@@ -22,6 +22,11 @@ struct FileFilter {
 std::string open_file(const std::vector<FileFilter>& filters = {},
                       const std::string& default_path = {});
 
+// 保存文件对话框；取消/失败返回空字符串（default_name 为默认文件名）
+std::string save_file(const std::vector<FileFilter>& filters = {},
+                      const std::string& default_path = {},
+                      const std::string& default_name = {});
+
 // 选择目录；取消/失败返回空字符串
 std::string pick_folder(const std::string& default_path = {});
 

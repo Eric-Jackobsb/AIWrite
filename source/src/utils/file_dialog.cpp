@@ -107,4 +107,38 @@ std::string pick_folder(const std::string& default_path)
     return path;
 }
 
+std::string save_file(const std::vector<FileFilter>& filters, const std::string& default_path,
+                      const std::string& default_name)
+{
+    NfdSession session;
+    if (!session.ok()) {
+        return {};
+    }
+
+    std::vector<nfdu8filteritem_t> items;
+    items.reserve(filters.size());
+    for (const FileFilter& filter : filters) {
+        items.push_back(nfdu8filteritem_t{filter.label.c_str(), filter.pattern.c_str()});
+    }
+
+    NFD::UniquePathU8 out_path;
+    const nfdresult_t result =
+        NFD::SaveDialog(out_path, items.empty() ? nullptr : items.data(),
+                        static_cast<int>(items.size()),
+                        default_path.empty() ? nullptr : default_path.c_str(),
+                        default_name.empty() ? nullptr : default_name.c_str());
+
+    if (result == NFD_ERROR) {
+        log::error(std::string("[文件对话框] 保存文件失败: ") + NFD::GetError());
+        return {};
+    }
+    if (result == NFD_CANCEL) {
+        return {};
+    }
+
+    const std::string path = to_string(out_path);
+    log::info("[文件对话框] 保存为: " + path);
+    return path;
+}
+
 } // namespace aiwrite::utils

@@ -180,6 +180,7 @@ add_library(aiwrite_core STATIC
     src/engine/workflow_io.cpp
     src/engine/validate.cpp
     src/engine/executor.cpp
+    src/engine/recent_files.cpp
     src/nodes/local_nodes.cpp
     src/nodes/register_executors.cpp
     src/web/session_store.cpp)

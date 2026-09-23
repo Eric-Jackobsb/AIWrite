@@ -21,6 +21,7 @@ const std::filesystem::path& logs_dir();          // ~/.brain-ai/logs
 const std::filesystem::path& config_file();       // ~/.brain-ai/config.toml
 const std::filesystem::path& app_log_file();      // ~/.brain-ai/logs/app.log
 const std::filesystem::path& workflow_log_file(); // ~/.brain-ai/logs/workflow.log
+const std::filesystem::path& recent_file();       // ~/.brain-ai/recent.json
 const std::filesystem::path& webview2_profile();  // ~/.brain-ai/webview2
 
 // 可执行文件所在目录

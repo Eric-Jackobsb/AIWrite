@@ -12,6 +12,8 @@
 #include "utils/paths.h"
 #include "web/session_store.h"
 
+#include "engine/recent_files.h"
+
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
@@ -426,8 +428,36 @@ int run(const AppOptions& options)
                     state.create_sample_workflow();
                 }
                 ImGui::Separator();
-                ImGui::MenuItem("打开工作流…（M2-05）", nullptr, false, false);
-                ImGui::MenuItem("保存工作流（M2-05）", nullptr, false, false);
+                if (ImGui::MenuItem("打开工作流…")) {
+                    open_workflow_dialog();
+                }
+                if (ImGui::MenuItem("保存工作流…")) {
+                    save_workflow_dialog();
+                }
+                if (ImGui::BeginMenu("最近打开")) {
+                    const std::vector<engine::RecentEntry> recent = state.recent_workflows();
+                    if (recent.empty()) {
+                        ImGui::MenuItem("（暂无记录）", nullptr, false, false);
+                    }
+                    for (const engine::RecentEntry& entry : recent) {
+                        const std::string label = entry.name + "##" + entry.path; // ## 保证 id 唯一
+                        if (ImGui::MenuItem(label.c_str())) {
+                            std::string error;
+                            if (!state.open_workflow_from(entry.path, &error)) {
+                                state.set_status("打开失败：" + error);
+                            }
+                        }
+                        if (ImGui::IsItemHovered()) {
+                            ImGui::SetTooltip("%s\n最后打开：%s", entry.path.c_str(),
+                                              entry.opened_at.c_str());
+                        }
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("清空列表")) {
+                        engine::clear_recent_files();
+                    }
+                    ImGui::EndMenu();
+                }
                 ImGui::Separator();
                 if (ImGui::MenuItem("退出")) {
                     glfwSetWindowShouldClose(window, GLFW_TRUE);

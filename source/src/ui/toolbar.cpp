@@ -70,6 +70,22 @@ void draw_toolbar_buttons()
     }
 
     ImGui::SameLine();
+    if (ImGui::Button("打开工作流")) {
+        open_workflow_dialog();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("从磁盘加载工作流 JSON：先做加载校验，通过后清空撤销栈并记入最近列表");
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("保存工作流")) {
+        save_workflow_dialog();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("另存为工作流 JSON（API Key 等 is_secret 参数不落盘，设计 §8.4）");
+    }
+
+    ImGui::SameLine();
     ImGui::TextDisabled("| 节点 %d  连线 %d  |  选中 节点 %d / 连线 %d  |  撤销栈 %d",
                         static_cast<int>(state.graph.nodes.size()),
                         static_cast<int>(state.graph.edges.size()),

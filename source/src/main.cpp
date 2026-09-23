@@ -10,6 +10,9 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -57,8 +60,43 @@ int run_selftest()
     std::printf("[运行自检] %s\n", state.executor.summary().c_str());
 
     const bool finished = state.executor.state() == aiwrite::engine::ExecState::Finished;
-    std::printf("[运行自检] %s\n", finished ? "PASS" : "FAIL（会话未正常结束）");
-    return finished ? 0 : 1;
+
+    // ---- M2-05：工作流文件往返（保存 → 打开，走 app 侧同一代码路径）----
+    // 备份/还原 recent.json，避免自检污染真实最近列表
+    const std::filesystem::path recent_file = aiwrite::paths::recent_file();
+    std::string                 recent_backup;
+    std::error_code             ec;
+    const bool                  had_recent = std::filesystem::exists(recent_file, ec);
+    if (had_recent) {
+        std::ifstream     in(recent_file, std::ios::binary);
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        recent_backup = buffer.str();
+    }
+
+    const std::filesystem::path temp_file =
+        std::filesystem::temp_directory_path() / "aiwrite_run_selftest_workflow.json";
+    std::string file_error;
+    const bool  saved      = state.save_workflow_to(temp_file.string(), &file_error);
+    const std::size_t nodes_before = state.graph.nodes.size();
+    const bool  opened     = saved && state.open_workflow_from(temp_file.string(), &file_error);
+    const bool  same       = opened && state.graph.nodes.size() == nodes_before;
+    std::printf("[运行自检] 工作流文件往返：保存=%s / 打开=%s / 节点数一致=%s%s\n",
+                saved ? "OK" : "失败", opened ? "OK" : "失败", same ? "OK" : "不一致",
+                file_error.empty() ? "" : ("（" + file_error + "）").c_str());
+
+    std::filesystem::remove(temp_file, ec);
+    if (had_recent) {
+        std::ofstream out(recent_file, std::ios::binary | std::ios::trunc);
+        out << recent_backup;
+    }
+    else {
+        std::filesystem::remove(recent_file, ec);
+    }
+
+    const bool pass = finished && saved && opened && same;
+    std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
+    return pass ? 0 : 1;
 }
 
 } // namespace

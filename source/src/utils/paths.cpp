@@ -96,6 +96,12 @@ const std::filesystem::path& workflow_log_file()
     return value;
 }
 
+const std::filesystem::path& recent_file()
+{
+    static const std::filesystem::path value = data_root() / "recent.json";
+    return value;
+}
+
 const std::filesystem::path& webview2_profile()
 {
     static const std::filesystem::path value = data_root() / "webview2";

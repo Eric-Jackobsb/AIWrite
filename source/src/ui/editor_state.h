@@ -14,6 +14,7 @@
 
 #include "engine/executor.h"
 #include "engine/graph.h"
+#include "engine/recent_files.h"
 #include "engine/undo_stack.h"
 
 namespace aiwrite::ui {
@@ -33,6 +34,16 @@ struct EditorState {
     void cancel_run();
     void tick_run();                       // 主循环每帧调用一次
     std::string run_status_text() const;    // 状态栏文本（Idle 时为空）
+    void abort_run_if_any(const std::string& reason); // 运行中修改/切换工作流时终止运行
+
+    // ------------------------------------------------------- 工作流文件 -----
+    // 保存（is_secret 参数不落盘：设计 §8.4）+ 记录最近列表
+    bool save_workflow_to(const std::string& path, std::string* error);
+    // 打开：加载 → **加载校验**（不合法则拒绝并保持原图）→ 清空撤销栈 → 记录最近列表
+    bool open_workflow_from(const std::string& path, std::string* error);
+    std::vector<engine::RecentEntry> recent_workflows() const; // 读取 ~/.brain-ai/recent.json
+
+    std::string current_workflow_path;   // 当前文件路径（保存对话框的默认名用）
 
     // 画布每帧同步的选择信息
     std::vector<std::string> selected_nodes;
@@ -74,5 +85,10 @@ private:
 
 // 全局单例（UI 生命周期内唯一）
 EditorState& editor();
+
+// ---- 系统文件对话框入口（菜单与工具栏共用）----
+// 成功返回 true；用户取消返回 false（不改动任何状态）
+bool open_workflow_dialog();
+bool save_workflow_dialog();
 
 } // namespace aiwrite::ui

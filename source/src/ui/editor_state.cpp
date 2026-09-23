@@ -4,6 +4,7 @@
 #include "engine/validate.h"
 #include "engine/workflow_io.h"
 #include "nodes/nodes.h"
+#include "utils/file_dialog.h"
 #include "utils/log.h"
 #include "utils/paths.h"
 
@@ -35,16 +36,7 @@ void EditorState::log_summary(const std::string& prefix) const
 void EditorState::snapshot(const std::string& label)
 {
     // 运行中修改工作流 → 计划与图不再一致，先终止本次运行（M2-04 守卫）
-    if (executor.running()) {
-        log::warn("运行中修改工作流（" + label + "）→ 已终止当前运行");
-        executor.cancel();
-        executor.reset();
-        for (engine::Node& node : graph.nodes) {
-            node.state = engine::NodeState::Idle;
-            node.error_message.clear();
-        }
-        set_status("运行已终止（工作流被修改）");
-    }
+    abort_run_if_any("修改工作流（" + label + "）");
     undo.push(graph, label);
 }
 
@@ -404,6 +396,151 @@ std::string EditorState::run_status_text() const
         stream << " | 当前 " << current;
     }
     return stream.str();
+}
+
+void EditorState::abort_run_if_any(const std::string& reason)
+{
+    if (!executor.running()) {
+        return;
+    }
+    log::warn("运行中" + reason + " → 已终止当前运行");
+    executor.cancel();
+    executor.reset();
+    for (engine::Node& node : graph.nodes) {
+        node.state = engine::NodeState::Idle;
+        node.error_message.clear();
+    }
+    set_status("运行已终止（" + reason + "）");
+}
+
+// ------------------------------------------------------------- 工作流文件 ----
+bool EditorState::save_workflow_to(const std::string& path, std::string* error)
+{
+    if (path.empty()) {
+        if (error != nullptr) {
+            *error = "路径为空";
+        }
+        return false;
+    }
+
+    std::string save_error;
+    if (!engine::save_workflow(graph, path, &save_error)) {
+        if (error != nullptr) {
+            *error = save_error;
+        }
+        log::error("保存工作流失败: " + save_error);
+        log::workflow("[工作流-保存失败] " + path + "（" + save_error + "）");
+        return false;
+    }
+
+    current_workflow_path = path;
+    engine::push_recent_file(path, graph.name);
+    log::info("工作流已保存: " + path);
+    log::workflow("[工作流-保存] " + path + "（节点 " + std::to_string(graph.nodes.size()) +
+                  "，连线 " + std::to_string(graph.edges.size()) + "）");
+    set_status("已保存：" + path);
+    return true;
+}
+
+bool EditorState::open_workflow_from(const std::string& path, std::string* error)
+{
+    if (path.empty()) {
+        if (error != nullptr) {
+            *error = "路径为空";
+        }
+        return false;
+    }
+
+    engine::Graph loaded;
+    std::string   load_error;
+    if (!engine::load_workflow(path, loaded, &load_error)) {
+        if (error != nullptr) {
+            *error = load_error;
+        }
+        log::error("打开工作流失败: " + path + " → " + load_error);
+        log::workflow("[工作流-加载失败] " + path + " → " + load_error);
+        return false;
+    }
+
+    // 加载校验（三级校验的第二级）：不合法则拒绝并保持原图不变
+    engine::ValidationMessages issues;
+    if (!engine::validateWorkflow(loaded, &issues)) {
+        const std::string first = issues.empty() ? std::string("未知问题") : issues.front();
+        if (error != nullptr) {
+            *error = "加载校验失败：" + first;
+        }
+        log::error("打开工作流被拒绝（加载校验）: " + path + " → " + first);
+        log::workflow("[工作流-加载拒绝] " + path + " → " + first);
+        return false;
+    }
+
+    abort_run_if_any("切换工作流");
+    graph = std::move(loaded);
+    undo.clear(); // 设计 §6.6：加载工作流清空撤销栈
+    selected_nodes.clear();
+    selected_links.clear();
+    selected_node.clear();
+    request_navigate_to_content = true; // 视图跟随新内容
+    current_workflow_path       = path;
+    engine::push_recent_file(path, graph.name);
+
+    log::info("工作流已打开: " + path);
+    log::workflow("[工作流-加载] " + path + "（节点 " + std::to_string(graph.nodes.size()) +
+                  "，连线 " + std::to_string(graph.edges.size()) + "）");
+    log_summary("[工作流] 已加载");
+    set_status("已打开：" + path);
+    return true;
+}
+
+std::vector<engine::RecentEntry> EditorState::recent_workflows() const
+{
+    return engine::load_recent_files();
+}
+
+// ----------------------------------------------------- 文件对话框入口 -------
+namespace {
+
+const std::vector<utils::FileFilter>& workflow_filters()
+{
+    static const std::vector<utils::FileFilter> filters = {{"工作流 JSON", "json"},
+                                                           {"所有文件", "*"}};
+    return filters;
+}
+
+} // namespace
+
+bool open_workflow_dialog()
+{
+    const std::string path = utils::open_file(workflow_filters(), paths::workflows_dir().string());
+    if (path.empty()) {
+        return false; // 用户取消
+    }
+
+    std::string error;
+    if (!editor().open_workflow_from(path, &error)) {
+        editor().set_status("打开失败：" + error);
+        return false;
+    }
+    return true;
+}
+
+bool save_workflow_dialog()
+{
+    EditorState&      state = editor();
+    const std::string default_name =
+        (state.graph.name.empty() ? std::string("workflow") : state.graph.name) + ".json";
+    const std::string path =
+        utils::save_file(workflow_filters(), paths::workflows_dir().string(), default_name);
+    if (path.empty()) {
+        return false; // 用户取消
+    }
+
+    std::string error;
+    if (!state.save_workflow_to(path, &error)) {
+        state.set_status("保存失败：" + error);
+        return false;
+    }
+    return true;
 }
 
 } // namespace aiwrite::ui

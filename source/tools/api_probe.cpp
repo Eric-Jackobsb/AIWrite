@@ -24,12 +24,17 @@
 
 #include "engine/graph.h"
 #include "engine/node_registry.h"
+#include "engine/recent_files.h"
 #include "engine/undo_stack.h"
 #include "engine/validate.h"
 #include "engine/workflow_io.h"
 #include "nodes/nodes.h"
 #include "utils/config.h"
+#include "utils/paths.h"
 #include "web/session_store.h"
+
+#include <fstream>
+#include <sstream>
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -236,6 +241,141 @@ bool test_web_session_and_visibility()
                 "api_key·api_base / 两模式校验均通过）\n",
                 ok ? "PASS" : "FAIL", store_ok ? "OK" : "异常", cleared_ok ? "/注销清空 OK" : "/注销异常",
                 visibility_ok ? "OK" : "异常");
+    return ok;
+}
+
+// 设置节点参数（节点/参数不存在时静默跳过，断言由调用方负责）
+void set_param(engine::Graph& graph, const std::string& node_id, const std::string& param_id,
+               const nlohmann::json& value)
+{
+    if (engine::Node* node = graph.findNode(node_id)) {
+        if (engine::Param* param = node->findParam(param_id)) {
+            param->value = value;
+        }
+    }
+}
+
+// M2-05：工作流文件读写 + 最近列表（不需要网络）
+bool test_workflow_files()
+{
+    std::printf("[V-10] 工作流文件 / 最近列表自检\n");
+
+    const std::filesystem::path work_file =
+        std::filesystem::temp_directory_path() / "aiwrite_workflow_selftest.json";
+    const std::filesystem::path recent_file = aiwrite::paths::recent_file();
+    std::error_code             ec;
+    std::filesystem::remove(work_file, ec);
+
+    // 备份用户现有 recent.json（测试结束原样还原，避免污染最近列表）
+    std::string recent_backup;
+    const bool  had_recent = std::filesystem::exists(recent_file, ec);
+    if (had_recent) {
+        std::ifstream     in(recent_file, std::ios::binary);
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        recent_backup = buffer.str();
+    }
+
+    bool ok = true;
+
+    // ---------------------------------------------------- 1. 保存 → 加载 -----
+    {
+        aiwrite::engine::registerAllNodes();
+        aiwrite::engine::Graph graph;
+        std::string            error;
+        const std::string      text_node = graph.addNode("TextInput", 0.0f, 0.0f, &error);
+        const std::string      conf_node = graph.addNode("ProviderConfig", 0.0f, 0.0f, &error);
+        set_param(graph, text_node, "text", "自检文本");
+        set_param(graph, conf_node, "api_key", "sk-secret-file-test");
+        graph.name = "自检工作流";
+
+        const bool saved = aiwrite::engine::save_workflow(graph, work_file, &error);
+
+        aiwrite::engine::Graph loaded;
+        std::string            load_error;
+        const bool             loaded_ok = aiwrite::engine::load_workflow(work_file, loaded, &load_error);
+        const bool             same = loaded_ok && loaded.nodes.size() == graph.nodes.size() &&
+                          loaded.edges.size() == graph.edges.size() &&
+                          loaded.name == "自检工作流";
+        aiwrite::engine::ValidationMessages issues;
+        const bool valid = loaded_ok && aiwrite::engine::validateWorkflow(loaded, &issues);
+
+        std::ifstream     in(work_file, std::ios::binary);
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        const std::string text      = buffer.str();
+        const bool        no_secret = text.find("sk-secret-file-test") == std::string::npos;
+
+        const bool pass = saved && same && valid && no_secret;
+        std::printf("   %-6s 保存=%s / 往返一致=%s / 加载校验=%s / 密钥未落盘=%s\n",
+                    pass ? "PASS" : "FAIL", saved ? "OK" : "失败", same ? "OK" : "不一致",
+                    valid ? "OK" : "失败", no_secret ? "OK" : "文件里出现明文 Key");
+        ok = ok && pass;
+    }
+
+    // -------------------------------------------- 2. 最近列表（recent.json）--
+    {
+        aiwrite::engine::clear_recent_files();
+        const bool empty_ok = aiwrite::engine::load_recent_files().empty();
+
+        aiwrite::engine::push_recent_file("C:/tmp/a.json", "工作流 A");
+        aiwrite::engine::push_recent_file("C:/tmp/b.json", "工作流 B");
+        aiwrite::engine::push_recent_file("C:/tmp/a.json", "工作流 A"); // 重复 → 置顶不重复
+        std::vector<aiwrite::engine::RecentEntry> entries = aiwrite::engine::load_recent_files();
+        const bool order_ok = entries.size() == 2 && entries[0].name == "工作流 A" &&
+                              entries[1].name == "工作流 B";
+
+        for (int i = 0; i < 12; ++i) {
+            aiwrite::engine::push_recent_file("C:/tmp/w" + std::to_string(i) + ".json",
+                                              "W" + std::to_string(i));
+        }
+        entries              = aiwrite::engine::load_recent_files();
+        const bool cap_ok = entries.size() == aiwrite::engine::kMaxRecentFiles &&
+                            entries.front().name == "W11";
+
+        aiwrite::engine::clear_recent_files();
+        const bool cleared = aiwrite::engine::load_recent_files().empty();
+
+        const bool pass = empty_ok && order_ok && cap_ok && cleared;
+        std::printf("   %-6s 初始空列表=%s / 去重置顶=%s / 上限 10 条=%s / 清空=%s\n",
+                    pass ? "PASS" : "FAIL", empty_ok ? "OK" : "异常", order_ok ? "OK" : "异常",
+                    cap_ok ? "OK" : "异常", cleared ? "OK" : "异常");
+        ok = ok && pass;
+    }
+
+    // ------------------------------------- 3. 非法工作流文件被加载校验拒绝 ----
+    {
+        const std::filesystem::path bad_file =
+            std::filesystem::temp_directory_path() / "aiwrite_workflow_bad.json";
+        {
+            std::ofstream out(bad_file, std::ios::binary | std::ios::trunc);
+            out << "{\"version\":\"1.0\",\"name\":\"坏工作流\",\"nodes\":[{\"id\":\"n1\","
+                   "\"type\":\"NotExists\",\"title\":\"未知\",\"position\":{\"x\":0,\"y\":0},"
+                   "\"params\":{}}],\"edges\":[]}";
+        }
+
+        aiwrite::engine::Graph loaded;
+        std::string            error;
+        const bool             loaded_ok = aiwrite::engine::load_workflow(bad_file, loaded, &error);
+        aiwrite::engine::ValidationMessages issues;
+        const bool valid    = loaded_ok && aiwrite::engine::validateWorkflow(loaded, &issues);
+        const bool rejected = !valid;
+        std::printf("   %-6s 含未知节点类型的文件被拒绝（加载%s / 校验%s）\n",
+                    rejected ? "PASS" : "FAIL", loaded_ok ? "成功" : "失败",
+                    valid ? "通过（异常）" : "拒绝");
+        ok = ok && rejected;
+        std::filesystem::remove(bad_file, ec);
+    }
+
+    // -------------------------------------------------- 清理 / 还原现场 -----
+    std::filesystem::remove(work_file, ec);
+    if (had_recent) {
+        std::ofstream out(recent_file, std::ios::binary | std::ios::trunc);
+        out << recent_backup;
+    }
+    else {
+        std::filesystem::remove(recent_file, ec);
+    }
     return ok;
 }
 
@@ -1095,17 +1235,6 @@ int executor_selftest()
     return check.failed == 0 ? 0 : 1;
 }
 
-// 设置节点参数（节点/参数不存在时静默跳过，断言由调用方负责）
-void set_param(engine::Graph& graph, const std::string& node_id, const std::string& param_id,
-               const nlohmann::json& value)
-{
-    if (engine::Node* node = graph.findNode(node_id)) {
-        if (engine::Param* param = node->findParam(param_id)) {
-            param->value = value;
-        }
-    }
-}
-
 // P3-2：执行器核心（分帧 / 值传递 / 失败传播 / 取消 / 安全）
 int execution_selftest()
 {
@@ -1415,14 +1544,17 @@ int main(int argc, char** argv)
         const bool web_ok     = test_web_session_and_visibility();
         const bool exec_ok =
             (executor_selftest() == 0) && (execution_selftest() == 0); // P3-1 + P3-2（离线）
+        const bool files_ok = test_workflow_files();                   // M2-05（离线）
 
         const char* http_text =
             (http_code == 0) ? "PASS" : (http_code == 2 ? "SKIP(网络不可达)" : "FAIL");
         std::printf("=== 结果: SHA3 %s / HTTP %s / 请求构造 %s / 配置往返 %s / 会话与可见性 %s / "
-                    "执行器 %s ===\n",
+                    "执行器 %s / 工作流文件 %s ===\n",
                     sha3_ok ? "PASS" : "FAIL", http_text, request_ok ? "PASS" : "FAIL",
-                    config_ok ? "PASS" : "FAIL", web_ok ? "PASS" : "FAIL", exec_ok ? "PASS" : "FAIL");
-        if (!sha3_ok || http_code == 1 || !request_ok || !config_ok || !web_ok || !exec_ok) {
+                    config_ok ? "PASS" : "FAIL", web_ok ? "PASS" : "FAIL", exec_ok ? "PASS" : "FAIL",
+                    files_ok ? "PASS" : "FAIL");
+        if (!sha3_ok || http_code == 1 || !request_ok || !config_ok || !web_ok || !exec_ok ||
+            !files_ok) {
             exit_code = 1;
         }
     }
