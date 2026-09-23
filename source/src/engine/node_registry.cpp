@@ -267,9 +267,9 @@ void registerAllNodes()
         definition.inputs       = {input_port("vars", "变量", PortType::Any,
                                               /*variadic*/ true, /*optional*/ true)};
         definition.outputs      = {output_port("text", "文本", PortType::Text)};
-        definition.params       = {text_param("template", "模板", "请根据以下内容续写：\n{content}",
+        definition.params       = {text_param("template", "模板", "请根据以下内容续写：\n{vars}",
                                               ParamType::Text, /*required*/ true, false,
-                                              "用 {名字} 引用输入端口的值")};
+                                              "用 {端口名} 引用输入值；变长输入按顺序可用 {1}/{2}…（单值时也可写 {vars}）")};
         registry.registerNode(std::move(definition));
     }
 

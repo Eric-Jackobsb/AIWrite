@@ -179,6 +179,9 @@ add_library(aiwrite_core STATIC
     src/engine/undo_stack.cpp
     src/engine/workflow_io.cpp
     src/engine/validate.cpp
+    src/engine/executor.cpp
+    src/nodes/local_nodes.cpp
+    src/nodes/register_executors.cpp
     src/web/session_store.cpp)
 target_include_directories(aiwrite_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(aiwrite_core

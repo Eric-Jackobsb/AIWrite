@@ -621,6 +621,11 @@ nlohmann::json execute(
 
 所有节点抛出 `NodeError`，由执行引擎捕获并标记节点状态为 error。
 
+> **实现说明（M2）**：`{var}` 的现行替换规则见 `src/nodes/local_nodes.cpp` —— 命名输入用 `{端口id}`；
+> 变长输入按边顺序用 `{1}`/`{2}`…（恰好 1 个值时额外提供 `{vars}`）；未匹配的 `{…}` **原样保留**
+> （便于用户看出名字写错）。注册表中 PromptTemplate 的默认模板已同步为 `请根据以下内容续写：\n{vars}`。
+> 节点执行函数统一注册在 `engine::NodeExecutorRegistry`（入口 `nodes::registerAllExecutors()`）。
+
 ---
 
 ## 10. 执行引擎
@@ -658,6 +663,19 @@ void Executor::cancel() {
 - 节点失败 → 标记 error
 - 下游节点 → 标记 skipped
 - 无关分支 → 继续执行
+
+> **实现说明（M2 P3-2）**：`engine/executor.{h,cpp}` 已落地本节语义 —— `tick()` 一帧推进一步；
+> 状态机 `Waiting → Running → Done / Error`（失败节点下游标 `Skipped`，无关分支继续）；
+> 协作式 `cancel()`。两点取舍：
+> ① **运行态端口值只存在于 `Executor::NodeOutputs`，不写入 `Graph`** —— `Graph` 是"文档"，
+> 这样撤销快照与工作流 JSON 不受执行结果影响；节点**状态**仍写在 `Graph`（画布就地绘制状态色）；
+> ② 同步执行无法中断"正在执行"的节点，`cancel()` 只保证不再开始新节点 —— 真正的可中断调用
+> 留待 M4 的独立 HTTP 线程。
+>
+> 节点执行函数在 `NodeExecutorRegistry` 注册（`nodes::registerAllExecutors()`）；M2 期
+> TextInput / ImageInput / PromptTemplate / TextMerge / ProviderConfig / TextOutput / ImagePreview 为本地实现，
+> LLMGenerate / VLMGenerate 为占位（抛 `NodeError`），等待 **M4-05 官方 API / M4-06 网页版**接线。
+> 自检：`api_probe.exe --exec-selftest`（129 项断言，全离线）。
 
 ---
 

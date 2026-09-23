@@ -102,6 +102,7 @@ M1 验证工具：
                               # 网页版登录自检（离屏）：退出码 0=通过 / 1=失败 / 2=超时
 .\api_probe.exe --selftest                  # V-04 HTTP + V-05 SHA3 自检
 .\api_probe.exe --graph-selftest            # 图模型/注册表/撤销栈/序列化 自检（95 项断言，无需网络）
+.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 自检（129 项断言，无需网络）
 .\api_probe.exe --sha3 "abc"                # 单次 SHA3-256
 $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 Key）
 .\webview2_login.exe --selftest --timeout 30   # V-03 自检：离屏跑「导航 → 提取 Cookie」，退出码 0=PASS/1=FAIL/2=超时
@@ -186,5 +187,5 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 | `src/utils/config.cpp` | toml++ 读写 `config.toml`（字段与设计文档 20.2 一致，缺省自动生成） |
 | `src/utils/crypto.cpp` | SHA3-256（OpenSSL EVP，供 PoW 与自检使用） |
 | `src/utils/file_dialog.cpp` | 原生文件/目录对话框（nativefiledialog-extended，`NFD::Init/Quit` 配对） |
-| `tools/api_probe.cpp` | V-04/V-05/V-06 命令行验证工具 + `--graph-selftest` 图模型自检 |
+| `tools/api_probe.cpp` | V-04/V-05/V-06 命令行验证工具 + `--graph-selftest` 图模型自检 + `--exec-selftest` 执行器自检 |
 | `tools/webview2_login.cpp` | V-03 WebView2 登录 + Cookie 提取（仅内存，脱敏打印） |

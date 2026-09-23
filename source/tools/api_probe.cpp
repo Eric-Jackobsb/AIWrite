@@ -27,6 +27,7 @@
 #include "engine/undo_stack.h"
 #include "engine/validate.h"
 #include "engine/workflow_io.h"
+#include "nodes/nodes.h"
 #include "utils/config.h"
 #include "web/session_store.h"
 
@@ -1094,6 +1095,238 @@ int executor_selftest()
     return check.failed == 0 ? 0 : 1;
 }
 
+// 设置节点参数（节点/参数不存在时静默跳过，断言由调用方负责）
+void set_param(engine::Graph& graph, const std::string& node_id, const std::string& param_id,
+               const nlohmann::json& value)
+{
+    if (engine::Node* node = graph.findNode(node_id)) {
+        if (engine::Param* param = node->findParam(param_id)) {
+            param->value = value;
+        }
+    }
+}
+
+// P3-2：执行器核心（分帧 / 值传递 / 失败传播 / 取消 / 安全）
+int execution_selftest()
+{
+    using engine::ExecState;
+    using engine::Executor;
+    using engine::Graph;
+    using engine::NodeState;
+
+    Check check;
+    std::printf("[P3-2] 执行器核心自检（本地节点链路 / 失败传播 / 取消）\n");
+
+    engine::registerAllNodes();
+    aiwrite::nodes::registerAllExecutors();
+    expect_eq(check, std::to_string(engine::NodeExecutorRegistry::instance().size()), "9",
+              "已注册 9 个节点执行函数");
+
+    // ------------------------------------------------ 1. 本地链路端到端 ------
+    {
+        Graph             graph;
+        const std::string n1 = add_node(check, graph, "TextInput", "链路 n1（文本输入）");
+        const std::string n2 = add_node(check, graph, "PromptTemplate", "链路 n2（模板）");
+        const std::string n3 = add_node(check, graph, "TextOutput", "链路 n3（输出）");
+        graph.edges.push_back(make_edge("e1", n1, "text", n2, "vars"));
+        graph.edges.push_back(make_edge("e2", n2, "text", n3, "text"));
+        set_param(graph, n1, "text", "标题：秋日");
+        set_param(graph, n2, "template", "请根据以下内容续写：\n{vars}");
+
+        std::vector<std::string> console_lines;
+        std::vector<std::string> state_log;
+        Executor                 executor;
+        executor.setConsoleHandler(
+            [&console_lines](const std::string& text) { console_lines.push_back(text); });
+        executor.setStateHandler([&state_log](const std::string& id, NodeState state) {
+            state_log.push_back(id + ":" + engine::nodeStateName(state));
+        });
+
+        std::string error;
+        expect(check, executor.start(graph, &error), "本地链路：start 通过（运行前校验）", error);
+        expect(check, executor.totalCount() == 3, "本地链路：计划含 3 个节点");
+
+        std::vector<std::string> order;
+        graph.topologicalOrder(&order, nullptr);
+        expect(check, executor.plan() == order, "本地链路：执行计划 == 拓扑序");
+
+        // 分帧：一次 tick 只推进一个节点
+        expect(check, executor.tick(&graph), "本地链路：tick #1 推进成功");
+        expect(check, executor.finishedCount() == 1, "本地链路：一帧只执行一个节点");
+
+        expect(check, executor.runToCompletion(&graph, 64), "本地链路：runToCompletion 正常结束");
+        expect(check, executor.state() == ExecState::Finished, "本地链路：会话状态 Finished");
+        expect(check, executor.finishedCount() == 3 && executor.failedCount() == 0,
+               "本地链路：完成 3 / 失败 0");
+
+        const engine::Node* node1 = graph.findNode(n1);
+        const engine::Node* node2 = graph.findNode(n2);
+        const engine::Node* node3 = graph.findNode(n3);
+        expect(check,
+               node1 != nullptr && node1->state == NodeState::Done && node2 != nullptr &&
+                   node2->state == NodeState::Done && node3 != nullptr &&
+                   node3->state == NodeState::Done,
+               "本地链路：三个节点状态均为 done");
+
+        // TextOutput 节点只有输入端口 → 检查「上游模板节点的输出」与「Console 中的文本输出行」
+        const nlohmann::json* templated = executor.outputs().find(n2, "text");
+        expect_eq(check, templated != nullptr ? templated->dump() : std::string("(无输出)"),
+                  nlohmann::json("请根据以下内容续写：\n标题：秋日").dump(),
+                  "本地链路：模板节点输出已替换 {vars}");
+        const bool printed =
+            std::any_of(console_lines.begin(), console_lines.end(), [](const std::string& line) {
+                return line.find("[文本输出]") != std::string::npos &&
+                       line.find("标题：秋日") != std::string::npos;
+            });
+        expect(check, printed, "本地链路：文本输出节点把结果写入 Console 回调");
+        expect(check, !console_lines.empty(), "本地链路：console 回调收到输出");
+        expect(check, !state_log.empty() && state_log.front() == n1 + ":running",
+               "本地链路：状态回调首个事件为 n1:running");
+    }
+
+    // ------------------------------------------- 2. 失败传播（设计 §10.4）----
+    {
+        Graph             graph;
+        const std::string t1 = add_node(check, graph, "TextInput", "失败图 n1");
+        const std::string t2 = add_node(check, graph, "PromptTemplate", "失败图 n2");
+        const std::string l1 = add_node(check, graph, "LLMGenerate", "失败图 n3（生成·占位）");
+        const std::string o1 = add_node(check, graph, "TextOutput", "失败图 n4（下游）");
+        const std::string t3 = add_node(check, graph, "TextInput", "失败图 n5（无关分支）");
+        const std::string o2 = add_node(check, graph, "TextOutput", "失败图 n6（无关分支）");
+        graph.edges.push_back(make_edge("e1", t1, "text", t2, "vars"));
+        graph.edges.push_back(make_edge("e2", t2, "text", l1, "prompt"));
+        graph.edges.push_back(make_edge("e3", l1, "text", o1, "text"));
+        graph.edges.push_back(make_edge("e4", t3, "text", o2, "text"));
+        set_param(graph, t1, "text", "输入 A");
+        set_param(graph, t3, "text", "输入 B");
+
+        Executor    executor;
+        std::string error;
+        expect(check, executor.start(graph, &error), "失败传播：start 通过", error);
+        expect(check, executor.runToCompletion(&graph, 64),
+               "失败传播：runToCompletion 正常结束（会话 Finished）");
+        expect(check, executor.state() == ExecState::Finished, "失败传播：会话状态 Finished");
+
+        const engine::Node* llm = graph.findNode(l1);
+        expect(check, llm != nullptr && llm->state == NodeState::Error,
+               "失败传播：LLMGenerate 节点标记 error");
+        expect(check, llm != nullptr && llm->error_message.find("尚未接线") != std::string::npos,
+               "失败传播：错误信息说明「尚未接线」", llm != nullptr ? llm->error_message : std::string());
+        const engine::Node* downstream = graph.findNode(o1);
+        expect(check, downstream != nullptr && downstream->state == NodeState::Skipped,
+               "失败传播：下游节点标记 skipped");
+        const engine::Node* unrelated = graph.findNode(o2);
+        expect(check, unrelated != nullptr && unrelated->state == NodeState::Done,
+               "失败传播：无关分支继续执行（done）");
+        expect(check, executor.failedCount() == 1 && executor.skippedCount() == 1,
+               "失败传播：计数 失败 1 / 跳过 1");
+        expect(check, executor.summary().find("完成 4/6") != std::string::npos,
+               "失败传播：summary 反映 完成 4/6", executor.summary());
+    }
+
+    // ------------------------------------------- 3. ProviderConfig 安全性 ----
+    {
+        Graph             graph;
+        const std::string p = add_node(check, graph, "ProviderConfig", "配置节点");
+        set_param(graph, p, "api_key", "sk-secret-should-not-leak");
+        set_param(graph, p, "model", "deepseek-reasoner");
+
+        Executor    executor;
+        std::string error;
+        expect(check, executor.start(graph, &error), "提供商节点：start 通过", error);
+        executor.runToCompletion(&graph, 16);
+
+        const nlohmann::json* provider = executor.outputs().find(p, "provider");
+        expect(check, provider != nullptr && provider->value("has_api_key", false),
+               "提供商节点：输出 has_api_key = true");
+        const std::string dump = provider != nullptr ? provider->dump() : std::string();
+        expect(check, dump.find("sk-secret") == std::string::npos,
+               "提供商节点：输出**不含** Key 明文（设计 §8.4）", dump);
+        expect(check, dump.find("deepseek-reasoner") != std::string::npos,
+               "提供商节点：输出包含模型名");
+    }
+
+    // ------------------------------------------- 4. 文本合并 / 模板容错 -----
+    {
+        Graph             graph;
+        const std::string a = add_node(check, graph, "TextInput", "合并 a");
+        const std::string b = add_node(check, graph, "TextInput", "合并 b");
+        const std::string m = add_node(check, graph, "TextMerge", "合并节点");
+        const std::string t = add_node(check, graph, "PromptTemplate", "模板（含未知占位符）");
+        graph.edges.push_back(make_edge("e1", a, "text", m, "texts"));
+        graph.edges.push_back(make_edge("e2", b, "text", m, "texts"));
+        graph.edges.push_back(make_edge("e3", m, "text", t, "vars"));
+        set_param(graph, a, "text", "第一段");
+        set_param(graph, b, "text", "第二段");
+        set_param(graph, m, "separator", "|");
+        set_param(graph, t, "template", "X{unknown}Y{vars}Z");
+
+        Executor    executor;
+        std::string error;
+        expect(check, executor.start(graph, &error), "合并/模板：start 通过", error);
+        executor.runToCompletion(&graph, 32);
+
+        const nlohmann::json* merged = executor.outputs().find(m, "text");
+        expect_eq(check, merged != nullptr ? merged->dump() : std::string("(无输出)"),
+                  nlohmann::json("第一段|第二段").dump(), "文本合并：按分隔符拼接");
+        const nlohmann::json* templated = executor.outputs().find(t, "text");
+        expect_eq(check, templated != nullptr ? templated->dump() : std::string("(无输出)"),
+                  nlohmann::json("X{unknown}Y第一段|第二段Z").dump(),
+                  "提示词模板：未匹配占位符原样保留，{vars} 正常替换");
+    }
+
+    // ------------------------------------------- 5. 图片输入（文件不存在）----
+    {
+        Graph             graph;
+        const std::string img = add_node(check, graph, "ImageInput", "图片输入");
+        set_param(graph, img, "path", "Z:/not-exists/aiwrite-selftest.png");
+
+        Executor    executor;
+        std::string error;
+        expect(check, !executor.start(graph, &error) && error.find("不存在") != std::string::npos,
+               "图片输入：文件不存在 → 运行前校验直接拒绝", error);
+    }
+
+    // ------------------------------------------- 6. 取消（协作式）------------
+    {
+        Graph             graph;
+        const std::string a = add_node(check, graph, "TextInput", "取消 a");
+        const std::string b = add_node(check, graph, "PromptTemplate", "取消 b");
+        const std::string c = add_node(check, graph, "TextOutput", "取消 c");
+        graph.edges.push_back(make_edge("e1", a, "text", b, "vars"));
+        graph.edges.push_back(make_edge("e2", b, "text", c, "text"));
+        set_param(graph, a, "text", "取消测试");
+
+        Executor    executor;
+        std::string error;
+        expect(check, executor.start(graph, &error), "取消：start 通过", error);
+        executor.tick(&graph);
+        executor.cancel();
+        executor.tick(&graph);
+        expect(check, executor.state() == ExecState::Cancelled, "取消：会话状态 Cancelled");
+        const engine::Node* node_c = graph.findNode(c);
+        expect(check, node_c != nullptr && node_c->state == NodeState::Waiting,
+               "取消：未执行的节点保持 waiting");
+        expect(check, executor.finishedCount() == 1, "取消：已完成 1 个节点");
+    }
+
+    // ------------------------------------------- 7. 运行前校验失败 ----------
+    {
+        Graph             graph;
+        const std::string a = add_node(check, graph, "PromptTemplate", "校验失败 a");
+        add_node(check, graph, "TextOutput", "校验失败 b（必填输入未连）");
+        set_param(graph, a, "template", "只有模板");
+
+        Executor    executor;
+        std::string error;
+        expect(check, !executor.start(graph, &error) && executor.state() == ExecState::Failed,
+               "运行前校验失败：start 拒绝且会话状态 Failed", error);
+    }
+
+    std::printf("=== 执行器自检结果: %d 通过 / %d 失败 ===\n", check.passed, check.failed);
+    return check.failed == 0 ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -1180,13 +1413,16 @@ int main(int argc, char** argv)
         const bool request_ok = test_chat_request_shape(request_options);
         const bool config_ok  = test_config_roundtrip();
         const bool web_ok     = test_web_session_and_visibility();
+        const bool exec_ok =
+            (executor_selftest() == 0) && (execution_selftest() == 0); // P3-1 + P3-2（离线）
 
         const char* http_text =
             (http_code == 0) ? "PASS" : (http_code == 2 ? "SKIP(网络不可达)" : "FAIL");
-        std::printf("=== 结果: SHA3 %s / HTTP %s / 请求构造 %s / 配置往返 %s / 会话与可见性 %s ===\n",
+        std::printf("=== 结果: SHA3 %s / HTTP %s / 请求构造 %s / 配置往返 %s / 会话与可见性 %s / "
+                    "执行器 %s ===\n",
                     sha3_ok ? "PASS" : "FAIL", http_text, request_ok ? "PASS" : "FAIL",
-                    config_ok ? "PASS" : "FAIL", web_ok ? "PASS" : "FAIL");
-        if (!sha3_ok || http_code == 1 || !request_ok || !config_ok || !web_ok) {
+                    config_ok ? "PASS" : "FAIL", web_ok ? "PASS" : "FAIL", exec_ok ? "PASS" : "FAIL");
+        if (!sha3_ok || http_code == 1 || !request_ok || !config_ok || !web_ok || !exec_ok) {
             exit_code = 1;
         }
     }
@@ -1203,6 +1439,9 @@ int main(int argc, char** argv)
 
     if (options.exec_selftest) {
         if (executor_selftest() != 0) {
+            exit_code = 1;
+        }
+        if (execution_selftest() != 0) {
             exit_code = 1;
         }
     }
