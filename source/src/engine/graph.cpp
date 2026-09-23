@@ -8,6 +8,8 @@
 #include <filesystem>
 #include <sstream>
 #include <string>
+#include <unordered_map>
+#include <utility>
 
 namespace aiwrite::engine {
 namespace {
@@ -570,6 +572,77 @@ bool Graph::validateParams(const Node& node, std::vector<std::string>* errors) c
         }
     }
     return ok;
+}
+
+bool Graph::topologicalOrder(std::vector<std::string>* order, std::string* error) const
+{
+    if (order != nullptr) {
+        order->clear();
+    }
+    const auto fail = [error](const std::string& text) {
+        if (error != nullptr) {
+            *error = text;
+        }
+        return false;
+    };
+
+    // 入度表 + 下游邻接表：只统计"连接两个存在节点"的边
+    std::unordered_map<std::string, int>                        in_degree;
+    std::unordered_map<std::string, std::vector<std::string>>   downstream;
+    in_degree.reserve(nodes.size());
+    for (const Node& node : nodes) {
+        in_degree.emplace(node.id, 0);
+    }
+    for (const Edge& edge : edges) {
+        if (in_degree.find(edge.from_node) == in_degree.end() ||
+            in_degree.find(edge.to_node) == in_degree.end()) {
+            continue; // 悬空边：交给 validateWorkflow 报错
+        }
+        downstream[edge.from_node].push_back(edge.to_node);
+        ++in_degree[edge.to_node];
+    }
+
+    // 零入度节点按插入序入队，保证结果稳定（可测、可复现）
+    std::vector<std::string> queue;
+    queue.reserve(nodes.size());
+    for (const Node& node : nodes) {
+        if (in_degree[node.id] == 0) {
+            queue.push_back(node.id);
+        }
+    }
+
+    std::vector<std::string> result;
+    result.reserve(nodes.size());
+    for (std::size_t head = 0; head < queue.size(); ++head) {
+        const std::string current = queue[head];
+        result.push_back(current);
+        for (const std::string& next : downstream[current]) {
+            if (--in_degree[next] == 0) {
+                queue.push_back(next);
+            }
+        }
+    }
+
+    if (result.size() != nodes.size()) {
+        std::string cycle;
+        for (const Node& node : nodes) {
+            if (in_degree[node.id] > 0) {
+                if (!cycle.empty()) {
+                    cycle += "、";
+                }
+                cycle += node.id;
+            }
+        }
+        return fail("工作流存在环，涉及节点: " + cycle + "（请删除环上的连线后重试）");
+    }
+
+    if (order != nullptr) {
+        *order = std::move(result);
+    }
+    if (error != nullptr) {
+        error->clear();
+    }
+    return true;
 }
 
 bool param_visible(const Node& node, const Param& param)

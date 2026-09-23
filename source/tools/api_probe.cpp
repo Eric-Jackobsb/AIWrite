@@ -25,6 +25,7 @@
 #include "engine/graph.h"
 #include "engine/node_registry.h"
 #include "engine/undo_stack.h"
+#include "engine/validate.h"
 #include "engine/workflow_io.h"
 #include "utils/config.h"
 #include "web/session_store.h"
@@ -49,6 +50,7 @@ namespace {
 struct Options {
     bool        selftest = false;
     bool        graph_selftest = false;
+    bool        exec_selftest  = false;
     bool        insecure = false;
     bool        dry_run  = false;   // --chat --dry-run：只打印/断言请求，不发网络请求
     std::string http_url;
@@ -67,7 +69,8 @@ void print_usage()
     std::printf("api_probe - AIwrite M1 技术验证工具\n");
     std::printf("用法:\n");
     std::printf("  api_probe --selftest\n");
-    std::printf("  api_probe --graph-selftest          # 图模型/注册表/撤销栈自检（不需要网络）\n");
+    std::printf("  api_probe --graph-selftest          # 图模型/注册表/撤销栈/序列化 自检（不需要网络）\n");
+    std::printf("  api_probe --exec-selftest           # 拓扑排序 + 加载/运行前校验 + 执行器 自检（不需要网络）\n");
     std::printf("  api_probe --sha3 <text>\n");
     std::printf("  api_probe --http <url>\n");
     std::printf("  api_probe --chat \"<prompt>\" [--model <name>] [--api-base <url>] [--insecure]\n");
@@ -800,6 +803,297 @@ int graph_selftest()
     return check.failed == 0 ? 0 : 1;
 }
 
+// ------------------------------------------------------ 执行器自检（P3-1）-----
+engine::Edge make_edge(const std::string& id, const std::string& from_node,
+                       const std::string& from_port, const std::string& to_node,
+                       const std::string& to_port)
+{
+    engine::Edge edge;
+    edge.id        = id;
+    edge.from_node = from_node;
+    edge.from_port = from_port;
+    edge.to_node   = to_node;
+    edge.to_port   = to_port;
+    return edge;
+}
+
+bool contains_text(const std::vector<std::string>& messages, const std::string& needle)
+{
+    return std::any_of(messages.begin(), messages.end(), [&needle](const std::string& text) {
+        return text.find(needle) != std::string::npos;
+    });
+}
+
+// M2-03 拓扑排序 + M2-06 加载/运行前校验（P3-2 会在此追加执行相关断言）
+int executor_selftest()
+{
+    using engine::Graph;
+    using engine::ValidationMessages;
+
+    Check check;
+    std::printf("[P3-1] 拓扑排序 / 加载校验 / 运行前校验 自检\n");
+    engine::registerAllNodes();
+
+    // ------------------------------------------------ 1. 拓扑排序（Kahn）-----
+    {
+        Graph                    graph;
+        std::vector<std::string> order;
+        std::string              error;
+        expect(check, graph.topologicalOrder(&order, &error) && order.empty(),
+               "空图：拓扑排序成功且序列为空", error);
+    }
+    {
+        Graph             graph;
+        const std::string n1 = add_node(check, graph, "TextInput", "线性图 n1");
+        const std::string n2 = add_node(check, graph, "PromptTemplate", "线性图 n2");
+        const std::string n3 = add_node(check, graph, "TextOutput", "线性图 n3");
+        graph.edges.push_back(make_edge("e1", n1, "text", n2, "vars"));
+        graph.edges.push_back(make_edge("e2", n2, "text", n3, "text"));
+
+        std::vector<std::string> order;
+        std::string              error;
+        const bool               ok = graph.topologicalOrder(&order, &error);
+        expect(check, ok && order.size() == 3, "线性图：拓扑排序成功", error);
+        if (order.size() == 3) {
+            expect(check, order[0] == n1 && order[1] == n2 && order[2] == n3,
+                   "线性图：顺序为 n1→n2→n3", order[0] + "→" + order[1] + "→" + order[2]);
+        }
+    }
+    {
+        Graph             graph;
+        const std::string n1 = add_node(check, graph, "TextInput", "菱形图 n1");
+        const std::string n2 = add_node(check, graph, "PromptTemplate", "菱形图 n2");
+        const std::string n3 = add_node(check, graph, "PromptTemplate", "菱形图 n3");
+        const std::string n4 = add_node(check, graph, "TextMerge", "菱形图 n4");
+        graph.edges.push_back(make_edge("e1", n1, "text", n2, "vars"));
+        graph.edges.push_back(make_edge("e2", n1, "text", n3, "vars"));
+        graph.edges.push_back(make_edge("e3", n2, "text", n4, "texts"));
+        graph.edges.push_back(make_edge("e4", n3, "text", n4, "texts"));
+
+        std::vector<std::string> order;
+        std::string              error;
+        const bool               ok = graph.topologicalOrder(&order, &error);
+        expect(check, ok && order.size() == 4 && order.front() == n1 && order.back() == n4,
+               "菱形图：起点最先、汇点最后", error);
+    }
+    {
+        Graph             graph;
+        const std::string n1 = add_node(check, graph, "TextInput", "孤立节点 n1");
+        const std::string n2 = add_node(check, graph, "PromptTemplate", "孤立节点 n2");
+        const std::string n3 = add_node(check, graph, "TextOutput", "孤立节点 n3");
+        graph.edges.push_back(make_edge("e1", n2, "text", n3, "text"));
+
+        std::vector<std::string> order;
+        std::string              error;
+        const bool               ok = graph.topologicalOrder(&order, &error);
+        expect(check, ok && order.size() == 3, "孤立节点也进入拓扑序列", error);
+        expect(check, ok && !order.empty() && order.front() == n1, "孤立节点（无入边）排在最前");
+    }
+
+    {
+        Graph             graph;
+        const std::string p1 = add_node(check, graph, "PromptTemplate", "环图 p1");
+        const std::string p2 = add_node(check, graph, "PromptTemplate", "环图 p2");
+        graph.edges.push_back(make_edge("e1", p1, "text", p2, "vars"));
+        graph.edges.push_back(make_edge("e2", p2, "text", p1, "vars"));
+
+        std::vector<std::string> order;
+        std::string              error;
+        const bool               ok = graph.topologicalOrder(&order, &error);
+        expect(check, !ok && !error.empty(), "两节点环：拓扑排序失败");
+        expect(check, !ok && error.find(p1) != std::string::npos &&
+                         error.find(p2) != std::string::npos,
+               "环错误信息列出环内节点", error);
+    }
+    {
+        Graph             graph;
+        const std::string p1 = add_node(check, graph, "PromptTemplate", "自环图 p1");
+        graph.edges.push_back(make_edge("e1", p1, "text", p1, "vars"));
+
+        std::vector<std::string> order;
+        std::string              error;
+        expect(check, !graph.topologicalOrder(&order, &error), "自环：拓扑排序失败", error);
+    }
+    {
+        Graph                    graph;
+        std::vector<std::string> ids;
+        for (int i = 0; i < 20; ++i) {
+            const std::string id =
+                add_node(check, graph, "PromptTemplate", "20 节点链 #" + std::to_string(i + 1));
+            ids.push_back(id);
+            if (i > 0) {
+                graph.edges.push_back(
+                    make_edge("e" + std::to_string(i), ids[i - 1], "text", ids[i], "vars"));
+            }
+        }
+        std::vector<std::string> order;
+        std::string              error;
+        const bool               ok = graph.topologicalOrder(&order, &error);
+        expect(check, ok && order.size() == 20, "20 节点链：拓扑排序成功", error);
+        expect(check, ok && !order.empty() && order.front() == ids.front() && order.back() == ids.back(),
+               "20 节点链：首尾顺序正确");
+    }
+    {
+        Graph             graph;
+        const std::string n1 = add_node(check, graph, "PromptTemplate", "悬空边图 n1");
+        graph.edges.push_back(make_edge("e1", "nope", "text", n1, "vars"));
+
+        std::vector<std::string> order;
+        std::string              error;
+        expect(check, graph.topologicalOrder(&order, &error) && order.size() == 1,
+               "悬空边被拓扑排序忽略（交给校验报告）", error);
+
+        ValidationMessages errors;
+        expect(check, !engine::validateWorkflow(graph, &errors) &&
+                         contains_text(errors, "起点节点不存在"),
+               "悬空边：加载校验拒绝");
+    }
+
+    // ------------------------------------- 2. 加载校验 / 运行前校验（示例图）----
+    Graph             sample;
+    const std::string text_in = add_node(check, sample, "TextInput", "示例 n1（文本输入）");
+    const std::string tmpl    = add_node(check, sample, "PromptTemplate", "示例 n2（模板）");
+    const std::string llm     = add_node(check, sample, "LLMGenerate", "示例 n3（文本生成）");
+    const std::string out     = add_node(check, sample, "TextOutput", "示例 n4（文本输出）");
+    const std::string provider = add_node(check, sample, "ProviderConfig", "示例 n5（提供商配置）");
+    sample.edges.push_back(make_edge("e1", text_in, "text", tmpl, "vars"));
+    sample.edges.push_back(make_edge("e2", tmpl, "text", llm, "prompt"));
+    sample.edges.push_back(make_edge("e3", provider, "provider", llm, "provider"));
+    sample.edges.push_back(make_edge("e4", llm, "text", out, "text"));
+    if (engine::Node* node = sample.findNode(text_in)) {
+        if (engine::Param* param = node->findParam("text")) {
+            param->value = "标题：秋日";
+        }
+    }
+    {
+        ValidationMessages errors;
+        const bool         ok = engine::validateWorkflow(sample, &errors);
+        expect(check, ok, "示例工作流（5 节点 4 连线）：加载校验通过",
+               errors.empty() ? std::string() : errors.front());
+    }
+    { // 无 Key 时只给 warning，不阻断（临时清环境变量后恢复）
+        std::string saved;
+        if (const char* value = std::getenv("DEEPSEEK_API_KEY")) {
+            saved = value;
+            if (!saved.empty()) {
+                _putenv_s("DEEPSEEK_API_KEY", "");
+            }
+        }
+        ValidationMessages errors;
+        ValidationMessages warnings;
+        const bool         ok = engine::validateBeforeRun(sample, &errors, &warnings);
+        expect(check, ok, "未配置 Key：运行前校验仍通过（不阻断）");
+        expect(check, contains_text(warnings, "未配置 API Key"), "未配置 Key：给出 warning");
+        if (!saved.empty()) {
+            _putenv_s("DEEPSEEK_API_KEY", saved.c_str());
+        }
+    }
+
+    { // 必填输入未连接：LLMGenerate.prompt（结构仍合法 → 仅运行前拒绝）
+        Graph graph = sample;
+        graph.removeEdge("e2");
+        ValidationMessages errors;
+        ValidationMessages warnings;
+        expect(check, !engine::validateBeforeRun(graph, &errors, &warnings),
+               "必填输入未连接：运行前校验拒绝");
+        expect(check, contains_text(errors, "必填输入") && contains_text(errors, llm),
+               "错误信息含节点 id 与「必填输入」", errors.empty() ? std::string() : errors.front());
+        ValidationMessages load_errors;
+        expect(check, engine::validateWorkflow(graph, &load_errors),
+               "必填输入未连接：加载校验仍通过（分层清晰）");
+    }
+    { // 可变长输入无入边：TextMerge.texts
+        Graph             graph = sample;
+        const std::string merge = add_node(check, graph, "TextMerge", "悬空 TextMerge");
+        ValidationMessages errors;
+        ValidationMessages warnings;
+        expect(check, !engine::validateBeforeRun(graph, &errors, &warnings),
+               "可变长输入无入边：运行前校验拒绝");
+        expect(check, contains_text(errors, merge) && contains_text(errors, "至少需要 1 条连线"),
+               "错误信息说明可变长输入要求");
+    }
+    { // 必填参数为空：PromptTemplate.template
+        Graph graph = sample;
+        if (engine::Node* node = graph.findNode(tmpl)) {
+            if (engine::Param* param = node->findParam("template")) {
+                param->value = "";
+            }
+        }
+        ValidationMessages errors;
+        expect(check, !engine::validateWorkflow(graph, &errors) && contains_text(errors, "必填"),
+               "必填参数为空：加载校验拒绝");
+    }
+    { // 端口类型不兼容：Text 输出 → Image 输入
+        Graph             graph = sample;
+        const std::string preview = add_node(check, graph, "ImagePreview", "图片预览");
+        graph.edges.push_back(make_edge("e9", llm, "text", preview, "image"));
+        ValidationMessages errors;
+        expect(check, !engine::validateWorkflow(graph, &errors) &&
+                         contains_text(errors, "端口类型不兼容"),
+               "端口类型不兼容：加载校验拒绝");
+    }
+    { // 端口不存在
+        Graph graph = sample;
+        graph.edges.push_back(make_edge("e9", tmpl, "nope", out, "text"));
+        ValidationMessages errors;
+        expect(check, !engine::validateWorkflow(graph, &errors) &&
+                         contains_text(errors, "起点端口不存在"),
+               "端口不存在：加载校验拒绝");
+    }
+    { // 非可变长输入被重复占用
+        Graph graph = sample;
+        graph.edges.push_back(make_edge("e9", tmpl, "text", out, "text"));
+        ValidationMessages errors;
+        expect(check, !engine::validateWorkflow(graph, &errors) &&
+                         contains_text(errors, "重复占用"),
+               "输入端口重复占用：加载校验拒绝");
+    }
+    { // 未知节点类型
+        Graph       graph;
+        engine::Node unknown;
+        unknown.id   = "n1";
+        unknown.type = "NotExists";
+        graph.nodes.push_back(unknown);
+        ValidationMessages errors;
+        expect(check, !engine::validateWorkflow(graph, &errors) &&
+                         contains_text(errors, "未知节点类型"),
+               "未知节点类型：加载校验拒绝");
+    }
+    { // 缺少提供商配置节点 → warning（provider 输入可选，不阻断）
+        Graph graph = sample;
+        graph.removeNode(provider);
+        ValidationMessages errors;
+        ValidationMessages warnings;
+        const bool         ok = engine::validateBeforeRun(graph, &errors, &warnings);
+        expect(check, ok, "缺少提供商节点：运行前校验仍通过（provider 为可选输入）");
+        expect(check, contains_text(warnings, "提供商配置"), "缺少提供商节点：给出 warning");
+    }
+    { // web 模式 → 登录提示 warning（不阻断）
+        Graph graph = sample;
+        if (engine::Node* node = graph.findNode(provider)) {
+            if (engine::Param* mode = node->findParam("mode")) {
+                mode->value = "web";
+            }
+        }
+        ValidationMessages errors;
+        ValidationMessages warnings;
+        expect(check, engine::validateBeforeRun(graph, &errors, &warnings), "web 模式：运行前校验通过");
+        expect(check, contains_text(warnings, "网页版模式"), "web 模式：给出登录提示 warning");
+    }
+    { // 空图
+        Graph              graph;
+        ValidationMessages errors;
+        ValidationMessages warnings;
+        expect(check, !engine::validateWorkflow(graph, &errors) &&
+                         contains_text(errors, "工作流为空"),
+               "空图：加载校验拒绝");
+        expect(check, !engine::validateBeforeRun(graph, &errors, &warnings), "空图：运行前校验拒绝");
+    }
+
+    std::printf("=== 执行器自检结果: %d 通过 / %d 失败 ===\n", check.passed, check.failed);
+    return check.failed == 0 ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -824,6 +1118,9 @@ int main(int argc, char** argv)
         }
         else if (arg == "--graph-selftest") {
             options.graph_selftest = true;
+        }
+        else if (arg == "--exec-selftest") {
+            options.exec_selftest = true;
         }
         else if (arg == "--insecure") {
             options.insecure = true;
@@ -858,7 +1155,7 @@ int main(int argc, char** argv)
     aiwrite::log::info("api_probe 启动（M1 技术验证）");
 
     if (options.sha3_text == "" && !options.selftest && !options.graph_selftest &&
-        options.http_url.empty() && options.chat_prompt.empty()) {
+        !options.exec_selftest && options.http_url.empty() && options.chat_prompt.empty()) {
         print_usage();
         aiwrite::log::shutdown();
         return 2;
@@ -900,6 +1197,12 @@ int main(int argc, char** argv)
 
     if (options.graph_selftest) {
         if (graph_selftest() != 0) {
+            exit_code = 1;
+        }
+    }
+
+    if (options.exec_selftest) {
+        if (executor_selftest() != 0) {
             exit_code = 1;
         }
     }

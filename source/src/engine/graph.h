@@ -163,6 +163,12 @@ public:
     static bool validateParam(const Param& param, std::string* error);
     bool        validateParams(const Node& node, std::vector<std::string>* errors) const;
 
+    // 设计 §10 / M2-03：Kahn 拓扑排序
+    //  * 零入度按 **节点插入序** 出队 → 结果稳定可测
+    //  * 只统计"连接两个存在节点"的边（悬空边由 validateWorkflow 报告）
+    //  * 有环返回 false，error 列出环内节点（残余入度 > 0 者）
+    bool topologicalOrder(std::vector<std::string>* order, std::string* error) const;
+
     // ----------------------------------------------------------- id ---------
     std::string makeNodeId();   // "n1"、"n2" ...
     std::string makeEdgeId();   // "e1"、"e2" ...
