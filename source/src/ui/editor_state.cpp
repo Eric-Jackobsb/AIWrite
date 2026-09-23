@@ -330,29 +330,36 @@ bool EditorState::start_run()
 {
     aiwrite::nodes::registerAllExecutors(); // 幂等
 
-    executor.setConsoleHandler([](const std::string& text) { log::info("[执行] " + text); });
+    executor.setConsoleHandler([](const std::string& text) {
+        log::info("[执行] " + text);  // Console 面板 + app.log
+        log::workflow(text);          // 执行日志：workflow.log（设计 §11.1）
+    });
 
     engine::ValidationMessages errors;
     engine::ValidationMessages warnings;
     if (!engine::validateBeforeRun(graph, &errors, &warnings)) {
         for (const std::string& text : errors) {
             log::error("[运行前校验] " + text);
+            log::workflow("[运行前校验-失败] " + text);
         }
         set_status("运行被拒绝：" + (errors.empty() ? std::string("未知原因") : errors.front()));
         return false;
     }
     for (const std::string& text : warnings) {
         log::warn("[运行前校验] " + text);
+        log::workflow("[运行前校验-警告] " + text);
     }
 
     std::string error;
     if (!executor.start(graph, &error)) {
         log::error("启动运行失败：" + error);
+        log::workflow("[运行启动失败] " + error);
         set_status("启动运行失败：" + error);
         return false;
     }
 
     log::info("开始运行工作流：计划 " + std::to_string(executor.totalCount()) + " 个节点");
+    log::workflow("===== 运行开始（计划 " + std::to_string(executor.totalCount()) + " 个节点）=====");
     set_status("运行中…");
     return true;
 }
@@ -376,7 +383,9 @@ void EditorState::tick_run()
     if (executor.tick(&graph)) {
         return; // 本帧推进了一个节点
     }
-    set_status("运行结束：" + executor.summary()); // Finished / Cancelled / Failed
+    // 会话结束（Finished / Cancelled / Failed）
+    set_status("运行结束：" + executor.summary());
+    log::workflow("===== 运行结束：" + executor.summary() + " =====");
 }
 
 std::string EditorState::run_status_text() const

@@ -108,6 +108,7 @@ protected:
 };
 
 std::shared_ptr<spdlog::logger> g_logger;
+std::shared_ptr<spdlog::logger> g_workflow_logger;
 
 } // namespace
 
@@ -150,6 +151,24 @@ void init(bool attach_console)
     g_logger->flush_on(spdlog::level::warn);
     spdlog::set_default_logger(g_logger);
 
+    // ---- workflow.log：独立文件 sink（设计 §11.1；M4-13 只补事件，不再新建 sink）----
+    try {
+        auto workflow_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+            paths::workflow_log_file().string(), 10 * 1024 * 1024, 5);
+        workflow_sink->set_formatter(std::make_unique<AppFormatter>());
+
+        std::vector<spdlog::sink_ptr> workflow_sinks{workflow_sink};
+        g_workflow_logger =
+            std::make_shared<spdlog::logger>("workflow", workflow_sinks.begin(), workflow_sinks.end());
+        g_workflow_logger->set_level(spdlog::level::info);
+        g_workflow_logger->flush_on(spdlog::level::info);
+        spdlog::register_logger(g_workflow_logger); // 让 flush_every 也覆盖它
+    }
+    catch (const spdlog::spdlog_ex& ex) {
+        std::fprintf(stderr, "[log] 无法创建工作流日志 %s: %s\n",
+                     paths::workflow_log_file().string().c_str(), ex.what());
+    }
+
     // 周期性落盘，便于用外部工具 tail app.log
     spdlog::flush_every(std::chrono::seconds(2));
 }
@@ -159,7 +178,18 @@ void shutdown()
     if (g_logger) {
         g_logger->flush();
     }
+    if (g_workflow_logger) {
+        g_workflow_logger->flush();
+    }
+    g_workflow_logger.reset();
     spdlog::shutdown();
+}
+
+void workflow(const std::string& message)
+{
+    if (g_workflow_logger) {
+        g_workflow_logger->info("{}", message);
+    }
 }
 
 void info(const std::string& message)
@@ -207,6 +237,11 @@ void clear_entries()
 std::string file_path_string()
 {
     return paths::app_log_file().string();
+}
+
+std::string workflow_file_path_string()
+{
+    return paths::workflow_log_file().string();
 }
 
 } // namespace aiwrite::log
