@@ -13,7 +13,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include <chrono>
+#include <condition_variable>
 #include <cstdio>
+#include <mutex>
 #include <exception>
 #include <filesystem>
 #include <utility>
@@ -33,7 +36,92 @@ constexpr DWORD          kAutoCloseGraceMs = 3000; // 自检：取到 Cookie 后
 constexpr int            kHotkeyExtract = 1;     // Ctrl+Alt+C：立即重新提取
 constexpr int            kHotkeyClose   = 2;     // ESC：关闭窗口
 constexpr UINT           kProbeMessage  = WM_APP + 1; // 请求协议探测（可在任意线程 Post）
-constexpr DWORD          kProbeDelayMs  = 1500;  // 页面加载完成后再等一会儿（SPA 就绪）才探测
+constexpr UINT           kSolvePowMessage = WM_APP + 2; // 请求在页面内求解 PoW（任意线程 Post）
+// 页面加载完成后到开始协议探测的等待（给 SPA 一点就绪时间）
+constexpr DWORD kProbeDelayMs = 1500;
+
+// 页面内求解 PoW：分两段执行（注入→轮询取回），避免部分运行时 ExecuteScript 不等待 Promise
+//  1) 找 main.*.js（页面已加载的主包）
+//  2) 正则取 `n.u(<id>)`（new Worker 处）与 `<id>:"<hash>"`（chunk 表）
+//  3) 用「主包 URL 换文件名」拼出 worker URL，取回源码 → Blob → Worker（绕同源限制）
+constexpr const char* kSolvePowScript = R"JS(
+(function () {
+  window.__aiwritePowResult = '';
+  const finish = (obj) => { window.__aiwritePowResult = JSON.stringify(obj); };
+  const runWorker = (urlText) => new Promise((resolve, reject) => {
+    const worker = new Worker(urlText);
+    const timer = setTimeout(() => { worker.terminate(); reject(new Error('worker timeout')); }, 60000);
+    worker.onmessage = (ev) => {
+      clearTimeout(timer); worker.terminate();
+      if (ev.data && ev.data.type === 'pow-answer') { resolve(ev.data.answer); }
+      else { reject(new Error('pow-error')); }
+    };
+    worker.onerror = () => { clearTimeout(timer); worker.terminate(); reject(new Error('worker error')); };
+    worker.postMessage(window.__aiwritePowPayload);
+  });
+
+  (async () => {
+    const out = { ok: false, answer: -1, error: '' };
+    try {
+      let raw = window.__aiwritePowChallenge;
+      if (typeof raw === 'string') { raw = raw.trim(); }
+      if (!raw) { throw new Error('empty challenge'); }
+      const parsed = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+      const ch = parsed.data.biz_data.challenge;
+      window.__aiwritePowPayload = {
+        type: 'pow-challenge',
+        challenge: { ...ch, expireAt: ch.expire_at, expireAfter: ch.expire_after }
+      };
+
+      const candidates = [];
+      try {
+        const mainUrl = Array.from(document.querySelectorAll('script[src]'))
+          .map((s) => s.src)
+          .find((u) => /\/main\.[0-9a-f]+\.js$/i.test(u));
+        if (mainUrl) {
+          const text = await (await fetch(mainUrl)).text();
+          const ids = new Set();
+          const workerRe = /new Worker\(new URL\([^,]*?\.u\((\d+)\)/g;
+          let m;
+          while ((m = workerRe.exec(text)) !== null) { ids.add(m[1]); }
+          for (const id of ids) {
+            const hashRe = new RegExp('(?:^|[,{])"?' + id + '"?:"([0-9a-f]{8,})"');
+            const hm = hashRe.exec(text);
+            if (hm) { candidates.push(mainUrl.replace(/\/[^/]+\.js$/, '/' + id + '.' + hm[1] + '.js')); }
+          }
+        }
+      } catch (e) { /* 主包解析失败则走兜底 */ }
+      candidates.push('https://fe-static.deepseek.com/chat/static/76608.8f2a9fa413.js');
+
+      let lastError = '';
+      for (const url of candidates) {
+        try {
+          const src = await (await fetch(url)).text();
+          const blobUrl = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+          const answer = await runWorker(blobUrl);
+          if (answer && typeof answer.answer === 'number') {
+            out.ok = true;
+            out.answer = answer.answer;
+            finish(out);
+            return;
+          }
+        } catch (e) { lastError = String(e); }
+      }
+      out.error = lastError || 'no worker candidate succeeded';
+    } catch (e) { out.error = String(e); }
+    finish(out);
+  })();
+  return 'started';
+})();
+)JS";
+
+// 轮询取回求解结果
+constexpr const char* kSolvePowPollScript = R"JS(
+(function () {
+  const r = window.__aiwritePowResult;
+  return r ? r : '';
+})();
+)JS";
 
 // 协议探测脚本（在**已登录页面内**执行：同源 fetch，可绕过跨域/反爬）
 //  两段式：kickoff 注入异步任务并把结果写到 window.__aiwriteProbe；poll 轮询取回
@@ -109,6 +197,18 @@ int                   g_probe_attempt = 0;
 DWORD                 g_probe_due_tick  = 0;
 DWORD                 g_probe_last_poll = 0;
 constexpr int         kProbeMaxAttempts = 24; // 24 × 500ms ≈ 12 秒
+
+// 页面内 PoW 求解：跨线程同步（调用方等待，窗口线程执行）
+std::mutex              g_pow_mutex;
+std::condition_variable g_pow_cv;
+bool                    g_pow_done = false;
+long long               g_pow_answer = -1;
+std::string             g_pow_error;
+std::string             g_pow_challenge_json;
+int                     g_pow_stage      = 0;   // 0=空闲 / 1=已注入（轮询等待）/ 2=完成
+int                     g_pow_attempt    = 0;
+DWORD                   g_pow_last_poll  = 0;
+constexpr int           kPowMaxAttempts  = 240; // 240 × 500ms ≈ 120 秒
 DWORD                 g_start_tick = 0;
 DWORD                 g_last_poll  = 0;
 
@@ -414,6 +514,130 @@ void poll_protocol_probe()
     }
 }
 
+// PoW：把结果交回等待中的调用线程
+void finish_pow_solve(long long answer, std::string error)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_pow_mutex);
+        g_pow_answer = answer;
+        g_pow_error  = std::move(error);
+        g_pow_done   = true;
+    }
+    g_pow_cv.notify_all();
+}
+
+// PoW：在窗口线程执行（注入挑战 → 运行页面内求解脚本）
+void run_pow_solve_in_page()
+{
+    if (g_webview == nullptr) {
+        finish_pow_solve(-1, "WebView2 未就绪");
+        return;
+    }
+
+    std::string challenge_json;
+    {
+        std::lock_guard<std::mutex> lock(g_pow_mutex);
+        challenge_json = g_pow_challenge_json;
+    }
+    if (challenge_json.empty()) {
+        finish_pow_solve(-1, "挑战为空");
+        return;
+    }
+
+    // 1) 挑战 JSON 写入页面全局（内容是合法 JSON，可安全内联）
+    const std::wstring inject =
+        to_wide("window.__aiwritePowChallenge = " + challenge_json + "; 'ok';");
+    const HRESULT inject_hr = g_webview->ExecuteScript(
+        inject.c_str(),
+        Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+            [](HRESULT result, LPCWSTR /*json_result*/) -> HRESULT {
+                if (FAILED(result)) {
+                    finish_pow_solve(-1, "注入挑战失败");
+                }
+                return S_OK;
+            })
+            .Get());
+    if (FAILED(inject_hr)) {
+        finish_pow_solve(-1, "调用注入脚本失败");
+        return;
+    }
+
+    // 2) 注入求解脚本（结果写入 window.__aiwritePowResult，由 WM_TIMER 轮询取回）
+    const std::wstring script = to_wide(kSolvePowScript);
+    const HRESULT      hr     = g_webview->ExecuteScript(
+        script.c_str(),
+        Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+            [](HRESULT result, LPCWSTR /*json_result*/) -> HRESULT {
+                if (FAILED(result)) {
+                    finish_pow_solve(-1, "注入求解脚本失败");
+                }
+                return S_OK;
+            })
+            .Get());
+    if (FAILED(hr)) {
+        finish_pow_solve(-1, "调用求解脚本失败");
+        return;
+    }
+    g_pow_stage     = 1;
+    g_pow_attempt   = 0;
+    g_pow_last_poll = ::GetTickCount();
+}
+
+// PoW：轮询页面里的求解结果（WM_TIMER 驱动）
+void poll_pow_solve()
+{
+    if (g_pow_stage != 1 || g_webview == nullptr) {
+        return;
+    }
+    if (++g_pow_attempt > kPowMaxAttempts) {
+        g_pow_stage = 2;
+        finish_pow_solve(-1, "页面内 PoW 求解超时");
+        return;
+    }
+
+    const std::wstring script = to_wide(kSolvePowPollScript);
+    const HRESULT      hr     = g_webview->ExecuteScript(
+        script.c_str(),
+        Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+            [](HRESULT result, LPCWSTR json_result) -> HRESULT {
+                if (FAILED(result) || json_result == nullptr) {
+                    return S_OK; // 下一轮继续
+                }
+                std::string inner;
+                try {
+                    const nlohmann::json outer = nlohmann::json::parse(to_utf8(json_result));
+                    inner = outer.is_string() ? outer.get<std::string>() : std::string();
+                }
+                catch (const std::exception&) {
+                    return S_OK;
+                }
+                if (inner.empty()) {
+                    return S_OK; // 尚未完成
+                }
+
+                g_pow_stage = 2;
+                try {
+                    const nlohmann::json data   = nlohmann::json::parse(inner);
+                    const bool           ok     = data.value("ok", false);
+                    const long long      answer = data.value("answer", -1LL);
+                    const std::string    why    = data.value("error", std::string());
+                    log::info("[网页版 PoW] 页面内求解：" +
+                              (ok ? "answer=" + std::to_string(answer)
+                                  : std::string("失败（") + why + "）"));
+                    finish_pow_solve(ok ? answer : -1, ok ? std::string() : why);
+                }
+                catch (const std::exception& ex) {
+                    finish_pow_solve(-1, std::string("解析求解结果失败: ") + ex.what());
+                }
+                return S_OK;
+            })
+            .Get());
+    if (FAILED(hr)) {
+        g_pow_stage = 2;
+        finish_pow_solve(-1, "轮询求解结果失败");
+    }
+}
+
 HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
 {
     if (FAILED(result) || controller == nullptr) {
@@ -546,6 +770,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
             g_probe_last_poll = now;
             poll_protocol_probe();
         }
+        if (g_pow_stage == 1 && now - g_pow_last_poll >= 500) {
+            g_pow_last_poll = now;
+            poll_pow_solve();
+        }
         if (g_probe_due_tick != 0 && now >= g_probe_due_tick) {
             g_probe_due_tick = 0;
             start_protocol_probe();
@@ -563,6 +791,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
 
     case kProbeMessage:
         start_protocol_probe();
+        return 0;
+
+    case kSolvePowMessage:
+        run_pow_solve_in_page();
         return 0;
 
     case WM_CLOSE:
@@ -819,6 +1051,92 @@ void request_protocol_probe()
     }
     log::info("[网页版探测] 已请求（在登录窗口内执行）");
     ::PostMessageW(window, kProbeMessage, 0, 0);
+}
+
+bool ensure_session(int timeout_ms, std::string* error)
+{
+    // 已有凭证 → 幂等返回
+    if (!SessionStore::instance().snapshot().user_token.empty()) {
+        return true;
+    }
+
+    // 起（或复用）离屏登录窗口；probe_after_load 会刷新 Cookie 与 userToken
+    if (g_window.load() == nullptr || g_webview == nullptr) {
+        LoginRequest request;
+        request.offscreen        = true;
+        request.timeout_seconds  = 0;
+        request.probe_after_load = true;
+        std::string start_error;
+        if (!login_window().start(request, &start_error)) {
+            if (error != nullptr) {
+                *error = "启动登录窗口失败: " + start_error;
+            }
+            return false;
+        }
+    }
+
+    const DWORD deadline = ::GetTickCount() + static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 30000);
+    while (::GetTickCount() < deadline) {
+        if (!SessionStore::instance().snapshot().user_token.empty()) {
+            return true;
+        }
+        ::Sleep(100);
+    }
+
+    if (error != nullptr) {
+        *error = "未取得网页版凭证（请先登录一次：界面「网页版会话 → 打开登录窗口」，"
+                 "或运行 aiwrite.exe --login-selftest）";
+    }
+    return false;
+}
+
+long long solve_pow_via_page(const std::string& challenge_json, int timeout_ms, std::string* error)
+{
+    if (challenge_json.empty()) {
+        if (error != nullptr) {
+            *error = "挑战为空";
+        }
+        return -1;
+    }
+
+    // 确保有可用登录窗口（profile 已登录即可用；离屏启动，用户无需干预）
+    std::string boot_error;
+    if (!ensure_session(15000, &boot_error)) {
+        if (error != nullptr) {
+            *error = boot_error;
+        }
+        return -1;
+    }
+
+    const HWND window = g_window.load();
+    if (window == nullptr || g_webview == nullptr) {
+        if (error != nullptr) {
+            *error = "登录窗口未就绪（请先登录一次：界面「打开登录窗口」或 --login-selftest）";
+        }
+        return -1;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_pow_mutex);
+        g_pow_challenge_json = challenge_json;
+        g_pow_done           = false;
+        g_pow_answer         = -1;
+        g_pow_error.clear();
+    }
+    ::PostMessageW(window, kSolvePowMessage, 0, 0);
+
+    std::unique_lock<std::mutex> lock(g_pow_mutex);
+    const auto                   wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 60000);
+    if (!g_pow_cv.wait_for(lock, wait_ms, [] { return g_pow_done; })) {
+        if (error != nullptr) {
+            *error = "页面内 PoW 求解超时";
+        }
+        return -1;
+    }
+    if (error != nullptr) {
+        *error = g_pow_error;
+    }
+    return g_pow_answer;
 }
 
 int protocol_probe(int timeout_seconds)

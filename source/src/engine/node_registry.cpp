@@ -337,6 +337,11 @@ void registerAllNodes()
         definition.outputs      = {output_port("text", "文本", PortType::Text)};
         definition.params       = {
             text_param("system_prompt", "系统提示词", std::string(), ParamType::Text),
+            enum_param("mode", "模式", {"official", "web"}, "web",
+                       "web = 网页版（已接线，需先登录一次）；official = 官方 API（M4-05 待接线）"),
+            enum_param("model", "模型",
+                       {"deepseek-chat", "deepseek-reasoner", "expert"}, "deepseek-chat",
+                       "deepseek-reasoner 走网页版「深度思考」；expert 走专家模式"),
             float_param("temperature", "温度", 0.7, 0.0, 2.0, 0.1, "采样温度，越高越随机"),
             int_param("max_tokens", "最大长度", 2048, 1.0, 8192.0, "生成的最大 token 数"),
             float_param("top_p", "Top P", 1.0, 0.0, 1.0, 0.05),

@@ -1,5 +1,10 @@
 #include "nodes/nodes.h"
 
+#include "ai/deepseek_web_client.h"
+#include "utils/log.h"
+#include "web/session_store.h"
+#include "web/webview_host.h"
+
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -189,18 +194,56 @@ json execute_image_preview(const json& inputs, const json& /*params*/,
     return path;
 }
 
-// --- N-06 文本生成（M2 占位：等待 Provider 接线）-----------------------------
-json execute_llm_generate(const json& inputs, const json& /*params*/,
-                          engine::ExecutionContext& /*ctx*/)
+// --- N-06 文本生成 -----------------------------------------------------------
+//  * provider.mode == "web"    → 网页版（M4-06 已接线：Cookie+userToken → PoW → SSE）
+//  * provider.mode == "official" → 官方 API（M4-05 待接线，抛错提示可先切网页版）
+//  * 输出：单输出端口 → 直接返回生成文本
+json execute_llm_generate(const json& inputs, const json& params, engine::ExecutionContext& ctx)
 {
-    std::string model = "deepseek-chat";
+    std::string mode  = params.value("mode", std::string("official"));
+    std::string model = params.value("model", std::string("deepseek-chat"));
     if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
+        mode  = it->value("mode", mode);
         model = it->value("model", model);
     }
-    const std::size_t prompt_size =
-        inputs.contains("prompt") ? text_of(inputs["prompt"]).size() : 0;
-    throw engine::NodeError("文本生成尚未接线（M4-05 官方 API / M4-06 网页版）：已收到提示词 " +
-                            std::to_string(prompt_size) + " 字节，模型 " + model);
+
+    const std::string prompt = inputs.contains("prompt") ? text_of(inputs["prompt"]) : "";
+    if (prompt.empty()) {
+        throw engine::NodeError("文本生成：提示词为空（请连接 PromptTemplate 或直接填写 prompt）");
+    }
+
+    if (mode != "web") {
+        throw engine::NodeError("文本生成尚未接线（M4-05 官方 API）：当前 provider.mode = " + mode +
+                                "；可先切到 web（网页版）验证链路，或等待官方 API 接线");
+    }
+
+    // 网页版：凭证（Cookie + userToken）只在内存；没有则自动引导一次（profile 已登录即可用）
+    if (web::SessionStore::instance().snapshot().user_token.empty()) {
+        std::string boot_error;
+        ctx.console("[文本生成] 正在准备网页版会话（首次约数秒）…");
+        if (!web::ensure_session(25000, &boot_error)) {
+            throw engine::NodeError("文本生成（网页版）不可用：" + boot_error);
+        }
+    }
+    const web::Session session = web::SessionStore::instance().snapshot();
+
+    ai::WebChatRequest request;
+    request.prompt           = prompt;
+    request.model_type       = (model == "expert") ? "expert" : "default";
+    request.thinking_enabled = (model == "deepseek-reasoner");
+
+    ctx.console("[文本生成] 网页版请求：模型 " + model + "，提示词 " +
+                std::to_string(prompt.size()) + " 字节");
+    const ai::WebChatResult result = ai::web_chat(session, request);
+    if (!result.ok || result.text.empty()) {
+        throw engine::NodeError("文本生成（网页版）失败：" +
+                                (result.error.empty() ? std::string("未取到文本") : result.error));
+    }
+
+    log::info("[文本生成] 网页版完成：HTTP " + std::to_string(result.http_status) + "，输出 " +
+              std::to_string(result.text.size()) + " 字节");
+    ctx.console("[文本生成] 完成，输出 " + std::to_string(result.text.size()) + " 字节");
+    return result.text;
 }
 
 // --- N-07 多模态生成（M2 占位：等待 Provider 接线）---------------------------

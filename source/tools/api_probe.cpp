@@ -1319,6 +1319,12 @@ int execution_selftest()
         const std::string t1 = add_node(check, graph, "TextInput", "失败图 n1");
         const std::string t2 = add_node(check, graph, "PromptTemplate", "失败图 n2");
         const std::string l1 = add_node(check, graph, "LLMGenerate", "失败图 n3（生成·占位）");
+        // 自检不联网：把生成模式置为 official（官方 API 占位分支，快速失败且信息稳定）
+        if (engine::Node* llm_node = graph.findNode(l1)) {
+            if (engine::Param* mode = llm_node->findParam("mode")) {
+                mode->value = std::string("official");
+            }
+        }
         const std::string o1 = add_node(check, graph, "TextOutput", "失败图 n4（下游）");
         const std::string t3 = add_node(check, graph, "TextInput", "失败图 n5（无关分支）");
         const std::string o2 = add_node(check, graph, "TextOutput", "失败图 n6（无关分支）");

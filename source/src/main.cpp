@@ -11,9 +11,11 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <thread>
 #include <string>
 
 namespace {
@@ -32,16 +34,31 @@ void print_usage()
     std::printf("  --web-chat \"<提示词>\"\n");
     std::printf("                   网页版生成：取 PoW 挑战 → C++ 求解 → 调用 /api/v0/chat/completion\n");
     std::printf("                   退出码 0=取到文本 / 1=失败（需先登录过一次）\n");
-    std::printf("  --run-selftest   执行自检：创建示例工作流 → 运行到结束，打印各节点状态与统计\n");
-    std::printf("                   （LLMGenerate 目前为占位实现，预期该节点 error、下游 skipped）\n");
+    std::printf("  --run-selftest [--web]\n");
+    std::printf("                   执行自检：创建示例工作流 → 运行到结束，打印各节点状态与统计\n");
+    std::printf("                   --web：LLMGenerate 走网页版真实生成（需已登录过一次）\n");
+    std::printf("                   默认 LLMGenerate 为占位实现，预期该节点 error、下游 skipped\n");
     std::printf("  --help           显示本帮助\n");
 }
 
 // --run-selftest：不打开窗口，直接验证 EditorState 的运行接线（start_run / tick_run / 状态文本）
-int run_selftest()
+int run_selftest(bool use_web)
 {
     aiwrite::ui::EditorState& state = aiwrite::ui::editor();
     state.create_sample_workflow();
+
+    // 默认（自检不联网）：把生成相关节点的 mode 置为 official（官方 API 占位分支）
+    // --run-selftest --web：置为 web，走真实网页版生成
+    // 注意：LLMGenerate 的模式取「provider 端口（ProviderConfig）」优先，故两处都要设
+    for (aiwrite::engine::Node& node : state.graph.nodes) {
+        if (node.type != "LLMGenerate" && node.type != "ProviderConfig") {
+            continue;
+        }
+        if (aiwrite::engine::Param* mode = node.findParam("mode")) {
+            mode->value = std::string(use_web ? "web" : "official");
+        }
+    }
+    std::printf("[运行自检] 模式：%s\n", use_web ? "web（网页版真实生成）" : "official（离线占位）");
 
     std::printf("[运行自检] 示例工作流：节点 %zu，连线 %zu\n", state.graph.nodes.size(),
                 state.graph.edges.size());
@@ -111,17 +128,24 @@ int web_chat_selftest(const std::string& prompt)
 {
     aiwrite::web::LoginRequest request;
     request.offscreen              = true;
-    request.timeout_seconds        = 60;
+    request.timeout_seconds        = 0;    // 生命周期由本函数控制
     request.probe_after_load       = true; // 目的：拿到 Cookie + userToken
-    request.auto_close_after_probe = true;
+    request.auto_close_after_probe = false; // 窗口保留给后续 PoW 求解复用
 
-    aiwrite::web::LoginWindow window;
+    aiwrite::web::LoginWindow& window = aiwrite::web::login_window();
     std::string error;
     if (!window.start(request, &error)) {
         std::printf("[网页版生成] 启动登录窗口失败: %s\n", error.c_str());
         return 1;
     }
-    window.join();
+
+    // 等探测完成（窗口保持打开，供后续 PoW 求解复用）
+    for (int i = 0; i < 200; ++i) { // ≤20 秒
+        if (!aiwrite::web::SessionStore::instance().snapshot().probe.ran_at.empty()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     const aiwrite::web::Session session = aiwrite::web::SessionStore::instance().snapshot();
     std::printf("[网页版生成] 会话：Cookie %zu 条，userToken %s\n", session.cookie_count(),
@@ -147,6 +171,8 @@ int web_chat_selftest(const std::string& prompt)
     const bool pass = result.ok && !result.text.empty();
     std::printf("[网页版生成] %s\n", pass ? "PASS" : "FAIL");
 
+    aiwrite::web::login_window().request_close(); // 收尾：关闭离屏窗口
+    aiwrite::web::login_window().join();
     aiwrite::web::SessionStore::instance().clear(); // 自检不留会话
     return pass ? 0 : 1;
 }
@@ -158,6 +184,7 @@ int main(int argc, char** argv)
     aiwrite::ui::AppOptions options;
     bool login_selftest   = false;
     bool run_selftest_flag = false;
+    bool run_selftest_web  = false;
     bool web_probe_flag    = false;
     std::string web_chat_prompt;
     int  selftest_timeout = 30;
@@ -182,6 +209,9 @@ int main(int argc, char** argv)
         }
         else if (arg == "--run-selftest") {
             run_selftest_flag = true;
+        }
+        else if (arg == "--web") {
+            run_selftest_web = true; // 与 --run-selftest 组合：真实调用网页版生成
         }
         else if (arg == "--timeout") {
             if (i + 1 >= argc) {
@@ -236,7 +266,7 @@ int main(int argc, char** argv)
 
     // 执行自检（不需要 GUI）：验证 EditorState 的运行接线
     if (run_selftest_flag) {
-        const int selftest_code = run_selftest();
+        const int selftest_code = run_selftest(run_selftest_web);
         aiwrite::log::info("AIwrite 运行自检退出，返回码 " + std::to_string(selftest_code));
         aiwrite::log::shutdown();
         return selftest_code;

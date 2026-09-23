@@ -100,7 +100,12 @@ M1 验证工具：
 .\aiwrite.exe --console       # 同上，并额外分配控制台窗口显示日志
 .\aiwrite.exe --login-selftest --timeout 30
                               # 网页版登录自检（离屏）：退出码 0=通过 / 1=失败 / 2=超时
+.\aiwrite.exe --web-probe     # 网页版协议探测（脱敏）：userToken / PoW 挑战 / 端点校验
+.\aiwrite.exe --web-chat "用一句话介绍你自己"
+                              # 网页版端到端生成：PoW（页面内官方 worker）→ completion → SSE
 .\aiwrite.exe --run-selftest  # 执行自检：示例工作流跑到底，打印各节点状态与统计（不开窗口）
+.\aiwrite.exe --run-selftest --web
+                              # 同上，但 LLMGenerate 走网页版真实生成（需已登录过一次；实测 5/5 ≈10s）
 .\api_probe.exe --selftest                  # V-04 HTTP + V-05 SHA3 自检
 .\api_probe.exe --graph-selftest            # 图模型/注册表/撤销栈/序列化 自检（95 项断言，无需网络）
 .\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 自检（129 项断言，无需网络）

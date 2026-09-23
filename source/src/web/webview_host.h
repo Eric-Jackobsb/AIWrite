@@ -69,6 +69,17 @@ void request_protocol_probe();
 // 前置：profile 里已有登录态（用户至少登录过一次）；返回 0=探测成功 / 1=失败
 int protocol_probe(int timeout_seconds);
 
+// 用**登录窗口内的官方 PoW worker** 求解（M4-06/M4-09 方案 A：版本自适应、零逆向）
+//  * challenge_json：/api/v0/chat/create_pow_challenge 的原始响应
+//  * 若登录窗口尚未打开，会离屏启动一个（profile 已登录即可用），用户无需干预
+//  * 同步阻塞至多 timeout_ms；成功返回 answer（>=0），失败返回 -1 并写 error
+long long solve_pow_via_page(const std::string& challenge_json, int timeout_ms,
+                             std::string* error);
+
+// 确保内存会话里有可用凭证（Cookie + userToken）：没有则离屏起登录窗口并等一次协议探测完成
+// 返回 true 表示已具备凭证（幂等，已有凭证时立即返回）
+bool ensure_session(int timeout_ms, std::string* error);
+
 // 进程内单例：参数面板与状态栏共用一个登录窗口（故意不析构，避免退出期竞态）
 LoginWindow& login_window();
 

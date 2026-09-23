@@ -2,6 +2,7 @@
 
 #include "ai/web_pow.h"
 #include "utils/log.h"
+#include "web/webview_host.h"
 
 #include <sstream>
 
@@ -41,34 +42,54 @@ httplib::Headers base_headers(const web::Session& session)
     return headers;
 }
 
-// 递归提取 SSE 负载中的文本
-//  形态 A（较新）：{"p":"response/fragments/-1/content","v":"文本"}
-//  形态 B：{"content":"文本"} / {"text":"文本"}
-std::string extract_text(const nlohmann::json& node)
+// SSE 负载 → **增量**文本
+//  形态 A（较新）：{"p":"response/fragments/-1/content","o":"APPEND","v":"文本"}
+//  形态 B（旧版）  ：{"p":"response/content","v":"文本"}
+std::string delta_text_of(const nlohmann::json& node)
 {
-    std::string out;
-    if (node.is_object()) {
-        if (node.contains("p") && node.contains("v") && node["v"].is_string()) {
-            if (node.value("p", std::string()).find("content") != std::string::npos) {
-                return node["v"].get<std::string>();
-            }
-        }
-        if (node.contains("content") && node["content"].is_string()) {
-            out += node["content"].get<std::string>();
-        }
-        if (node.contains("text") && node["text"].is_string()) {
-            out += node["text"].get<std::string>();
-        }
-        for (auto it = node.begin(); it != node.end(); ++it) {
-            if (it.key() == "content" || it.key() == "text") {
-                continue;
-            }
-            out += extract_text(it.value());
+    if (!node.is_object()) {
+        return {};
+    }
+    // 紧凑增量形态：{"v":"文本"}（对象里只有 v 一个键）
+    if (node.size() == 1 && node.contains("v") && node["v"].is_string()) {
+        return node["v"].get<std::string>();
+    }
+    if (!node.contains("p") || !node.contains("v") || !node["v"].is_string()) {
+        return {};
+    }
+    const std::string path = node.value("p", std::string());
+    if (path.find("content") == std::string::npos) {
+        return {};
+    }
+    if (node.contains("o")) {
+        const std::string op = node.value("o", std::string());
+        if (!op.empty() && op != "APPEND") {
+            return {}; // 非追加操作（如 REPLACE）不叠加
         }
     }
-    else if (node.is_array()) {
-        for (const nlohmann::json& item : node) {
-            out += extract_text(item);
+    return node["v"].get<std::string>();
+}
+
+// SSE 负载 → 完整快照正文：{"v":{"response":{"fragments":[{"content":"…"},…]}}}
+//（服务端会周期性下发完整快照；只在拿不到增量时兜底使用，避免重复拼接）
+std::string snapshot_text_of(const nlohmann::json& node)
+{
+    if (!node.is_object() || !node.contains("v") || !node["v"].is_object()) {
+        return {};
+    }
+    const nlohmann::json& v = node["v"];
+    if (!v.contains("response") || !v["response"].is_object()) {
+        return {};
+    }
+    const nlohmann::json& response = v["response"];
+    if (!response.contains("fragments") || !response["fragments"].is_array()) {
+        return {};
+    }
+    std::string out;
+    for (const nlohmann::json& fragment : response["fragments"]) {
+        if (fragment.is_object() && fragment.contains("content") &&
+            fragment["content"].is_string()) {
+            out += fragment["content"].get<std::string>();
         }
     }
     return out;
@@ -188,15 +209,28 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
               " difficulty=" + std::to_string(challenge.difficulty));
 
     // ---------------------------------------------------------- 2) 求解 -----
+    // 方案 A（默认）：交给登录窗口内的**官方 PoW worker** 求解（版本自适应、零逆向）
+    // 方案 B（回退）：C++ 求解器（官方为自定义哈希，通常不会命中，仅作兜底）
     long long         attempts = 0;
-    std::string       solve_error;
-    const std::string answer = solve_pow(challenge, &attempts, &solve_error);
-    result.pow_attempts      = attempts;
-    log::info("[网页版] PoW 求解：" + (answer.empty() ? std::string("失败") : "nonce=" + answer) +
-              "，尝试 " + std::to_string(attempts) + " 次");
-    if (answer.empty()) {
-        result.error = "PoW 求解失败: " + solve_error;
-        return result;
+    std::string       answer;
+    std::string       page_error;
+    const long long   page_answer = web::solve_pow_via_page(challenge_resp->body, 90000, &page_error);
+    if (page_answer >= 0) {
+        answer = std::to_string(page_answer);
+        result.pow_attempts = 1;
+        log::info("[网页版] PoW：页面内官方 worker 求解成功，answer=" + answer);
+    }
+    else {
+        std::string solve_error;
+        answer = solve_pow(challenge, &attempts, &solve_error);
+        result.pow_attempts = attempts;
+        log::warn("[网页版] PoW：页面内求解不可用（" + page_error + "），回退 C++ 求解器（尝试 " +
+                  std::to_string(attempts) + " 次）");
+        if (answer.empty()) {
+            result.error = "PoW 求解失败：页面内求解不可用（" + page_error + "）；C++ 求解器：" +
+                           solve_error;
+            return result;
+        }
     }
 
     // ---------------------------------------------------------- 3) 调用 -----
@@ -245,6 +279,7 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
     // ---------------------------------------------------------- 4) 解析 -----
     std::istringstream stream(response->body);
     std::string        line;
+    std::string        snapshot_text;
     int                line_index = 0;
     while (std::getline(stream, line)) {
         if (line_index < request.raw_head_lines) {
@@ -253,22 +288,29 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
         ++line_index;
 
         const std::string trimmed = trim(line);
-        if (trimmed.rfind("data:", 0) != 0) {
+        const std::string payload =
+            (trimmed.rfind("data:", 0) == 0) ? trim(trimmed.substr(5)) : trimmed;
+        if (payload.empty() || payload == "[DONE]" || payload == "finished") {
+            if (payload == "[DONE]" || payload == "finished") {
+                break;
+            }
             continue;
-        }
-        const std::string payload = trim(trimmed.substr(5));
-        if (payload.empty()) {
-            continue;
-        }
-        if (payload == "[DONE]" || payload == "finished") {
-            break;
         }
         try {
-            result.text += extract_text(nlohmann::json::parse(payload));
+            const nlohmann::json data = nlohmann::json::parse(payload);
+            result.text += delta_text_of(data); // 增量（权威且有序）
+            const std::string snapshot = snapshot_text_of(data);
+            if (!snapshot.empty()) {
+                snapshot_text = snapshot; // 记录最后一份完整快照
+            }
         }
         catch (const std::exception&) {
-            // 非 JSON 的 SSE 行（心跳 / 结束标记）忽略
+            // 非 JSON 行（事件名 / 心跳）忽略
         }
+    }
+    // 取更完整的一份（快照通常包含完整正文；流被截断时增量更全）
+    if (snapshot_text.size() > result.text.size()) {
+        result.text = snapshot_text;
     }
 
     result.ok = (response->status == 200);

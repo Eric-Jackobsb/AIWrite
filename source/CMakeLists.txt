@@ -185,7 +185,8 @@ add_library(aiwrite_core STATIC
     src/ai/deepseek_web_client.cpp
     src/nodes/local_nodes.cpp
     src/nodes/register_executors.cpp
-    src/web/session_store.cpp)
+    src/web/session_store.cpp
+    src/web/webview_host.cpp)   # 网页版登录 + 会话 + 协议探测 + 页面内 PoW 求解
 target_include_directories(aiwrite_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(aiwrite_core
     PUBLIC aiwrite_build_options
@@ -194,6 +195,7 @@ target_link_libraries(aiwrite_core
     PUBLIC aiwrite_tomlplusplus
     PUBLIC OpenSSL::Crypto
     PUBLIC httplib::httplib   # ai/：网页版 PoW + /api/v0/chat/completion（M4-06）
+    ${AIWRITE_WEBVIEW2}       # web/：内嵌 WebView2 登录窗口 + 页面内 PoW 求解（M4-06/M4-08）
     PRIVATE psapi)   # 诊断模块：GetProcessMemoryInfo
 if(MSVC)
     target_compile_options(aiwrite_core PRIVATE /W4)
@@ -229,15 +231,13 @@ add_executable(aiwrite WIN32
     src/ui/node_canvas.cpp
     src/ui/node_library.cpp
     src/ui/toolbar.cpp
-    src/utils/file_dialog.cpp
-    src/web/webview_host.cpp)
+    src/utils/file_dialog.cpp)
 target_link_libraries(aiwrite PRIVATE
     aiwrite_core
     imgui_node_editor
     glfw
     OpenGL::GL
-    nfd::nfd
-    ${AIWRITE_WEBVIEW2})   # M2：网页版登录（内嵌 WebView2 有头登录窗口）
+    nfd::nfd)
 if(MSVC)
     target_compile_options(aiwrite PRIVATE /W4)
     # GUI 程序但保留 main() 入口（便于命令行参数解析）
