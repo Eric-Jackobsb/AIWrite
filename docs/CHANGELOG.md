@@ -10,12 +10,26 @@
 | [ai_writer_nodes.md](ai_writer_nodes.md) | 项目设计文档（v1.0） |
 | [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6） |
 | [actionPlan/M1.md](actionPlan/M1.md) … [M6.md](actionPlan/M6.md) | 各里程碑 Action Plan |
+| [actionPlan/M_patchA.md](actionPlan/M_patchA.md) | **地基补丁系列 A–D**（结果回流与可观测性 / 异步与流式 / 数据安全 / 交互打磨）行动计划 |
 | [M1_技术验证报告.md](M1_技术验证报告.md) | M1 实测环境、验证结果与问题记录 |
 | [../source/README.md](../source/README.md) | 源码构建 / 运行 / 调试说明 |
 
 ---
 
 ## [Unreleased] — M2 节点系统（P1 数据层 + P2 画布交互）已落地
+
+**文档：建立「地基补丁系列」行动计划（M_patchA）**
+
+- `docs/actionPlan/M_patchA.md`（新）：基于 2026-09-23 **全库底层逻辑审计**（A 结果回流 / B 执行层 / C 配置层 / D 会话凭据 / E 交互 / F 数据 / G 占位），
+  把跨里程碑的地基缺口收敛为补丁系列 **A→B→C→D + 并行小项**，并给出 Patch A 的完整详述
+  （PA-01…PA-09 任务、VA-01…VA-08 验证、风险与产出）、横向追溯矩阵（缺口→任务→验证→验收）与决策点 D-01…D-05
+- 关键审计结论：`Executor::outputs()` 在 UI 侧**零引用**（结果无法回显/复制）、执行**同步阻塞且不可中断**、
+  `ExecutionContext` 无流式回调、`config` 的多数字段（`output/timeout/error/general/advanced` 等）**未被读取**、
+  无自动保存/版本迁移/输出归档、无快捷键、复制粘贴暂停、窗口几何不持久
+- 与既有里程碑的归口：M4-05/M4-07/M4-10/M4-11 → **Patch B**；M4-12/M4-13 → **Patch A**；
+  M6-02 → **PM-01**；M6-06 → **PD-03**；M5 §11 输出归档 → **Patch C** 打底
+- 索引同步：`docs/CHANGELOG.md` 相关文档索引新增本文件；`docs/actionPlan/milestone_plan.md` 新增「补丁系列」行
+  并修正 M2/M3/M4/M5/M6 过期状态（M2 已完成、M3/M4 进行中）
 
 **网页版生成端到端打通（M4-06 / M4-09 方案 A 收口）：LLMGenerate 已能真实生成文本**
 
