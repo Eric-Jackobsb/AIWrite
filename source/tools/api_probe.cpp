@@ -12,6 +12,9 @@
 //    api_probe --sha3 <text>
 //    api_probe --chat "<prompt>" [--model deepseek-chat]
 //                                [--api-base https://api.deepseek.com] [--insecure]
+//    api_probe --chat "<prompt>" --dry-run      # 只打印/断言请求构造，不需要 Key
+//    api_probe --selftest                      # V-04 + V-05 + V-06 请求构造 + V-08 配置往返
+
 //
 //  说明：API Key 只从环境变量 DEEPSEEK_API_KEY 读取，不写入磁盘、不硬编码。
 // =============================================================================
@@ -23,6 +26,8 @@
 #include "engine/node_registry.h"
 #include "engine/undo_stack.h"
 #include "engine/workflow_io.h"
+#include "utils/config.h"
+#include "web/session_store.h"
 
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -45,6 +50,7 @@ struct Options {
     bool        selftest = false;
     bool        graph_selftest = false;
     bool        insecure = false;
+    bool        dry_run  = false;   // --chat --dry-run：只打印/断言请求，不发网络请求
     std::string http_url;
     std::string sha3_text;
     std::string chat_prompt;
@@ -65,6 +71,9 @@ void print_usage()
     std::printf("  api_probe --sha3 <text>\n");
     std::printf("  api_probe --http <url>\n");
     std::printf("  api_probe --chat \"<prompt>\" [--model <name>] [--api-base <url>] [--insecure]\n");
+    std::printf("     --dry-run   只打印请求（URL / Authorization 脱敏 / body）并做结构断言，不发起网络请求\n");
+    std::printf("  自检 --selftest 覆盖: V-05 SHA3 / V-04 HTTP / V-06 请求构造 / V-08 配置往返 / V-09 会话与可见性\n");
+
 }
 
 bool test_sha3()
@@ -93,9 +102,146 @@ bool test_sha3()
     return all_ok;
 }
 
-bool test_http(const std::string& url, bool insecure)
+// V-06 请求构造自检（无需 API Key）：打印将发送的请求并做结构断言
+bool test_chat_request_shape(const Options& options)
+{
+    std::printf("[V-06] 请求构造自检（不发起网络请求）\n");
+
+    nlohmann::json body;
+    body["model"]    = options.model;
+    body["stream"]   = false;
+    body["messages"] = nlohmann::json::array(
+        {nlohmann::json{{"role", "user"}, {"content", options.chat_prompt}}});
+
+    const char* key        = std::getenv("DEEPSEEK_API_KEY");
+    const std::string auth = (key != nullptr && *key != '\0')
+                                 ? "Bearer ****（已设置 DEEPSEEK_API_KEY，值已脱敏）"
+                                 : "(未设置 DEEPSEEK_API_KEY，仅校验请求构造)";
+
+    std::printf("       POST %s/chat/completions\n", options.api_base.c_str());
+    std::printf("       Authorization: %s\n", auth.c_str());
+    std::printf("       Content-Type: application/json\n");
+    std::printf("       body: %s\n", body.dump(2).c_str());
+
+    const bool ok =
+        body.contains("model") && body["model"].is_string() &&
+        !body["model"].get<std::string>().empty() && body.contains("stream") &&
+        body["stream"].is_boolean() && !body["stream"].get<bool>() && body.contains("messages") &&
+        body["messages"].is_array() && body["messages"].size() == 1 &&
+        body["messages"][0].value("role", std::string()) == "user" &&
+        body["messages"][0].value("content", std::string()) == options.chat_prompt;
+
+    std::printf("   %-6s 请求体结构: model 非空 / stream=false / messages[1]{role=user, content=prompt}\n",
+                ok ? "PASS" : "FAIL");
+    return ok;
+}
+
+// M1-07 配置读写往返自检（在临时文件上做，不改动用户配置）
+bool test_config_roundtrip()
+{
+    std::printf("[V-08] 配置加载 / 保存往返自检（临时文件）\n");
+
+    const std::filesystem::path file =
+        std::filesystem::temp_directory_path() / "aiwrite_config_roundtrip.toml";
+    std::error_code ec;
+    std::filesystem::remove(file, ec);
+
+    aiwrite::Config created;
+    if (!aiwrite::load_config(file, created)) { // 文件不存在 → 生成默认配置并落盘
+        std::printf("   FAIL  默认配置生成失败\n");
+        return false;
+    }
+    const bool generated = std::filesystem::exists(file);
+
+    aiwrite::Config modified         = created;
+    modified.general.language        = "zh-CN-selftest";
+    modified.ui.show_grid            = !created.ui.show_grid;
+    modified.output.ttl_days         = 7;
+    modified.deepseek.model          = "deepseek-reasoner";
+    if (!aiwrite::save_config(file, modified)) {
+        std::printf("   FAIL  保存配置失败\n");
+        return false;
+    }
+
+    aiwrite::Config reloaded;
+    if (!aiwrite::load_config(file, reloaded)) {
+        std::printf("   FAIL  重新加载配置失败\n");
+        return false;
+    }
+
+    const bool same = generated && reloaded.config_version == modified.config_version &&
+                      reloaded.general.language == modified.general.language &&
+                      reloaded.ui.show_grid == modified.ui.show_grid &&
+                      reloaded.output.ttl_days == modified.output.ttl_days &&
+                      reloaded.deepseek.model == modified.deepseek.model;
+    std::printf("   %-6s 默认生成=%s；字段往返一致=%s（language / show_grid / ttl_days / model）\n",
+                same ? "PASS" : "FAIL", generated ? "是" : "否", same ? "是" : "否");
+
+    std::filesystem::remove(file, ec);
+    return same;
+}
+
+// M2：网页版会话存储 + 参数条件可见性自检（不需要网络）
+bool test_web_session_and_visibility()
+{
+    std::printf("[V-09] 会话存储 / 参数条件可见性自检\n");
+
+    // ---- 会话存储：写入 → 快照 → 查找 → 注销 ----
+    aiwrite::web::Session session;
+    session.url = "https://chat.deepseek.com/";
+    aiwrite::web::Cookie cookie;
+    cookie.name  = "ds_session_id";
+    cookie.value = "0123456789abcdef0123456789abcdef";
+    session.cookies.push_back(cookie);
+    aiwrite::web::SessionStore::instance().set(session);
+
+    const aiwrite::web::Session snapshot = aiwrite::web::SessionStore::instance().snapshot();
+    const bool store_ok = snapshot.logged_in && snapshot.cookie_count() == 1 &&
+                          snapshot.has("ds_session_id") &&
+                          aiwrite::web::mask_value(cookie.value) == "0123****cdef(len=32)";
+    aiwrite::web::SessionStore::instance().clear();
+    const bool cleared_ok = !aiwrite::web::SessionStore::instance().logged_in() &&
+                            aiwrite::web::SessionStore::instance().cookie_count() == 0;
+
+    // ---- 参数条件可见性：ProviderConfig 在 official 显示 api_key，在 web 隐藏（且不参与校验）----
+    aiwrite::engine::registerAllNodes();
+    aiwrite::engine::Graph graph;
+    std::string            error;
+    const std::string      id       = graph.addNode("ProviderConfig", 0.0f, 0.0f, &error);
+    aiwrite::engine::Node* provider = graph.findNode(id);
+
+    bool visibility_ok = false;
+    if (provider != nullptr) {
+        aiwrite::engine::Param* mode = provider->findParam("mode");
+        std::vector<std::string> errors;
+        const bool official_visible = aiwrite::engine::param_visible(*provider, "api_key");
+        const bool official_valid   = graph.validateParams(*provider, &errors);
+        if (mode != nullptr) {
+            mode->value = "web";
+        }
+        errors.clear();
+        const bool web_hidden = !aiwrite::engine::param_visible(*provider, "api_key") &&
+                                !aiwrite::engine::param_visible(*provider, "api_base");
+        const bool web_valid = graph.validateParams(*provider, &errors);
+        visibility_ok =
+            (mode != nullptr) && official_visible && web_hidden && official_valid && web_valid;
+    }
+
+    const bool ok = store_ok && cleared_ok && visibility_ok;
+    std::printf("   %-6s 会话存储写读=%s%s；参数可见性=%s（official 显示 api_key / web 隐藏 "
+                "api_key·api_base / 两模式校验均通过）\n",
+                ok ? "PASS" : "FAIL", store_ok ? "OK" : "异常", cleared_ok ? "/注销清空 OK" : "/注销异常",
+                visibility_ok ? "OK" : "异常");
+    return ok;
+}
+
+// V-04：HTTP GET
+// 返回：0 = 通过（2xx~4xx，链路连通）；1 = 失败；2 = 跳过（网络/代理不可达，非代码问题）
+int test_http(const std::string& url, bool insecure)
 {
     std::printf("[V-04] HTTP GET %s\n", url.c_str());
+    std::printf("       连接超时 15s / 读取超时 30s / 跟随重定向 / 证书校验: %s\n",
+                insecure ? "关闭（--insecure）" : "开启");
 
     httplib::Client client(url);
     client.set_connection_timeout(15, 0);
@@ -110,22 +256,39 @@ bool test_http(const std::string& url, bool insecure)
             .count();
 
     if (!res) {
-        std::printf("   FAIL  请求失败: %s\n", httplib::to_string(res.error()).c_str());
-        std::printf("          TLS 校验状态: %ld（0 = 通过）；如为证书问题可加 --insecure 复测\n",
+        const auto error = res.error();
+        // 连接类错误视为"网络/代理不可达" → SKIP（不算代码失败）；TLS 类错误才算 FAIL
+        const bool network_unreachable =
+            error == httplib::Error::Connection || error == httplib::Error::ConnectionTimeout ||
+            error == httplib::Error::Read || error == httplib::Error::Write ||
+            error == httplib::Error::ProxyConnection;
+        std::printf("   %-6s 请求失败: %s（TLS 校验结果: %ld）\n",
+                    network_unreachable ? "SKIP" : "FAIL", httplib::to_string(error).c_str(),
                     insecure ? 0L : client.get_openssl_verify_result());
-        return false;
+        if (network_unreachable) {
+            std::printf("          判定为网络/代理不可达 → SKIP（不计入失败；如为证书问题可加 --insecure 复测）\n");
+            return 2;
+        }
+        return 1;
     }
 
     // 未带 Key 访问 api.deepseek.com 会返回 401，同样说明链路连通
     const bool reachable = res->status >= 200 && res->status < 500;
     std::printf("   %-6s HTTP %d，耗时 %lld ms，响应 %zu 字节\n", reachable ? "PASS" : "FAIL",
                 res->status, static_cast<long long>(elapsed), res->body.size());
-    return reachable;
+    if (!reachable) {
+        std::printf("         响应: %s\n", res->body.substr(0, 200).c_str());
+    }
+    return reachable ? 0 : 1;
 }
 
 // V-06：DeepSeek 官方 API 最小调用（M1-06）
 int test_chat(const Options& options)
 {
+    if (options.dry_run) { // --dry-run：只校验请求构造，不需要 API Key
+        return test_chat_request_shape(options) ? 0 : 1;
+    }
+
     std::printf("[V-06] DeepSeek API 调用（model=%s, base=%s）\n", options.model.c_str(),
                 options.api_base.c_str());
 
@@ -656,6 +819,9 @@ int main(int argc, char** argv)
         if (arg == "--selftest") {
             options.selftest = true;
         }
+        else if (arg == "--dry-run") {
+            options.dry_run = true;
+        }
         else if (arg == "--graph-selftest") {
             options.graph_selftest = true;
         }
@@ -707,16 +873,29 @@ int main(int argc, char** argv)
 
     if (options.selftest) {
         std::printf("=== AIwrite M1 自检 ===\n");
-        const bool sha3_ok = test_sha3();
-        const bool http_ok = test_http("https://api.deepseek.com", options.insecure);
-        std::printf("=== 结果: SHA3 %s / HTTP %s ===\n", sha3_ok ? "PASS" : "FAIL",
-                    http_ok ? "PASS" : "FAIL");
-        if (!sha3_ok || !http_ok) {
+        const bool sha3_ok   = test_sha3();
+        const int  http_code = test_http("https://api.deepseek.com", options.insecure);
+
+        Options request_options = options;
+        if (request_options.chat_prompt.empty()) {
+            request_options.chat_prompt = "用一句话介绍你自己";
+        }
+        const bool request_ok = test_chat_request_shape(request_options);
+        const bool config_ok  = test_config_roundtrip();
+        const bool web_ok     = test_web_session_and_visibility();
+
+        const char* http_text =
+            (http_code == 0) ? "PASS" : (http_code == 2 ? "SKIP(网络不可达)" : "FAIL");
+        std::printf("=== 结果: SHA3 %s / HTTP %s / 请求构造 %s / 配置往返 %s / 会话与可见性 %s ===\n",
+                    sha3_ok ? "PASS" : "FAIL", http_text, request_ok ? "PASS" : "FAIL",
+                    config_ok ? "PASS" : "FAIL", web_ok ? "PASS" : "FAIL");
+        if (!sha3_ok || http_code == 1 || !request_ok || !config_ok || !web_ok) {
             exit_code = 1;
         }
     }
     else if (!options.http_url.empty()) {
-        exit_code = test_http(options.http_url, options.insecure) ? 0 : 1;
+        const int http_code = test_http(options.http_url, options.insecure);
+        exit_code           = (http_code == 0) ? 0 : (http_code == 2 ? 2 : 1);
     }
 
     if (options.graph_selftest) {

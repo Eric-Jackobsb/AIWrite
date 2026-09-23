@@ -177,7 +177,8 @@ add_library(aiwrite_core STATIC
     src/engine/graph.cpp
     src/engine/node_registry.cpp
     src/engine/undo_stack.cpp
-    src/engine/workflow_io.cpp)
+    src/engine/workflow_io.cpp
+    src/web/session_store.cpp)
 target_include_directories(aiwrite_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(aiwrite_core
     PUBLIC aiwrite_build_options
@@ -220,13 +221,15 @@ add_executable(aiwrite WIN32
     src/ui/node_canvas.cpp
     src/ui/node_library.cpp
     src/ui/toolbar.cpp
-    src/utils/file_dialog.cpp)
+    src/utils/file_dialog.cpp
+    src/web/webview_host.cpp)
 target_link_libraries(aiwrite PRIVATE
     aiwrite_core
     imgui_node_editor
     glfw
     OpenGL::GL
-    nfd::nfd)
+    nfd::nfd
+    ${AIWRITE_WEBVIEW2})   # M2：网页版登录（内嵌 WebView2 有头登录窗口）
 if(MSVC)
     target_compile_options(aiwrite PRIVATE /W4)
     # GUI 程序但保留 main() 入口（便于命令行参数解析）

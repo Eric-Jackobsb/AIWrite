@@ -4,6 +4,9 @@
 #include "ui/editor_state.h"
 #include "utils/file_dialog.h"
 #include "utils/log.h"
+#include "utils/paths.h"
+#include "web/session_store.h"
+#include "web/webview_host.h"
 
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -12,6 +15,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -57,6 +61,88 @@ void help_marker(const std::string& description)
 std::string param_label(const Param& param)
 {
     return param.display_name + (param.is_required ? " *" : "");
+}
+
+// ---------------------------------------------------------------- 网页版会话 --
+// 登录窗口（独立线程，不阻塞主界面）：进程内单例见 web::login_window()
+bool is_web_mode(const Node& node)
+{
+    const Param* mode = node.findParam("mode");
+    return mode != nullptr && mode->text() == "web";
+}
+
+// 注销：清内存会话 + 删除 WebView2 profile（强制下次重新登录）
+void logout_web_session()
+{
+    web::login_window().request_close();
+    web::SessionStore::instance().clear();
+
+    std::error_code ec;
+    const std::filesystem::path profile = paths::webview2_profile();
+    std::filesystem::remove_all(profile, ec);
+    if (ec) {
+        log::warn("网页版注销：profile 目录删除失败 " + profile.string() + "（" + ec.message() + "）");
+    }
+    else {
+        log::info("网页版注销：profile 已删除 " + profile.string());
+    }
+}
+
+// ProviderConfig 节点在 web 模式下显示「会话状态 + 登录入口」（设计 §8.5）
+void draw_web_session_section()
+{
+    ImGui::Separator();
+    ImGui::TextUnformatted("网页版会话（Cookie 只存内存，程序退出即销毁）");
+
+    web::LoginWindow&  window  = web::login_window();
+    const web::Session session = web::SessionStore::instance().snapshot();
+    const bool         running = window.running();
+
+    if (session.logged_in) {
+        ImGui::TextColored(ImVec4(0.31f, 0.75f, 0.42f, 1.0f), "状态：已登录（Cookie %zu 条）",
+                           session.cookie_count());
+        ImGui::TextDisabled("来源：%s", session.url.c_str());
+        ImGui::TextDisabled("更新：%s", session.updated_at.c_str());
+        if (const web::Cookie* cookie = session.find("ds_session_id")) {
+            ImGui::TextDisabled("ds_session_id = %s", web::mask_value(cookie->value).c_str());
+        }
+    }
+    else {
+        ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f), "状态：未登录");
+    }
+
+    if (running) {
+        ImGui::TextDisabled("登录窗口已打开：请在窗口中完成登录，然后关闭它。");
+        ImGui::TextDisabled("当前：%s", window.status().c_str());
+        if (ImGui::Button("关闭登录窗口", ImVec2(-FLT_MIN, 0.0f))) {
+            window.request_close();
+        }
+    }
+    else {
+        if (ImGui::Button("打开登录窗口（WebView2）", ImVec2(-FLT_MIN, 0.0f))) {
+            web::LoginRequest request;
+            request.url          = "https://chat.deepseek.com/";
+            request.window_title = "AIwrite · DeepSeek 网页版登录（登录后关闭本窗口）";
+            std::string error;
+            if (window.start(request, &error)) {
+                log::info("网页版登录窗口已打开（独立线程，主界面不受影响）");
+            }
+            else {
+                log::warn("网页版登录窗口打开失败: " + error);
+            }
+        }
+        if (session.logged_in) {
+            ImGui::Spacing();
+            if (ImGui::Button("注销（清会话 + 删除登录 profile）", ImVec2(-FLT_MIN, 0.0f))) {
+                logout_web_session();
+            }
+        }
+    }
+
+    ImGui::Spacing();
+    ImGui::TextWrapped("登录窗口内：Ctrl+Alt+C 立即重新提取 Cookie，ESC 关闭窗口。"
+                       "网页版推理（PoW / 定制 SSE）将在 M4-06 / M4-08 接线，"
+                       "本步骤完成的是「登录 + 会话获取」。");
 }
 
 // 绘制单个参数控件；返回 true 表示本次编辑结束且值已变化
@@ -278,9 +364,12 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         ImGui::TextWrapped("%s", definition->description.c_str());
     }
 
-    // ---- 校验汇总（设计 §6.3）----
+    // ---- 校验汇总（设计 §6.3；条件隐藏的参数不参与校验）----
     std::vector<std::string> errors;
     for (const Param& param : node->params) {
+        if (!engine::param_visible(*node, param)) {
+            continue;
+        }
         const std::string error = param_error(param);
         if (!error.empty()) {
             errors.push_back(param.display_name + ": " + error);
@@ -299,11 +388,16 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
 
     ImGui::Separator();
 
-    // ---- 参数控件 ----
+    // ---- 参数控件（条件隐藏的参数不显示）----
     if (node->params.empty()) {
         ImGui::TextDisabled("该节点没有参数");
     }
+    int hidden_params = 0;
     for (Param& param : node->params) {
+        if (!engine::param_visible(*node, param)) {
+            ++hidden_params;
+            continue;
+        }
         ImGui::PushID(param.id.c_str());
         ImGui::TextUnformatted(param_label(param).c_str());
         help_marker(param.description);
@@ -323,6 +417,23 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
             ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "  %s", error.c_str());
         }
         ImGui::Spacing();
+    }
+
+    if (hidden_params > 0) {
+        ImGui::TextDisabled("（%d 个 %s 专属参数已按当前模式隐藏）", hidden_params,
+                            node->type == "ProviderConfig" ? "官方 API" : "条件");
+    }
+
+    // ---- 网页版（web 模式）：会话状态 + 登录入口（设计 §8.5）----
+    if (node->type == "ProviderConfig") {
+        if (is_web_mode(*node)) {
+            draw_web_session_section();
+        }
+        else {
+            ImGui::Spacing();
+            ImGui::TextDisabled("提示：把「模式」切到 web 可在此处打开 DeepSeek 网页版登录窗口"
+                                "（Cookie 只存内存）。");
+        }
     }
 
     // ---- 底部操作 ----

@@ -30,7 +30,7 @@ F:\GameDao\Tools\AIwrite\build\bin\aiwrite.exe
 
 - VS Code：`Ctrl+Shift+B` 构建，`F5` 调试（配置见 `.vscode/launch.json`），`Terminal → Run Task` 还有 release / 重装依赖 / 自检 / 看日志等任务。
 - Visual Studio 2026：打开 `build\aiwrite.slnx`，选 `aiwrite` 后 F5。
-- 验证工具：`api_probe.exe --selftest`（HTTP + SHA3）、`webview2_login.exe`（登录取 Cookie，`Ctrl+Alt+C`）。
+- 验证工具：`api_probe.exe --selftest`（SHA3 + HTTP + 请求构造 + 配置往返）、`webview2_login.exe --selftest`（WebView2 Cookie 链路，退出码 0=PASS）。
 
 ---
 
@@ -41,7 +41,7 @@ F:\GameDao\Tools\AIwrite\build\bin\aiwrite.exe
 | 构建 / 运行 / 中文界面 / 日志 / 配置（A-01、A-02、A-07、A-08） | ✅ 已验证 |
 | HTTP、SHA3（V-04、V-05） | ✅ 已验证 |
 | 节点画布渲染与交互（V-02、A-03） | ✅ 已升级为真实节点系统（M2 P1/P2）：节点/连线/参数/撤销全部可鼠标操作，逻辑层自检 70 项全绿 |
-| WebView2 登录 + Cookie（V-03 / A-04、A-05） | ⏳ 运行 `webview2_login.exe` 手动登录一次 |
+| WebView2 登录 + Cookie（V-03 / A-04、A-05） | 🟡 自动化链路已通过（`webview2_login --selftest` → Cookie 5 条）；⏳ 运行 `webview2_login.exe` 手动登录一次 |
 | DeepSeek API 生成（V-06 / A-06） | ⏳ 需设置 `DEEPSEEK_API_KEY` |
 | M3 节点编辑器验收 | ⏳ 按 [节点编辑器使用说明.md](节点编辑器使用说明.md) §8 的 22 项清单人工确认 |
 

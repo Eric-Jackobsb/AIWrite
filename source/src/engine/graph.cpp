@@ -558,6 +558,9 @@ bool Graph::validateParams(const Node& node, std::vector<std::string>* errors) c
 {
     bool ok = true;
     for (const Param& param : node.params) {
+        if (!param_visible(node, param)) {
+            continue; // 条件隐藏的参数不参与校验（如 web 模式下的 API Key / API 地址）
+        }
         std::string error;
         if (!validateParam(param, &error)) {
             ok = false;
@@ -567,6 +570,24 @@ bool Graph::validateParams(const Node& node, std::vector<std::string>* errors) c
         }
     }
     return ok;
+}
+
+bool param_visible(const Node& node, const Param& param)
+{
+    if (param.visible_when_param.empty()) {
+        return true; // 未设置条件 → 始终可见
+    }
+    const Param* guard = node.findParam(param.visible_when_param);
+    if (guard == nullptr) {
+        return true; // 条件参数不存在 → 不隐藏（宁可多显示也不要误隐藏）
+    }
+    return guard->text() == param.visible_when_value;
+}
+
+bool param_visible(const Node& node, const std::string& param_id)
+{
+    const Param* param = node.findParam(param_id);
+    return param == nullptr ? true : param_visible(node, *param);
 }
 
 } // namespace aiwrite::engine

@@ -346,6 +346,9 @@ void draw_node_body(const Node& node)
         ImGui::Separator();
         int shown = 0;
         for (const engine::Param& param : node.params) {
+            if (!engine::param_visible(node, param)) {
+                continue; // 条件隐藏的参数不预览（如 web 模式下的 API Key / API 地址）
+            }
             if (shown >= 2) {
                 break;
             }

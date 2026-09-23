@@ -56,6 +56,12 @@ struct Param {
     bool                     is_required = false;
     bool                     is_secret   = false; // 如 api_key：界面用密码框
 
+    // 条件可见性（M2 扩展）：当同一节点内的 visible_when_param 参数值等于 visible_when_value
+    // 时本参数才显示/参与校验；两项留空 = 始终可见（默认，向后兼容）。
+    // 用途：ProviderConfig 在 mode=web 时隐藏 official 专属参数（API 地址 / 模型 / Key / 引用名）。
+    std::string visible_when_param;
+    std::string visible_when_value;
+
     void        reset_to_default() { value = default_value; }
     std::string text() const;                       // 取字符串值（非字符串返回 dump）
     double      number(double fallback = 0.0) const;
@@ -82,6 +88,12 @@ struct Node {
     Param*       findParam(const std::string& param_id);
     int          portIndex(const std::string& port_id, PortDirection dir) const;
 };
+
+// 参数条件可见性（M2 扩展）：param.visible_when_param 指向同一节点内的另一个参数，
+// 当该参数的值等于 param.visible_when_value 时本参数可见；未设置条件 = 始终可见。
+// 参数面板、画布预览与 Graph::validateParams 共用本判定，保证"隐藏即不校验"。
+bool param_visible(const Node& node, const Param& param);
+bool param_visible(const Node& node, const std::string& param_id);
 
 // ------------------------------------------------------------------- Edge ----
 struct Edge {

@@ -76,6 +76,24 @@ void draw_toolbar_buttons()
                         static_cast<int>(state.selected_nodes.size()),
                         static_cast<int>(state.selected_links.size()),
                         static_cast<int>(state.undo.undoDepth()));
+
+    // ---- 运行（右对齐 = 顶栏右上角；设计 §6.5 / §7.1）----
+    // 【占位】当前只渲染按钮，不接任何逻辑：执行引擎（M2-03 拓扑排序 / M2-04 执行引擎）
+    // 落地后把这里改为调用 Executor，并按设计 §6.5 增加「停止」按钮与状态栏进度。
+    const char* run_label    = "▶ 运行";
+    const float run_width    = ImGui::CalcTextSize(run_label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    const float right_edge   = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
+    const float next_left    = ImGui::GetCursorPosX() + ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(next_left > right_edge - run_width ? next_left : right_edge - run_width);
+    ImGui::BeginDisabled(true); // 占位：无执行引擎
+    ImGui::Button(run_label);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("运行工作流（UI 占位，暂未接逻辑）\n"
+                          "执行引擎将在 M2-03（拓扑排序）/ M2-04（单线程分帧执行）落地后接线；\n"
+                          "届时会连同设计 §6.5 的「停止」按钮与状态栏进度一起启用。");
+    }
 }
 
 } // namespace aiwrite::ui

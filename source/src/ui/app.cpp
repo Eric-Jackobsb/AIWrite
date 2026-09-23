@@ -10,6 +10,7 @@
 #include "utils/diagnostics.h"
 #include "utils/log.h"
 #include "utils/paths.h"
+#include "web/session_store.h"
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -182,6 +183,27 @@ void build_default_layout(ImGuiID dockspace_id, const ImVec2& size)
     ImGui::DockBuilderFinish(dockspace_id);
 }
 
+// 工作流使用的推理后端模式（取第一个 ProviderConfig 节点）+ 网页版会话状态
+std::string provider_mode_text(const EditorState& state)
+{
+    for (const engine::Node& node : state.graph.nodes) {
+        if (node.type != "ProviderConfig") {
+            continue;
+        }
+        const engine::Param* mode         = node.findParam("mode");
+        const std::string    mode_value   = mode != nullptr ? mode->text() : "official";
+        if (mode_value != "web") {
+            return "推理模式: 官方 API";
+        }
+        const web::Session session = web::SessionStore::instance().snapshot();
+        return session.logged_in
+                   ? ("推理模式: 网页版（已登录 " + std::to_string(session.cookie_count()) +
+                      " 条 Cookie）")
+                   : std::string("推理模式: 网页版（未登录）");
+    }
+    return "推理模式: 未配置（缺少提供商配置节点）";
+}
+
 // 工作流信息面板（环境 + 当前工作流统计；数据来自 EditorState）
 void draw_info_panel(const char* title, bool* open)
 {
@@ -307,12 +329,19 @@ int run(const AppOptions& options)
     CanvasOptions canvas_options;
     canvas_options.show_grid = config.ui.show_grid;
 
+    // 面板可见性来自 config.toml（设计 §7.2：节点库/参数面板默认隐藏、可切换；
+    // M6-06 设置面板落地前，手动切换会写回 [ui] 段以便下次记住）
     bool show_console         = config.ui.show_console;
-    bool show_library         = true;
-    bool show_params          = true;
-    bool show_info            = true;
+    bool show_library         = config.ui.show_node_library;
+    bool show_params          = config.ui.show_property_panel;
+    bool show_info            = true; // 工作流信息面板不在 config 中：始终显示
     bool layout_ready         = false;
     bool request_layout_reset = false;
+
+    log::info(std::string("界面可见性（config.toml [ui]）: 节点库=") +
+              (show_library ? "显示" : "隐藏") + "，参数面板=" + (show_params ? "显示" : "隐藏") +
+              "，Console=" + (show_console ? "显示" : "隐藏") + "，网格=" +
+              (canvas_options.show_grid ? "开" : "关"));
 
     // 启动即创建示例工作流，便于直接验证节点操作（可用工具栏「新建（清空）」重来）
     editor().create_sample_workflow();
@@ -421,15 +450,32 @@ int run(const AppOptions& options)
             }
 
             if (ImGui::BeginMenu("视图")) {
-                ImGui::MenuItem("节点库", nullptr, &show_library);
-                ImGui::MenuItem("参数面板", nullptr, &show_params);
-                ImGui::MenuItem("Console", nullptr, &show_console);
-                ImGui::MenuItem("工作流信息", nullptr, &show_info);
+                const bool library_toggled = ImGui::MenuItem("节点库", nullptr, &show_library);
+                const bool params_toggled  = ImGui::MenuItem("参数面板", nullptr, &show_params);
+                const bool console_toggled = ImGui::MenuItem("Console", nullptr, &show_console);
+                ImGui::MenuItem("工作流信息", nullptr, &show_info); // 不入 config：仅本次会话生效
                 ImGui::Separator();
                 if (ImGui::MenuItem("重置布局")) {
                     request_layout_reset = true;
                 }
                 ImGui::EndMenu();
+
+                // 可见性持久化（设计 §20.2：启动读取 config.toml）——让手动切换被记住；
+                // M6-06 设置面板落地后改由设置面板统一保存
+                if (library_toggled || params_toggled || console_toggled) {
+                    config.ui.show_node_library   = show_library;
+                    config.ui.show_property_panel = show_params;
+                    config.ui.show_console        = show_console;
+                    if (save_config(paths::config_file(), config)) {
+                        log::info(std::string("界面可见性已保存到 config.toml（节点库=") +
+                                  (show_library ? "显示" : "隐藏") + "，参数面板=" +
+                                  (show_params ? "显示" : "隐藏") + "，Console=" +
+                                  (show_console ? "显示" : "隐藏") + "）");
+                    }
+                    else {
+                        log::warn("界面可见性保存失败：config.toml 不可写？");
+                    }
+                }
             }
 
             if (ImGui::BeginMenu("帮助")) {
@@ -514,6 +560,8 @@ int run(const AppOptions& options)
                         static_cast<int>(state.graph.nodes.size()),
                         static_cast<int>(state.graph.edges.size()),
                         static_cast<int>(state.selected_nodes.size()), io.Framerate);
+            ImGui::SameLine();
+            ImGui::TextDisabled("  %s", provider_mode_text(state).c_str());
             if (!state.status.empty()) {
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "  %s", state.status.c_str());

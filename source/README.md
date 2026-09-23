@@ -96,13 +96,26 @@ cd F:\GameDao\Tools\AIwrite\build\bin
 M1 验证工具：
 
 ```powershell
+.\aiwrite.exe                 # 主程序（GUI）：节点画布 + 参数 + 网页版登录
+.\aiwrite.exe --console       # 同上，并额外分配控制台窗口显示日志
+.\aiwrite.exe --login-selftest --timeout 30
+                              # 网页版登录自检（离屏）：退出码 0=通过 / 1=失败 / 2=超时
 .\api_probe.exe --selftest                  # V-04 HTTP + V-05 SHA3 自检
 .\api_probe.exe --graph-selftest            # 图模型/注册表/撤销栈/序列化 自检（95 项断言，无需网络）
 .\api_probe.exe --sha3 "abc"                # 单次 SHA3-256
 $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 Key）
-.\webview2_login.exe                        # V-03 打开 DeepSeek 登录页
+.\webview2_login.exe --selftest --timeout 30   # V-03 自检：离屏跑「导航 → 提取 Cookie」，退出码 0=PASS/1=FAIL/2=超时
+.\webview2_login.exe                        # V-03 交互：打开站点手动登录（Ctrl+Alt+C 提取 Cookie）
 .\webview2_login.exe --ephemeral            # 使用临时 profile（退出丢弃登录态）
 ```
+
+> 面板可见性由 `~/.brain-ai/config.toml` 的 `[ui]` 段控制（`show_node_library` / `show_property_panel` /
+> `show_console`，设计 §7.2 默认隐藏）；在菜单「视图」里勾选后会自动写回配置，下次启动生效。
+> `webview2_login --selftest` 结果写入 `~/.brain-ai/logs/app.log`（`[V-03]` 行），控制台输出脱敏 Cookie 清单
+> （名称 + 前4后4 + 属性）；Cookie 仅内存、不落盘（设计 §8.4）。
+> 若手工强杀该工具，可能留下 `msedgewebview2.exe` 子进程：用
+> `Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'"` 查看其命令行中的 `--user-data-dir`，
+> **只清理指向 `\.brain-ai\webview2` 的那些**（`msedgewebview2.exe` 也被 Windows 小组件等使用，勿误杀）。
 
 `webview2_login` 快捷键：**Ctrl+Alt+C** 提取 Cookie（脱敏打印），**ESC** 退出。
 运行日志：`C:\Users\<用户>\.brain-ai\logs\app.log`（每 2 秒落盘，可直接 tail）。

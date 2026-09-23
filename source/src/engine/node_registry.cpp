@@ -311,6 +311,15 @@ void registerAllNodes()
             text_param("api_key_ref", "Key 引用名", "brain-ai/deepseek", ParamType::String,
                        false, false, "凭据管理器中的条目名（M4-07）"),
         };
+        // mode=web 时隐藏 official 专属参数（API 地址 / 模型 / Key / 引用名）
+        // 可见性判定见 engine::param_visible()：参数面板、画布预览与运行前校验共用同一份规则
+        for (Param& param : definition.params) {
+            if (param.id == "api_base" || param.id == "model" || param.id == "api_key" ||
+                param.id == "api_key_ref") {
+                param.visible_when_param = "mode";
+                param.visible_when_value = "official";
+            }
+        }
         registry.registerNode(std::move(definition));
     }
 
