@@ -111,6 +111,23 @@ void draw_web_session_section()
         ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f), "状态：未登录");
     }
 
+    // 协议探测状态（M4-06/M4-08 逆向用）：网页版接口真正需要的是 userToken（不是 Cookie）
+    const web::ProbeResult& probe = session.probe;
+    if (probe.has_user_token) {
+        ImGui::TextColored(ImVec4(0.31f, 0.75f, 0.42f, 1.0f), "userToken：%s",
+                           probe.user_token_masked.c_str());
+    }
+    else {
+        ImGui::TextDisabled("userToken：未获取（网页版接口需要它，请先登录）");
+    }
+    if (!probe.challenge_json.empty()) {
+        ImGui::TextDisabled("PoW 挑战：已获取（%zu 字节，见 Console / app.log）",
+                            probe.challenge_json.size());
+    }
+    if (!probe.error.empty()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "探测错误：%s", probe.error.c_str());
+    }
+
     if (running) {
         ImGui::TextDisabled("登录窗口已打开：请在窗口中完成登录，然后关闭它。");
         ImGui::TextDisabled("当前：%s", window.status().c_str());
@@ -140,9 +157,31 @@ void draw_web_session_section()
     }
 
     ImGui::Spacing();
+    if (ImGui::Button("探测网页版协议（dev）", ImVec2(-FLT_MIN, 0.0f))) {
+        if (window.running()) {
+            web::request_protocol_probe(); // 窗口已开：直接在当前页面里探测
+        }
+        else {
+            web::LoginRequest request;
+            request.url              = "https://chat.deepseek.com/";
+            request.window_title     = "AIwrite · 网页版协议探测（登录后自动探测）";
+            request.probe_after_load = true; // 页面加载完成 → 自动探测
+            std::string error;
+            if (!window.start(request, &error)) {
+                log::warn("启动探测窗口失败: " + error);
+            }
+        }
+        log::info("已触发网页版协议探测（结果写入 Console 与 app.log）");
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("在已登录页面内读取 userToken 并请求 PoW 挑战（同源，绕过跨域与反爬），\n"
+                          "结果用于 M4-06 网页版 Provider 的实现；Token 只以脱敏形式记录");
+    }
+
+    ImGui::Spacing();
     ImGui::TextWrapped("登录窗口内：Ctrl+Alt+C 立即重新提取 Cookie，ESC 关闭窗口。"
-                       "网页版推理（PoW / 定制 SSE）将在 M4-06 / M4-08 接线，"
-                       "本步骤完成的是「登录 + 会话获取」。");
+                       "网页版推理（PoW 求解 / 定制 SSE）在 M4-06 / M4-08 落地；"
+                       "当前已完成「登录 + 会话 + 协议探测」。");
 }
 
 // 绘制单个参数控件；返回 true 表示本次编辑结束且值已变化

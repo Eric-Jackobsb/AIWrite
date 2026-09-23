@@ -25,6 +25,8 @@ struct LoginRequest {
     bool        offscreen       = false;  // true：窗口放在桌面可见区域之外（自检用）
     int         timeout_seconds = 0;      // >0：到时自动关闭（自检用；0 = 直到用户关闭）
     bool        auto_close_after_cookies = false; // true：取到 Cookie 且稳定 3 秒后自动关闭（自检用）
+    bool        probe_after_load    = false;      // 页面加载完成后自动执行协议探测（M4-06/M4-08）
+    bool        auto_close_after_probe = false;   // 探测完成即关闭窗口（命令行自检用）
 };
 
 class LoginWindow {
@@ -58,6 +60,14 @@ private:
 // 自检：离屏起一次登录窗口并等待结果（同步阻塞），打印脱敏 Cookie 清单
 // 返回 0=通过 / 1=失败 / 2=超时
 int selftest(int timeout_seconds);
+
+// 在**已打开**的登录窗口里请求一次协议探测（异步；结果写入 web::SessionStore.probe）
+// 典型用途：用户登录后点参数面板的「探测网页版协议」，把真实协议（challenge / Token / 端点）取回来
+void request_protocol_probe();
+
+// 协议探测自检：离屏起登录窗口 → 页面加载后自动探测 → 打印结果（脱敏）
+// 前置：profile 里已有登录态（用户至少登录过一次）；返回 0=探测成功 / 1=失败
+int protocol_probe(int timeout_seconds);
 
 // 进程内单例：参数面板与状态栏共用一个登录窗口（故意不析构，避免退出期竞态）
 LoginWindow& login_window();

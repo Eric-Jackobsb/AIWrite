@@ -4,6 +4,7 @@
 // =============================================================================
 #include "ui/app.h"
 #include "ui/editor_state.h"
+#include "ai/deepseek_web_client.h"
 #include "utils/log.h"
 #include "utils/paths.h"
 #include "web/webview_host.h"
@@ -25,6 +26,12 @@ void print_usage()
     std::printf("  --login-selftest [--timeout <秒>]\n");
     std::printf("                   网页版登录自检：离屏跑「WebView2 环境 → 导航 → 提取 Cookie」\n");
     std::printf("                   退出码 0=通过 / 1=失败 / 2=超时（默认超时 30 秒）\n");
+    std::printf("  --web-probe [--timeout <秒>]\n");
+    std::printf("                   网页版协议探测：在已登录页面内读取 userToken 并请求 PoW 挑战\n");
+    std::printf("                   退出码 0=取到 userToken / 1=失败（需先登录过一次）\n");
+    std::printf("  --web-chat \"<提示词>\"\n");
+    std::printf("                   网页版生成：取 PoW 挑战 → C++ 求解 → 调用 /api/v0/chat/completion\n");
+    std::printf("                   退出码 0=取到文本 / 1=失败（需先登录过一次）\n");
     std::printf("  --run-selftest   执行自检：创建示例工作流 → 运行到结束，打印各节点状态与统计\n");
     std::printf("                   （LLMGenerate 目前为占位实现，预期该节点 error、下游 skipped）\n");
     std::printf("  --help           显示本帮助\n");
@@ -99,6 +106,51 @@ int run_selftest()
     return pass ? 0 : 1;
 }
 
+// --web-chat：不打开界面，用已登录 profile 直接调网页版生成（PoW 求解 + SSE 解析）
+int web_chat_selftest(const std::string& prompt)
+{
+    aiwrite::web::LoginRequest request;
+    request.offscreen              = true;
+    request.timeout_seconds        = 60;
+    request.probe_after_load       = true; // 目的：拿到 Cookie + userToken
+    request.auto_close_after_probe = true;
+
+    aiwrite::web::LoginWindow window;
+    std::string error;
+    if (!window.start(request, &error)) {
+        std::printf("[网页版生成] 启动登录窗口失败: %s\n", error.c_str());
+        return 1;
+    }
+    window.join();
+
+    const aiwrite::web::Session session = aiwrite::web::SessionStore::instance().snapshot();
+    std::printf("[网页版生成] 会话：Cookie %zu 条，userToken %s\n", session.cookie_count(),
+                session.user_token.empty() ? "未获取" : "已获取（仅内存）");
+    if (session.user_token.empty()) {
+        std::printf("[网页版生成] FAIL：请先登录一次（`aiwrite.exe --login-selftest` 或界面"
+                    "参数面板的「打开登录窗口」）\n");
+        return 1;
+    }
+
+    aiwrite::ai::WebChatRequest chat;
+    chat.prompt = prompt;
+    const aiwrite::ai::WebChatResult result = aiwrite::ai::web_chat(session, chat);
+
+    std::printf("[网页版生成] HTTP %d，PoW 尝试 %lld 次\n", result.http_status,
+                result.pow_attempts);
+    std::printf("---- 原始响应前几行 ----\n%s\n", result.raw_head.c_str());
+    std::printf("---- 生成文本 ----\n%s\n", result.text.c_str());
+    if (!result.error.empty()) {
+        std::printf("---- 错误 ----\n%s\n", result.error.c_str());
+    }
+
+    const bool pass = result.ok && !result.text.empty();
+    std::printf("[网页版生成] %s\n", pass ? "PASS" : "FAIL");
+
+    aiwrite::web::SessionStore::instance().clear(); // 自检不留会话
+    return pass ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -106,6 +158,8 @@ int main(int argc, char** argv)
     aiwrite::ui::AppOptions options;
     bool login_selftest   = false;
     bool run_selftest_flag = false;
+    bool web_probe_flag    = false;
+    std::string web_chat_prompt;
     int  selftest_timeout = 30;
 
     for (int i = 1; i < argc; ++i) {
@@ -115,6 +169,16 @@ int main(int argc, char** argv)
         }
         else if (arg == "--login-selftest") {
             login_selftest = true;
+        }
+        else if (arg == "--web-probe") {
+            web_probe_flag = true;
+        }
+        else if (arg == "--web-chat") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --web-chat 缺少取值\n");
+                return 2;
+            }
+            web_chat_prompt = argv[++i];
         }
         else if (arg == "--run-selftest") {
             run_selftest_flag = true;
@@ -152,6 +216,22 @@ int main(int argc, char** argv)
         aiwrite::log::info("AIwrite 登录自检退出，返回码 " + std::to_string(selftest_code));
         aiwrite::log::shutdown();
         return selftest_code;
+    }
+
+    // 网页版协议探测（需要 profile 里已有登录态）
+    if (web_probe_flag) {
+        const int probe_code = aiwrite::web::protocol_probe(selftest_timeout);
+        aiwrite::log::info("AIwrite 协议探测退出，返回码 " + std::to_string(probe_code));
+        aiwrite::log::shutdown();
+        return probe_code;
+    }
+
+    // 网页版生成（PoW + SSE；需要 profile 里已有登录态）
+    if (!web_chat_prompt.empty()) {
+        const int chat_code = web_chat_selftest(web_chat_prompt);
+        aiwrite::log::info("AIwrite 网页版生成退出，返回码 " + std::to_string(chat_code));
+        aiwrite::log::shutdown();
+        return chat_code;
     }
 
     // 执行自检（不需要 GUI）：验证 EditorState 的运行接线

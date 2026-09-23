@@ -11,6 +11,8 @@
 
 #include <WebView2.h>
 
+#include <nlohmann/json.hpp>
+
 #include <cstdio>
 #include <exception>
 #include <filesystem>
@@ -30,6 +32,68 @@ constexpr DWORD          kCookiePollMs  = 3000;  // 登录期间重取 Cookie �
 constexpr DWORD          kAutoCloseGraceMs = 3000; // 自检：取到 Cookie 后静置多久自动收尾
 constexpr int            kHotkeyExtract = 1;     // Ctrl+Alt+C：立即重新提取
 constexpr int            kHotkeyClose   = 2;     // ESC：关闭窗口
+constexpr UINT           kProbeMessage  = WM_APP + 1; // 请求协议探测（可在任意线程 Post）
+constexpr DWORD          kProbeDelayMs  = 1500;  // 页面加载完成后再等一会儿（SPA 就绪）才探测
+
+// 协议探测脚本（在**已登录页面内**执行：同源 fetch，可绕过跨域/反爬）
+//  两段式：kickoff 注入异步任务并把结果写到 window.__aiwriteProbe；poll 轮询取回
+//  （不用 ExecuteScript 的 Promise 等待：部分运行时不会 await，会拿到空的 {}）
+constexpr const char* kProbeKickoffScript = R"JS(
+(function () {
+  window.__aiwriteProbe = { done: false, data: '' };
+  const mask = (t) => (t && t.length > 8) ? (t.slice(0, 4) + '****' + t.slice(-4) + '(len=' + t.length + ')') : (t ? '****' : '');
+  const scrub = (t) => (t || '').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '***@***').slice(0, 400);
+  (async () => {
+    const out = { keys: '', hasUserToken: false, userTokenMasked: '', settingsJwtMasked: '', tokenRaw: '', challenge: '', endpoints: '', error: '' };
+    let token = '';
+    try {
+      out.keys = Object.keys(localStorage).join(',');
+      const raw = localStorage.getItem('userToken') || '';
+      token = raw;
+      try {                              // 新版前端把 Token 包成 JSON：{"value":"...","__version":"0"}
+        const parsed = JSON.parse(raw);
+        token = parsed.value || parsed.token || raw;
+      } catch (e) { /* 旧版直接是字符串 */ }
+      out.hasUserToken = token.length > 0;
+      out.userTokenMasked = mask(token);
+      out.tokenRaw = token;              // 真 Token：只回传给宿主进程内存，不写日志/文件
+      out.settingsJwtMasked = mask(localStorage.getItem('settingsJwt') || '');
+    } catch (e) { out.error += 'localStorage:' + e + ' | '; }
+    const authHeaders = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+    try {
+      const resp = await fetch('/api/v0/chat/create_pow_challenge', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ target_path: '/api/v0/chat/completion' })
+      });
+      out.challenge = (await resp.text()).slice(0, 2000);
+    } catch (e) { out.error += 'challenge:' + e + ' | '; }
+    const candidates = ['/api/v0/users/current', '/api/v0/chat_session/fetch_page'];
+    const lines = [];
+    for (const path of candidates) {
+      try {
+        const r = await fetch(path, { headers: { 'Authorization': 'Bearer ' + token } });
+        lines.push(path + ' -> ' + r.status + ' ' + scrub(await r.text()));
+      } catch (e) { lines.push(path + ' -> error ' + e); }
+    }
+    out.endpoints = lines.join(' || ');
+
+    // 说明：RE 期的重量级步骤（抓取页面 JS 片段 / 调用官方 PoW worker 求 ground truth /
+    //       哈希指纹）已移除，结论记录在 docs/ai_writer_nodes.md；此处保持轻量（~3 秒）。
+    window.__aiwriteProbe.data = JSON.stringify(out);
+    window.__aiwriteProbe.done = true;
+  })();
+  return 'started';
+})();
+)JS";
+
+constexpr const char* kProbePollScript = R"JS(
+(function () {
+  const p = window.__aiwriteProbe;
+  if (!p || !p.done) { return ''; }
+  return p.data || '';
+})();
+)JS";
 
 // ---- 登录线程内的运行时状态（同一时刻只允许一个登录窗口）----
 LoginRequest          g_request;   // start() 写入，线程只读
@@ -39,6 +103,12 @@ std::atomic<int>      g_result{-1};
 std::atomic<unsigned> g_cookie_count{0};
 std::atomic<bool>     g_cookies_done{false};
 std::atomic<DWORD>    g_first_cookie_tick{0};
+// 协议探测状态：0=空闲 / 1=已注入（轮询等待结果）/ 2=完成
+int                   g_probe_stage   = 0;
+int                   g_probe_attempt = 0;
+DWORD                 g_probe_due_tick  = 0;
+DWORD                 g_probe_last_poll = 0;
+constexpr int         kProbeMaxAttempts = 24; // 24 × 500ms ≈ 12 秒
 DWORD                 g_start_tick = 0;
 DWORD                 g_last_poll  = 0;
 
@@ -212,6 +282,138 @@ void close_window(int code)
     }
 }
 
+// 在登录窗口内执行协议探测（必须运行在窗口线程）
+//  两段式：start 注入脚本 → WM_TIMER 调 poll 轮询结果 → finish 落库（+ 可选自动关窗）
+void finish_protocol_probe(ProbeResult probe);
+void start_protocol_probe();
+void poll_protocol_probe();
+
+void finish_protocol_probe(ProbeResult probe)
+{
+    g_probe_stage = 2;
+
+    log::info("[网页版探测] localStorage 键: " +
+              (probe.local_storage_keys.empty() ? std::string("(空)") : probe.local_storage_keys));
+    log::info("[网页版探测] userToken: " +
+              (probe.has_user_token ? probe.user_token_masked
+                                    : std::string("未获取（可能未登录）")));
+    log::info("[网页版探测] settingsJwt: " +
+              (probe.settings_jwt_masked.empty() ? std::string("(空)") : probe.settings_jwt_masked));
+    log::info("[网页版探测] challenge: " +
+              (probe.challenge_json.empty() ? std::string("(空)") : probe.challenge_json));
+    log::info("[网页版探测] 端点探测: " +
+              (probe.endpoints_report.empty() ? std::string("(空)") : probe.endpoints_report));
+    if (!probe.error.empty()) {
+        log::warn("[网页版探测] 错误: " + probe.error);
+    }
+
+    const bool ok = probe.ok;
+    SessionStore::instance().set_probe(std::move(probe));
+
+    if (g_request.auto_close_after_probe) {
+        log::info("[网页版探测] 已自动收尾（关闭登录窗口）");
+        close_window(ok ? 0 : 1);
+    }
+}
+
+void start_protocol_probe()
+{
+    if (g_webview == nullptr) {
+        ProbeResult probe;
+        probe.error = "WebView2 尚未就绪";
+        finish_protocol_probe(std::move(probe));
+        return;
+    }
+
+    log::info("[网页版探测] 注入探测脚本（localStorage/userToken + create_pow_challenge）");
+    const std::wstring script = to_wide(kProbeKickoffScript);
+    const HRESULT      hr     = g_webview->ExecuteScript(
+        script.c_str(),
+        Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+            [](HRESULT result, LPCWSTR /*json_result*/) -> HRESULT {
+                if (FAILED(result)) {
+                    ProbeResult probe;
+                    probe.error = "注入探测脚本失败 HRESULT=" + std::to_string(result);
+                    finish_protocol_probe(std::move(probe));
+                    return S_OK;
+                }
+                g_probe_stage     = 1; // 等待异步任务完成，交给 WM_TIMER 轮询
+                g_probe_attempt   = 0;
+                g_probe_last_poll = ::GetTickCount();
+                return S_OK;
+            })
+            .Get());
+
+    if (FAILED(hr)) {
+        ProbeResult probe;
+        probe.error = "调用 ExecuteScript 失败";
+        finish_protocol_probe(std::move(probe));
+    }
+}
+
+void poll_protocol_probe()
+{
+    if (g_probe_stage != 1 || g_webview == nullptr) {
+        return;
+    }
+    if (++g_probe_attempt > kProbeMaxAttempts) {
+        ProbeResult probe;
+        probe.error = "探测超时（结果未在 " + std::to_string(kProbeMaxAttempts * 500 / 1000) +
+                      " 秒内返回）";
+        finish_protocol_probe(std::move(probe));
+        return;
+    }
+
+    const std::wstring script = to_wide(kProbePollScript);
+    const HRESULT      hr     = g_webview->ExecuteScript(
+        script.c_str(),
+        Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+            [](HRESULT result, LPCWSTR json_result) -> HRESULT {
+                if (FAILED(result) || json_result == nullptr) {
+                    return S_OK; // 下一轮继续
+                }
+
+                // ExecuteScript 把返回值编码为 JSON：未完成时是空字符串 "\"\""
+                std::string inner;
+                try {
+                    const nlohmann::json outer = nlohmann::json::parse(to_utf8(json_result));
+                    inner = outer.is_string() ? outer.get<std::string>() : std::string();
+                }
+                catch (const std::exception&) {
+                    return S_OK;
+                }
+                if (inner.empty()) {
+                    return S_OK; // 尚未完成
+                }
+
+                ProbeResult probe;
+                try {
+                    const nlohmann::json data = nlohmann::json::parse(inner);
+                    probe.local_storage_keys = data.value("keys", std::string());
+                    probe.has_user_token     = data.value("hasUserToken", false);
+                    probe.user_token_masked  = data.value("userTokenMasked", std::string());
+                    probe.settings_jwt_masked = data.value("settingsJwtMasked", std::string());
+                    probe.token_raw          = data.value("tokenRaw", std::string()); // 仅内存
+                    probe.challenge_json     = data.value("challenge", std::string());
+                    probe.endpoints_report   = data.value("endpoints", std::string());
+                    probe.error              = data.value("error", std::string());
+                    probe.ok                 = true;
+                }
+                catch (const std::exception& ex) {
+                    probe.error = std::string("探测结果解析失败: ") + ex.what();
+                }
+                finish_protocol_probe(std::move(probe));
+                return S_OK;
+            })
+            .Get());
+
+    if (FAILED(hr)) {
+        ProbeResult probe;
+        probe.error = "轮询探测结果失败";
+        finish_protocol_probe(std::move(probe));
+    }
+}
+
 HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
 {
     if (FAILED(result) || controller == nullptr) {
@@ -240,6 +442,9 @@ HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
                 args->get_IsSuccess(&success);
                 if (success) {
                     extract_cookies("页面加载完成");
+                    if (g_request.probe_after_load) {
+                        g_probe_due_tick = ::GetTickCount() + kProbeDelayMs; // SPA 就绪后再探测
+                    }
                 }
                 else {
                     log::warn("[网页版登录] 页面导航失败（可检查网络后重试）");
@@ -337,6 +542,14 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
             g_last_poll = now;
             extract_cookies("定时刷新（登录后 Cookie 会变化）");
         }
+        if (g_probe_stage == 1 && now - g_probe_last_poll >= 500) {
+            g_probe_last_poll = now;
+            poll_protocol_probe();
+        }
+        if (g_probe_due_tick != 0 && now >= g_probe_due_tick) {
+            g_probe_due_tick = 0;
+            start_protocol_probe();
+        }
         if (g_request.auto_close_after_cookies && g_cookies_done.load()) {
             const DWORD first = g_first_cookie_tick.load();
             if (first != 0 && now - first >= kAutoCloseGraceMs) {
@@ -347,6 +560,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         }
         return 0;
     }
+
+    case kProbeMessage:
+        start_protocol_probe();
+        return 0;
 
     case WM_CLOSE:
         extract_cookies("窗口关闭前最后一次提取"); // 异步；紧接着销毁窗口
@@ -466,6 +683,9 @@ bool LoginWindow::start(const LoginRequest& request, std::string* error)
     g_cookies_done     = false;
     g_cookie_count     = 0;
     g_first_cookie_tick = 0;
+    g_probe_due_tick   = 0;
+    g_probe_stage      = 0;
+    g_probe_attempt    = 0;
     g_window           = nullptr;
 
     std::error_code ec;
@@ -588,6 +808,63 @@ LoginWindow& login_window()
     // 生命周期由 stop_login_window() 显式收尾。
     static LoginWindow* instance = new LoginWindow();
     return *instance;
+}
+
+void request_protocol_probe()
+{
+    HWND window = g_window.load();
+    if (window == nullptr) {
+        log::warn("[网页版探测] 登录窗口未打开：请先点「打开登录窗口（WebView2）」并完成登录");
+        return;
+    }
+    log::info("[网页版探测] 已请求（在登录窗口内执行）");
+    ::PostMessageW(window, kProbeMessage, 0, 0);
+}
+
+int protocol_probe(int timeout_seconds)
+{
+    attach_parent_console();
+
+    const int timeout = timeout_seconds > 0 ? timeout_seconds : 30;
+    log::info("[网页版探测] 自检开始（离屏窗口，超时 " + std::to_string(timeout) + " 秒）");
+
+    LoginRequest request;
+    request.offscreen              = true;
+    request.timeout_seconds        = timeout;
+    request.probe_after_load       = true; // 页面加载完成后自动探测
+    request.auto_close_after_probe = true; // 探测完成即关窗退出
+
+    LoginWindow window;
+    std::string error;
+    if (!window.start(request, &error)) {
+        std::printf("[网页版探测] 启动失败: %s\n", error.c_str());
+        return 1;
+    }
+    window.join();
+
+    const Session      session = SessionStore::instance().snapshot();
+    const ProbeResult& probe   = session.probe;
+
+    std::printf("\n===== 网页版协议探测（脱敏）=====\n");
+    std::printf("localStorage 键 : %s\n", probe.local_storage_keys.c_str());
+    std::printf("userToken      : %s\n",
+                probe.has_user_token ? probe.user_token_masked.c_str() : "未获取（可能未登录）");
+    std::printf("settingsJwt    : %s\n", probe.settings_jwt_masked.c_str());
+    std::printf("challenge      : %s\n", probe.challenge_json.c_str());
+    std::printf("端点探测       : %s\n", probe.endpoints_report.c_str());
+    std::printf("错误           : %s\n", probe.error.c_str());
+    std::printf("================================\n");
+
+    const bool pass = probe.ok && probe.has_user_token;
+    if (probe.ok && !probe.has_user_token) {
+        std::printf("[网页版探测] 提示：未取到 userToken → 请先在登录窗口完成一次登录"
+                    "（`aiwrite.exe --login-selftest` 或界面参数面板的「打开登录窗口」）\n");
+    }
+    std::printf("[网页版探测] 结果：%s（退出码 %d）\n", pass ? "PASS" : "FAIL", pass ? 0 : 1);
+    log::info("[网页版探测] 自检结束：" + probe.summary());
+
+    SessionStore::instance().clear(); // 自检不留会话
+    return pass ? 0 : 1;
 }
 
 void stop_login_window()

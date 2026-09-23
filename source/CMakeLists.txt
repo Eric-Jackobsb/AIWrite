@@ -181,6 +181,8 @@ add_library(aiwrite_core STATIC
     src/engine/validate.cpp
     src/engine/executor.cpp
     src/engine/recent_files.cpp
+    src/ai/web_pow.cpp
+    src/ai/deepseek_web_client.cpp
     src/nodes/local_nodes.cpp
     src/nodes/register_executors.cpp
     src/web/session_store.cpp)
@@ -191,6 +193,7 @@ target_link_libraries(aiwrite_core
     PUBLIC nlohmann_json::nlohmann_json
     PUBLIC aiwrite_tomlplusplus
     PUBLIC OpenSSL::Crypto
+    PUBLIC httplib::httplib   # ai/：网页版 PoW + /api/v0/chat/completion（M4-06）
     PRIVATE psapi)   # 诊断模块：GetProcessMemoryInfo
 if(MSVC)
     target_compile_options(aiwrite_core PRIVATE /W4)

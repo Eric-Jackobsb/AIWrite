@@ -34,6 +34,19 @@ bool Session::has(const std::string& name) const
     return find(name) != nullptr;
 }
 
+std::string ProbeResult::summary() const
+{
+    if (error.empty() && user_token_masked.empty() && challenge_json.empty()) {
+        return "未探测";
+    }
+    std::string text = ok ? "已探测" : "探测失败";
+    text += std::string("（Token ") + (has_user_token ? user_token_masked : "未获取") + "）";
+    if (!error.empty()) {
+        text += " 错误: " + error;
+    }
+    return text;
+}
+
 std::string mask_value(const std::string& value)
 {
     const std::size_t length = value.size();
@@ -65,6 +78,22 @@ void SessionStore::set(Session session)
     }
     log::info("[网页版会话] 已更新：Cookie " + std::to_string(cookie_count()) +
               " 条（仅内存，程序退出即销毁）");
+}
+
+void SessionStore::set_probe(ProbeResult probe)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (probe.ran_at.empty()) {
+            probe.ran_at = now_string();
+        }
+        if (!probe.token_raw.empty()) {
+            session_.user_token = probe.token_raw; // 真 Token 只留在这一个内存字段
+            probe.token_raw.clear();               // 探测结果本身可安全打印
+        }
+        session_.probe = std::move(probe);
+    }
+    log::info("[网页版会话] 协议探测结果已更新：" + snapshot().probe.summary());
 }
 
 void SessionStore::clear()
