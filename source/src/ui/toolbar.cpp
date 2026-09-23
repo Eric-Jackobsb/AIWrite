@@ -77,22 +77,40 @@ void draw_toolbar_buttons()
                         static_cast<int>(state.selected_links.size()),
                         static_cast<int>(state.undo.undoDepth()));
 
-    // ---- 运行（右对齐 = 顶栏右上角；设计 §6.5 / §7.1）----
-    // 【占位】当前只渲染按钮，不接任何逻辑：执行引擎（M2-03 拓扑排序 / M2-04 执行引擎）
-    // 落地后把这里改为调用 Executor，并按设计 §6.5 增加「停止」按钮与状态栏进度。
-    const char* run_label    = "▶ 运行";
-    const float run_width    = ImGui::CalcTextSize(run_label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-    const float right_edge   = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
-    const float next_left    = ImGui::GetCursorPosX() + ImGui::GetStyle().ItemSpacing.x;
+    // ---- 运行 / 停止（右对齐 = 顶栏右上角；设计 §6.5 / §7.1）----
+    const bool  running    = state.executor.running();
+    const char* run_label  = "▶ 运行";
+    const char* stop_label = "■ 停止";
+    const float spacing    = ImGui::GetStyle().ItemSpacing.x;
+    const float run_width  = ImGui::CalcTextSize(run_label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    const float stop_width = ImGui::CalcTextSize(stop_label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    const float right_edge = ImGui::GetWindowWidth() - ImGui::GetStyle().WindowPadding.x;
+    const float next_left  = ImGui::GetCursorPosX() + spacing;
+    const float wanted     = right_edge - run_width - spacing - stop_width;
+
     ImGui::SameLine();
-    ImGui::SetCursorPosX(next_left > right_edge - run_width ? next_left : right_edge - run_width);
-    ImGui::BeginDisabled(true); // 占位：无执行引擎
-    ImGui::Button(run_label);
+    ImGui::SetCursorPosX(next_left > wanted ? next_left : wanted);
+
+    ImGui::BeginDisabled(running || state.graph.nodes.empty());
+    if (ImGui::Button(run_label)) {
+        state.start_run(); // 运行前校验 → 执行器 start；之后每帧由主循环 tick_run 推进
+    }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("运行工作流（UI 占位，暂未接逻辑）\n"
-                          "执行引擎将在 M2-03（拓扑排序）/ M2-04（单线程分帧执行）落地后接线；\n"
-                          "届时会连同设计 §6.5 的「停止」按钮与状态栏进度一起启用。");
+        ImGui::SetTooltip("运行工作流（设计 §6.5）\n"
+                          "· 先做运行前校验（无环 / 必填输入已连 / 参数合法），失败会被拒绝并写入 Console\n"
+                          "· 每帧推进一个节点；节点状态实时显示在画布上"
+                          "（蓝=运行中 / 绿=完成 / 红=失败 / 暗=跳过）");
+    }
+
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!running);
+    if (ImGui::Button(stop_label)) {
+        state.cancel_run();
+    }
+    ImGui::EndDisabled();
+    if (running && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("停止运行：不再开始新节点（正在执行的节点会跑完当前步骤）");
     }
 }
 

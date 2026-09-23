@@ -1,12 +1,16 @@
 #include "ui/editor_state.h"
 
 #include "engine/node_registry.h"
+#include "engine/validate.h"
 #include "engine/workflow_io.h"
+#include "nodes/nodes.h"
 #include "utils/log.h"
 #include "utils/paths.h"
 
 #include <algorithm>
 #include <filesystem>
+#include <iomanip>
+#include <sstream>
 
 namespace aiwrite::ui {
 
@@ -30,6 +34,17 @@ void EditorState::log_summary(const std::string& prefix) const
 // ------------------------------------------------------------------ 撤销 -----
 void EditorState::snapshot(const std::string& label)
 {
+    // 运行中修改工作流 → 计划与图不再一致，先终止本次运行（M2-04 守卫）
+    if (executor.running()) {
+        log::warn("运行中修改工作流（" + label + "）→ 已终止当前运行");
+        executor.cancel();
+        executor.reset();
+        for (engine::Node& node : graph.nodes) {
+            node.state = engine::NodeState::Idle;
+            node.error_message.clear();
+        }
+        set_status("运行已终止（工作流被修改）");
+    }
     undo.push(graph, label);
 }
 
@@ -305,6 +320,81 @@ bool EditorState::paste_clipboard()
     log_summary("[粘贴] 已粘贴 " + std::to_string(created.size()) + " 个节点");
     set_status("已粘贴 " + std::to_string(created.size()) + " 个节点");
     return !created.empty();
+}
+
+// ------------------------------------------------------------------ 运行 -----
+// 说明（M2 P3-3）：运行前校验 → 执行器 → 每帧 tick。
+//  * 值只在 Executor 内部；只有节点状态写回 Graph（画布就地染状态色）
+//  * 控制台输出走 log::info，Console 面板读同一环形缓冲（设计 §12.4）
+bool EditorState::start_run()
+{
+    aiwrite::nodes::registerAllExecutors(); // 幂等
+
+    executor.setConsoleHandler([](const std::string& text) { log::info("[执行] " + text); });
+
+    engine::ValidationMessages errors;
+    engine::ValidationMessages warnings;
+    if (!engine::validateBeforeRun(graph, &errors, &warnings)) {
+        for (const std::string& text : errors) {
+            log::error("[运行前校验] " + text);
+        }
+        set_status("运行被拒绝：" + (errors.empty() ? std::string("未知原因") : errors.front()));
+        return false;
+    }
+    for (const std::string& text : warnings) {
+        log::warn("[运行前校验] " + text);
+    }
+
+    std::string error;
+    if (!executor.start(graph, &error)) {
+        log::error("启动运行失败：" + error);
+        set_status("启动运行失败：" + error);
+        return false;
+    }
+
+    log::info("开始运行工作流：计划 " + std::to_string(executor.totalCount()) + " 个节点");
+    set_status("运行中…");
+    return true;
+}
+
+void EditorState::cancel_run()
+{
+    if (!executor.running()) {
+        set_status("当前没有正在运行的执行会话");
+        return;
+    }
+    executor.cancel();
+    log::warn("已请求停止运行（正在执行的节点会跑完当前步骤）");
+    set_status("正在停止…");
+}
+
+void EditorState::tick_run()
+{
+    if (!executor.running()) {
+        return; // 空闲：不推进
+    }
+    if (executor.tick(&graph)) {
+        return; // 本帧推进了一个节点
+    }
+    set_status("运行结束：" + executor.summary()); // Finished / Cancelled / Failed
+}
+
+std::string EditorState::run_status_text() const
+{
+    if (executor.state() == engine::ExecState::Idle) {
+        return {};
+    }
+    if (!executor.running()) {
+        return executor.summary();
+    }
+    std::ostringstream stream;
+    stream << "运行中 | " << executor.finishedCount() << "/" << executor.totalCount() << " | "
+           << std::fixed << std::setprecision(1) << executor.elapsedSeconds() << "s";
+    const std::string current = executor.currentNode();
+    if (!current.empty()) {
+        stream << " | 当前 " << current;
+    }
+    return stream.str();
 }
 
 } // namespace aiwrite::ui

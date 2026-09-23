@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "engine/executor.h"
 #include "engine/graph.h"
 #include "engine/undo_stack.h"
 
@@ -20,6 +21,18 @@ namespace aiwrite::ui {
 struct EditorState {
     engine::Graph      graph;
     engine::UndoStack  undo;
+
+    // -------------------------------------------------------------- 运行 -----
+    // 执行会话（M2-04）：分帧推进由主循环调用 tick_run()；
+    //  * 运行态端口值保存在 Executor 内部，**不写回 Graph**
+    //  * 节点状态写在 Graph 上（画布就地染状态色）
+    engine::Executor executor;
+
+    // 启动运行：先做运行前校验（失败 → 每条错误写 Console 与状态栏，不启动）
+    bool start_run();
+    void cancel_run();
+    void tick_run();                       // 主循环每帧调用一次
+    std::string run_status_text() const;    // 状态栏文本（Idle 时为空）
 
     // 画布每帧同步的选择信息
     std::vector<std::string> selected_nodes;

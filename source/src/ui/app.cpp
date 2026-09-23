@@ -362,6 +362,9 @@ int run(const AppOptions& options)
         const bool first_frame = (frame_index++ == 0);
         glfwPollEvents();
 
+        // ---- 执行会话推进（M2-04：一帧最多推进一个节点；无运行会话时为空操作）----
+        editor().tick_run();
+
         // ---- 诊断（限流输出）：放在"最小化检查"之前，保证窗口不可见时也能采样 ----
         //  · 首异常累计（有变化才输出，限流）
         //  · 心跳（每 300 帧）：确认渲染循环真的在跑
@@ -562,6 +565,11 @@ int run(const AppOptions& options)
                         static_cast<int>(state.selected_nodes.size()), io.Framerate);
             ImGui::SameLine();
             ImGui::TextDisabled("  %s", provider_mode_text(state).c_str());
+            const std::string run_text = state.run_status_text();
+            if (!run_text.empty()) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.40f, 0.72f, 1.0f, 1.0f), "  %s", run_text.c_str());
+            }
             if (!state.status.empty()) {
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "  %s", state.status.c_str());

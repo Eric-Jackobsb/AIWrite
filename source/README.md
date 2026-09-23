@@ -100,6 +100,7 @@ M1 验证工具：
 .\aiwrite.exe --console       # 同上，并额外分配控制台窗口显示日志
 .\aiwrite.exe --login-selftest --timeout 30
                               # 网页版登录自检（离屏）：退出码 0=通过 / 1=失败 / 2=超时
+.\aiwrite.exe --run-selftest  # 执行自检：示例工作流跑到底，打印各节点状态与统计（不开窗口）
 .\api_probe.exe --selftest                  # V-04 HTTP + V-05 SHA3 自检
 .\api_probe.exe --graph-selftest            # 图模型/注册表/撤销栈/序列化 自检（95 项断言，无需网络）
 .\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 自检（129 项断言，无需网络）
