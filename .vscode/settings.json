@@ -1,0 +1,28 @@
+{
+  "// 说明": "本工程用 source/CMakePresets.json + source/build.ps1 构建（不依赖 CMake Tools 的 kit 检测）",
+  "cmake.sourceDirectory": "${workspaceFolder}/source",
+  "cmake.useCMakePresets": "always",
+  "cmake.configureOnOpen": false,
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "files.encoding": "utf8",
+  "files.eol": "\r\n",
+  "files.associations": {
+    "*.h": "cpp",
+    "*.inl": "cpp"
+  },
+  "search.exclude": {
+    "build/**": true,
+    "vcpkg-installed/**": true,
+    "vcpkg-cache/**": true,
+    "third_party/**": true
+  },
+  "// 文件监视排除": "vcpkg 缓存/安装树与构建目录体积巨大（合计 4 GB+），排除可避免 VS Code 文件监视与 Git 扩展卡顿（曾导致 index.lock 被长期占用）",
+  "files.watcherExclude": {
+    "**/build/**": true,
+    "**/vcpkg-cache/**": true,
+    "**/vcpkg-installed/**": true,
+    "**/third_party/cmake-3.31.6/**": true
+  },
+  "git.autofetch": false,
+  "git.ignoreLimitWarning": true
+}

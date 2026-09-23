@@ -1,0 +1,78 @@
+# =============================================================================
+#  AIwrite —— 根目录 .gitignore
+#
+#  原则：只提交"源码 + 文档 + 构建脚本/配置"；所有可再生成的产物、依赖安装树、
+#        本地工具与本机私有配置一律不入库（体积大 / 与机器相关 / 含本地路径）。
+#
+#  说明：本仓库示例（本机布局）
+#    build/                 218 MB  构建产物
+#    vcpkg-cache/           3.6 GB  vcpkg 下载与 buildtrees
+#    vcpkg-installed/       151 MB  依赖安装树
+#    third_party/           159 MB  仅含本地 CMake 二进制 drop（+ 其 zip）
+# =============================================================================
+
+# ------------------------------------------------------- 构建产物（可再生成）----
+/build/
+/out/
+/out-*/
+source/build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln.docx
+*.sln
+*.slnx
+*.obj
+*.o
+*.ilk
+*.pch
+*.exp
+*.pdb
+*.exe
+*.dll
+*.lib
+*.dll.manifest
+compile_commands.json
+
+# --------------------------------------------------------------- vcpkg 依赖 ----
+/vcpkg-cache/
+/vcpkg-installed/
+source/vcpkg_installed/
+vcpkg_installed/
+*.vcpkg-cache
+
+# ------------------------------------------------- 本机预装工具（非源码）-------
+# 工程自带的 CMake 二进制发行版（仅用于 vcpkg 端口构建），以及它的压缩包
+/third_party/cmake-3.31.6/
+/third_party/*.zip
+/third_party/*.7z
+/third_party/*.tar.*
+
+# ---------------------------------------------------------- 本机私有配置 ----
+CMakeUserPresets.json
+*.local.json
+.vs/
+.vscode/*.log
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+*.aps
+*.ncb
+*.sdf
+*.opensdf
+*.log
+*.tmp
+*.temp
+*~
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ------------------------------------------------------------ 运行期数据 ----
+# 程序数据目录默认在 %USERPROFILE%\.brain-ai（不在仓库内）；这里兜底防止误放
+.brain-ai/
+*.brain-ai.json

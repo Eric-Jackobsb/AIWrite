@@ -1,0 +1,86 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "aiwrite（主程序）",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/bin/aiwrite.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/build/bin",
+      "console": "internalConsole",
+      "stopAtEntry": false,
+      "justMyCode": false,
+      "preLaunchTask": "build"
+    },
+    {
+      "name": "aiwrite（带控制台，日志走 stdout）",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/bin/aiwrite.exe",
+      "args": ["--console"],
+      "cwd": "${workspaceFolder}/build/bin",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "justMyCode": false,
+      "preLaunchTask": "build"
+    },
+    {
+      "name": "api_probe：M1 自检（V-04 HTTP / V-05 SHA3）",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/bin/api_probe.exe",
+      "args": ["--selftest"],
+      "cwd": "${workspaceFolder}/build/bin",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "justMyCode": false,
+      "preLaunchTask": "build"
+    },
+    {
+      "name": "api_probe：图模型自检（M2 节点系统）",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/bin/api_probe.exe",
+      "args": ["--graph-selftest"],
+      "cwd": "${workspaceFolder}/build/bin",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "justMyCode": false,
+      "preLaunchTask": "build"
+    },
+    {
+      "name": "api_probe：DeepSeek Chat（V-06，需 DEEPSEEK_API_KEY）",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/bin/api_probe.exe",
+      "args": ["--chat", "用一句话介绍你自己"],
+      "cwd": "${workspaceFolder}/build/bin",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "justMyCode": false,
+      "environment": [
+        { "name": "DEEPSEEK_API_KEY", "value": "${env:DEEPSEEK_API_KEY}" }
+      ],
+      "preLaunchTask": "build"
+    },
+    {
+      "name": "webview2_login：登录并提取 Cookie（V-03）",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/bin/webview2_login.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/build/bin",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "justMyCode": false,
+      "preLaunchTask": "build"
+    },
+    {
+      "name": "附加到正在运行的进程",
+      "type": "cppvsdbg",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
+    }
+  ]
+}

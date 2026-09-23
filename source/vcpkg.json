@@ -1,0 +1,32 @@
+{
+  "name": "aiwrite",
+  "version": "0.1.0",
+  "description": "AI 小说/剧本创作软件 —— 节点工作流 + DeepSeek 后端（MVP）",
+  "builtin-baseline": "eb0f108ebd674c6ed79acb1c2e123208c416af0d",
+  "homepage": "https://github.com/local/aiwrite",
+  "license": null,
+  "dependencies": [
+    {
+      "name": "imgui",
+      "features": [
+        "docking-experimental",
+        "glfw-binding",
+        "opengl3-binding"
+      ]
+    },
+    "glfw3",
+    {
+      "name": "cpp-httplib",
+      "features": [
+        "openssl"
+      ]
+    },
+    "openssl",
+    "nlohmann-json",
+    "nativefiledialog-extended",
+    "spdlog",
+    "tomlplusplus",
+    "stb",
+    "webview2"
+  ]
+}

@@ -1,0 +1,39 @@
+# =============================================================================
+#  AIwrite —— .gitattributes
+#
+#  * 文本文件统一按 LF 存库、检出时按平台转换（本工程只在 Windows 上开发/构建，
+#    编辑器与脚本仍保持 CRLF 工作副本，见 .vscode/settings.json 的 files.eol）
+#  * 明确标记二进制类型，避免任何行尾/合并处理破坏它们
+# =============================================================================
+
+* text=auto
+
+# 脚本与工程文件：检出时保持 CRLF（cmd.exe / PowerShell / MSBuild 友好）
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+*.slnx text eol=crlf
+
+# --------------------------------------------------------------- 二进制 ----
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.bmp    binary
+*.gif    binary
+*.ico    binary
+*.icns   binary
+*.webp   binary
+*.ttf    binary
+*.otf    binary
+*.woff   binary
+*.woff2  binary
+*.zip    binary
+*.7z     binary
+*.gz     binary
+*.tar    binary
+*.lib    binary
+*.dll    binary
+*.exe    binary
+*.pdb    binary
+*.bin    binary
+*.obj    binary

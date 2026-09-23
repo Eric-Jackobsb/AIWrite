@@ -1,0 +1,109 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "detail": "一键配置 + 编译（Debug）；使用系统 CMake + VS 2026 生成器",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/source/build.ps1"
+      ],
+      "options": { "cwd": "${workspaceFolder}/source" },
+      "problemMatcher": ["$msCompile"],
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "build (release)",
+      "detail": "RelWithDebInfo 编译",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/source/build.ps1",
+        "-Config",
+        "release"
+      ],
+      "options": { "cwd": "${workspaceFolder}/source" },
+      "problemMatcher": ["$msCompile"],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "build: 重新配置（清空 build 目录）",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/source/build.ps1",
+        "-Reconfigure"
+      ],
+      "options": { "cwd": "${workspaceFolder}/source" },
+      "problemMatcher": ["$msCompile"],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "build: 纯 cmake 命令（配置 + 编译）",
+      "detail": "等价于：cmake --preset default && cmake --build --preset debug",
+      "type": "shell",
+      "command": "cmake --preset default && cmake --build --preset debug",
+      "options": { "cwd": "${workspaceFolder}/source" },
+      "problemMatcher": ["$msCompile"],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "vcpkg: 安装/更新依赖",
+      "detail": "按 source/vcpkg.json 安装依赖到 F: 盘（首次约 8 分钟，之后走二进制缓存）",
+      "type": "shell",
+      "command": "${workspaceFolder}/source/install-deps.cmd",
+      "options": { "cwd": "${workspaceFolder}/source" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "run: aiwrite",
+      "type": "shell",
+      "command": "${workspaceFolder}/build/bin/aiwrite.exe",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" } 
+    },
+    {
+      "label": "verify: api_probe 自检（HTTP + SHA3）",
+      "type": "shell",
+      "command": "${workspaceFolder}/build/bin/api_probe.exe",
+      "args": ["--selftest"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "verify: 图模型自检（节点/连线/参数/撤销）",
+      "type": "shell",
+      "command": "${workspaceFolder}/build/bin/api_probe.exe",
+      "args": ["--graph-selftest"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "log: 查看 app.log",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Get-Content \"$env:USERPROFILE\\.brain-ai\\logs\\app.log\" -Tail 60"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    }
+  ]
+}

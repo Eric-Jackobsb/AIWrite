@@ -1,0 +1,39 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Visual Studio 2026 (x64) - 默认构建",
+      "description": "系统安装的 CMake + VS 2026 生成器：无需 Developer Prompt、无需选择 kit，VS Code / VS / 命令行均可直接构建",
+      "generator": "Visual Studio 18 2026",
+      "architecture": { "value": "x64", "strategy": "external" },
+      "binaryDir": "${sourceDir}/../build",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_HOST_TRIPLET": "x64-windows",
+        "VCPKG_MANIFEST_DIR": "${sourceDir}",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/../vcpkg-installed",
+        "VCPKG_MANIFEST_INSTALL": "OFF",
+        "CMAKE_PREFIX_PATH": "${sourceDir}/../vcpkg-installed/x64-windows;${sourceDir}/../vcpkg-installed/x64-windows/share",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.10"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "configurePreset": "default",
+      "configuration": "Debug"
+    },
+    {
+      "name": "release",
+      "displayName": "RelWithDebInfo",
+      "configurePreset": "default",
+      "configuration": "RelWithDebInfo"
+    }
+  ]
+}

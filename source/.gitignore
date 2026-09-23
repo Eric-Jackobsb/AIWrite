@@ -1,0 +1,7 @@
+# AIwrite 源码目录 —— 构建产物与本地工具不入库
+/build/
+/vcpkg_installed/
+compile_commands.json
+*.user
+.vs/
+.vscode/
