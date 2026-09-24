@@ -1,156 +1,1202 @@
 {
-  "project": "AIwrite · AI 小说/剧本创作工具",
-  "current_version": "v0.2.x（M2 已收口；地基补丁 A 进行中 / C 部分提前落地）",
-  "updated": "2026-09-24",
-  "structure": "categories(Debug|Feature|Test|Docs|Archive) → milestones(M1..M6) → tasks[{id,desc,doc}]",
-  "baseline": {
-    "build": "0 error / 0 warning（MSVC /W4）",
-    "selftest": "api_probe --selftest：七组 PASS",
-    "graph_selftest": "95 通过 / 0 失败",
-    "exec_selftest": "72 通过 / 0 失败（执行器 + 运行信息 + 归档）",
-    "run_selftest": "PASS（离线 3/5，失败 1 为预期）",
-    "run_selftest_web": "PASS（5/5，约 6–9 s，含 PC-05 归档断言）",
-    "web_chain": "--web-probe / --web-chat：PASS（协议探明 + 端到端生成）"
-  },
-  "categories": {
-    "Debug": {
-      "M1": [
-        { "id": "DBG-M1-01", "desc": "WebView2 Runtime 缺失时仅有日志提示与退出码 1，缺少面向用户的引导", "doc": "docs/actionPlan/M1.md · 遗留表（M6-02/M6-08）" }
-      ],
-      "M3": [
-        { "id": "DBG-M3-01", "desc": "粘贴节点后视图漂移/坐标异常（历史事故根因未修，故复制粘贴 UI 入口仍下线）", "doc": "docs/actionPlan/M_patchA.md · §6.1 PD-02" }
-      ],
-      "M4": [
-        { "id": "DBG-M4-01", "desc": "生成期间界面同步阻塞 4–10 秒（执行器未线程化前无解）", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-01" },
-        { "id": "DBG-M4-02", "desc": "「■ 停止」无法中断正在执行的节点（cancel 仅阻止开启新节点）", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-02" },
-        { "id": "DBG-M4-03", "desc": "网页版 PoW 依赖官方 worker chunk，前端发版变化可能导致求解失败", "doc": "docs/网页版协议实测记录.md · §3（方案 A 收敛）" },
-        { "id": "DBG-M4-04", "desc": "网页版请求忽略 temperature / max_tokens / top_p（网页前端无对应开关）", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-05" },
-        { "id": "DBG-M4-05", "desc": "会话失效（40002/401）只呈现为通用错误串，缺少「重新登录」引导", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-07" }
-      ],
-      "M5": [
-        { "id": "DBG-M5-01", "desc": "网页版每次运行会在账号内新建/追加会话，正文进入 chat.deepseek.com 历史（副作用）", "doc": "docs/网页版协议实测记录.md · §2 端点" }
-      ],
-      "M6": [
-        { "id": "DBG-M6-01", "desc": "config 多个字段仍无效果（output.auto_open_on_complete / general.* / advanced.log_ttl_days 等）", "doc": "docs/actionPlan/M_patchA.md · §3.2 PA-08" },
-        { "id": "DBG-M6-02", "desc": "工作流与配置缺版本迁移路径，跨版本文件只能 warn 后被拒/忽略", "doc": "docs/actionPlan/M_patchA.md · §5.1 PC-04" }
-      ]
-    },
-    "Feature": {
-      "M2": [
-        { "id": "FEA-M2-01", "desc": "autosave：变更节流写 snapshots/autosave.json（原子写），启动时提示恢复未保存更改", "doc": "docs/actionPlan/M_patchA.md · §5.1 PC-01/PC-02" },
-        { "id": "FEA-M2-02", "desc": "最近列表治理：打开前校验存在性、失效项灰显并提供「清理失效条目」", "doc": "docs/actionPlan/M_patchA.md · §5.1 PC-03" },
-        { "id": "FEA-M2-03", "desc": "工作流/配置版本迁移框架（迁移表 + 未来版本明确拒绝 + 迁移自检）", "doc": "docs/actionPlan/M_patchA.md · §5.1 PC-04" }
-      ],
-      "M3": [
-        { "id": "FEA-M3-01", "desc": "复制/粘贴重做：先落 Graph 位置再统一 sync_positions，视图跟随延后一帧", "doc": "docs/actionPlan/M_patchA.md · §6.1 PD-02" },
-        { "id": "FEA-M3-02", "desc": "快捷键表（设计 §6.7）：Ctrl+Z/Y、Ctrl+S/O/N、Ctrl+C/V/X、Del、F5/Shift+F5、Ctrl+L、Ctrl+0", "doc": "docs/actionPlan/M_patchA.md · §6.1 PD-01" },
-        { "id": "FEA-M3-03", "desc": "参数面板增强：重置为默认、按节点类型批量应用参数、参数搜索过滤", "doc": "docs/actionPlan/M_patchA.md · §6.1 PD-05" },
-        { "id": "FEA-M3-04", "desc": "窗口几何持久化：尺寸/位置/最大化写入 config 并在启动恢复且越屏矫正", "doc": "docs/actionPlan/M_patchA.md · §6.1 PD-04" },
-        { "id": "FEA-M3-05", "desc": "节点内结果摘要 + 参数面板「运行结果」区（与输出面板三处逐字符一致）", "doc": "docs/actionPlan/M_patchA.md · §3.2 PA-03" }
-      ],
-      "M4": [
-        { "id": "FEA-M4-01", "desc": "执行线程化：tick 移入工作线程 + 线程安全事件队列，Graph 写入仅限主线程", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-01" },
-        { "id": "FEA-M4-02", "desc": "真取消：HTTP 可中断 + 节点协作检查点，运行中点停止 1 秒内生效", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-02" },
-        { "id": "FEA-M4-03", "desc": "流式回调：ExecutionContext 增 on_delta，NodeRunInfo.delta_bytes 生效", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-03" },
-        { "id": "FEA-M4-04", "desc": "Provider 统一抽象：inference_provider.h + provider_factory，网页版收编为 DeepSeekWebProvider", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-04" },
-        { "id": "FEA-M4-05", "desc": "官方 DeepSeek Provider：/chat/completions、参数透传、错误分类、超时重试、官方 SSE", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-05（原 M4-05/M4-10）" },
-        { "id": "FEA-M4-06", "desc": "API Key 凭据管理器（CredWrite/Read/Delete + api_key_ref）与代理/证书策略", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-06（原 M4-07）" },
-        { "id": "FEA-M4-07", "desc": "会话失效引导：识别 40002/401 → 状态栏提示并可一键打开登录窗口", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-07" },
-        { "id": "FEA-M4-08", "desc": "流式呈现：输出面板与节点摘要逐字增长，运行中显示「生成中…（N 字）」", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-08" },
-        { "id": "FEA-M4-09", "desc": "Console 增强：复制全部 / 复制当前过滤 / 导出到文件 / 自动滚动与「回到底部」", "doc": "docs/actionPlan/M_patchA.md · §3.2 PA-05（M4-12）" },
-        { "id": "FEA-M4-10", "desc": "轻量错误条：失败后可关闭、悬停看全文、点击定位到失败节点", "doc": "docs/actionPlan/M_patchA.md · §3.2 PA-06" },
-        { "id": "FEA-M4-11", "desc": "重跑能力：重跑单个节点 / 重跑该节点及下游（复用运行信息与拓扑）", "doc": "docs/actionPlan/M_patchA.md · §6.1 PD-06" },
-        { "id": "FEA-M4-12", "desc": "自检扩展：V-11 无 Key 请求构造、V-12 取消/超时语义、--run-selftest --official", "doc": "docs/actionPlan/M_patchA.md · §4.1 PB-09" }
-      ],
-      "M5": [
-        { "id": "FEA-M5-01", "desc": "VLMGenerate 接线（M5-02）：图片输入 + prompt → 视觉模型生成文字", "doc": "docs/actionPlan/M5.md" },
-        { "id": "FEA-M5-02", "desc": "ImagePreview 真实预览与 Output 窗口（历史、图片、完成后自动打开）", "doc": "docs/actionPlan/M5.md · §11.2 Output 归档" },
-        { "id": "FEA-M5-03", "desc": "输出面板进阶：历史运行列表、节点内搜索、复制为 Markdown/JSON", "doc": "docs/actionPlan/M_patchA.md · §6.1 PD-07" },
-        { "id": "FEA-M5-04", "desc": "归档完整化：outputs 历史/预览/自动打开，接线 config.output.auto_open_on_complete", "doc": "docs/actionPlan/M_patchA.md · §5.1 PC-06" }
-      ],
-      "M6": [
-        { "id": "FEA-M6-01", "desc": "设置面板（M6-06）：接线 grid_size / console_height / running_animation 等全部配置并落盘", "doc": "docs/actionPlan/M_patchA.md · §6.1 PD-03" },
-        { "id": "FEA-M6-02", "desc": "WebView2 Runtime 检测与安装引导（清零 M1 唯一遗留，缺失时给官方 Bootstrapper 链接）", "doc": "docs/actionPlan/M_patchA.md · §7 PM-01" },
-        { "id": "FEA-M6-03", "desc": "一键构建+自检：source/build.ps1 增加「跑全部自检并输出摘要（失败给文件+行号）」", "doc": "docs/actionPlan/M_patchA.md · §7 PM-03" },
-        { "id": "FEA-M6-04", "desc": "诊断信息一键复制：版本、依赖、数据目录、日志路径、GPU、DPI 缩放", "doc": "docs/actionPlan/M_patchA.md · §7 PM-04" },
-        { "id": "FEA-M6-05", "desc": "i18n 决策与落地（最小字符串表）或从 config 移除 language/startup 并记入 M6", "doc": "docs/actionPlan/M_patchA.md · §6.1 PD-08" },
-        { "id": "FEA-M6-06", "desc": "打包与分发（M6-08）：便携/安装包 + 是否随包附带 Evergreen Bootstrapper", "doc": "docs/actionPlan/M6.md · M6-08" },
-        { "id": "FEA-M6-07", "desc": "日志保留策略语义实现（advanced.log_ttl_days / log_dir 生效）", "doc": "docs/actionPlan/M_patchA.md · §1.3 C 类配置层" }
-      ]
-    },
-    "Test": {
-      "M1": [
-        { "id": "TST-M1-01", "desc": "设置 DEEPSEEK_API_KEY 后跑 api_probe --chat 实测官方 API 生成，取证 M1 V-06 / A-06", "doc": "docs/actionPlan/M1.md · 验收表 A-06；source/README.md" },
-        { "id": "TST-M1-02", "desc": "人工确认后勾选 A-03（画布交互）/ A-04（WebView2 登录）/ A-05（Cookie 提取）", "doc": "docs/节点编辑器使用说明.md · §8 人工验证清单" }
-      ],
-      "M2": [
-        { "id": "TST-M2-01", "desc": "按使用说明 §8 的 22 项清单逐项确认画布交互（可选/多选/框选/连线/右键菜单）", "doc": "docs/节点编辑器使用说明.md · §8" },
-        { "id": "TST-M2-02", "desc": "每次提交重跑回归基线（七组 PASS / 95-0 / 72-0 / --run-selftest / --run-selftest --web）并回填数字", "doc": "docs/actionPlan/M_patchA.md · §0.4 回归基线" },
-        { "id": "TST-M2-03", "desc": "autosave 恢复与版本迁移用例（VC-02 / VC-03）待 PC-01/02/04 落地后补测", "doc": "docs/actionPlan/M_patchA.md · §5.2" }
-      ],
-      "M3": [
-        { "id": "TST-M3-01", "desc": "VD-01…VD-08（快捷键无冲突、粘贴坐标、设置面板一致、窗口几何、重跑语义、输出进阶）待 Patch D 后测", "doc": "docs/actionPlan/M_patchA.md · §6.2" },
-        { "id": "TST-M3-02", "desc": "输出面板按钮人工确认（复制全文/该节点/导出）与 VA-01 三处一致断言（PA-03 后补）", "doc": "docs/节点编辑器使用说明.md · §10.5；docs/actionPlan/M_patchA.md · §3.3" }
-      ],
-      "M4": [
-        { "id": "TST-M4-01", "desc": "VB-01…VB-09（UI 不卡、取消 1 秒生效、流式拼接一致、参数透传、凭据三优先级、会话失效引导、线程安全）待 Patch B", "doc": "docs/actionPlan/M_patchA.md · §4.2" },
-        { "id": "TST-M4-02", "desc": "V-03 官方 API 生成 / V-08 官方 SSE / V-09 流式输出 三项实测（Patch B 落地后）", "doc": "docs/actionPlan/M4.md · 三、技术验证清单" },
-        { "id": "TST-M4-03", "desc": "VA-04（错误条定位）/ VA-06（grid_size、running_animation 生效）待 PA-06 / PA-08", "doc": "docs/actionPlan/M_patchA.md · §3.3" }
-      ],
-      "M5": [
-        { "id": "TST-M5-01", "desc": "M5 验证清单：VLM 生成、图片预览、Output 窗口历史/自动打开", "doc": "docs/actionPlan/M5.md · 技术验证清单" }
-      ],
-      "M6": [
-        { "id": "TST-M6-01", "desc": "M6 验证清单与打包冒烟（干净机器首启、缺 WebView2 Runtime 时引导）", "doc": "docs/actionPlan/M6.md" },
-        { "id": "TST-M6-02", "desc": "归档与保留策略人工确认（§10.6：目录/文件/正文一致、keep_history/max_history/ttl_days 生效）", "doc": "docs/节点编辑器使用说明.md · §10.6" }
-      ]
-    },
-    "Docs": {
-      "M1": [
-        { "id": "DOC-M1-01", "desc": "V-06/A-06 取证后更新 M1.md 验收表与遗留登记表（保持与代码一致）", "doc": "docs/actionPlan/M1.md" }
-      ],
-      "M2": [
-        { "id": "DOC-M2-01", "desc": "PA-09 收尾：README 补输出面板/归档/--selftest 命令；M_patchA 进度与勾选回填", "doc": "docs/actionPlan/M_patchA.md · §3.2 PA-09；source/README.md" }
-      ],
-      "M3": [
-        { "id": "DOC-M3-01", "desc": "使用说明补「节点结果摘要 + 参数面板运行结果区」与 Console 复制/导出（PA-03/PA-05 后）", "doc": "docs/节点编辑器使用说明.md" }
-      ],
-      "M4": [
-        { "id": "DOC-M4-01", "desc": "Patch B 文档：Provider 抽象与官方 API 用法、凭据管理器、会话失效处理、流式行为说明", "doc": "docs/actionPlan/M_patchA.md · §4" }
-      ],
-      "M5": [
-        { "id": "DOC-M5-01", "desc": "多模态（VLM/图片预览）与 Output 窗口使用说明章节", "doc": "docs/actionPlan/M5.md" }
-      ],
-      "M6": [
-        { "id": "DOC-M6-01", "desc": "打包与首启引导文档 + 设置面板字段说明（含「需重启生效」标注）", "doc": "docs/actionPlan/M6.md" },
-        { "id": "DOC-M6-02", "desc": "DevPlan.todo 维护规则：每次提交同步任务状态、勾选完成项并追加新条目", "doc": "docs/DevPlan.todo" }
-      ]
-    },
-    "Archive": {
-      "M1": [
-        { "id": "ARC-M1-01", "desc": "M1-01…07 全部落地；V-01…V-05 / V-07 / V-08 通过；--login-selftest PASS（Cookie 5 条）", "doc": "docs/actionPlan/M1.md；docs/M1_技术验证报告.md" }
-      ],
-      "M2": [
-        { "id": "ARC-M2-01", "desc": "M2-01…07 全绿：数据结构/注册表/拓扑/执行器/序列化/三级校验/撤销重做", "doc": "docs/actionPlan/M2.md" },
-        { "id": "ARC-M2-02", "desc": "P3-3 运行按钮接线（▶/■ + 状态栏进度 + Console）与 P3-4 workflow.log、P3-6 工作流打开保存 + recent.json", "doc": "docs/actionPlan/M2.md · 实施进度表" },
-        { "id": "ARC-M2-03", "desc": "Patch A1：NodeRunInfo/runInfos 只读暴露 + 逐节点耗时入 workflow.log + app_config 配置访问器（exec-selftest 72-0）", "doc": "docs/actionPlan/M_patchA.md · §3.2 PA-01/PA-04/PA-07" }
-      ],
-      "M3": [
-        { "id": "ARC-M3-01", "desc": "M3-01/02/03/05/06/07/09 完成：节点/端口/连线渲染、参数面板 9 类控件、画布平移缩放网格、节点库", "doc": "docs/actionPlan/M3.md" },
-        { "id": "ARC-M3-02", "desc": "PA-02 输出面板：逐节点全文 + 复制全文/该节点 + 导出到文件 + VA-07 快照纯净断言", "doc": "docs/actionPlan/M_patchA.md · §3.2 PA-02" }
-      ],
-      "M4": [
-        { "id": "ARC-M4-01", "desc": "M4-06 网页版生成端到端（PoW 方案 A + 定制 SSE + LLMGenerate 接线）：--run-selftest --web 5/5", "doc": "docs/网页版协议实测记录.md" },
-        { "id": "ARC-M4-02", "desc": "M4-08 登录与内存会话（W1）+ M4-09 PoW（方案 A）+ --web-probe / --web-chat 命令", "doc": "docs/actionPlan/M4.md · M4-06/M4-08 进展块" },
-        { "id": "ARC-M4-03", "desc": "M4-13 workflow.log 基础 + PA-04 逐节点耗时明细（[运行明细] 行，含失败/跳过）", "doc": "docs/actionPlan/M_patchA.md · §3.2 PA-04" }
-      ],
-      "M5": [
-        { "id": "ARC-M5-01", "desc": "PC-05/PC-06 输出归档提前落地：每节点 .txt + run.json + keep_history/max_history/ttl_days", "doc": "docs/actionPlan/M_patchA.md · §5.1 PC-05/PC-06" }
-      ],
-      "M6": [
-        { "id": "ARC-M6-01", "desc": "PM-02 文档索引与状态治理：CHANGELOG 索引 + milestone_plan 状态修正 + 每次提交同步规则", "doc": "docs/actionPlan/milestone_plan.md；docs/CHANGELOG.md" }
-      ]
-    }
-    }
+  "todotree": {
+    "tree": [
+      {
+        "key": 1,
+        "children": [
+          {
+            "key": 2,
+            "children": [
+              {
+                "key": 3,
+                "children": [],
+                "todo": {
+                  "id": 3,
+                  "content": "WebView2 Runtime 缺失时仅有日志提示与退出码 1，缺少面向用户的引导 ｜ 遗留表（M6-02/M6-08）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M1.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 2,
+              "content": "M1（1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 4,
+            "children": [
+              {
+                "key": 5,
+                "children": [],
+                "todo": {
+                  "id": 5,
+                  "content": "粘贴节点后视图漂移/坐标异常（历史事故根因未修，故复制粘贴 UI 入口仍下线） ｜ §6.1 PD-02",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 4,
+              "content": "M3（1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 6,
+            "children": [
+              {
+                "key": 7,
+                "children": [],
+                "todo": {
+                  "id": 7,
+                  "content": "生成期间界面同步阻塞 4–10 秒（执行器未线程化前无解） ｜ §4.1 PB-01",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 8,
+                "children": [],
+                "todo": {
+                  "id": 8,
+                  "content": "「■ 停止」无法中断正在执行的节点（cancel 仅阻止开启新节点） ｜ §4.1 PB-02",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 9,
+                "children": [],
+                "todo": {
+                  "id": 9,
+                  "content": "网页版 PoW 依赖官方 worker chunk，前端发版变化可能导致求解失败 ｜ §3（方案 A 收敛）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/网页版协议实测记录.md"
+                }
+              },
+              {
+                "key": 10,
+                "children": [],
+                "todo": {
+                  "id": 10,
+                  "content": "网页版请求忽略 temperature / max_tokens / top_p（网页前端无对应开关） ｜ §4.1 PB-05",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 11,
+                "children": [],
+                "todo": {
+                  "id": 11,
+                  "content": "会话失效（40002/401）只呈现为通用错误串，缺少「重新登录」引导 ｜ §4.1 PB-07",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 6,
+              "content": "M4（5 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 12,
+            "children": [
+              {
+                "key": 13,
+                "children": [],
+                "todo": {
+                  "id": 13,
+                  "content": "网页版每次运行会在账号内新建/追加会话，正文进入 chat.deepseek.com 历史（副作用） ｜ §2 端点",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/网页版协议实测记录.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 12,
+              "content": "M5（1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 14,
+            "children": [
+              {
+                "key": 15,
+                "children": [],
+                "todo": {
+                  "id": 15,
+                  "content": "config 多个字段仍无效果（output.auto_open_on_complete / general.* / advanced.log_ttl_days 等） ｜ §3.2 PA-08",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 16,
+                "children": [],
+                "todo": {
+                  "id": 16,
+                  "content": "工作流与配置缺版本迁移路径，跨版本文件只能 warn 后被拒/忽略 ｜ §5.1 PC-04",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 14,
+              "content": "M6（2 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          }
+        ],
+        "todo": {
+          "id": 1,
+          "content": "Debug（10 项）",
+          "done": false,
+          "level": "danger"
+        }
+      },
+      {
+        "key": 17,
+        "children": [
+          {
+            "key": 18,
+            "children": [
+              {
+                "key": 19,
+                "children": [],
+                "todo": {
+                  "id": 19,
+                  "content": "autosave：变更节流写 snapshots/autosave.json（原子写），启动时提示恢复未保存更改 ｜ §5.1 PC-01/PC-02",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 20,
+                "children": [],
+                "todo": {
+                  "id": 20,
+                  "content": "最近列表治理：打开前校验存在性、失效项灰显并提供「清理失效条目」 ｜ §5.1 PC-03",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 21,
+                "children": [],
+                "todo": {
+                  "id": 21,
+                  "content": "工作流/配置版本迁移框架（迁移表 + 未来版本明确拒绝 + 迁移自检） ｜ §5.1 PC-04",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 18,
+              "content": "M2（3 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 22,
+            "children": [
+              {
+                "key": 23,
+                "children": [],
+                "todo": {
+                  "id": 23,
+                  "content": "复制/粘贴重做：先落 Graph 位置再统一 sync_positions，视图跟随延后一帧 ｜ §6.1 PD-02",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 24,
+                "children": [],
+                "todo": {
+                  "id": 24,
+                  "content": "快捷键表（设计 §6.7）：Ctrl+Z/Y、Ctrl+S/O/N、Ctrl+C/V/X、Del、F5/Shift+F5、Ctrl+L、Ctrl+0 ｜ §6.1 PD-01",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 25,
+                "children": [],
+                "todo": {
+                  "id": 25,
+                  "content": "参数面板增强：重置为默认、按节点类型批量应用参数、参数搜索过滤 ｜ §6.1 PD-05",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 26,
+                "children": [],
+                "todo": {
+                  "id": 26,
+                  "content": "窗口几何持久化：尺寸/位置/最大化写入 config 并在启动恢复且越屏矫正 ｜ §6.1 PD-04",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 27,
+                "children": [],
+                "todo": {
+                  "id": 27,
+                  "content": "节点内结果摘要 + 参数面板「运行结果」区（与输出面板三处逐字符一致） ｜ §3.2 PA-03",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 22,
+              "content": "M3（5 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 28,
+            "children": [
+              {
+                "key": 29,
+                "children": [],
+                "todo": {
+                  "id": 29,
+                  "content": "执行线程化：tick 移入工作线程 + 线程安全事件队列，Graph 写入仅限主线程 ｜ §4.1 PB-01",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 30,
+                "children": [],
+                "todo": {
+                  "id": 30,
+                  "content": "真取消：HTTP 可中断 + 节点协作检查点，运行中点停止 1 秒内生效 ｜ §4.1 PB-02",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 31,
+                "children": [],
+                "todo": {
+                  "id": 31,
+                  "content": "流式回调：ExecutionContext 增 on_delta，NodeRunInfo.delta_bytes 生效 ｜ §4.1 PB-03",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 32,
+                "children": [],
+                "todo": {
+                  "id": 32,
+                  "content": "Provider 统一抽象：inference_provider.h + provider_factory，网页版收编为 DeepSeekWebProvider ｜ §4.1 PB-04",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 33,
+                "children": [],
+                "todo": {
+                  "id": 33,
+                  "content": "官方 DeepSeek Provider：/chat/completions、参数透传、错误分类、超时重试、官方 SSE ｜ §4.1 PB-05（原 M4-05/M4-10）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 34,
+                "children": [],
+                "todo": {
+                  "id": 34,
+                  "content": "API Key 凭据管理器（CredWrite/Read/Delete + api_key_ref）与代理/证书策略 ｜ §4.1 PB-06（原 M4-07）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 35,
+                "children": [],
+                "todo": {
+                  "id": 35,
+                  "content": "会话失效引导：识别 40002/401 → 状态栏提示并可一键打开登录窗口 ｜ §4.1 PB-07",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 36,
+                "children": [],
+                "todo": {
+                  "id": 36,
+                  "content": "流式呈现：输出面板与节点摘要逐字增长，运行中显示「生成中…（N 字）」 ｜ §4.1 PB-08",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 37,
+                "children": [],
+                "todo": {
+                  "id": 37,
+                  "content": "Console 增强：复制全部 / 复制当前过滤 / 导出到文件 / 自动滚动与「回到底部」 ｜ §3.2 PA-05（M4-12）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 38,
+                "children": [],
+                "todo": {
+                  "id": 38,
+                  "content": "轻量错误条：失败后可关闭、悬停看全文、点击定位到失败节点 ｜ §3.2 PA-06",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 39,
+                "children": [],
+                "todo": {
+                  "id": 39,
+                  "content": "重跑能力：重跑单个节点 / 重跑该节点及下游（复用运行信息与拓扑） ｜ §6.1 PD-06",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 40,
+                "children": [],
+                "todo": {
+                  "id": 40,
+                  "content": "自检扩展：V-11 无 Key 请求构造、V-12 取消/超时语义、--run-selftest --official ｜ §4.1 PB-09",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 28,
+              "content": "M4（12 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 41,
+            "children": [
+              {
+                "key": 42,
+                "children": [],
+                "todo": {
+                  "id": 42,
+                  "content": "VLMGenerate 接线（M5-02）：图片输入 + prompt → 视觉模型生成文字",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M5.md"
+                }
+              },
+              {
+                "key": 43,
+                "children": [],
+                "todo": {
+                  "id": 43,
+                  "content": "ImagePreview 真实预览与 Output 窗口（历史、图片、完成后自动打开） ｜ §11.2 Output 归档",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M5.md"
+                }
+              },
+              {
+                "key": 44,
+                "children": [],
+                "todo": {
+                  "id": 44,
+                  "content": "输出面板进阶：历史运行列表、节点内搜索、复制为 Markdown/JSON ｜ §6.1 PD-07",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 45,
+                "children": [],
+                "todo": {
+                  "id": 45,
+                  "content": "归档完整化：outputs 历史/预览/自动打开，接线 config.output.auto_open_on_complete ｜ §5.1 PC-06",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 41,
+              "content": "M5（4 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 46,
+            "children": [
+              {
+                "key": 47,
+                "children": [],
+                "todo": {
+                  "id": 47,
+                  "content": "设置面板（M6-06）：接线 grid_size / console_height / running_animation 等全部配置并落盘 ｜ §6.1 PD-03",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 48,
+                "children": [],
+                "todo": {
+                  "id": 48,
+                  "content": "WebView2 Runtime 检测与安装引导（清零 M1 唯一遗留，缺失时给官方 Bootstrapper 链接） ｜ §7 PM-01",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 49,
+                "children": [],
+                "todo": {
+                  "id": 49,
+                  "content": "一键构建+自检：source/build.ps1 增加「跑全部自检并输出摘要（失败给文件+行号）」 ｜ §7 PM-03",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 50,
+                "children": [],
+                "todo": {
+                  "id": 50,
+                  "content": "诊断信息一键复制：版本、依赖、数据目录、日志路径、GPU、DPI 缩放 ｜ §7 PM-04",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 51,
+                "children": [],
+                "todo": {
+                  "id": 51,
+                  "content": "i18n 决策与落地（最小字符串表）或从 config 移除 language/startup 并记入 M6 ｜ §6.1 PD-08",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 52,
+                "children": [],
+                "todo": {
+                  "id": 52,
+                  "content": "打包与分发（M6-08）：便携/安装包 + 是否随包附带 Evergreen Bootstrapper ｜ M6-08",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M6.md"
+                }
+              },
+              {
+                "key": 53,
+                "children": [],
+                "todo": {
+                  "id": 53,
+                  "content": "日志保留策略语义实现（advanced.log_ttl_days / log_dir 生效） ｜ §1.3 C 类配置层",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 46,
+              "content": "M6（7 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          }
+        ],
+        "todo": {
+          "id": 17,
+          "content": "Feature（31 项）",
+          "done": false,
+          "level": "default"
+        }
+      },
+      {
+        "key": 54,
+        "children": [
+          {
+            "key": 55,
+            "children": [
+              {
+                "key": 56,
+                "children": [],
+                "todo": {
+                  "id": 56,
+                  "content": "设置 DEEPSEEK_API_KEY 后跑 api_probe --chat 实测官方 API 生成，取证 M1 V-06 / A-06 ｜ 验收表 A-06；source/README.md",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M1.md"
+                }
+              },
+              {
+                "key": 57,
+                "children": [],
+                "todo": {
+                  "id": 57,
+                  "content": "人工确认后勾选 A-03（画布交互）/ A-04（WebView2 登录）/ A-05（Cookie 提取） ｜ §8 人工验证清单",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/节点编辑器使用说明.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 55,
+              "content": "M1（2 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 58,
+            "children": [
+              {
+                "key": 59,
+                "children": [],
+                "todo": {
+                  "id": 59,
+                  "content": "按使用说明 §8 的 22 项清单逐项确认画布交互（可选/多选/框选/连线/右键菜单） ｜ §8",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/节点编辑器使用说明.md"
+                }
+              },
+              {
+                "key": 60,
+                "children": [],
+                "todo": {
+                  "id": 60,
+                  "content": "每次提交重跑回归基线（七组 PASS / 95-0 / 72-0 / --run-selftest / --run-selftest --web）并回填数字 ｜ §0.4 回归基线",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 61,
+                "children": [],
+                "todo": {
+                  "id": 61,
+                  "content": "autosave 恢复与版本迁移用例（VC-02 / VC-03）待 PC-01/02/04 落地后补测 ｜ §5.2",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 58,
+              "content": "M2（3 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 62,
+            "children": [
+              {
+                "key": 63,
+                "children": [],
+                "todo": {
+                  "id": 63,
+                  "content": "VD-01…VD-08（快捷键无冲突、粘贴坐标、设置面板一致、窗口几何、重跑语义、输出进阶）待 Patch D 后测 ｜ §6.2",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 64,
+                "children": [],
+                "todo": {
+                  "id": 64,
+                  "content": "输出面板按钮人工确认（复制全文/该节点/导出）与 VA-01 三处一致断言（PA-03 后补） ｜ §10.5；docs/actionPlan/M_patchA.md · §3.3",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/节点编辑器使用说明.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 62,
+              "content": "M3（2 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 65,
+            "children": [
+              {
+                "key": 66,
+                "children": [],
+                "todo": {
+                  "id": 66,
+                  "content": "VB-01…VB-09（UI 不卡、取消 1 秒生效、流式拼接一致、参数透传、凭据三优先级、会话失效引导、线程安全）待 Patch B ｜ §4.2",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 67,
+                "children": [],
+                "todo": {
+                  "id": 67,
+                  "content": "V-03 官方 API 生成 / V-08 官方 SSE / V-09 流式输出 三项实测（Patch B 落地后） ｜ 三、技术验证清单",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M4.md"
+                }
+              },
+              {
+                "key": 68,
+                "children": [],
+                "todo": {
+                  "id": 68,
+                  "content": "VA-04（错误条定位）/ VA-06（grid_size、running_animation 生效）待 PA-06 / PA-08 ｜ §3.3",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 65,
+              "content": "M4（3 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 69,
+            "children": [
+              {
+                "key": 70,
+                "children": [],
+                "todo": {
+                  "id": 70,
+                  "content": "M5 验证清单：VLM 生成、图片预览、Output 窗口历史/自动打开 ｜ 技术验证清单",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M5.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 69,
+              "content": "M5（1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 71,
+            "children": [
+              {
+                "key": 72,
+                "children": [],
+                "todo": {
+                  "id": 72,
+                  "content": "M6 验证清单与打包冒烟（干净机器首启、缺 WebView2 Runtime 时引导）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M6.md"
+                }
+              },
+              {
+                "key": 73,
+                "children": [],
+                "todo": {
+                  "id": 73,
+                  "content": "归档与保留策略人工确认（§10.6：目录/文件/正文一致、keep_history/max_history/ttl_days 生效） ｜ §10.6",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/节点编辑器使用说明.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 71,
+              "content": "M6（2 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          }
+        ],
+        "todo": {
+          "id": 54,
+          "content": "Test（13 项）",
+          "done": false,
+          "level": "warning"
+        }
+      },
+      {
+        "key": 74,
+        "children": [
+          {
+            "key": 75,
+            "children": [
+              {
+                "key": 76,
+                "children": [],
+                "todo": {
+                  "id": 76,
+                  "content": "V-06/A-06 取证后更新 M1.md 验收表与遗留登记表（保持与代码一致）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M1.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 75,
+              "content": "M1（1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 77,
+            "children": [
+              {
+                "key": 78,
+                "children": [],
+                "todo": {
+                  "id": 78,
+                  "content": "PA-09 收尾：README 补输出面板/归档/--selftest 命令；M_patchA 进度与勾选回填 ｜ §3.2 PA-09；source/README.md",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 77,
+              "content": "M2（1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 79,
+            "children": [
+              {
+                "key": 80,
+                "children": [],
+                "todo": {
+                  "id": 80,
+                  "content": "使用说明补「节点结果摘要 + 参数面板运行结果区」与 Console 复制/导出（PA-03/PA-05 后）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/节点编辑器使用说明.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 79,
+              "content": "M3（1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 81,
+            "children": [
+              {
+                "key": 82,
+                "children": [],
+                "todo": {
+                  "id": 82,
+                  "content": "Patch B 文档：Provider 抽象与官方 API 用法、凭据管理器、会话失效处理、流式行为说明 ｜ §4",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 81,
+              "content": "M4（1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 83,
+            "children": [
+              {
+                "key": 84,
+                "children": [],
+                "todo": {
+                  "id": 84,
+                  "content": "多模态（VLM/图片预览）与 Output 窗口使用说明章节",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M5.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 83,
+              "content": "M5（1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 85,
+            "children": [
+              {
+                "key": 86,
+                "children": [],
+                "todo": {
+                  "id": 86,
+                  "content": "打包与首启引导文档 + 设置面板字段说明（含「需重启生效」标注）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M6.md"
+                }
+              },
+              {
+                "key": 87,
+                "children": [],
+                "todo": {
+                  "id": 87,
+                  "content": "DevPlan.todo 维护规则：每次提交同步任务状态、勾选完成项并追加新条目",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/DevPlan.todo"
+                }
+              }
+            ],
+            "todo": {
+              "id": 85,
+              "content": "M6（2 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          }
+        ],
+        "todo": {
+          "id": 74,
+          "content": "Docs（7 项）",
+          "done": false,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 88,
+        "children": [
+          {
+            "key": 89,
+            "children": [
+              {
+                "key": 90,
+                "children": [],
+                "todo": {
+                  "id": 90,
+                  "content": "M1-01…07 全部落地；V-01…V-05 / V-07 / V-08 通过；--login-selftest PASS（Cookie 5 条）",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/actionPlan/M1.md；docs/M1_技术验证报告.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 89,
+              "content": "M1（1 项）",
+              "done": true,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 91,
+            "children": [
+              {
+                "key": 92,
+                "children": [],
+                "todo": {
+                  "id": 92,
+                  "content": "M2-01…07 全绿：数据结构/注册表/拓扑/执行器/序列化/三级校验/撤销重做",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/actionPlan/M2.md"
+                }
+              },
+              {
+                "key": 93,
+                "children": [],
+                "todo": {
+                  "id": 93,
+                  "content": "P3-3 运行按钮接线（▶/■ + 状态栏进度 + Console）与 P3-4 workflow.log、P3-6 工作流打开保存 + recent.json ｜ 实施进度表",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/actionPlan/M2.md"
+                }
+              },
+              {
+                "key": 94,
+                "children": [],
+                "todo": {
+                  "id": 94,
+                  "content": "Patch A1：NodeRunInfo/runInfos 只读暴露 + 逐节点耗时入 workflow.log + app_config 配置访问器（exec-selftest 72-0） ｜ §3.2 PA-01/PA-04/PA-07",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 91,
+              "content": "M2（3 项）",
+              "done": true,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 95,
+            "children": [
+              {
+                "key": 96,
+                "children": [],
+                "todo": {
+                  "id": 96,
+                  "content": "M3-01/02/03/05/06/07/09 完成：节点/端口/连线渲染、参数面板 9 类控件、画布平移缩放网格、节点库",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/actionPlan/M3.md"
+                }
+              },
+              {
+                "key": 97,
+                "children": [],
+                "todo": {
+                  "id": 97,
+                  "content": "PA-02 输出面板：逐节点全文 + 复制全文/该节点 + 导出到文件 + VA-07 快照纯净断言 ｜ §3.2 PA-02",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 95,
+              "content": "M3（2 项）",
+              "done": true,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 98,
+            "children": [
+              {
+                "key": 99,
+                "children": [],
+                "todo": {
+                  "id": 99,
+                  "content": "M4-06 网页版生成端到端（PoW 方案 A + 定制 SSE + LLMGenerate 接线）：--run-selftest --web 5/5",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/网页版协议实测记录.md"
+                }
+              },
+              {
+                "key": 100,
+                "children": [],
+                "todo": {
+                  "id": 100,
+                  "content": "M4-08 登录与内存会话（W1）+ M4-09 PoW（方案 A）+ --web-probe / --web-chat 命令 ｜ M4-06/M4-08 进展块",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/actionPlan/M4.md"
+                }
+              },
+              {
+                "key": 101,
+                "children": [],
+                "todo": {
+                  "id": 101,
+                  "content": "M4-13 workflow.log 基础 + PA-04 逐节点耗时明细（[运行明细] 行，含失败/跳过） ｜ §3.2 PA-04",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 98,
+              "content": "M4（3 项）",
+              "done": true,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 102,
+            "children": [
+              {
+                "key": 103,
+                "children": [],
+                "todo": {
+                  "id": 103,
+                  "content": "PC-05/PC-06 输出归档提前落地：每节点 .txt + run.json + keep_history/max_history/ttl_days ｜ §5.1 PC-05/PC-06",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 102,
+              "content": "M5（1 项）",
+              "done": true,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 104,
+            "children": [
+              {
+                "key": 105,
+                "children": [],
+                "todo": {
+                  "id": 105,
+                  "content": "PM-02 文档索引与状态治理：CHANGELOG 索引 + milestone_plan 状态修正 + 每次提交同步规则",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/actionPlan/milestone_plan.md；docs/CHANGELOG.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 104,
+              "content": "M6（1 项）",
+              "done": true,
+              "level": "secondary"
+            }
+          }
+        ],
+        "todo": {
+          "id": 88,
+          "content": "Archive（11 项）",
+          "done": true,
+          "level": "success"
+        }
+      }
+    ],
+    "expandKeys": [
+      1,
+      2,
+      4,
+      6,
+      12,
+      14,
+      17,
+      18,
+      22,
+      28,
+      41,
+      46,
+      54,
+      55,
+      58,
+      62,
+      65,
+      69,
+      71,
+      74,
+      75,
+      77,
+      79,
+      81,
+      83,
+      85,
+      88,
+      89,
+      91,
+      95,
+      98,
+      102,
+      104
+    ],
+    "add_mode": "bottom",
+    "title": "AIwrite · 开发计划（DevPlan）",
+    "desc": "**当前基线**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS\n- graph_selftest: 95 通过 / 0 失败\n- exec_selftest: 72 通过 / 0 失败（执行器 + 运行信息 + 归档）\n- run_selftest: PASS（离线 3/5，失败 1 为预期）\n- run_selftest_web: PASS（5/5，约 6–9 s，含 PC-05 归档断言）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n\n**主要风险**\n- 生成期间 UI 同步阻塞、取消无法中断（Patch B 解决）\n- 网页版 PoW 依赖官方 worker chunk，前端发版变化需回归\n- 复制/粘贴仍暂停（画布坐标根因待修）\n- 未接配置字段仍无效果（PA-08 / PD-03）",
+    "lang": "zh-CN",
+    "version": "v0.2.x（M2 已收口；地基补丁 A 进行中 / C 部分提前落地）",
+    "timelines": []
+  }
 }
-
