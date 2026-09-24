@@ -1172,11 +1172,33 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md · PA-05/06/08/09"
                 }
+              },
+              {
+                "key": 117,
+                "children": [],
+                "todo": {
+                  "id": 117,
+                  "content": "ARC-M3-10 Patch B PB-01 执行线程化（三步完成）：RunEvent 事件队列 + Graph 副本 + startAsync/pumpEvents/requestStop/stopAsync；EditorState 异步入口 + RunSnapshot/RunNodeView 读模型 + finish_run_session（先 join → 快照落定 → 归档 → 错误条）；GUI 三处运行入口切异步、退出与切图前 join；断言：线程化 OK + 快照·Graph == 权威。延后：PB-02 真取消 / PB-05 官方 Provider / PB-06 凭据",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchA.md · PB-01"
+                }
+              },
+              {
+                "key": 118,
+                "children": [],
+                "todo": {
+                  "id": 118,
+                  "content": "ARC-M3-11 PB-03（最小化）+ PB-08 流式呈现：网页版 SSE 每段增量即回调 on_delta → 执行器 RunEvent::Delta → 读模型逐段追加；节点摘要/输出面板标题/状态栏显示「生成中…（N 字）」；abort_run_if_any 先 join 再 cancel/reset",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchA.md · PB-03/PB-08"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（10 项）",
+              "content": "M3（12 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1272,7 +1294,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（19 项）",
+          "content": "Archive（21 项）",
           "done": true,
           "level": "success"
         }

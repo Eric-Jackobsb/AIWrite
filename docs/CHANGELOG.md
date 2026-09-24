@@ -19,6 +19,25 @@
 
 ## [Unreleased] — M2 节点系统（P1 数据层 + P2 画布交互）已落地
 
+**PB-03（最小化）+ PB-08：流式呈现 —— 网页版增量回调 → 逐字显示「生成中…（N 字）」**
+
+- `ai/deepseek_web_client.{h,cpp}`：`WebChatRequest` 增 `on_delta`；SSE 解析循环**每解析到一段
+  `delta_text_of` 就回调一次**（原先只累加、结束时才返回全文，故做不到逐字）
+- `engine/executor.{h,cpp}`：`ExecutionContext` 增 `on_delta` + `delta()` 助手；`RunEvent::Kind` 增 `Delta`；
+  构造时接线 `handleDelta()`（**异步模式才推事件**，同步/自检路径行为不变）
+- `nodes/local_nodes.cpp`：网页版请求携带 `ctx.on_delta`（官方 Provider 的 `on_delta` 随 PB-05 延后）
+- `ui/editor_state.cpp`：`pump_run_events()` 处理 `Delta`（读模型 `text` 逐段追加、状态置 Running、
+  `delta_bytes` 同步）；`run_status_text()` 运行中显示 `当前 nX（生成中… N 字）`；
+  **`abort_run_if_any()` 先 `stop_run_async()` 再 `cancel/reset`**（运行中切图/改图不再与工作线程竞争）
+- `ui/node_canvas.cpp`：`Running` 状态显示 `生成中…（N 字）`（无增量回退「运行中…」）；缓存签名含文本长度
+  → 逐字增长自然刷新
+- `ui/output_panel.cpp`：`RunNodeView` 标题行运行中追加 `· 生成中（N 字）`；正文随增量逐段增长
+- 回归：构建 **0 error / 0 warning**；`api_probe --selftest` 七组 PASS；`--graph-selftest` 111/0；
+  `--exec-selftest` 73/0 + 72/0；`--run-selftest` PASS（PB-01 OK）；`--run-selftest --web` PASS 5/5（8.81s）
+- 看板：DevPlan Archive/M3 追加 `ARC-M3-10`（PB-01 三步）/ `ARC-M3-11`（PB-03-min + PB-08）
+- **待办**：① 离线"假增量"断言（把 VB-03 自动化：临时注册会 `ctx.delta()` 的执行器，断言增量拼接 ==
+  最终文本 + `delta_bytes` 一致）；② **PB-07 会话失效引导**（40002/401 → 错误条「重新登录」→ WebView2 登录窗）
+
 **PB-01（第一步）：执行线程化核心 —— 事件队列 + Graph 副本 + 只读快照（Patch B 开工）**
 
 - `engine/executor.{h,cpp}`：
