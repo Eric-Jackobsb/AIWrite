@@ -4,6 +4,7 @@
 #include "ui/editor_state.h"
 #include "ui/node_canvas.h"
 #include "ui/node_library.h"
+#include "ui/output_panel.h"
 #include "ui/property_panel.h"
 #include "ui/toolbar.h"
 #include "utils/config.h"
@@ -40,6 +41,7 @@ constexpr const char* kWindowCanvas  = "节点画布";
 constexpr const char* kWindowLibrary = "节点库";
 constexpr const char* kWindowParams  = "参数";
 constexpr const char* kWindowConsole = "Console";
+constexpr const char* kWindowOutput  = "输出";
 constexpr const char* kWindowInfo    = "工作流信息";
 
 void glfw_error_callback(int code, const char* description)
@@ -180,6 +182,7 @@ void build_default_layout(ImGuiID dockspace_id, const ImVec2& size)
     ImGui::DockBuilderDockWindow(kWindowCanvas, center);
     ImGui::DockBuilderDockWindow(kWindowLibrary, left);
     ImGui::DockBuilderDockWindow(kWindowConsole, bottom);
+    ImGui::DockBuilderDockWindow(kWindowOutput, bottom); // PA-02：与 Console 同区（可拖动分离）
     ImGui::DockBuilderDockWindow(kWindowParams, right);
     ImGui::DockBuilderDockWindow(kWindowInfo, right);
     ImGui::DockBuilderFinish(dockspace_id);
@@ -336,6 +339,7 @@ int run(const AppOptions& options)
     // 面板可见性来自 config.toml（设计 §7.2：节点库/参数面板默认隐藏、可切换；
     // M6-06 设置面板落地前，手动切换会写回 [ui] 段以便下次记住）
     bool show_console         = config.ui.show_console;
+    bool show_output          = config.ui.show_output_window; // PA-02：首次接线该配置项
     bool show_library         = config.ui.show_node_library;
     bool show_params          = config.ui.show_property_panel;
     bool show_info            = true; // 工作流信息面板不在 config 中：始终显示
@@ -344,7 +348,8 @@ int run(const AppOptions& options)
 
     log::info(std::string("界面可见性（config.toml [ui]）: 节点库=") +
               (show_library ? "显示" : "隐藏") + "，参数面板=" + (show_params ? "显示" : "隐藏") +
-              "，Console=" + (show_console ? "显示" : "隐藏") + "，网格=" +
+              "，Console=" + (show_console ? "显示" : "隐藏") + "，输出=" +
+              (show_output ? "显示" : "隐藏") + "，网格=" +
               (canvas_options.show_grid ? "开" : "关"));
 
     // 启动即创建示例工作流，便于直接验证节点操作（可用工具栏「新建（清空）」重来）
@@ -488,6 +493,7 @@ int run(const AppOptions& options)
                 const bool library_toggled = ImGui::MenuItem("节点库", nullptr, &show_library);
                 const bool params_toggled  = ImGui::MenuItem("参数面板", nullptr, &show_params);
                 const bool console_toggled = ImGui::MenuItem("Console", nullptr, &show_console);
+                const bool output_toggled  = ImGui::MenuItem("输出", nullptr, &show_output);
                 ImGui::MenuItem("工作流信息", nullptr, &show_info); // 不入 config：仅本次会话生效
                 ImGui::Separator();
                 if (ImGui::MenuItem("重置布局")) {
@@ -497,10 +503,11 @@ int run(const AppOptions& options)
 
                 // 可见性持久化（设计 §20.2：启动读取 config.toml）——让手动切换被记住；
                 // M6-06 设置面板落地后改由设置面板统一保存
-                if (library_toggled || params_toggled || console_toggled) {
+                if (library_toggled || params_toggled || console_toggled || output_toggled) {
                     config.ui.show_node_library   = show_library;
                     config.ui.show_property_panel = show_params;
                     config.ui.show_console        = show_console;
+                    config.ui.show_output_window  = show_output;
                     if (save_config(paths::config_file(), config)) {
                         set_app_config(config); // PA-07：保持进程缓存与磁盘一致
                         log::info(std::string("界面可见性已保存到 config.toml（节点库=") +
@@ -574,6 +581,11 @@ int run(const AppOptions& options)
         if (show_console) {
             ImGui::PushFont(fonts.console);
             draw_console_panel(kWindowConsole, &show_console);
+            ImGui::PopFont();
+        }
+        if (show_output) { // PA-02：输出面板（结果全文 / 复制全文·该节点 / 导出）
+            ImGui::PushFont(fonts.ui);
+            draw_output_panel(kWindowOutput, &show_output, state);
             ImGui::PopFont();
         }
         if (show_info) {

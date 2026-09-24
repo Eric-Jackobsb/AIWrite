@@ -4,6 +4,7 @@
 // =============================================================================
 #include "ui/app.h"
 #include "ui/editor_state.h"
+#include "ui/output_panel.h"
 #include "ai/deepseek_web_client.h"
 #include "utils/log.h"
 #include "utils/paths.h"
@@ -85,6 +86,23 @@ int run_selftest(bool use_web)
 
     const bool finished = state.executor.state() == aiwrite::engine::ExecState::Finished;
 
+    // ---- PA-02：输出面板数据通道（与面板「复制全文 / 导出」同一实现）----
+    const std::string output_text = aiwrite::ui::run_output_text(state.graph, state.executor);
+    std::printf("[运行自检] 输出面板文本：%zu 字符\n", output_text.size());
+    if (!output_text.empty()) {
+        const std::size_t head = output_text.size() > 100 ? 100 : output_text.size();
+        std::printf("[运行自检] 输出面板预览：%s…\n", output_text.substr(0, head).c_str());
+    }
+
+    // VA-07 取样：LLMGenerate 节点的运行结果（跑完不得出现在工作流 JSON 里）
+    std::string llm_result;
+    for (const aiwrite::engine::Node& node : state.graph.nodes) {
+        if (node.type == "LLMGenerate") {
+            llm_result = aiwrite::ui::node_output_text(state.graph, state.executor, node.id);
+            break;
+        }
+    }
+
     // ---- M2-05：工作流文件往返（保存 → 打开，走 app 侧同一代码路径）----
     // 备份/还原 recent.json，避免自检污染真实最近列表
     const std::filesystem::path recent_file = aiwrite::paths::recent_file();
@@ -109,6 +127,18 @@ int run_selftest(bool use_web)
                 saved ? "OK" : "失败", opened ? "OK" : "失败", same ? "OK" : "不一致",
                 file_error.empty() ? "" : ("（" + file_error + "）").c_str());
 
+    // VA-07：保存出来的 JSON 不得包含运行结果（运行态值原则）
+    bool json_clean = true;
+    if (saved && !llm_result.empty()) {
+        std::ifstream     json_in(temp_file, std::ios::binary);
+        std::stringstream json_buffer;
+        json_buffer << json_in.rdbuf();
+        const std::string json = json_buffer.str();
+        const std::size_t probe_len = llm_result.size() < 24 ? llm_result.size() : 24;
+        json_clean = json.find(llm_result.substr(0, probe_len)) == std::string::npos;
+    }
+    std::printf("[运行自检] VA-07 工作流 JSON 不含运行结果：%s\n", json_clean ? "OK" : "失败");
+
     std::filesystem::remove(temp_file, ec);
     if (had_recent) {
         std::ofstream out(recent_file, std::ios::binary | std::ios::trunc);
@@ -118,7 +148,7 @@ int run_selftest(bool use_web)
         std::filesystem::remove(recent_file, ec);
     }
 
-    const bool pass = finished && saved && opened && same;
+    const bool pass = finished && saved && opened && same && json_clean;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

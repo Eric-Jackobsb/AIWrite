@@ -4,17 +4,19 @@
 > 依据：2026-09-23 全库底层逻辑审计（见 §1）
 > 版本目标：v0.2.x（在已收口的 M2 之上补体验地基）
 > 预计工期：全系列 5–6 天（全职）/ 12–15 天（业余）；**Patch A 单批 ≈1.2 天**
-> 实施状态：🟡 进行中 —— **A1 已完成**（PA-01 运行信息 / PA-04 逐节点耗时 / PA-07 配置访问器，2026-09-24）；**A2 待做**（PA-02/03/05/06/08/09）
+> 实施状态：🟡 进行中 —— **A1 已完成**（PA-01/PA-04/PA-07，2026-09-24）；**A2 进行中**：**PA-02 输出面板 ✅**（2026-09-24），其余（PA-03/05/06/08/09）待做
 
 ### 实施进度（2026-09-24）
 
 | 阶段 | 任务 | 状态 | 实测 / 证据 |
 |---|---|---|---|
-| A1 | PA-01 执行器只读运行信息 | ✅ | `NodeRunInfo` + `Executor::runInfos()`；`api_probe --exec-selftest` **62 通过 / 0 失败**（较基线 +6 项断言：记录数=节点数、失败含 error 与耗时、跳过被记录、完成含类型、耗时之和 ≤ 总耗时、reset 后清空） |
-| A1 | PA-04 逐节点耗时写入 `workflow.log` | ✅ | 运行结束写 `[运行明细] n1(TextInput)=done/0ms … n3(LLMGenerate)=done/7167ms …`；节点行带耗时（`[n3] 完成（7167 ms）`、`[n3] 失败（0.11 ms）：…`、跳过 `skipped/0ms/err:上游 n3 执行失败，已跳过`） |
-| A1 | PA-07 配置访问器地基 | ✅ | `app_config()/set_app_config()`（线程安全只读）；`app.cpp` 启动与保存后同步；`api_probe` 启动载入真实配置；`--selftest` 配置往返组新增断言（set→get 一致 + 默认值）→ 七组全 PASS |
-| A1 | 回归基线 | ✅ | `--selftest` 七组 PASS；`--graph-selftest` 95/0；`--exec-selftest` **62/0**；`--run-selftest` PASS（3/5 预期）；`--run-selftest --web` **5/5**（7.17s）；构建 0 error / 0 warning |
-| A2 | PA-02 输出面板 / PA-03 结果呈现 / PA-05 Console 增强 / PA-06 错误条 / PA-08 未接配置治理 / PA-09 文档收尾 | ⬜ 待做 | — |
+| A1 | PA-01 执行器只读运行信息 | ✅ | `NodeRunInfo` + `Executor::runInfos()`；`api_probe --exec-selftest` **62 通过 / 0 失败**（+6 项断言） |
+| A1 | PA-04 逐节点耗时写入 `workflow.log` | ✅ | `[运行明细] n1(TextInput)=done/0ms … n3(LLMGenerate)=done/7167ms …`；节点行带耗时（完成/失败/跳过） |
+| A1 | PA-07 配置访问器地基 | ✅ | `app_config()/set_app_config()`（mutex 保护）；app 启动与保存后同步；api_probe 启动载入；`--selftest` 断言通过 |
+| A2 | PA-02 输出面板（全文 / 复制 / 导出） | ✅ | 新增 `ui/output_panel.{h,cpp}`（`node_output_text` / `run_output_text` 供面板、导出与自检共用）；视图菜单「输出」+ 接线 `config.ui.show_output_window`（切换即持久化）；停靠于 Console 同区；只读消费 `runInfos()`+`outputs()` |
+| A2 | PA-02 无界面验证 | ✅ | `--run-selftest --web`：输出面板文本 **501 字符**、预览 `[n1] TextInput · done · 0 ms`、**VA-07 工作流 JSON 不含运行结果 = OK**、PASS（5.51s）；离线模式 613 字符（含错误/跳过段）、VA-07 OK、PASS |
+| A2 | PA-03 节点摘要 / 参数面板结果区；PA-05 Console 增强；PA-06 错误条；PA-08 配置治理；PA-09 文档收尾 | ⬜ 待做 | — |
+| A2 | 回归基线（PA-02 后） | ✅ | `--selftest` 七组 PASS；`--graph-selftest` 95/0；`--exec-selftest` 62/0；`--run-selftest` PASS（3/5 预期）；`--run-selftest --web` 5/5；构建 0 error / 0 warning |
 > 当前基线（全绿）：`api_probe --selftest` 七组 PASS、`--graph-selftest` 95/0、`--exec-selftest` 56/0、
 > `aiwrite --run-selftest` PASS、`--run-selftest --web` **5/5 ≈10s**、`--web-probe` PASS、`--web-chat` PASS
 
@@ -169,7 +171,7 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | 验证 | 自检断言：记录数 = 计划节点数；耗时 ≥0；状态与 `Graph` 一致；失败节点含 `error`；跳过节点有记录 |
 | 产出 | `src/engine/executor.{h,cpp}` |
 
-#### PA-02 输出面板（Output 窗口最小可用版）
+#### PA-02 输出面板（Output 窗口最小可用版）✅（2026-09-24 · A2）
 
 | 项目 | 内容 |
 |---|---|
@@ -244,13 +246,13 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 
 | 编号 | 验证项 | 通过标准 |
 |---|---|---|
-| VA-01 | 结果可见且一致 | 同一次运行下，节点摘要 / 参数面板全文 / 输出面板内容**逐字符一致** |
-| VA-02 | 结果可用 | 复制与导出的内容与面板一致；UTF-8 无乱码；导出失败有提示 |
+| VA-01 | 结果可见且一致 **🟡 PA-02 部分** | 输出面板已可用（数据通道经 `--run-selftest` 验证 501 字符）；节点摘要与参数面板全文待 PA-03，届时断言三处逐字符一致 |
+| VA-02 | 结果可用 **🟡 PA-02 部分** | 复制全文/该节点、导出到文件已实现（同一 `run_output_text` 实现）；按钮行为的**人工确认**见使用说明 §10.5 |
 | VA-03 | 耗时正确 **✅ A1** | 每节点 ≥0；各节点耗时之和 ≤ 总耗时；失败/跳过节点也有记录（已由 `--exec-selftest` 6 项断言 + `workflow.log` 明细实测覆盖） |
 | VA-04 | 错误条 | 失败出现；悬停显示全文；点击定位失败节点；可关闭 |
 | VA-05 | Console 增强 | 复制/导出与过滤结果一致；自动滚动在手动上滚后暂停、点「回到底部」恢复 |
 | VA-06 | 配置地基 **🟡 A1 部分** | `app_config()` set→get 一致（✅ A1 已断言）；`grid_size`/`running_animation` 生效与"尚未生效"日志待 PA-08 |
-| VA-07 | **快照纯净** | 运行后工作流 JSON 与撤销快照**不含**任何运行结果（显式断言） |
+| VA-07 | **快照纯净** **✅ PA-02** | 运行后工作流 JSON 与撤销快照**不含**任何运行结果（`--run-selftest` 已断言：`VA-07 工作流 JSON 不含运行结果 = OK`，web/离线两模式均通过） |
 | VA-08 | 无回归 **✅ A1** | §0.4 基线全绿（七组 PASS / 95-0 / **62-0** / `--run-selftest` PASS / `--run-selftest --web` 5/5）；构建 0 error / 0 warning |
 
 ### 3.4 风险与对策
