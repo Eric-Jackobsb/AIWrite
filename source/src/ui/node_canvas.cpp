@@ -371,8 +371,12 @@ NodeResultView result_view_of(const Node& node)
         return entry.view;
     }
     if (node.state == NodeState::Running) {
+        // PB-08：流式进度（增量字节数来自读模型；无增量时退回"运行中…"）
+        const engine::RunNodeView* live  = snapshot.find(node.id);
+        const std::size_t          bytes = (live != nullptr) ? live->delta_bytes : 0;
         entry.view.has_content = true;
-        entry.view.text        = "运行中…";
+        entry.view.text        = (bytes > 0) ? ("生成中…（" + std::to_string(bytes) + " 字）")
+                                            : std::string("运行中…");
         return entry.view;
     }
 

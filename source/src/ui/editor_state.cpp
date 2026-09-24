@@ -649,6 +649,12 @@ std::string EditorState::run_status_text() const
     const std::string current = executor.currentNode();
     if (!current.empty()) {
         stream << " | 当前 " << current;
+        // PB-08：流式进度（读模型里的增量字节数；无增量时不显示）
+        if (const engine::RunNodeView* live = run_snapshot.find(current)) {
+            if (live->delta_bytes > 0) {
+                stream << "（生成中… " << live->delta_bytes << " 字）";
+            }
+        }
     }
     return stream.str();
 }
@@ -659,6 +665,7 @@ void EditorState::abort_run_if_any(const std::string& reason)
         return;
     }
     log::warn("运行中" + reason + " → 已终止当前运行");
+    stop_run_async(); // PB-01：先 join 工作线程（再动 Executor 状态，避免竞争）
     executor.cancel();
     executor.reset();
     for (engine::Node& node : graph.nodes) {

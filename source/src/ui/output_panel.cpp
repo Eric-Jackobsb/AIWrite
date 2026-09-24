@@ -44,8 +44,14 @@ std::string node_header(const engine::NodeRunInfo& info)
 // PB-01：读模型条目使用同一标题格式（面板改读 RunSnapshot 后仍与自检一致）
 std::string node_header(const engine::RunNodeView& info)
 {
-    return "[" + info.node_id + "] " + info.type + " · " + engine::nodeStateName(info.state) +
-           " · " + std::to_string(static_cast<long long>(info.duration_ms + 0.5)) + " ms";
+    std::string header = "[" + info.node_id + "] " + info.type + " · " +
+                         engine::nodeStateName(info.state) + " · " +
+                         std::to_string(static_cast<long long>(info.duration_ms + 0.5)) + " ms";
+    // PB-08：运行中显示流式进度（正文会随增量逐段增长）
+    if (info.state == engine::NodeState::Running) {
+        header += " · 生成中（" + std::to_string(info.delta_bytes) + " 字）";
+    }
+    return header;
 }
 
 } // namespace
