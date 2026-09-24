@@ -17,6 +17,8 @@
 | A2 | PA-02 无界面验证 | ✅ | `--run-selftest --web`：输出面板文本 **501 字符**、预览 `[n1] TextInput · done · 0 ms`、**VA-07 工作流 JSON 不含运行结果 = OK**、PASS（5.51s）；离线模式 613 字符（含错误/跳过段）、VA-07 OK、PASS |
 | A2 | **PA-03 结果呈现（节点摘要 + 参数面板结果区）** | ✅ | 新增 `ui/text_view.{h,cpp}`（只读文本/复制共用，输出面板与参数面板同源）；`node_canvas` 节点内结果摘要（状态着色 + 首 160 字符 + 字符数，签名缓存避免每帧重算）；`property_panel` 新增「运行结果」折叠区（状态/耗时/错误 + 只读全文 + 复制 + 归档路径） |
 | A2 | **VA-01 三处一致断言** | ✅ | `--run-selftest` 断言「输出面板全文 ⊇ 每个节点全文」：离线 **3 节点 / 613 字符**、网页版 **4 节点 / 2397 字符**，均 OK |
+| A2 | **P1-a 生效提供商可见性** | ✅ | 新增 `engine/provider_resolve.{h,cpp}`（provider 输入优先的单点实现）；参数面板显示 `生效：official（来自 提供商配置 n5）` + 红字「必定失败」+ 「把 提供商配置 n5 改为 web」一键按钮（先压快照→可撤销）；节点体显示 `生效 official ← n5` |
+| A2 | **P1-b 运行前提示（拦截）** | ✅ | `validateBeforeRun` **追加** warning（保持"不阻断"，保住既有断言）；工具栏「▶ 运行」预检 → 确认弹窗（受影响清单 + 「切换为网页版并运行」/「仍要运行」/「取消」）。回归不变：七组 PASS / 95-0 / 72-0 / 3-of-5 / 5-of-5 / 构建 0-0 |
 | A2 | PA-05 Console 增强 / PA-06 错误条 / PA-08 未接配置治理 / PA-09 文档收尾 | ⬜ 待做 | — |
 | A2 | 回归基线（PA-02 后） | ✅ | `--selftest` 七组 PASS；`--graph-selftest` 95/0；`--exec-selftest` 62/0；`--run-selftest` PASS（3/5 预期）；`--run-selftest --web` 5/5；构建 0 error / 0 warning |
 | C | PC-05 输出归档（提前落地） | ✅ | 新增 `utils/output_archive.{h,cpp}`：运行结束写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`（每节点 `.txt` 含元信息头 + `run.json`）；同秒多次运行自动加序号且**本次归档永不删除**；工作流名非法字符清洗；不可写路径返回错误不抛异常。`editor_state` 运行结束自动归档 + `last_archive_dir`；输出面板显示归档路径并可「复制归档路径」 |

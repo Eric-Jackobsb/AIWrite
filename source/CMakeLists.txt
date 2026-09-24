@@ -180,6 +180,7 @@ add_library(aiwrite_core STATIC
     src/engine/undo_stack.cpp
     src/engine/workflow_io.cpp
     src/engine/validate.cpp
+src/engine/provider_resolve.cpp
     src/engine/executor.cpp
     src/engine/recent_files.cpp
     src/ai/web_pow.cpp

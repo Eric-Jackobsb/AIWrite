@@ -1,6 +1,7 @@
 #include "ui/property_panel.h"
 
 #include "engine/node_registry.h"
+#include "engine/provider_resolve.h"
 #include "ui/editor_state.h"
 #include "ui/output_panel.h"
 #include "ui/text_view.h"
@@ -403,6 +404,53 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
 
     if (definition != nullptr && !definition->description.empty()) {
         ImGui::TextWrapped("%s", definition->description.c_str());
+    }
+
+    // ---- 生效提供商（P1-a）：provider 输入优先，覆盖节点自身参数 ----
+    // 解决"改了节点「模式」却不生效"的困惑；official（官方 API，PB-04/PB-05 未接线）给出红字与一键切换
+    if (engine::uses_provider(node->type)) {
+        const engine::EffectiveProvider effective =
+            engine::resolve_effective_provider(editor().graph, *node);
+        if (node->type == "LLMGenerate") {
+            if (effective.from_edge) {
+                ImGui::TextDisabled("生效：%s（来自 提供商配置 %s）· 模型 %s", effective.mode.c_str(),
+                                    effective.source_node.c_str(), effective.model.c_str());
+            }
+            else {
+                ImGui::TextDisabled("生效：%s（节点自身设置；provider 输入未连接）",
+                                    effective.mode.c_str());
+            }
+        }
+
+        const std::string reason = engine::unwired_reason(editor().graph, *node);
+        if (!reason.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+            ImGui::TextWrapped("%s：本次运行该节点必定失败，下游会被跳过。", reason.c_str());
+            ImGui::PopStyleColor();
+
+            if (engine::official_not_wired(effective)) {
+                ImGui::TextDisabled(
+                    "网页版已接线（provider.mode = web）：切换后即可真实生成，需先登录一次。");
+
+                const std::string target_id = effective.from_edge ? effective.source_node : node->id;
+                const std::string target_label =
+                    effective.from_edge ? "提供商配置 " + target_id : std::string("本节点");
+                if (ImGui::Button(("把 " + target_label + " 改为 web").c_str())) {
+                    if (engine::Node* target = editor().graph.findNode(target_id)) {
+                        if (engine::Param* mode = target->findParam("mode")) {
+                            editor().snapshot("切换提供商为网页版"); // 先压快照：可撤销
+                            mode->value = std::string("web");
+                            editor().set_status(target_label + " 已切换为网页版（可撤销）");
+                            log::info("[参数面板] " + target_label + " mode → web");
+                        }
+                    }
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("网页版走 DeepSeek 网页版会话（需已登录一次）；\n"
+                                      "官方 API（API Key）待 PB-04/PB-05 接线后可用");
+                }
+            }
+        }
     }
 
     // ---- 校验汇总（设计 §6.3；条件隐藏的参数不参与校验）----

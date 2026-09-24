@@ -1,6 +1,7 @@
 #include "engine/validate.h"
 
 #include "engine/node_registry.h"
+#include "engine/provider_resolve.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -147,6 +148,27 @@ bool validateBeforeRun(const Graph& graph, ValidationMessages* errors,
                             "] 未配置 API Key（参数或环境变量 DEEPSEEK_API_KEY）：运行时将无法调用"
                             "官方 API");
         }
+    }
+
+    // ---- P1-b：推理节点「本次运行必定失败」提示（刻意保持 warning，不阻断运行）----
+    //  * official（官方 API）分支尚未接线（归口 PB-04/PB-05）；多模态分支尚未接线（M5-02）
+    //  * 为何不升级为 error：自检（--run-selftest）与 api_probe 断言要求运行前校验「不阻断」
+    //    （见 api_probe「未配置 Key：运行前校验仍通过」）。真正的拦截在 UI 层：工具栏弹窗确认。
+    for (const Node& node : graph.nodes) {
+        const std::string reason = unwired_reason(graph, node);
+        if (reason.empty()) {
+            continue;
+        }
+        const EffectiveProvider effective = resolve_effective_provider(graph, node);
+        std::string              text     = "[" + node.id + "] " + reason;
+        if (node.type == "LLMGenerate") {
+            text += effective.from_edge
+                        ? "（生效模式 " + effective.mode + " 来自 " + effective.source_node + "）"
+                        : "（生效模式 " + effective.mode + " 来自节点自身设置）";
+        }
+        text += "：本次运行该节点必定失败，下游会被跳过；网页版（provider.mode = web）已接线，"
+                "需先在参数面板完成一次登录";
+        notes.push_back(text);
     }
 
     if (!has_provider && !graph.nodes.empty()) {

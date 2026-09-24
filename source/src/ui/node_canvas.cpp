@@ -1,6 +1,7 @@
 #include "ui/node_canvas.h"
 
 #include "engine/node_registry.h"
+#include "engine/provider_resolve.h"
 #include "ui/editor_state.h"
 #include "ui/output_panel.h"
 #include "ui/theme.h"
@@ -450,6 +451,31 @@ void draw_node_body(const Node& node)
             ImGui::TextDisabled("%s: %s", param.display_name.c_str(),
                                 value.empty() ? "(空)" : value.c_str());
             ++shown;
+        }
+    }
+
+    // ---- 生效提供商提示（P1-a：provider 输入优先；official 未接线 → 必定失败）----
+    if (engine::uses_provider(node.type)) {
+        const engine::EffectiveProvider effective =
+            engine::resolve_effective_provider(editor().graph, node);
+        const std::string reason = engine::unwired_reason(editor().graph, node);
+
+        ImGui::Separator();
+        if (node.type == "LLMGenerate") {
+            if (effective.from_edge) {
+                ImGui::TextDisabled("生效 %s ← %s", effective.mode.c_str(),
+                                    effective.source_node.c_str());
+            }
+            else {
+                ImGui::TextDisabled("生效 %s（节点自身）", effective.mode.c_str());
+            }
+        }
+        if (!reason.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeContentWidth);
+            ImGui::TextUnformatted((reason + "：必定失败").c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::PopStyleColor();
         }
     }
 

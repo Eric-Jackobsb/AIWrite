@@ -1,10 +1,13 @@
 #include "ui/toolbar.h"
 
+#include "engine/provider_resolve.h"
 #include "ui/editor_state.h"
+#include "utils/log.h"
 
 #include <imgui.h>
 
 #include <string>
+#include <vector>
 
 namespace aiwrite::ui {
 
@@ -98,6 +101,41 @@ void draw_toolbar_buttons()
     const bool  running    = state.executor.running();
     const char* run_label  = "▶ 运行";
     const char* stop_label = "■ 停止";
+
+    // ---- 运行前预检（P1-b）：未接线分支（official / M5-02）本次运行必定失败，先弹窗确认 ----
+    struct BlockedNode {
+        std::string node_id;
+        std::string node_title;
+        std::string reason;
+        std::string source_node;  // 空 = 节点自身设置
+        std::string source_title; // 来源节点头衔（如「提供商配置」）
+    };
+    static std::vector<BlockedNode> blocked_nodes; // 弹窗打开期间的待确认清单
+    constexpr const char* kUnwiredModal = "运行前提示##run_unwired_confirm";
+
+    // 收集「本次运行必定失败」的节点（官方 API 未接线 / 多模态未接线）
+    const auto collect_blocked = [&state]() {
+        std::vector<BlockedNode> found;
+        for (const engine::Node& node : state.graph.nodes) {
+            const std::string reason = engine::unwired_reason(state.graph, node);
+            if (reason.empty()) {
+                continue;
+            }
+            const engine::EffectiveProvider effective =
+                engine::resolve_effective_provider(state.graph, node);
+            BlockedNode item;
+            item.node_id    = node.id;
+            item.node_title = node.title.empty() ? node.type : node.title;
+            item.reason     = reason;
+            if (effective.from_edge) {
+                item.source_node  = effective.source_node;
+                item.source_title = "提供商配置";
+            }
+            found.push_back(std::move(item));
+        }
+        return found;
+    };
+
     const float spacing    = ImGui::GetStyle().ItemSpacing.x;
     const float run_width  = ImGui::CalcTextSize(run_label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
     const float stop_width = ImGui::CalcTextSize(stop_label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
@@ -110,14 +148,97 @@ void draw_toolbar_buttons()
 
     ImGui::BeginDisabled(running || state.graph.nodes.empty());
     if (ImGui::Button(run_label)) {
-        state.start_run(); // 运行前校验 → 执行器 start；之后每帧由主循环 tick_run 推进
+        blocked_nodes = collect_blocked();
+        if (blocked_nodes.empty()) {
+            state.start_run(); // 运行前校验 → 执行器 start；之后每帧由主循环 tick_run 推进
+        }
+        else {
+            // P1-b：存在「未接线分支」→ 先弹窗确认（不直接运行）
+            log::warn("[运行前提示] 有 " + std::to_string(blocked_nodes.size()) +
+                      " 个节点的分支尚未接线，等待用户确认");
+            ImGui::OpenPopup(kUnwiredModal);
+        }
     }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("运行工作流（设计 §6.5）\n"
                           "· 先做运行前校验（无环 / 必填输入已连 / 参数合法），失败会被拒绝并写入 Console\n"
+                          "· 运行前预检：若存在未接线分支（官方 API / 多模态）会先弹窗确认\n"
                           "· 每帧推进一个节点；节点状态实时显示在画布上"
                           "（蓝=运行中 / 绿=完成 / 红=失败 / 暗=跳过）");
+    }
+
+    // ---- 运行前预检弹窗（P1-b）----
+    // 为什么不把 official 升级为运行前校验的 error：--run-selftest 与 api_probe 断言都要求
+    // 运行前校验「不阻断」（见 api_probe「未配置 Key：运行前校验仍通过」）；拦截只发生在工具栏。
+    if (ImGui::BeginPopupModal(kUnwiredModal, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.30f, 1.0f),
+                           "运行前提示：%d 个节点的分支尚未接线，本次运行必定失败",
+                           static_cast<int>(blocked_nodes.size()));
+        ImGui::Separator();
+        for (const BlockedNode& item : blocked_nodes) {
+            if (item.source_node.empty()) {
+                ImGui::BulletText("%s %s ← 节点自身设置（%s）", item.node_id.c_str(),
+                                  item.node_title.c_str(), item.reason.c_str());
+            }
+            else {
+                ImGui::BulletText("%s %s ← %s %s（%s）", item.node_id.c_str(),
+                                  item.node_title.c_str(), item.source_title.c_str(),
+                                  item.source_node.c_str(), item.reason.c_str());
+            }
+        }
+        ImGui::Separator();
+        ImGui::TextDisabled("官方 API（API Key）需 PB-04/PB-05 后才可用；网页版已接线（需先登录一次）。\n"
+                            "「切换为网页版并运行」会把这些来源节点的「模式」改为 web（一次快照，可撤销）。\n"
+                            "多模态分支（M5-02）无法通过切换模式修复，仍会失败。");
+        ImGui::Separator();
+
+        if (ImGui::Button("切换为网页版并运行", ImVec2(180.0f, 0.0f))) {
+            const auto switchable = [](const EditorState& state,
+                                       const std::vector<BlockedNode>& items) {
+                for (const BlockedNode& item : items) {
+                    const std::string target_id =
+                        item.source_node.empty() ? item.node_id : item.source_node;
+                    if (const engine::Node* target = state.graph.findNode(target_id)) {
+                        if (target->findParam("mode") != nullptr) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            if (switchable(state, blocked_nodes)) {
+                state.snapshot("切换提供商为网页版并运行"); // 先压快照：整批切换可一次撤销
+            }
+            int switched = 0;
+            for (const BlockedNode& item : blocked_nodes) {
+                const std::string target_id =
+                    item.source_node.empty() ? item.node_id : item.source_node;
+                if (engine::Node* target = state.graph.findNode(target_id)) {
+                    if (engine::Param* mode = target->findParam("mode")) {
+                        mode->value = std::string("web");
+                        ++switched;
+                    }
+                }
+            }
+            log::info("[运行前提示] 已把 " + std::to_string(switched) + " 个节点的模式切换为 web，开始运行");
+            blocked_nodes.clear();
+            ImGui::CloseCurrentPopup();
+            state.start_run();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("仍要运行", ImVec2(100.0f, 0.0f))) {
+            log::warn("[运行前提示] 用户选择仍要运行（预期失败）");
+            blocked_nodes.clear();
+            ImGui::CloseCurrentPopup();
+            state.start_run();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("取消", ImVec2(80.0f, 0.0f))) {
+            blocked_nodes.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     ImGui::SameLine();
