@@ -15,6 +15,30 @@
 
 namespace aiwrite::ui {
 
+namespace {
+
+// PA-04：逐节点运行明细（机器可读，写入 workflow.log）
+//  形如：[运行明细] n1(TextInput)=done/0ms n2(PromptTemplate)=done/1ms n3(LLMGenerate)=error/5003ms/err:…
+std::string run_detail_text(const engine::Executor& executor)
+{
+    std::string text = "[运行明细]";
+    for (const engine::NodeRunInfo& info : executor.runInfos()) {
+        text += " " + info.node_id + "(" + info.type + ")=" + engine::nodeStateName(info.state) + "/" +
+                std::to_string(static_cast<long long>(info.duration_ms + 0.5)) + "ms";
+        if (!info.error.empty()) {
+            std::string error = info.error;
+            std::replace(error.begin(), error.end(), '\n', ' ');
+            if (error.size() > 80) {
+                error = error.substr(0, 77) + "...";
+            }
+            text += "/err:" + error;
+        }
+    }
+    return text;
+}
+
+} // namespace
+
 EditorState& editor()
 {
     static EditorState state;
@@ -378,6 +402,10 @@ void EditorState::tick_run()
     // 会话结束（Finished / Cancelled / Failed）
     set_status("运行结束：" + executor.summary());
     log::workflow("===== 运行结束：" + executor.summary() + " =====");
+    // PA-04：逐节点耗时明细（补 M4-13 登记项；F 类缺口）
+    if (!executor.runInfos().empty()) {
+        log::workflow(run_detail_text(executor));
+    }
 }
 
 std::string EditorState::run_status_text() const

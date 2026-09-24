@@ -74,4 +74,11 @@ bool load_config(const std::filesystem::path& file, Config& out);
 // 写入配置（自动创建父目录）
 bool save_config(const std::filesystem::path& file, const Config& config);
 
+// 进程级配置缓存（PA-07：地基补丁 A）
+//  * 启动时由 app / api_probe 以 set_app_config(load_config(...)) 灌入一次
+//  * 供非 UI 代码（provider / 工具 / 自检）读取；未设置时返回默认构造值
+//  * 只读约定：返回引用；set_app_config 仅发生在启动/显式保存时，不要在读取期间并发写入
+const Config& app_config();
+void          set_app_config(Config config);
+
 } // namespace aiwrite

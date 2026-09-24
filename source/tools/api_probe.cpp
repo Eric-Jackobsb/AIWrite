@@ -186,8 +186,19 @@ bool test_config_roundtrip()
     std::printf("   %-6s 默认生成=%s；字段往返一致=%s（language / show_grid / ttl_days / model）\n",
                 same ? "PASS" : "FAIL", generated ? "是" : "否", same ? "是" : "否");
 
+    // PA-07：进程级配置访问器（app_config / set_app_config）
+    const aiwrite::Config before = aiwrite::app_config();
+    aiwrite::set_app_config(modified);
+    const bool cache_ok = aiwrite::app_config().deepseek.model == modified.deepseek.model &&
+                          aiwrite::app_config().output.ttl_days == modified.output.ttl_days &&
+                          aiwrite::app_config().ui.show_grid == modified.ui.show_grid;
+    aiwrite::set_app_config(before); // 还原，避免污染后续用例
+    std::printf("   %-6s PA-07 配置访问器：set→get 一致=%s；默认连接超时=%d ms（未设置时返回默认值）\n",
+                cache_ok ? "PASS" : "FAIL", cache_ok ? "是" : "否",
+                aiwrite::Config{}.timeout.connect_ms);
+
     std::filesystem::remove(file, ec);
-    return same;
+    return same && cache_ok;
 }
 
 // M2：网页版会话存储 + 参数条件可见性自检（不需要网络）
@@ -1357,6 +1368,40 @@ int execution_selftest()
                "失败传播：计数 失败 1 / 跳过 1");
         expect(check, executor.summary().find("完成 4/6") != std::string::npos,
                "失败传播：summary 反映 完成 4/6", executor.summary());
+
+        // PA-01：运行信息只读暴露（输出面板 / workflow.log 明细的数据来源）
+        const auto& infos = executor.runInfos();
+        expect(check, infos.size() == graph.nodes.size(), "运行信息：记录数等于节点数",
+               std::to_string(infos.size()));
+        const auto find_info = [&infos](const std::string& id) -> const engine::NodeRunInfo* {
+            for (const engine::NodeRunInfo& info : infos) {
+                if (info.node_id == id) {
+                    return &info;
+                }
+            }
+            return nullptr;
+        };
+        const engine::NodeRunInfo* llm_info  = find_info(l1);
+        const engine::NodeRunInfo* skip_info = find_info(o1);
+        const engine::NodeRunInfo* done_info = find_info(t1);
+        expect(check,
+               llm_info != nullptr && llm_info->state == NodeState::Error &&
+                   llm_info->duration_ms >= 0.0 && !llm_info->error.empty(),
+               "运行信息：失败节点含 error 与耗时");
+        expect(check, skip_info != nullptr && skip_info->state == NodeState::Skipped,
+               "运行信息：跳过节点被记录");
+        expect(check,
+               done_info != nullptr && done_info->state == NodeState::Done &&
+                   done_info->type == "TextInput",
+               "运行信息：完成节点含类型");
+        double sum_ms = 0.0;
+        for (const engine::NodeRunInfo& info : infos) {
+            sum_ms += info.duration_ms;
+        }
+        expect(check, sum_ms <= executor.elapsedSeconds() * 1000.0 + 5.0,
+               "运行信息：节点耗时之和不超过总耗时", std::to_string(sum_ms) + " ms");
+        executor.reset();
+        expect(check, executor.runInfos().empty(), "运行信息：reset 后清空");
     }
 
     // ------------------------------------------- 3. ProviderConfig 安全性 ----
@@ -1521,6 +1566,14 @@ int main(int argc, char** argv)
 
     aiwrite::log::init(false);
     aiwrite::log::info("api_probe 启动（M1 技术验证）");
+
+    // PA-07：工具侧也载入真实配置到进程缓存（只读用途；provider 等后续补丁读取）
+    {
+        aiwrite::Config probe_config;
+        if (aiwrite::load_config(aiwrite::paths::config_file(), probe_config)) {
+            aiwrite::set_app_config(probe_config);
+        }
+    }
 
     if (options.sha3_text == "" && !options.selftest && !options.graph_selftest &&
         !options.exec_selftest && options.http_url.empty() && options.chat_prompt.empty()) {

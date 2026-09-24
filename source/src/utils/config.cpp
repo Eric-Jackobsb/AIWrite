@@ -5,9 +5,31 @@
 #include <toml++/toml.hpp>
 
 #include <fstream>
+#include <mutex>
 #include <string>
+#include <utility>
 
 namespace aiwrite {
+namespace {
+
+// PA-07：进程级配置缓存（只读访问为主）
+std::mutex g_config_mutex;
+Config     g_config;
+
+} // namespace
+
+const Config& app_config()
+{
+    std::lock_guard<std::mutex> lock(g_config_mutex);
+    return g_config;
+}
+
+void set_app_config(Config config)
+{
+    std::lock_guard<std::mutex> lock(g_config_mutex);
+    g_config = std::move(config);
+}
+
 namespace {
 
 template <typename T>

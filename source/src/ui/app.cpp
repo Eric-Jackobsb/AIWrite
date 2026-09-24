@@ -327,6 +327,8 @@ int run(const AppOptions& options)
     // 配置（M1-07：读配置 / 写日志）
     Config config;
     (void)load_config(paths::config_file(), config);
+    // PA-07：灌入进程级缓存，供非 UI 代码（provider / 工具）读取
+    set_app_config(config);
 
     CanvasOptions canvas_options;
     canvas_options.show_grid = config.ui.show_grid;
@@ -500,6 +502,7 @@ int run(const AppOptions& options)
                     config.ui.show_property_panel = show_params;
                     config.ui.show_console        = show_console;
                     if (save_config(paths::config_file(), config)) {
+                        set_app_config(config); // PA-07：保持进程缓存与磁盘一致
                         log::info(std::string("界面可见性已保存到 config.toml（节点库=") +
                                   (show_library ? "显示" : "隐藏") + "，参数面板=" +
                                   (show_params ? "显示" : "隐藏") + "，Console=" +

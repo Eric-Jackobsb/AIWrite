@@ -9,6 +9,25 @@
 
 namespace aiwrite::engine {
 
+namespace {
+
+// PA-01：节点耗时（毫秒）
+double ms_since(const std::chrono::steady_clock::time_point& start)
+{
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
+        .count();
+}
+
+// PA-04：耗时文本（<100ms 保留两位小数，便于看清本地节点的瞬时耗时）
+std::string format_ms(double ms)
+{
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(ms < 100.0 ? 2 : 0) << ms << " ms";
+    return stream.str();
+}
+
+} // namespace
+
 // ---------------------------------------------------------------- 运行态值 ----
 void NodeOutputs::set(const std::string& node_id, const std::string& port_id, nlohmann::json value)
 {
@@ -160,6 +179,18 @@ void Executor::notifyState(const std::string& node_id, NodeState state) const
     }
 }
 
+// PA-01：记录一次节点执行结果（只读暴露；不进 Graph / 快照）
+void Executor::recordRun(const Node& node, NodeState state, double duration_ms, std::string error)
+{
+    NodeRunInfo info;
+    info.node_id     = node.id;
+    info.type        = node.type;
+    info.state       = state;
+    info.duration_ms = duration_ms < 0.0 ? 0.0 : duration_ms;
+    info.error       = std::move(error);
+    run_infos_.push_back(std::move(info));
+}
+
 // ---------------------------------------------------------------- Executor ----
 Executor::Executor()
 {
@@ -188,6 +219,7 @@ void Executor::reset()
     current_node_.clear();
     cancelled_ = false;
     outputs_.clear();
+    run_infos_.clear();
     start_time_ = {};
     end_time_ = {};
 }
@@ -290,6 +322,7 @@ bool Executor::tick(Graph* graph)
     }
     if (node->state == NodeState::Skipped) {
         ++skipped_; // 上游失败导致本节点跳过
+        recordRun(*node, NodeState::Skipped, 0.0, node->error_message);
         return true;
     }
     executeNode(*graph, node_id);
@@ -329,6 +362,7 @@ bool Executor::executeNode(Graph& graph, const std::string& node_id)
     current_node_ = node_id;
     notifyState(node_id, NodeState::Running);
     ctx_.console("[" + node_id + "] 开始执行（" + node->type + " · " + node->title + "）");
+    const auto started = std::chrono::steady_clock::now(); // PA-01：节点耗时起点
 
     try {
         const nlohmann::json inputs = collectInputs(graph, *node);
@@ -358,7 +392,9 @@ bool Executor::executeNode(Graph& graph, const std::string& node_id)
         node->state = NodeState::Done;
         notifyState(node_id, NodeState::Done);
         ++finished_;
-        ctx_.console("[" + node_id + "] 完成");
+        const double done_ms = ms_since(started);
+        recordRun(*node, NodeState::Done, done_ms, {});
+        ctx_.console("[" + node_id + "] 完成（" + format_ms(done_ms) + "）");
         current_node_.clear();
         return true;
     }
@@ -367,7 +403,9 @@ bool Executor::executeNode(Graph& graph, const std::string& node_id)
         node->error_message = ex.what();
         notifyState(node_id, NodeState::Error);
         ++failed_;
-        ctx_.console("[" + node_id + "] 失败：" + node->error_message);
+        const double failed_ms = ms_since(started);
+        recordRun(*node, NodeState::Error, failed_ms, node->error_message);
+        ctx_.console("[" + node_id + "] 失败（" + format_ms(failed_ms) + "）：" + node->error_message);
         markDownstreamSkipped(graph, node_id);
         current_node_.clear();
         return false;

@@ -49,6 +49,19 @@ public:
     explicit NodeError(const std::string& message) : std::runtime_error(message) {}
 };
 
+// 单节点运行信息（PA-01：只读暴露）
+//  * **不进** Graph / 撤销快照 / 工作流 JSON —— 运行态值原则（M_patchA §0.3）
+//  * 用途：输出面板 / 画布节点摘要 / 参数面板「运行结果」/ workflow.log 明细
+//  * delta_bytes：Patch B 的流式增量字节数（预留，只增不改）
+struct NodeRunInfo {
+    std::string node_id;
+    std::string type;
+    NodeState   state       = NodeState::Waiting;
+    double      duration_ms = 0.0;
+    std::string error;
+    std::size_t delta_bytes = 0;
+};
+
 struct ExecutionContext;
 
 // 节点执行函数（设计 §9.1）
@@ -125,6 +138,8 @@ public:
     std::string     summary() const;
     const std::vector<std::string>& plan() const { return plan_; }
     const NodeOutputs&              outputs() const { return outputs_; }
+    // PA-01：本次运行的逐节点信息（按执行顺序；只读，供 UI 与日志）
+    const std::vector<NodeRunInfo>& runInfos() const { return run_infos_; }
 
 private:
     bool                 executeNode(Graph& graph, const std::string& node_id);
@@ -132,6 +147,8 @@ private:
     static nlohmann::json paramObject(const Node& node);
     void                 markDownstreamSkipped(Graph& graph, const std::string& node_id);
     void                 notifyState(const std::string& node_id, NodeState state) const;
+    // PA-01：记录一次节点执行（完成 / 失败 / 跳过）
+    void recordRun(const Node& node, NodeState state, double duration_ms, std::string error);
 
     std::vector<std::string> plan_;
     std::size_t              cursor_ = 0;
@@ -142,6 +159,7 @@ private:
     std::string              current_node_;
     std::atomic<bool>        cancelled_{false};
     NodeOutputs              outputs_;
+    std::vector<NodeRunInfo> run_infos_; // PA-01：逐节点运行信息（只读暴露）
     ExecutionContext         ctx_;
     std::chrono::steady_clock::time_point start_time_{};
     std::chrono::steady_clock::time_point end_time_{};
