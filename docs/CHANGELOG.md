@@ -11,6 +11,7 @@
 | [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6） |
 | [actionPlan/M1.md](actionPlan/M1.md) … [M6.md](actionPlan/M6.md) | 各里程碑 Action Plan |
 | [actionPlan/M_patchA.md](actionPlan/M_patchA.md) | **地基补丁系列 A–D**（结果回流与可观测性 / 异步与流式 / 数据安全 / 交互打磨）行动计划 |
+| [DevPlan.todo](DevPlan.todo) | **开发计划看板（JSON）**：Debug / Feature / Test / Docs / Archive 五类 × M1–M6 分层，每条含一行描述与文档链接 |
 | [M1_技术验证报告.md](M1_技术验证报告.md) | M1 实测环境、验证结果与问题记录 |
 | [../source/README.md](../source/README.md) | 源码构建 / 运行 / 调试说明 |
 
