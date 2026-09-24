@@ -15,8 +15,9 @@ namespace aiwrite::ui {
 
 struct CanvasOptions {
     bool show_grid  = true;
-    int  node_count = 0; // 输出
-    int  link_count = 0; // 输出
+    bool running_animation = true; // PA-08：ui.running_animation —— 运行中节点的脉冲动效
+    int  node_count = 0;                // 输出
+    int  link_count = 0;                // 输出
 };
 
 void draw_node_canvas(const char* title, CanvasOptions& options);

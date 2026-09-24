@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 // 配置管理（字段与设计文档 20.2 节 config.toml 示例一致）
 namespace aiwrite {
@@ -91,5 +92,16 @@ bool save_config(const std::filesystem::path& file, const Config& config);
 //  * 只读约定：返回引用；set_app_config 仅发生在启动/显式保存时，不要在读取期间并发写入
 const Config& app_config();
 void          set_app_config(Config config);
+
+// PA-08：**尚未接线**的配置字段清单（消除"改了 config 却没效果"的困惑）
+//  * 已接线：ui.show_grid / ui.console_height / ui.running_animation /
+//    ui.show_node_library / ui.show_property_panel / ui.show_console / ui.show_output_window /
+//    ui.window_*（F3 窗口几何）/ output.archive_dir / output.keep_history / output.max_history /
+//    output.ttl_days（PC-05 归档）
+//  * ui.grid_size：设计上属"网格间距"，但 vendored imgui-node-editor 的 Style 没有该字段，
+//    当前无法生效（如实登记，归口 PD-03 处理：升级库或自绘背景网格）
+//  * 节点参数为准：providers.deepseek.*（仅作默认值来源，实际以 ProviderConfig 节点参数为准）
+//  * 其余字段在加载时写 `[配置] 以下字段尚未生效：…` 日志，并在使用说明中标注归口补丁
+std::vector<std::string> unwired_config_fields();
 
 } // namespace aiwrite

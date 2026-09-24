@@ -2,6 +2,7 @@
 
 #include "ui/console_panel.h"
 #include "ui/editor_state.h"
+#include "ui/error_bar.h"
 #include "ui/node_canvas.h"
 #include "ui/node_library.h"
 #include "ui/output_panel.h"
@@ -282,6 +283,17 @@ int run(const AppOptions& options)
     // PA-07：灌入进程级缓存，供非 UI 代码（provider / 工具）读取
     set_app_config(config);
 
+    // PA-08：明确"哪些配置已生效 / 哪些还没接线"，消除"改了 config 却没效果"的困惑
+    {
+        log::info("[配置] 已接线：ui.show_grid / ui.console_height / ui.running_animation / "
+                  "面板可见性 / 窗口几何（window_*）/ output.archive_dir 等");
+        std::string unwired;
+        for (const std::string& field : unwired_config_fields()) {
+            unwired += (unwired.empty() ? "" : "、") + field;
+        }
+        log::info("[配置] 以下字段尚未生效（归口补丁见使用说明）：" + unwired);
+    }
+
     // OpenGL 3.3 Core（M1 Action Plan M1-02）
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -370,7 +382,8 @@ int run(const AppOptions& options)
     ImGui_ImplOpenGL3_Init("#version 330");
 
     CanvasOptions canvas_options;
-    canvas_options.show_grid = config.ui.show_grid;
+    canvas_options.show_grid         = config.ui.show_grid;
+    canvas_options.running_animation = config.ui.running_animation; // PA-08：执行态动效开关
 
     // 面板可见性来自 config.toml（设计 §7.2：节点库/参数面板默认隐藏、可切换；
     // M6-06 设置面板落地前，手动切换会写回 [ui] 段以便下次记住）
@@ -668,7 +681,9 @@ int run(const AppOptions& options)
 
         if (show_console) {
             ImGui::PushFont(fonts.console);
-            draw_console_panel(kWindowConsole, &show_console);
+            // PA-08：初始高度来自 config.toml [ui] console_height（面板内容区 + 工具条空间）
+            draw_console_panel(kWindowConsole, &show_console,
+                               static_cast<float>(config.ui.console_height) + 100.0f);
             ImGui::PopFont();
         }
         if (show_output) { // PA-02：输出面板（结果全文 / 复制全文·该节点 / 导出）
@@ -706,6 +721,10 @@ int run(const AppOptions& options)
             if (!state.status.empty()) {
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "  %s", state.status.c_str());
+            }
+            if (state.last_error.active) { // PA-06：失败运行 → 红色错误条（点击定位节点）
+                ImGui::SameLine();
+                draw_error_bar(state);
             }
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.55f, 0.55f, 0.55f, 1.0f), "  日志: %s",

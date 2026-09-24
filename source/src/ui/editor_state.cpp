@@ -411,6 +411,51 @@ void EditorState::tick_run()
     }
     // PC-05：运行结果归档（outputs/<时间>-<工作流名>/，每节点 .txt + run.json）
     archive_run_outputs();
+    // PA-06：刷新错误条（首个失败节点；本次无失败则清空）
+    refresh_last_error();
+}
+
+// ---- PA-06 轻量错误条 -------------------------------------------------------
+
+namespace {
+
+// 本地时间 HH:MM:SS（错误条展示用）
+std::string local_time_text()
+{
+    const std::time_t now = std::time(nullptr);
+    std::tm           tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &now);
+#else
+    localtime_r(&now, &tm);
+#endif
+    char buffer[16] = {};
+    std::strftime(buffer, sizeof(buffer), "%H:%M:%S", &tm);
+    return buffer;
+}
+
+} // namespace
+
+void EditorState::clear_last_error()
+{
+    last_error = LastError{};
+}
+
+void EditorState::refresh_last_error()
+{
+    for (const engine::Node& node : graph.nodes) {
+        if (node.state != engine::NodeState::Error) {
+            continue;
+        }
+        last_error.active  = true;
+        last_error.node_id = node.id;
+        last_error.message =
+            node.error_message.empty() ? std::string("执行失败") : node.error_message;
+        last_error.at = local_time_text();
+        log::info("[错误条] " + node.id + " 失败：" + last_error.message);
+        return;
+    }
+    last_error = LastError{}; // 本次运行无失败 → 清空（成功运行不留旧错误）
 }
 
 std::string EditorState::workflow_display_name() const

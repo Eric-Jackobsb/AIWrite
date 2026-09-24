@@ -5,6 +5,7 @@
 #include "ui/editor_state.h"
 #include "ui/output_panel.h"
 #include "ui/theme.h"
+#include "utils/config.h"
 #include "utils/log.h"
 #include "utils/paths.h"
 
@@ -107,6 +108,8 @@ void apply_editor_style()
     style.NodeBorderWidth         = 1.5f;
     style.SelectedNodeBorderWidth = 2.5f;
     style.NodePadding             = ImVec4(10.0f, 8.0f, 10.0f, 8.0f);
+    // 说明（PA-08 治理）：vendored imgui-node-editor 的 Style **没有网格间距字段**，
+    // 因此 ui.grid_size 目前无法生效 —— 已在 unwired_config_fields() 中如实登记并在启动日志提示
     style.Colors[ed::StyleColor_Bg]            = ImColor(30, 30, 30, 255);
     style.Colors[ed::StyleColor_Grid]          = ImColor(42, 42, 42, 255);
     style.Colors[ed::StyleColor_NodeBg]        = ImColor(45, 45, 45, 255);
@@ -410,6 +413,15 @@ void draw_node_body(const Node& node)
                                  ImVec2(cursor.x, cursor.y + height), category_color(category), 2.0f);
         draw_list->AddCircleFilled(ImVec2(cursor.x + 7.0f, cursor.y + height * 0.5f), 4.0f,
                                    state_color(node.state), 12);
+        // PA-08：ui.running_animation 开 → 运行中节点状态点加脉冲光环（关闭则静止）
+        if (node.state == NodeState::Running && aiwrite::app_config().ui.running_animation) {
+            const ImVec2 dot_center(cursor.x + 7.0f, cursor.y + height * 0.5f);
+            const float  pulse = 0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 5.0f);
+            ImVec4       glow  = ImGui::ColorConvertU32ToFloat4(state_color(node.state));
+            glow.w             = 0.30f + 0.45f * pulse;
+            draw_list->AddCircle(dot_center, 6.0f + 3.0f * pulse,
+                                 ImGui::ColorConvertFloat4ToU32(glow), 20, 1.5f);
+        }
         ImGui::Dummy(ImVec2(13.0f, height));
         ImGui::SameLine(0.0f, 2.0f);
         ImGui::TextUnformatted(node.title.c_str());

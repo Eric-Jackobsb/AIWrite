@@ -30,6 +30,21 @@ void set_app_config(Config config)
     g_config = std::move(config);
 }
 
+// PA-08：尚未接线的配置字段清单（见 config.h 注释；加载时写日志 + 文档标注）
+std::vector<std::string> unwired_config_fields()
+{
+    return {
+        "general.language",             // 界面语言切换（Patch D：设置面板）
+        "general.startup",              // 启动行为（依赖工作流变体保存 / 启动恢复）
+        "ui.grid_size",                 // 网格间距：vendored imgui-node-editor 的 Style 无此字段（PD-03 处理）
+        "output.auto_open_on_complete", // 完成后自动打开（M5 / Patch C）
+        "timeout.*",                    // 连接 / 首字节 / 流空闲超时（Patch B：PB-08）
+        "error.*",                      // 重试开关 / 次数 / 间隔（Patch B：PB-08）
+        "advanced.log_ttl_days",        // 日志清理（Patch D：PD-06）
+        "providers.deepseek.*",         // 仅作默认值来源：实际以 ProviderConfig 节点参数为准
+    };
+}
+
 namespace {
 
 template <typename T>

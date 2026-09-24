@@ -22,7 +22,11 @@
 | A2 | **P1-c 参数编辑即时生效（DBG-M3-02 修复）** | ✅ | 参数控件由 `Widget(...) && IsItemDeactivatedAfterEdit()` 改为**值变化即写回**（文本/数值/布尔/文件/颜色；Enum 原本就是即时写回）——修复"改了输入框但运行仍用旧值"；「重置为默认值」改为**先压快照**（D-M3-5 前半，可撤销）；新增 **P1-c 参数驱动断言**（`--run-selftest` 离线 3/5 与 `--web` 5/5 均 OK：改 TextInput 文本 → 该节点输出 == 新文本 且 下游提示词含新文本） |
 | A2 | **F2 参数面板增强（FEA-M3-03 / PD-05）** | ✅ | 参数**搜索过滤**（id / 显示名 / 说明 + 命中计数 + 一键清除）；**批量应用参数到图中全部同类型节点**（模型层 `Graph::copyParamsToSameType`：按参数 id 复制、**密钥类不复制**、不改标题/位置/连线；UI 二次确认 + 先压快照可撤销）；「重置为默认值」**二次确认**；只读标记「（密钥：仅存内存、不写盘）」与「已改」（与默认值不同）。图自检 **95 → 111 通过 / 0 失败**（新增 10 项批量应用断言） |
 | A2 | **F3 窗口几何持久化（FEA-M3-04 / PD-04）** | ✅ | `config.toml [ui]` 增 `window_width/height/pos_x/pos_y/maximized`（读/写往返有断言）；启动读取 → **越屏矫正纯函数** `utils::fit_window_to_workarea`（区内不变 / 越屏拉回 / 超大收缩 / 最小 640x480 保护 / 无工作区原样）后应用；**移动·缩放节流（静默 2s 落盘）+ 退出兜底保存**；最大化时保留"还原尺寸"便于下次恢复 |
-| A2 | PA-05 Console 增强 / PA-06 错误条 / PA-08 未接配置治理 / PA-09 文档收尾 | ⬜ 待做 | — |
+| A2 | **PA-05 Console 增强** | ✅ | 工具条新增 `复制可见`（与屏幕可见行逐行一致）/ `复制全部` / `导出可见到文件…`（UTF-8，行数一致）；**手动上滚自动暂停** + 「回到底部」恢复；`console_visible_text()` 与面板渲染共用 `log::filter`；窗口初始高度接 `ui.console_height` |
+| A2 | **PA-06 轻量错误条** | ✅ | `EditorState.last_error{node_id,message,at}` + `refresh_last_error()`（运行结束取首个失败节点，成功运行清空）；新增 `ui/error_bar.{h,cpp}`：状态栏红条（单行省略 + 悬停全文 + × 关闭），**点击选中失败节点并视图跟随**；连续失败覆盖显示不堆积 |
+| A2 | **PA-08 未接配置字段治理** | ✅ | 接线：`ui.console_height`（Console 初始高度）、`ui.running_animation`（运行中节点脉冲光环）；`unwired_config_fields()` 清单 + 启动日志「已接线 / 尚未生效」；`ui.grid_size` 如实登记（vendored imgui-node-editor 的 Style 无网格间距字段 → 归口 PD-03）；`api_probe --selftest` 新增 PA-08 断言（清单含 general.language/timeout./auto_open，且不含已接线的 console_height/running_animation/window_*） |
+| A2 | **PA-09 文档与索引同步** | ✅ | `CHANGELOG`（A2 条目 + 索引）、`M_patchA`（进度/§3.2/§3.3 状态）、`节点编辑器使用说明.md` §10.7（Console 增强 / 错误条 / 配置未接线清单）、`milestone_plan.md` 补「补丁系列」行；`M4.md` 归口说明已就位（M4-05→PB-04/05、M4-12→PA-05+PD-07、M4-13→PA-04） |
+| A2 | PA-05 Console 增强 / PA-06 错误条 / PA-08 未接配置治理 / PA-09 文档收尾 | ✅ A2 收尾完成 | 见上四行 |
 | 后续 | **工作流变体保存**（用户后续设计） | ⬜ 延后 | 把面板保存为独立 workflow，并把当前 workflow 更新为变体；启动恢复上次工作流一并归入该项（本条**不做**，仅登记） |
 | A2 | 回归基线（PA-02 后） | ✅ | `--selftest` 七组 PASS；`--graph-selftest` 95/0；`--exec-selftest` 62/0；`--run-selftest` PASS（3/5 预期）；`--run-selftest --web` 5/5；构建 0 error / 0 warning |
 | C | PC-05 输出归档（提前落地） | ✅ | 新增 `utils/output_archive.{h,cpp}`：运行结束写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`（每节点 `.txt` 含元信息头 + `run.json`）；同秒多次运行自动加序号且**本次归档永不删除**；工作流名非法字符清洗；不可写路径返回错误不抛异常。`editor_state` 运行结束自动归档 + `last_archive_dir`；输出面板显示归档路径并可「复制归档路径」 |
@@ -210,7 +214,7 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | 验证 | 运行后 `workflow.log` 含逐节点行；自检读取日志断言含本次 node_id |
 | 产出 | `src/engine/executor.cpp`（+ 自检） |
 
-#### PA-05 Console 增强：复制 / 导出 / 自动滚动
+#### PA-05 Console 增强：复制 / 导出 / 自动滚动 ✅（2026-09-24 · A2 收尾）
 
 | 项目 | 内容 |
 |---|---|
@@ -219,7 +223,7 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | 验证 | 复制内容与过滤/搜索后的可见行一致；导出为 UTF-8 文本且行数一致 |
 | 产出 | `src/ui/console_panel.cpp` |
 
-#### PA-06 轻量错误条
+#### PA-06 轻量错误条 ✅（2026-09-24 · A2 收尾）
 
 | 项目 | 内容 |
 |---|---|
@@ -237,7 +241,7 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | 验证 | 自检断言：设置后读取一致；未设置时返回默认值；现有 `config` 往返自检不变 |
 | 产出 | `src/utils/config.{h,cpp}`、`src/ui/app.cpp` |
 
-#### PA-08 未接配置字段治理
+#### PA-08 未接配置字段治理 ✅（2026-09-24 · A2 收尾）
 
 | 项目 | 内容 |
 |---|---|
@@ -246,7 +250,7 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | 验证 | 改 `grid_size`/`running_animation` 后重启生效；日志出现"尚未生效"清单 |
 | 产出 | `src/utils/config.*`、`src/ui/app.cpp`、`src/ui/node_canvas.*`、文档 |
 
-#### PA-09 文档与索引同步
+#### PA-09 文档与索引同步 ✅（2026-09-24 · A2 收尾）
 
 | 项目 | 内容 |
 |---|---|
@@ -261,9 +265,9 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | VA-01 | 结果可见且一致 **✅ 已自动化** | `--run-selftest` 断言「输出面板全文 ⊇ 每个节点全文」（离线 3 节点 / web 4 节点均 OK）；节点内摘要与参数面板结果区复用同一 `node_output_text`，人工确认见使用说明 §10.5 |
 | VA-02 | 结果可用 **🟡 PA-02 部分** | 复制全文/该节点、导出到文件已实现（同一 `run_output_text` 实现）；按钮行为的**人工确认**见使用说明 §10.5 |
 | VA-03 | 耗时正确 **✅ A1** | 每节点 ≥0；各节点耗时之和 ≤ 总耗时；失败/跳过节点也有记录（已由 `--exec-selftest` 6 项断言 + `workflow.log` 明细实测覆盖） |
-| VA-04 | 错误条 | 失败出现；悬停显示全文；点击定位失败节点；可关闭 |
-| VA-05 | Console 增强 | 复制/导出与过滤结果一致；自动滚动在手动上滚后暂停、点「回到底部」恢复 |
-| VA-06 | 配置地基 **🟡 A1 部分** | `app_config()` set→get 一致（✅ A1 已断言）；`grid_size`/`running_animation` 生效与"尚未生效"日志待 PA-08 |
+| VA-04 | 错误条 **✅ 已实现** | 失败运行出现红色错误条（状态栏）；悬停显示全文 + 时间；点击定位并选中失败节点；可关闭；成功运行自动清空（状态逻辑经 `--run-selftest` 离线路径验证：`[错误条] n3 失败：…` 入日志；视觉确认见使用说明 §10.7） |
+| VA-05 | Console 增强 **✅ 已实现** | `复制可见` 与 `log::filter` 结果逐行一致（同一函数 `console_visible_text`）；`导出可见到文件…` 为 UTF-8 且行数一致；手动上滚自动暂停、点「回到底部」恢复（人工确认见使用说明 §10.7） |
+| VA-06 | 配置地基 **✅ 完成** | `app_config()` set→get 一致（A1 断言）；`console_height`/`running_animation` 已接线，`ui.grid_size` 如实登记为"库限制不可生效"；启动日志输出「已接线 / 尚未生效」清单，`--selftest` 新增 PA-08 清单断言 |
 | VA-07 | **快照纯净** **✅ PA-02** | 运行后工作流 JSON 与撤销快照**不含**任何运行结果（`--run-selftest` 已断言：`VA-07 工作流 JSON 不含运行结果 = OK`，web/离线两模式均通过） |
 | VA-08 | 无回归 **✅ A1** | §0.4 基线全绿（七组 PASS / 95-0 / **62-0** / `--run-selftest` PASS / `--run-selftest --web` 5/5）；构建 0 error / 0 warning |
 

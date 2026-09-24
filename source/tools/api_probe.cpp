@@ -250,7 +250,30 @@ bool test_config_roundtrip()
                 grown.rect.width == 640 ? "是" : "否", grown.rect.width, grown.rect.height,
                 !no_area.changed ? "是" : "否");
 
-    return same && cache_ok && fit_ok;
+    // ---- PA-08：未接配置字段清单（"改了 config 却没效果"必须可查）----
+    const std::vector<std::string> unwired = aiwrite::unwired_config_fields();
+    const auto                     has_unwired = [&unwired](const char* needle) {
+        for (const std::string& field : unwired) {
+            if (field.find(needle) != std::string::npos) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const bool unwired_ok = has_unwired("general.language") && has_unwired("timeout.") &&
+                            has_unwired("output.auto_open_on_complete") &&
+                            has_unwired("ui.grid_size") && !has_unwired("console_height") &&
+                            !has_unwired("running_animation") && !has_unwired("window_width");
+    std::printf("   %-6s PA-08 未接配置字段清单：%zu 项；含 general.language=%s；"
+                "不含 console_height/running_animation/window_*=%s\n",
+                unwired_ok ? "PASS" : "FAIL", unwired.size(),
+                has_unwired("general.language") ? "是" : "否",
+                (!has_unwired("console_height") && !has_unwired("running_animation") &&
+                 !has_unwired("window_width"))
+                    ? "是"
+                    : "否");
+
+    return same && cache_ok && fit_ok && unwired_ok;
 }
 
 // M2：网页版会话存储 + 参数条件可见性自检（不需要网络）

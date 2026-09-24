@@ -51,6 +51,19 @@ struct EditorState {
     std::string last_archive_dir;        // 最近一次归档目录（输出面板显示 + 自检断言）
     std::string workflow_display_name() const; // 工作流名（文件名去扩展名；空 → 未命名）
 
+    // ---- PA-06 轻量错误条 ----
+    // 说明：运行结束时刷新 —— 记录**首个失败节点**（状态栏红条 + 点击定位）；
+    //       成功运行会清空；连续失败只覆盖显示，不堆积历史
+    struct LastError {
+        bool        active = false;
+        std::string node_id;
+        std::string message;
+        std::string at; // 本地时间 HH:MM:SS
+    };
+    LastError last_error;
+    void      clear_last_error();
+    void      refresh_last_error();
+
     // 画布每帧同步的选择信息
     std::vector<std::string> selected_nodes;
     std::vector<std::string> selected_links;       // 选中的连线（左键点连线 / 框选）
