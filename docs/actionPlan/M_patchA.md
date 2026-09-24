@@ -20,13 +20,15 @@
 | A2 | **P1-a 生效提供商可见性** | ✅ | 新增 `engine/provider_resolve.{h,cpp}`（provider 输入优先的单点实现）；参数面板显示 `生效：official（来自 提供商配置 n5）` + 红字「必定失败」+ 「把 提供商配置 n5 改为 web」一键按钮（先压快照→可撤销）；节点体显示 `生效 official ← n5` |
 | A2 | **P1-b 运行前提示（拦截）** | ✅ | `validateBeforeRun` **追加** warning（保持"不阻断"，保住既有断言）；工具栏「▶ 运行」预检 → 确认弹窗（受影响清单 + 「切换为网页版并运行」/「仍要运行」/「取消」）。回归不变：七组 PASS / 95-0 / 72-0 / 3-of-5 / 5-of-5 / 构建 0-0 |
 | A2 | **P1-c 参数编辑即时生效（DBG-M3-02 修复）** | ✅ | 参数控件由 `Widget(...) && IsItemDeactivatedAfterEdit()` 改为**值变化即写回**（文本/数值/布尔/文件/颜色；Enum 原本就是即时写回）——修复"改了输入框但运行仍用旧值"；「重置为默认值」改为**先压快照**（D-M3-5 前半，可撤销）；新增 **P1-c 参数驱动断言**（`--run-selftest` 离线 3/5 与 `--web` 5/5 均 OK：改 TextInput 文本 → 该节点输出 == 新文本 且 下游提示词含新文本） |
+| A2 | **F2 参数面板增强（FEA-M3-03 / PD-05）** | ✅ | 参数**搜索过滤**（id / 显示名 / 说明 + 命中计数 + 一键清除）；**批量应用参数到图中全部同类型节点**（模型层 `Graph::copyParamsToSameType`：按参数 id 复制、**密钥类不复制**、不改标题/位置/连线；UI 二次确认 + 先压快照可撤销）；「重置为默认值」**二次确认**；只读标记「（密钥：仅存内存、不写盘）」与「已改」（与默认值不同）。图自检 **95 → 111 通过 / 0 失败**（新增 10 项批量应用断言） |
 | A2 | PA-05 Console 增强 / PA-06 错误条 / PA-08 未接配置治理 / PA-09 文档收尾 | ⬜ 待做 | — |
+| 后续 | **工作流变体保存**（用户后续设计） | ⬜ 延后 | 把面板保存为独立 workflow，并把当前 workflow 更新为变体；启动恢复上次工作流一并归入该项（本条**不做**，仅登记） |
 | A2 | 回归基线（PA-02 后） | ✅ | `--selftest` 七组 PASS；`--graph-selftest` 95/0；`--exec-selftest` 62/0；`--run-selftest` PASS（3/5 预期）；`--run-selftest --web` 5/5；构建 0 error / 0 warning |
 | C | PC-05 输出归档（提前落地） | ✅ | 新增 `utils/output_archive.{h,cpp}`：运行结束写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`（每节点 `.txt` 含元信息头 + `run.json`）；同秒多次运行自动加序号且**本次归档永不删除**；工作流名非法字符清洗；不可写路径返回错误不抛异常。`editor_state` 运行结束自动归档 + `last_archive_dir`；输出面板显示归档路径并可「复制归档路径」 |
 | C | PC-06 归档保留策略（部分） | ✅ | **接线 `config.output.{archive_dir, keep_history, max_history, ttl_days}`**：`keep_history=false` 只留 1 份、`true` 按 `max_history`；`ttl_days>0` 清理超期目录（只清理符合命名规则的目录，先统计后删除并写日志）。`auto_open_on_complete` 仍留 M5 |
 | C | PC-05/06 验证 | ✅ | `--exec-selftest` **72 通过 / 0 失败**（+10 项归档断言：run.json、节点 .txt、无输出不写 txt、名字清洗、元信息头、run.json 明细、保留份数、不可写路径、ttl 清理）；`--run-selftest --web` → **PC-05 归档 OK**（4 个节点文件 + run.json，含生成文档=是）；自检用临时目录，**不污染用户 outputs** |
 | B | PB-xx 待做 | ⬜ | 执行线程化 / 流式 / Provider 统一（含官方 API）/ 凭据管理器 / 会话失效引导 |
-> 当前基线（全绿）：`api_probe --selftest` 七组 PASS、`--graph-selftest` 95/0、`--exec-selftest` 56/0、
+> 当前基线（全绿）：`api_probe --selftest` 七组 PASS、`--graph-selftest` 111/0、`--exec-selftest` 72/0、
 > `aiwrite --run-selftest` PASS、`--run-selftest --web` **5/5 ≈10s**、`--web-probe` PASS、`--web-chat` PASS
 
 ---
@@ -59,7 +61,7 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | 命令 | 期望 |
 |---|---|
 | `api_probe.exe --selftest` | 七组全 PASS（含新增 V-11/V-12） |
-| `api_probe.exe --graph-selftest` | 95 通过 / 0 失败（随补丁增长） |
+| `api_probe.exe --graph-selftest` | 111 通过 / 0 失败（F2 后；随补丁增长） |
 | `api_probe.exe --exec-selftest` | 56 通过 / 0 失败（随补丁增长） |
 | `aiwrite.exe --run-selftest` | PASS（离线：LLMGenerate 走 official 占位，3/5 为预期） |
 | `aiwrite.exe --run-selftest --web` | **5/5，失败 0，跳过 0**（真实网页版生成） |
@@ -536,7 +538,7 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 | 命令 | 用途 | 现状 / 目标 |
 |---|---|---|
 | `api_probe.exe --selftest` | V-01…V-10 + 新增 V-11（无 Key 请求构造）/ V-12（取消与超时） | 七组 PASS → 九组 PASS |
-| `api_probe.exe --graph-selftest` | 图模型/注册表/撤销/序列化 | 95/0 → 随补丁增长 |
+| `api_probe.exe --graph-selftest` | 图模型/注册表/撤销/序列化/批量参数 | 111/0 → 随补丁增长 |
 | `api_probe.exe --exec-selftest` | 拓扑 + 校验 + 执行器 | 56/0 → 随补丁增长 |
 | `aiwrite.exe --run-selftest` | 示例工作流（official 占位） | PASS（3/5 预期） |
 | `aiwrite.exe --run-selftest --web` | 示例工作流真实网页版生成 | PASS（5/5） |

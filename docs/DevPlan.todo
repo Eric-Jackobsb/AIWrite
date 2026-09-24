@@ -254,9 +254,9 @@
                 "children": [],
                 "todo": {
                   "id": 25,
-                  "content": "FEA-M3-03 参数面板增强：重置为默认、按节点类型批量应用参数、参数搜索过滤 ｜ §6.1 PD-05",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M3-03 参数面板增强（已完成）：参数搜索过滤（id / 显示名 / 说明 + 命中计数）、批量应用参数到图中全部同类型节点（Graph::copyParamsToSameType，密钥类不复制，先压快照可撤销）、重置与批量均二次确认；密钥 / 「已改」只读标记 ｜ §6.1 PD-05",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -303,11 +303,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md · P1-c"
                 }
+              },
+              {
+                "key": 113,
+                "children": [],
+                "todo": {
+                  "id": 113,
+                  "content": "FEA-M3-07 工作流变体保存（**延后·由用户后续设计**）：把面板保存为独立 workflow，并把当前 workflow 更新为变体；启动恢复上次工作流一并归入该项",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md · 后续"
+                }
               }
             ],
             "todo": {
               "id": 22,
-              "content": "M3（7 项）",
+              "content": "M3（8 项）",
               "done": false,
               "level": "secondary"
             }
@@ -601,7 +612,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（33 项）",
+          "content": "Feature（34 项）",
           "done": false,
           "level": "default"
         }
@@ -1128,11 +1139,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md · P1-c"
                 }
+              },
+              {
+                "key": 114,
+                "children": [],
+                "todo": {
+                  "id": 114,
+                  "content": "ARC-M3-07 F2/PD-05：参数面板增强 —— 参数搜索过滤（id/名称/说明）、批量应用参数到同类节点（Graph::copyParamsToSameType，密钥不复制）、重置与批量均二次确认；图自检 95→**111 通过 / 0 失败**",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchA.md · F2（FEA-M3-03）"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（7 项）",
+              "content": "M3（8 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1228,7 +1250,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（16 项）",
+          "content": "Archive（17 项）",
           "done": true,
           "level": "success"
         }

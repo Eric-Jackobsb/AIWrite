@@ -358,6 +358,40 @@ std::string Graph::cloneNode(const std::string& node_id, float dx, float dy, std
     return new_id;
 }
 
+int Graph::copyParamsToSameType(const std::string& from_node_id, std::string* error)
+{
+    const Node* source = findNode(from_node_id);
+    if (source == nullptr) {
+        if (error != nullptr) {
+            *error = "待应用参数的节点不存在: " + from_node_id;
+        }
+        return 0;
+    }
+
+    int updated = 0;
+    for (Node& node : nodes) {
+        if (node.id == source->id || node.type != source->type) {
+            continue;
+        }
+        for (Param& target : node.params) {
+            if (target.is_secret) {
+                continue; // 密钥类参数不参与批量复制（避免误扩散）
+            }
+            const Param* origin = source->findParam(target.id);
+            if (origin == nullptr || origin->is_secret) {
+                continue;
+            }
+            target.value = origin->value; // 按值复制
+        }
+        ++updated;
+    }
+
+    if (error != nullptr) {
+        error->clear();
+    }
+    return updated;
+}
+
 std::string Graph::addEdge(const std::string& from_node, const std::string& from_port,
                            const std::string& to_node, const std::string& to_port,
                            std::string* error)

@@ -144,6 +144,13 @@ public:
     // 复制节点（图内克隆，位置偏移 dx/dy；不含连线）；成功返回新节点 id
     std::string cloneNode(const std::string& node_id, float dx, float dy, std::string* error);
 
+    // 把某节点的**非密钥**参数值批量应用到图中全部同类型节点（F2 / PD-05）
+    //  * 按参数 id 匹配：仅复制目标节点上也存在的参数（不增删参数）
+    //  * is_secret 参数（如 API Key）**不复制**，避免密钥误扩散
+    //  * 不改动标题 / 位置 / 连线；返回被更新的其他节点数（不含自身）
+    //  * 节点不存在时返回 0，并把原因写入 error
+    int copyParamsToSameType(const std::string& from_node_id, std::string* error);
+
     // 建立连线；成功返回新连线 id
     std::string addEdge(const std::string& from_node, const std::string& from_port,
                         const std::string& to_node, const std::string& to_port,

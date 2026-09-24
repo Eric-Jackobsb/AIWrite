@@ -952,6 +952,91 @@ int graph_selftest()
         expect(check,
                !engine::graph_from_json(nlohmann::json{{"nodes", "not-an-array"}}, bad_graph, &bad_error),
                "反序列化：nodes 类型错误时被拒绝");
+
+        // ---- 参数批量应用（F2 / PD-05：把当前节点参数应用到图中全部同类型节点）----
+        {
+            Graph             batch_graph;
+            const std::string a_id = add_node(check, batch_graph, "LLMGenerate", "批量A");
+            const std::string b_id = add_node(check, batch_graph, "LLMGenerate", "批量B");
+            const std::string c_id = add_node(check, batch_graph, "LLMGenerate", "批量C");
+            const std::string t_id = add_node(check, batch_graph, "TextInput", "批量文本");
+
+            if (engine::Node* a = batch_graph.findNode(a_id)) {
+                if (engine::Param* temperature = a->findParam("temperature")) {
+                    temperature->value = 1.25;
+                }
+                if (engine::Param* system_prompt = a->findParam("system_prompt")) {
+                    system_prompt->value = std::string("批量系统提示词");
+                }
+                if (engine::Param* mode = a->findParam("mode")) {
+                    mode->value = std::string("official");
+                }
+                a->x = 100.0f; // 位置不应被批量应用带走
+                a->y = 200.0f;
+            }
+
+            std::string batch_error;
+            const int   affected = batch_graph.copyParamsToSameType(a_id, &batch_error);
+            expect(check, affected == 2, "批量应用：更新 2 个同类节点", batch_error);
+
+            const engine::Node* b = batch_graph.findNode(b_id);
+            const engine::Node* c = batch_graph.findNode(c_id);
+            if (b != nullptr && c != nullptr) {
+                const engine::Param* b_temp = b->findParam("temperature");
+                const engine::Param* b_sys  = b->findParam("system_prompt");
+                const engine::Param* b_mode = b->findParam("mode");
+                const engine::Param* c_temp = c->findParam("temperature");
+                expect(check,
+                       b_temp != nullptr && std::fabs(b_temp->number() - 1.25) < 0.001 &&
+                           c_temp != nullptr && std::fabs(c_temp->number() - 1.25) < 0.001,
+                       "批量应用：数值参数同步");
+                expect(check, b_sys != nullptr && b_sys->text() == "批量系统提示词",
+                       "批量应用：文本参数同步");
+                expect(check, b_mode != nullptr && b_mode->text() == "official",
+                       "批量应用：枚举参数同步");
+                expect(check, b->title == c->title && b->x == 0.0f && b->y == 0.0f &&
+                                 c->x == 0.0f && c->y == 0.0f,
+                       "批量应用：不改动标题与位置");
+            }
+
+            const engine::Node* text_node = batch_graph.findNode(t_id);
+            if (text_node != nullptr) {
+                const engine::Param* text_param = text_node->findParam("text");
+                expect(check, text_param != nullptr && text_param->text().empty(),
+                       "批量应用：异类节点不受影响");
+            }
+
+            // 密钥类参数不复制（避免误扩散），其余同类参数正常复制
+            Graph             secret_graph;
+            const std::string s1 = add_node(check, secret_graph, "ProviderConfig", "密钥A");
+            const std::string s2 = add_node(check, secret_graph, "ProviderConfig", "密钥B");
+            if (engine::Node* provider = secret_graph.findNode(s1)) {
+                if (engine::Param* key = provider->findParam("api_key")) {
+                    key->value = std::string("sk-secret");
+                }
+                if (engine::Param* base = provider->findParam("api_base")) {
+                    base->value = std::string("https://example.test");
+                }
+            }
+            expect(check, secret_graph.copyParamsToSameType(s1, nullptr) == 1,
+                   "批量应用：同类 ProviderConfig 命中 1 个");
+            const engine::Node* target_provider = secret_graph.findNode(s2);
+            if (target_provider != nullptr) {
+                const engine::Param* key  = target_provider->findParam("api_key");
+                const engine::Param* base = target_provider->findParam("api_base");
+                expect(check, key != nullptr && key->text().empty(),
+                       "批量应用：is_secret 参数不复制");
+                expect(check, base != nullptr && base->text() == "https://example.test",
+                       "批量应用：同类非密钥参数已复制");
+            }
+
+            // 未知节点 → 返回 0 且写 error（不崩溃、不改图）
+            std::string missing_error;
+            expect(check,
+                   batch_graph.copyParamsToSameType("n404", &missing_error) == 0 &&
+                       !missing_error.empty(),
+                   "批量应用：未知节点返回 0 并写 error");
+        }
     }
 
     std::printf("=== 图模型自检结果: %d 通过 / %d 失败 ===\n", check.passed, check.failed);
