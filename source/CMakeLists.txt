@@ -233,7 +233,8 @@ add_executable(aiwrite WIN32
     src/ui/node_library.cpp
     src/ui/toolbar.cpp
     src/utils/file_dialog.cpp
-    src/ui/output_panel.cpp)
+    src/ui/output_panel.cpp
+    src/ui/text_view.cpp)
 target_link_libraries(aiwrite PRIVATE
     aiwrite_core
     imgui_node_editor

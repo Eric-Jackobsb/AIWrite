@@ -2,6 +2,7 @@
 
 #include "engine/node_registry.h"
 #include "ui/editor_state.h"
+#include "ui/output_panel.h"
 #include "ui/theme.h"
 #include "utils/log.h"
 #include "utils/paths.h"
@@ -18,6 +19,7 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace aiwrite::ui {
@@ -303,6 +305,92 @@ void draw_pin(const Node& node, const Port& port, int index)
 
 // ------------------------------------------------------------- 节点绘制 -----
 // 设计 §14.1：标题栏（分类色 + 状态圆点）+ 端口 + 参数预览 + 错误提示
+// ------------------------------------------------- 运行结果摘要（PA-03）----
+// 节点内只读展示运行结果（与输出面板 / 参数面板「运行结果」同源 ui::node_output_text）。
+// 用「运行信息条数 + 状态 + 错误长度 + 输出字节数」做轻量签名缓存，避免每帧重算长文本。
+struct NodeResultView {
+    std::string text;
+    bool        has_content = false;
+    bool        is_error    = false;
+    bool        is_skipped  = false;
+};
+
+std::size_t result_signature(const Node& node, const engine::Executor& executor)
+{
+    std::size_t signature = executor.runInfos().size() * 1000003u;
+    signature += static_cast<std::size_t>(node.state) * 10007u;
+    signature += node.error_message.size() * 31u;
+    for (const Port& port : node.outputs) {
+        if (const nlohmann::json* value = executor.outputs().find(node.id, port.id)) {
+            signature += value->is_string() ? value->get_ref<const std::string&>().size() : 7u;
+        }
+    }
+    return signature;
+}
+
+NodeResultView result_view_of(const Node& node)
+{
+    struct Cached {
+        std::size_t    signature = 0;
+        NodeResultView view;
+        bool           valid = false;
+    };
+    static std::unordered_map<std::string, Cached> cache;
+
+    const engine::Executor& executor  = editor().executor;
+    const std::size_t       signature = result_signature(node, executor);
+    Cached&                 entry     = cache[node.id];
+    if (entry.valid && entry.signature == signature) {
+        return entry.view;
+    }
+
+    entry.valid     = true;
+    entry.signature = signature;
+    entry.view      = NodeResultView{};
+
+    if (node.state == NodeState::Error) {
+        std::string first = node.error_message;
+        if (const std::size_t pos = first.find('\n'); pos != std::string::npos) {
+            first.resize(pos);
+        }
+        if (first.size() > 120) {
+            first.resize(117);
+            first += "…";
+        }
+        entry.view.has_content = true;
+        entry.view.is_error    = true;
+        entry.view.text        = first.empty() ? std::string("执行失败") : first;
+        return entry.view;
+    }
+    if (node.state == NodeState::Skipped) {
+        entry.view.has_content = true;
+        entry.view.is_skipped  = true;
+        entry.view.text        = "已跳过（上游失败）";
+        return entry.view;
+    }
+    if (node.state == NodeState::Running) {
+        entry.view.has_content = true;
+        entry.view.text        = "运行中…";
+        return entry.view;
+    }
+
+    const std::string body = node_output_text(editor().graph, executor, node.id);
+    if (!body.empty()) {
+        std::string preview;
+        for (const char ch : body) {
+            if (preview.size() >= 160) {
+                break;
+            }
+            preview += (ch == '\n' || ch == '\r') ? ' ' : ch;
+        }
+        entry.view.has_content = true;
+        entry.view.text        = "结果： " + preview +
+                          (body.size() > preview.size() ? "…" : "") +
+                          "（" + std::to_string(body.size()) + " 字符）";
+    }
+    return entry.view;
+}
+
 void draw_node_body(const Node& node)
 {
     engine::registerAllNodes();
@@ -370,6 +458,25 @@ void draw_node_body(const Node& node)
     if (!errors.empty()) {
         ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "参数校验 %d 项错误",
                            static_cast<int>(errors.size()));
+    }
+
+    // ---- 运行结果摘要（PA-03：只读；与输出面板 / 参数面板同源）----
+    const NodeResultView result_view = result_view_of(node);
+    if (result_view.has_content) {
+        ImGui::Separator();
+        if (result_view.is_error) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+        }
+        else if (result_view.is_skipped) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.70f, 0.30f, 1.0f));
+        }
+        else {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.31f, 0.75f, 0.42f, 1.0f));
+        }
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeContentWidth);
+        ImGui::TextUnformatted(result_view.text.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
     }
 
     ed::EndNode();

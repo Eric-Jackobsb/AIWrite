@@ -3,13 +3,13 @@
 #include "engine/executor.h"
 #include "engine/graph.h"
 #include "ui/editor_state.h"
+#include "ui/text_view.h"
 #include "utils/file_dialog.h"
 #include "utils/log.h"
 
 #include <cstddef>
 #include <fstream>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <imgui.h>
@@ -50,34 +50,6 @@ std::string node_header(const engine::NodeRunInfo& info)
 {
     return "[" + info.node_id + "] " + info.type + " · " + engine::nodeStateName(info.state) +
            " · " + std::to_string(static_cast<long long>(info.duration_ms + 0.5)) + " ms";
-}
-
-// 只读多行文本（可选中复制）。缓冲按「节点 id + 内容」缓存，仅在内容变化时重建。
-void show_readonly_text(const std::string& node_id, const std::string& text)
-{
-    struct Cache {
-        std::string       text;
-        std::vector<char> buffer;
-    };
-    static std::unordered_map<std::string, Cache> cache;
-
-    const bool        truncated = text.size() > kDisplayLimit;
-    const std::string shown     = truncated ? text.substr(0, kDisplayLimit) : text;
-
-    Cache& entry = cache[node_id];
-    if (entry.text != shown) {
-        entry.text = shown;
-        entry.buffer.assign(shown.begin(), shown.end());
-        entry.buffer.push_back('\0');
-    }
-
-    const float height = ImGui::GetTextLineHeight() * 10.0f + ImGui::GetStyle().FramePadding.y * 2.0f;
-    ImGui::InputTextMultiline("##result", entry.buffer.data(), entry.buffer.size(),
-                              ImVec2(-FLT_MIN, height), ImGuiInputTextFlags_ReadOnly);
-    if (truncated) {
-        ImGui::TextDisabled("（显示已截断：%zu / %zu 字符；复制与导出为完整内容）", shown.size(),
-                            text.size());
-    }
 }
 
 } // namespace
@@ -149,8 +121,7 @@ void draw_output_panel(const char* title, bool* open, const EditorState& state)
 
     ImGui::BeginDisabled(!has_text);
     if (ImGui::Button("复制全文")) {
-        ImGui::SetClipboardText(all_text.c_str());
-        log::info("[输出面板] 已复制全文（" + std::to_string(all_text.size()) + " 字符）");
+        copy_text(all_text, "[输出面板] 全文");
     }
     ImGui::SameLine();
     if (ImGui::Button("导出到文件…")) {
@@ -212,11 +183,10 @@ void draw_output_panel(const char* title, bool* open, const EditorState& state)
                 ImGui::PopStyleColor();
             }
             if (!body.empty()) {
-                show_readonly_text(info.node_id, body);
+                const std::string view_id = "##result_" + info.node_id;
+                draw_readonly_text(view_id.c_str(), body, 10.0f, kDisplayLimit);
                 if (ImGui::Button("复制该节点")) {
-                    ImGui::SetClipboardText(body.c_str());
-                    log::info("[输出面板] 已复制 " + info.node_id + " 的结果（" +
-                              std::to_string(body.size()) + " 字符）");
+                    copy_text(body, "[输出面板] " + info.node_id);
                 }
             }
             else if (info.error.empty()) {

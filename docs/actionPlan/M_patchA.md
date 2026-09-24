@@ -15,7 +15,9 @@
 | A1 | PA-07 配置访问器地基 | ✅ | `app_config()/set_app_config()`（mutex 保护）；app 启动与保存后同步；api_probe 启动载入；`--selftest` 断言通过 |
 | A2 | PA-02 输出面板（全文 / 复制 / 导出） | ✅ | 新增 `ui/output_panel.{h,cpp}`（`node_output_text` / `run_output_text` 供面板、导出与自检共用）；视图菜单「输出」+ 接线 `config.ui.show_output_window`（切换即持久化）；停靠于 Console 同区；只读消费 `runInfos()`+`outputs()` |
 | A2 | PA-02 无界面验证 | ✅ | `--run-selftest --web`：输出面板文本 **501 字符**、预览 `[n1] TextInput · done · 0 ms`、**VA-07 工作流 JSON 不含运行结果 = OK**、PASS（5.51s）；离线模式 613 字符（含错误/跳过段）、VA-07 OK、PASS |
-| A2 | PA-03 节点摘要 / 参数面板结果区；PA-05 Console 增强；PA-06 错误条；PA-08 配置治理；PA-09 文档收尾 | ⬜ 待做 | — |
+| A2 | **PA-03 结果呈现（节点摘要 + 参数面板结果区）** | ✅ | 新增 `ui/text_view.{h,cpp}`（只读文本/复制共用，输出面板与参数面板同源）；`node_canvas` 节点内结果摘要（状态着色 + 首 160 字符 + 字符数，签名缓存避免每帧重算）；`property_panel` 新增「运行结果」折叠区（状态/耗时/错误 + 只读全文 + 复制 + 归档路径） |
+| A2 | **VA-01 三处一致断言** | ✅ | `--run-selftest` 断言「输出面板全文 ⊇ 每个节点全文」：离线 **3 节点 / 613 字符**、网页版 **4 节点 / 2397 字符**，均 OK |
+| A2 | PA-05 Console 增强 / PA-06 错误条 / PA-08 未接配置治理 / PA-09 文档收尾 | ⬜ 待做 | — |
 | A2 | 回归基线（PA-02 后） | ✅ | `--selftest` 七组 PASS；`--graph-selftest` 95/0；`--exec-selftest` 62/0；`--run-selftest` PASS（3/5 预期）；`--run-selftest --web` 5/5；构建 0 error / 0 warning |
 | C | PC-05 输出归档（提前落地） | ✅ | 新增 `utils/output_archive.{h,cpp}`：运行结束写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`（每节点 `.txt` 含元信息头 + `run.json`）；同秒多次运行自动加序号且**本次归档永不删除**；工作流名非法字符清洗；不可写路径返回错误不抛异常。`editor_state` 运行结束自动归档 + `last_archive_dir`；输出面板显示归档路径并可「复制归档路径」 |
 | C | PC-06 归档保留策略（部分） | ✅ | **接线 `config.output.{archive_dir, keep_history, max_history, ttl_days}`**：`keep_history=false` 只留 1 份、`true` 按 `max_history`；`ttl_days>0` 清理超期目录（只清理符合命名规则的目录，先统计后删除并写日志）。`auto_open_on_complete` 仍留 M5 |
@@ -184,7 +186,7 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | 验证 | `--run-selftest --web` 后需在 UI 手工确认；自检侧断言"导出函数输出 == `outputs()` 拼接结果"；重启后开关状态被记住 |
 | 产出 | 新面板 + `ui/app.cpp`（菜单/停靠/绘制调用）+ `config` 接线 |
 
-#### PA-03 结果呈现：节点摘要 + 参数面板「运行结果」
+#### PA-03 结果呈现：节点摘要 + 参数面板「运行结果」✅（2026-09-24 · A2/F4）
 
 | 项目 | 内容 |
 |---|---|
@@ -250,7 +252,7 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 
 | 编号 | 验证项 | 通过标准 |
 |---|---|---|
-| VA-01 | 结果可见且一致 **🟡 PA-02 部分** | 输出面板已可用（数据通道经 `--run-selftest` 验证 501 字符）；节点摘要与参数面板全文待 PA-03，届时断言三处逐字符一致 |
+| VA-01 | 结果可见且一致 **✅ 已自动化** | `--run-selftest` 断言「输出面板全文 ⊇ 每个节点全文」（离线 3 节点 / web 4 节点均 OK）；节点内摘要与参数面板结果区复用同一 `node_output_text`，人工确认见使用说明 §10.5 |
 | VA-02 | 结果可用 **🟡 PA-02 部分** | 复制全文/该节点、导出到文件已实现（同一 `run_output_text` 实现）；按钮行为的**人工确认**见使用说明 §10.5 |
 | VA-03 | 耗时正确 **✅ A1** | 每节点 ≥0；各节点耗时之和 ≤ 总耗时；失败/跳过节点也有记录（已由 `--exec-selftest` 6 项断言 + `workflow.log` 明细实测覆盖） |
 | VA-04 | 错误条 | 失败出现；悬停显示全文；点击定位失败节点；可关闭 |

@@ -194,6 +194,28 @@ int run_selftest(bool use_web)
         std::filesystem::remove(recent_file, ec);
     }
 
+    // ---- VA-01（PA-03）：三处呈现同源（画布节点摘要 / 参数面板结果区 / 输出面板全文）----
+    bool consistency_ok = false;
+    {
+        const std::string all = aiwrite::ui::run_output_text(state.graph, state.executor);
+        std::size_t       compared  = 0;
+        bool              contained = true;
+        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
+            const std::string per_node =
+                aiwrite::ui::node_output_text(state.graph, state.executor, info.node_id);
+            if (per_node.empty()) {
+                continue;
+            }
+            ++compared;
+            if (all.find(per_node) == std::string::npos) {
+                contained = false; // 输出面板全文必须包含每个节点全文
+            }
+        }
+        consistency_ok = contained && compared > 0;
+        std::printf("[运行自检] VA-01 三处一致：%s（比对 %zu 个有输出的节点，全文 %zu 字符）\n",
+                    consistency_ok ? "OK" : "失败", compared, all.size());
+    }
+
     // ---- F1（M3-04 重做）：复制/粘贴的模型级断言（先断言、后接线 UI）----
     // 说明：画布层守卫见 node_canvas.cpp（clamp_position / 未知手柄反向推送 / 视图跟随前校验），
     //       这里覆盖模型侧：新 id 唯一、位置偏移且有限、参数复制、选区内部连线重映射、可撤销。
@@ -351,7 +373,7 @@ int run_selftest(bool use_web)
     }
 
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
-                      paste_ok;
+                      consistency_ok && paste_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

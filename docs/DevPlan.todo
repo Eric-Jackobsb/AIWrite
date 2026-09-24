@@ -277,8 +277,8 @@
                 "todo": {
                   "id": 27,
                   "content": "FEA-M3-05 节点内结果摘要 + 参数面板「运行结果」区（与输出面板三处逐字符一致） ｜ §3.2 PA-03",
-                  "done": false,
-                  "level": "default",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               }
@@ -683,7 +683,7 @@
                 "children": [],
                 "todo": {
                   "id": 64,
-                  "content": "TST-M3-02 输出面板按钮人工确认（复制全文/该节点/导出）与 VA-01 三处一致断言（PA-03 后补） ｜ §10.5；docs/actionPlan/M_patchA.md · §3.3",
+                  "content": "TST-M3-02 结果呈现人工确认：节点内摘要 / 参数面板「运行结果」/ 输出面板三处内容一致；输出面板复制全文·该节点、导出到文件可用（VA-01 同源断言已自动化） ｜ 使用说明 §10.5",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/节点编辑器使用说明.md"
@@ -1062,11 +1062,33 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M3.md · M3-04；docs/DevPlan.todo"
                 }
+              },
+              {
+                "key": 107,
+                "children": [],
+                "todo": {
+                  "id": 107,
+                  "content": "ARC-M3-03 F1 收口：复制/粘贴重做（右键 + 编辑菜单接线，7 项模型级断言 OK）；粘贴坐标根因登记为已覆盖",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M3.md · M3-04"
+                }
+              },
+              {
+                "key": 108,
+                "children": [],
+                "todo": {
+                  "id": 108,
+                  "content": "ARC-M3-04 PA-03 结果呈现：节点内结果摘要（签名缓存）+ 参数面板「运行结果」区 + 共用 ui/text_view；VA-01 三处同源断言（web 4 节点 / 离线 3 节点）",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchA.md · §3.2 PA-03"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（3 项）",
+              "content": "M3（5 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1162,7 +1184,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（12 项）",
+          "content": "Archive（14 项）",
           "done": true,
           "level": "success"
         }

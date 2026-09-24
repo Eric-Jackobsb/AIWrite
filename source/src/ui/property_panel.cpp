@@ -2,6 +2,8 @@
 
 #include "engine/node_registry.h"
 #include "ui/editor_state.h"
+#include "ui/output_panel.h"
+#include "ui/text_view.h"
 #include "utils/file_dialog.h"
 #include "utils/log.h"
 #include "utils/paths.h"
@@ -472,6 +474,50 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
             ImGui::Spacing();
             ImGui::TextDisabled("提示：把「模式」切到 web 可在此处打开 DeepSeek 网页版登录窗口"
                                 "（Cookie 只存内存）。");
+        }
+    }
+
+    // ---- 运行结果（PA-03）：只读展示 + 复制（与输出面板 / 画布节点摘要同源）----
+    ImGui::Separator();
+    if (ImGui::CollapsingHeader("运行结果", ImGuiTreeNodeFlags_DefaultOpen)) {
+        const engine::Executor& executor = editor().executor;
+        const engine::NodeRunInfo* run   = nullptr;
+        for (const engine::NodeRunInfo& info : executor.runInfos()) {
+            if (info.node_id == node->id) {
+                run = &info;
+                break;
+            }
+        }
+
+        if (run == nullptr) {
+            ImGui::TextDisabled("尚未运行（点工具栏「▶ 运行」；首次网页版会话约数秒）");
+        }
+        else {
+            ImGui::TextDisabled("状态: %s    耗时: %.2f ms", engine::nodeStateName(run->state),
+                                run->duration_ms);
+            if (!run->error.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+                ImGui::TextWrapped("错误：%s", run->error.c_str());
+                ImGui::PopStyleColor();
+            }
+
+            const std::string body = node_output_text(editor().graph, executor, node->id);
+            if (!body.empty()) {
+                draw_readonly_text("##prop_run_result", body, 8.0f);
+                if (ImGui::Button("复制运行结果")) {
+                    copy_text(body, "[参数面板] " + node->id);
+                }
+            }
+            else if (run->error.empty()) {
+                ImGui::TextDisabled("（该节点无输出）");
+            }
+
+            if (!editor().last_archive_dir.empty()) {
+                ImGui::TextDisabled("已归档：%s", editor().last_archive_dir.c_str());
+                if (ImGui::SmallButton("复制归档路径")) {
+                    copy_text(editor().last_archive_dir, "[参数面板] 归档路径");
+                }
+            }
         }
     }
 
