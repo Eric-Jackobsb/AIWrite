@@ -749,6 +749,7 @@ int run(const AppOptions& options)
     }
 
     log::info("主窗口关闭，开始清理");
+    editor().stop_run_async(); // PB-01：退出前 join 工作线程（幂等）
 
     // ---- 窗口几何退出落盘（F3 / PD-04）：节流保存之外的最终兜底 ----
     if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) == 0) {

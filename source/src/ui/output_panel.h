@@ -15,6 +15,7 @@
 namespace aiwrite::engine {
 class Executor;
 class Graph;
+struct RunSnapshot;
 } // namespace aiwrite::engine
 
 namespace aiwrite::ui {
@@ -28,6 +29,12 @@ std::string node_output_text(const engine::Graph& graph, const engine::Executor&
 // 全部结果文本（含每节点标题行：id · 类型 · 状态 · 耗时；失败节点带错误行）
 // 供「复制全文 / 导出到文件」与无界面自检使用
 std::string run_output_text(const engine::Graph& graph, const engine::Executor& executor);
+
+// ---- PB-01：读模型重载（GUI 用；运行中读快照，避免跨线程读 Executor 运行态）----
+//  * 快照中的节点文本已由 makeSnapshot 用同一 nodeOutputText 规则落定 → 与上面两个重载逐字符一致
+std::string node_output_text(const engine::Graph& graph, const engine::RunSnapshot& snapshot,
+                             const std::string& node_id);
+std::string run_output_text(const engine::Graph& graph, const engine::RunSnapshot& snapshot);
 
 // 绘制输出面板（可停靠；默认不显示由调用方控制）
 void draw_output_panel(const char* title, bool* open, const EditorState& state);

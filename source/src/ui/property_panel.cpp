@@ -615,14 +615,8 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     // ---- 运行结果（PA-03）：只读展示 + 复制（与输出面板 / 画布节点摘要同源）----
     ImGui::Separator();
     if (ImGui::CollapsingHeader("运行结果", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const engine::Executor& executor = editor().executor;
-        const engine::NodeRunInfo* run   = nullptr;
-        for (const engine::NodeRunInfo& info : executor.runInfos()) {
-            if (info.node_id == node->id) {
-                run = &info;
-                break;
-            }
-        }
+        const engine::RunSnapshot& snapshot = editor().run_snapshot_view();
+        const engine::RunNodeView* run      = snapshot.find(node->id);
 
         if (run == nullptr) {
             ImGui::TextDisabled("尚未运行（点工具栏「▶ 运行」；首次网页版会话约数秒）");
@@ -636,7 +630,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                 ImGui::PopStyleColor();
             }
 
-            const std::string body = node_output_text(editor().graph, executor, node->id);
+            const std::string body = node_output_text(editor().graph, snapshot, node->id);
             if (!body.empty()) {
                 draw_readonly_text("##prop_run_result", body, 8.0f);
                 if (ImGui::Button("复制运行结果")) {

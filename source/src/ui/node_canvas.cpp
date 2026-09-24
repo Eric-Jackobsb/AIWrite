@@ -319,15 +319,13 @@ struct NodeResultView {
     bool        is_skipped  = false;
 };
 
-std::size_t result_signature(const Node& node, const engine::Executor& executor)
+std::size_t result_signature(const Node& node, const engine::RunSnapshot& snapshot)
 {
-    std::size_t signature = executor.runInfos().size() * 1000003u;
+    std::size_t signature = snapshot.nodes.size() * 1000003u;
     signature += static_cast<std::size_t>(node.state) * 10007u;
     signature += node.error_message.size() * 31u;
-    for (const Port& port : node.outputs) {
-        if (const nlohmann::json* value = executor.outputs().find(node.id, port.id)) {
-            signature += value->is_string() ? value->get_ref<const std::string&>().size() : 7u;
-        }
+    if (const engine::RunNodeView* view = snapshot.find(node.id)) {
+        signature += view->text.size() * 17u; // PB-01：读快照文本长度（含流式增长）
     }
     return signature;
 }
@@ -341,8 +339,8 @@ NodeResultView result_view_of(const Node& node)
     };
     static std::unordered_map<std::string, Cached> cache;
 
-    const engine::Executor& executor  = editor().executor;
-    const std::size_t       signature = result_signature(node, executor);
+    const engine::RunSnapshot& snapshot = editor().run_snapshot_view();
+    const std::size_t       signature = result_signature(node, snapshot);
     Cached&                 entry     = cache[node.id];
     if (entry.valid && entry.signature == signature) {
         return entry.view;
@@ -378,7 +376,7 @@ NodeResultView result_view_of(const Node& node)
         return entry.view;
     }
 
-    const std::string body = node_output_text(editor().graph, executor, node.id);
+    const std::string body = node_output_text(editor().graph, editor().run_snapshot_view(), node.id);
     if (!body.empty()) {
         std::string preview;
         for (const char ch : body) {

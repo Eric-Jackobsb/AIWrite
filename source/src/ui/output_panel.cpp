@@ -41,6 +41,13 @@ std::string node_header(const engine::NodeRunInfo& info)
            " · " + std::to_string(static_cast<long long>(info.duration_ms + 0.5)) + " ms";
 }
 
+// PB-01：读模型条目使用同一标题格式（面板改读 RunSnapshot 后仍与自检一致）
+std::string node_header(const engine::RunNodeView& info)
+{
+    return "[" + info.node_id + "] " + info.type + " · " + engine::nodeStateName(info.state) +
+           " · " + std::to_string(static_cast<long long>(info.duration_ms + 0.5)) + " ms";
+}
+
 } // namespace
 
 std::string node_output_text(const engine::Graph& graph, const engine::Executor& executor,
@@ -52,10 +59,24 @@ std::string node_output_text(const engine::Graph& graph, const engine::Executor&
 
 std::string run_output_text(const engine::Graph& graph, const engine::Executor& executor)
 {
+    // PB-01：单一实现 —— 走快照重载（快照文本由 makeSnapshot 用同一规则落定）
+    return run_output_text(graph, engine::makeSnapshot(graph, executor));
+}
+
+std::string node_output_text(const engine::Graph& graph, const engine::RunSnapshot& snapshot,
+                             const std::string& node_id)
+{
+    (void)graph;
+    const engine::RunNodeView* view = snapshot.find(node_id);
+    return view != nullptr ? view->text : std::string();
+}
+
+std::string run_output_text(const engine::Graph& graph, const engine::RunSnapshot& snapshot)
+{
+    (void)graph;
     std::string text;
-    for (const engine::NodeRunInfo& info : executor.runInfos()) {
-        const std::string body = node_output_text(graph, executor, info.node_id);
-        if (body.empty() && info.error.empty()) {
+    for (const engine::RunNodeView& info : snapshot.nodes) {
+        if (info.text.empty() && info.error.empty()) {
             continue; // 无输出也无错误（如被跳过的中间节点）→ 不占版面
         }
         if (!text.empty()) {
@@ -65,8 +86,8 @@ std::string run_output_text(const engine::Graph& graph, const engine::Executor& 
         if (!info.error.empty()) {
             text += "\n错误：" + info.error;
         }
-        if (!body.empty()) {
-            text += "\n" + body;
+        if (!info.text.empty()) {
+            text += "\n" + info.text;
         }
     }
     return text;
@@ -80,10 +101,11 @@ void draw_output_panel(const char* title, bool* open, const EditorState& state)
     }
 
     const engine::Executor& executor = state.executor;
-    const auto&             infos    = executor.runInfos();
+    const engine::RunSnapshot& snapshot = state.run_snapshot_view();
+    const auto&             infos    = snapshot.nodes;
 
     // ---- 顶部工具条 ----
-    const std::string all_text = run_output_text(state.graph, executor);
+    const std::string all_text = run_output_text(state.graph, snapshot);
     const bool        has_text = !all_text.empty();
 
     ImGui::BeginDisabled(!has_text);
@@ -132,8 +154,8 @@ void draw_output_panel(const char* title, bool* open, const EditorState& state)
     }
 
     // ---- 逐节点分段 ----
-    for (const engine::NodeRunInfo& info : infos) {
-        const std::string body   = node_output_text(state.graph, executor, info.node_id);
+    for (const engine::RunNodeView& info : infos) {
+        const std::string body   = node_output_text(state.graph, snapshot, info.node_id);
         const std::string header = node_header(info);
         const bool        leaf   = body.empty() && info.error.empty();
 

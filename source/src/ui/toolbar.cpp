@@ -150,7 +150,7 @@ void draw_toolbar_buttons()
     if (ImGui::Button(run_label)) {
         blocked_nodes = collect_blocked();
         if (blocked_nodes.empty()) {
-            state.start_run(); // 运行前校验 → 执行器 start；之后每帧由主循环 tick_run 推进
+            state.start_run_async(); // PB-01：后台线程推进；之后每帧由主循环 tick_run 泵事件
         }
         else {
             // P1-b：存在「未接线分支」→ 先弹窗确认（不直接运行）
@@ -224,14 +224,14 @@ void draw_toolbar_buttons()
             log::info("[运行前提示] 已把 " + std::to_string(switched) + " 个节点的模式切换为 web，开始运行");
             blocked_nodes.clear();
             ImGui::CloseCurrentPopup();
-            state.start_run();
+            state.start_run_async(); // PB-01：异步
         }
         ImGui::SameLine();
         if (ImGui::Button("仍要运行", ImVec2(100.0f, 0.0f))) {
             log::warn("[运行前提示] 用户选择仍要运行（预期失败）");
             blocked_nodes.clear();
             ImGui::CloseCurrentPopup();
-            state.start_run();
+            state.start_run_async(); // PB-01：异步
         }
         ImGui::SameLine();
         if (ImGui::Button("取消", ImVec2(80.0f, 0.0f))) {
