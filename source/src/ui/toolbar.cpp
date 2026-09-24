@@ -41,7 +41,8 @@ void draw_toolbar_buttons()
     ImGui::TextDisabled("|");
 
     // ---- 节点操作 ----
-    // 复制/粘贴已暂停（UI 入口下线，EditorState 逻辑与剪贴板代码保留）：M2/M3 重做画布交互时接回
+    // 复制/粘贴入口按设计 §6.1 放在「节点右键 → 复制」「画布右键 → 粘贴」与「编辑菜单」（M3-04 已接回）；
+    // 工具栏按 M3-10 的按钮清单（新建/示例/撤销/重做/删除选中/打开/保存/运行/停止）不重复放置。
     ImGui::SameLine();
     ImGui::BeginDisabled(!state.has_selection());
     if (ImGui::Button("删除选中")) {

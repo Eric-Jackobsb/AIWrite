@@ -12,7 +12,7 @@
                 "children": [],
                 "todo": {
                   "id": 3,
-                  "content": "WebView2 Runtime 缺失时仅有日志提示与退出码 1，缺少面向用户的引导 ｜ 遗留表（M6-02/M6-08）",
+                  "content": "DBG-M1-01 WebView2 Runtime 缺失时仅有日志提示与退出码 1，缺少面向用户的引导 ｜ 遗留表（M6-02/M6-08）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M1.md"
@@ -34,9 +34,9 @@
                 "children": [],
                 "todo": {
                   "id": 5,
-                  "content": "粘贴节点后视图漂移/坐标异常（历史事故根因未修，故复制粘贴 UI 入口仍下线） ｜ §6.1 PD-02",
-                  "done": false,
-                  "level": "default",
+                  "content": "DBG-M3-01 粘贴节点曾因坐标/视图异常导致卡死（根因已覆盖：clamp_position + 未知手柄反向推送 + 视图跟随前校验，并新增 7 项模型级断言） ｜ §6.1 PD-02",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               }
@@ -56,7 +56,7 @@
                 "children": [],
                 "todo": {
                   "id": 7,
-                  "content": "生成期间界面同步阻塞 4–10 秒（执行器未线程化前无解） ｜ §4.1 PB-01",
+                  "content": "DBG-M4-01 生成期间界面同步阻塞 4–10 秒（执行器未线程化前无解） ｜ §4.1 PB-01",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -67,7 +67,7 @@
                 "children": [],
                 "todo": {
                   "id": 8,
-                  "content": "「■ 停止」无法中断正在执行的节点（cancel 仅阻止开启新节点） ｜ §4.1 PB-02",
+                  "content": "DBG-M4-02 「■ 停止」无法中断正在执行的节点（cancel 仅阻止开启新节点） ｜ §4.1 PB-02",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -78,7 +78,7 @@
                 "children": [],
                 "todo": {
                   "id": 9,
-                  "content": "网页版 PoW 依赖官方 worker chunk，前端发版变化可能导致求解失败 ｜ §3（方案 A 收敛）",
+                  "content": "DBG-M4-03 网页版 PoW 依赖官方 worker chunk，前端发版变化可能导致求解失败 ｜ §3（方案 A 收敛）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/网页版协议实测记录.md"
@@ -89,7 +89,7 @@
                 "children": [],
                 "todo": {
                   "id": 10,
-                  "content": "网页版请求忽略 temperature / max_tokens / top_p（网页前端无对应开关） ｜ §4.1 PB-05",
+                  "content": "DBG-M4-04 网页版请求忽略 temperature / max_tokens / top_p（网页前端无对应开关） ｜ §4.1 PB-05",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -100,7 +100,7 @@
                 "children": [],
                 "todo": {
                   "id": 11,
-                  "content": "会话失效（40002/401）只呈现为通用错误串，缺少「重新登录」引导 ｜ §4.1 PB-07",
+                  "content": "DBG-M4-05 会话失效（40002/401）只呈现为通用错误串，缺少「重新登录」引导 ｜ §4.1 PB-07",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -122,7 +122,7 @@
                 "children": [],
                 "todo": {
                   "id": 13,
-                  "content": "网页版每次运行会在账号内新建/追加会话，正文进入 chat.deepseek.com 历史（副作用） ｜ §2 端点",
+                  "content": "DBG-M5-01 网页版每次运行会在账号内新建/追加会话，正文进入 chat.deepseek.com 历史（副作用） ｜ §2 端点",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/网页版协议实测记录.md"
@@ -144,7 +144,7 @@
                 "children": [],
                 "todo": {
                   "id": 15,
-                  "content": "config 多个字段仍无效果（output.auto_open_on_complete / general.* / advanced.log_ttl_days 等） ｜ §3.2 PA-08",
+                  "content": "DBG-M6-01 config 多个字段仍无效果（output.auto_open_on_complete / general.* / advanced.log_ttl_days 等） ｜ §3.2 PA-08",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -155,7 +155,7 @@
                 "children": [],
                 "todo": {
                   "id": 16,
-                  "content": "工作流与配置缺版本迁移路径，跨版本文件只能 warn 后被拒/忽略 ｜ §5.1 PC-04",
+                  "content": "DBG-M6-02 工作流与配置缺版本迁移路径，跨版本文件只能 warn 后被拒/忽略 ｜ §5.1 PC-04",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -188,7 +188,7 @@
                 "children": [],
                 "todo": {
                   "id": 19,
-                  "content": "autosave：变更节流写 snapshots/autosave.json（原子写），启动时提示恢复未保存更改 ｜ §5.1 PC-01/PC-02",
+                  "content": "FEA-M2-01 autosave：变更节流写 snapshots/autosave.json（原子写），启动时提示恢复未保存更改 ｜ §5.1 PC-01/PC-02",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -199,7 +199,7 @@
                 "children": [],
                 "todo": {
                   "id": 20,
-                  "content": "最近列表治理：打开前校验存在性、失效项灰显并提供「清理失效条目」 ｜ §5.1 PC-03",
+                  "content": "FEA-M2-02 最近列表治理：打开前校验存在性、失效项灰显并提供「清理失效条目」 ｜ §5.1 PC-03",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -210,7 +210,7 @@
                 "children": [],
                 "todo": {
                   "id": 21,
-                  "content": "工作流/配置版本迁移框架（迁移表 + 未来版本明确拒绝 + 迁移自检） ｜ §5.1 PC-04",
+                  "content": "FEA-M2-03 工作流/配置版本迁移框架（迁移表 + 未来版本明确拒绝 + 迁移自检） ｜ §5.1 PC-04",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -232,9 +232,9 @@
                 "children": [],
                 "todo": {
                   "id": 23,
-                  "content": "复制/粘贴重做：先落 Graph 位置再统一 sync_positions，视图跟随延后一帧 ｜ §6.1 PD-02",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M3-01 复制/粘贴重做：先落 Graph 位置再统一 sync_positions，视图跟随延后一帧 ｜ §6.1 PD-02",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -243,9 +243,9 @@
                 "children": [],
                 "todo": {
                   "id": 24,
-                  "content": "快捷键表（设计 §6.7）：Ctrl+Z/Y、Ctrl+S/O/N、Ctrl+C/V/X、Del、F5/Shift+F5、Ctrl+L、Ctrl+0 ｜ §6.1 PD-01",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M3-02 快捷键表：**决定不做**——设计 §6.7 明确「MVP 不保留任何快捷键，只保留鼠标操作」；鼠标入口已齐备（右键画布/节点 + 编辑菜单 + 工具栏）",
+                  "done": true,
+                  "level": "secondary",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -254,7 +254,7 @@
                 "children": [],
                 "todo": {
                   "id": 25,
-                  "content": "参数面板增强：重置为默认、按节点类型批量应用参数、参数搜索过滤 ｜ §6.1 PD-05",
+                  "content": "FEA-M3-03 参数面板增强：重置为默认、按节点类型批量应用参数、参数搜索过滤 ｜ §6.1 PD-05",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -265,7 +265,7 @@
                 "children": [],
                 "todo": {
                   "id": 26,
-                  "content": "窗口几何持久化：尺寸/位置/最大化写入 config 并在启动恢复且越屏矫正 ｜ §6.1 PD-04",
+                  "content": "FEA-M3-04 窗口几何持久化：尺寸/位置/最大化写入 config 并在启动恢复且越屏矫正 ｜ §6.1 PD-04",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -276,7 +276,7 @@
                 "children": [],
                 "todo": {
                   "id": 27,
-                  "content": "节点内结果摘要 + 参数面板「运行结果」区（与输出面板三处逐字符一致） ｜ §3.2 PA-03",
+                  "content": "FEA-M3-05 节点内结果摘要 + 参数面板「运行结果」区（与输出面板三处逐字符一致） ｜ §3.2 PA-03",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -298,7 +298,7 @@
                 "children": [],
                 "todo": {
                   "id": 29,
-                  "content": "执行线程化：tick 移入工作线程 + 线程安全事件队列，Graph 写入仅限主线程 ｜ §4.1 PB-01",
+                  "content": "FEA-M4-01 执行线程化：tick 移入工作线程 + 线程安全事件队列，Graph 写入仅限主线程 ｜ §4.1 PB-01",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -309,7 +309,7 @@
                 "children": [],
                 "todo": {
                   "id": 30,
-                  "content": "真取消：HTTP 可中断 + 节点协作检查点，运行中点停止 1 秒内生效 ｜ §4.1 PB-02",
+                  "content": "FEA-M4-02 真取消：HTTP 可中断 + 节点协作检查点，运行中点停止 1 秒内生效 ｜ §4.1 PB-02",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -320,7 +320,7 @@
                 "children": [],
                 "todo": {
                   "id": 31,
-                  "content": "流式回调：ExecutionContext 增 on_delta，NodeRunInfo.delta_bytes 生效 ｜ §4.1 PB-03",
+                  "content": "FEA-M4-03 流式回调：ExecutionContext 增 on_delta，NodeRunInfo.delta_bytes 生效 ｜ §4.1 PB-03",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -331,7 +331,7 @@
                 "children": [],
                 "todo": {
                   "id": 32,
-                  "content": "Provider 统一抽象：inference_provider.h + provider_factory，网页版收编为 DeepSeekWebProvider ｜ §4.1 PB-04",
+                  "content": "FEA-M4-04 Provider 统一抽象：inference_provider.h + provider_factory，网页版收编为 DeepSeekWebProvider ｜ §4.1 PB-04",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -342,7 +342,7 @@
                 "children": [],
                 "todo": {
                   "id": 33,
-                  "content": "官方 DeepSeek Provider：/chat/completions、参数透传、错误分类、超时重试、官方 SSE ｜ §4.1 PB-05（原 M4-05/M4-10）",
+                  "content": "FEA-M4-05 官方 DeepSeek Provider：/chat/completions、参数透传、错误分类、超时重试、官方 SSE ｜ §4.1 PB-05（原 M4-05/M4-10）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -353,7 +353,7 @@
                 "children": [],
                 "todo": {
                   "id": 34,
-                  "content": "API Key 凭据管理器（CredWrite/Read/Delete + api_key_ref）与代理/证书策略 ｜ §4.1 PB-06（原 M4-07）",
+                  "content": "FEA-M4-06 API Key 凭据管理器（CredWrite/Read/Delete + api_key_ref）与代理/证书策略 ｜ §4.1 PB-06（原 M4-07）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -364,7 +364,7 @@
                 "children": [],
                 "todo": {
                   "id": 35,
-                  "content": "会话失效引导：识别 40002/401 → 状态栏提示并可一键打开登录窗口 ｜ §4.1 PB-07",
+                  "content": "FEA-M4-07 会话失效引导：识别 40002/401 → 状态栏提示并可一键打开登录窗口 ｜ §4.1 PB-07",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -375,7 +375,7 @@
                 "children": [],
                 "todo": {
                   "id": 36,
-                  "content": "流式呈现：输出面板与节点摘要逐字增长，运行中显示「生成中…（N 字）」 ｜ §4.1 PB-08",
+                  "content": "FEA-M4-08 流式呈现：输出面板与节点摘要逐字增长，运行中显示「生成中…（N 字）」 ｜ §4.1 PB-08",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -386,7 +386,7 @@
                 "children": [],
                 "todo": {
                   "id": 37,
-                  "content": "Console 增强：复制全部 / 复制当前过滤 / 导出到文件 / 自动滚动与「回到底部」 ｜ §3.2 PA-05（M4-12）",
+                  "content": "FEA-M4-09 Console 增强：复制全部 / 复制当前过滤 / 导出到文件 / 自动滚动与「回到底部」 ｜ §3.2 PA-05（M4-12）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -397,7 +397,7 @@
                 "children": [],
                 "todo": {
                   "id": 38,
-                  "content": "轻量错误条：失败后可关闭、悬停看全文、点击定位到失败节点 ｜ §3.2 PA-06",
+                  "content": "FEA-M4-10 轻量错误条：失败后可关闭、悬停看全文、点击定位到失败节点 ｜ §3.2 PA-06",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -408,7 +408,7 @@
                 "children": [],
                 "todo": {
                   "id": 39,
-                  "content": "重跑能力：重跑单个节点 / 重跑该节点及下游（复用运行信息与拓扑） ｜ §6.1 PD-06",
+                  "content": "FEA-M4-11 重跑能力：重跑单个节点 / 重跑该节点及下游（复用运行信息与拓扑） ｜ §6.1 PD-06",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -419,7 +419,7 @@
                 "children": [],
                 "todo": {
                   "id": 40,
-                  "content": "自检扩展：V-11 无 Key 请求构造、V-12 取消/超时语义、--run-selftest --official ｜ §4.1 PB-09",
+                  "content": "FEA-M4-12 自检扩展：V-11 无 Key 请求构造、V-12 取消/超时语义、--run-selftest --official ｜ §4.1 PB-09",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -441,7 +441,7 @@
                 "children": [],
                 "todo": {
                   "id": 42,
-                  "content": "VLMGenerate 接线（M5-02）：图片输入 + prompt → 视觉模型生成文字",
+                  "content": "FEA-M5-01 VLMGenerate 接线（M5-02）：图片输入 + prompt → 视觉模型生成文字",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M5.md"
@@ -452,7 +452,7 @@
                 "children": [],
                 "todo": {
                   "id": 43,
-                  "content": "ImagePreview 真实预览与 Output 窗口（历史、图片、完成后自动打开） ｜ §11.2 Output 归档",
+                  "content": "FEA-M5-02 ImagePreview 真实预览与 Output 窗口（历史、图片、完成后自动打开） ｜ §11.2 Output 归档",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M5.md"
@@ -463,7 +463,7 @@
                 "children": [],
                 "todo": {
                   "id": 44,
-                  "content": "输出面板进阶：历史运行列表、节点内搜索、复制为 Markdown/JSON ｜ §6.1 PD-07",
+                  "content": "FEA-M5-03 输出面板进阶：历史运行列表、节点内搜索、复制为 Markdown/JSON ｜ §6.1 PD-07",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -474,7 +474,7 @@
                 "children": [],
                 "todo": {
                   "id": 45,
-                  "content": "归档完整化：outputs 历史/预览/自动打开，接线 config.output.auto_open_on_complete ｜ §5.1 PC-06",
+                  "content": "FEA-M5-04 归档完整化：outputs 历史/预览/自动打开，接线 config.output.auto_open_on_complete ｜ §5.1 PC-06",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -496,7 +496,7 @@
                 "children": [],
                 "todo": {
                   "id": 47,
-                  "content": "设置面板（M6-06）：接线 grid_size / console_height / running_animation 等全部配置并落盘 ｜ §6.1 PD-03",
+                  "content": "FEA-M6-01 设置面板（M6-06）：接线 grid_size / console_height / running_animation 等全部配置并落盘 ｜ §6.1 PD-03",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -507,7 +507,7 @@
                 "children": [],
                 "todo": {
                   "id": 48,
-                  "content": "WebView2 Runtime 检测与安装引导（清零 M1 唯一遗留，缺失时给官方 Bootstrapper 链接） ｜ §7 PM-01",
+                  "content": "FEA-M6-02 WebView2 Runtime 检测与安装引导（清零 M1 唯一遗留，缺失时给官方 Bootstrapper 链接） ｜ §7 PM-01",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -518,7 +518,7 @@
                 "children": [],
                 "todo": {
                   "id": 49,
-                  "content": "一键构建+自检：source/build.ps1 增加「跑全部自检并输出摘要（失败给文件+行号）」 ｜ §7 PM-03",
+                  "content": "FEA-M6-03 一键构建+自检：source/build.ps1 增加「跑全部自检并输出摘要（失败给文件+行号）」 ｜ §7 PM-03",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -529,7 +529,7 @@
                 "children": [],
                 "todo": {
                   "id": 50,
-                  "content": "诊断信息一键复制：版本、依赖、数据目录、日志路径、GPU、DPI 缩放 ｜ §7 PM-04",
+                  "content": "FEA-M6-04 诊断信息一键复制：版本、依赖、数据目录、日志路径、GPU、DPI 缩放 ｜ §7 PM-04",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -540,7 +540,7 @@
                 "children": [],
                 "todo": {
                   "id": 51,
-                  "content": "i18n 决策与落地（最小字符串表）或从 config 移除 language/startup 并记入 M6 ｜ §6.1 PD-08",
+                  "content": "FEA-M6-05 i18n 决策与落地（最小字符串表）或从 config 移除 language/startup 并记入 M6 ｜ §6.1 PD-08",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -551,7 +551,7 @@
                 "children": [],
                 "todo": {
                   "id": 52,
-                  "content": "打包与分发（M6-08）：便携/安装包 + 是否随包附带 Evergreen Bootstrapper ｜ M6-08",
+                  "content": "FEA-M6-06 打包与分发（M6-08）：便携/安装包 + 是否随包附带 Evergreen Bootstrapper ｜ M6-08",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M6.md"
@@ -562,7 +562,7 @@
                 "children": [],
                 "todo": {
                   "id": 53,
-                  "content": "日志保留策略语义实现（advanced.log_ttl_days / log_dir 生效） ｜ §1.3 C 类配置层",
+                  "content": "FEA-M6-07 日志保留策略语义实现（advanced.log_ttl_days / log_dir 生效） ｜ §1.3 C 类配置层",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -595,7 +595,7 @@
                 "children": [],
                 "todo": {
                   "id": 56,
-                  "content": "设置 DEEPSEEK_API_KEY 后跑 api_probe --chat 实测官方 API 生成，取证 M1 V-06 / A-06 ｜ 验收表 A-06；source/README.md",
+                  "content": "TST-M1-01 设置 DEEPSEEK_API_KEY 后跑 api_probe --chat 实测官方 API 生成，取证 M1 V-06 / A-06 ｜ 验收表 A-06；source/README.md",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M1.md"
@@ -606,7 +606,7 @@
                 "children": [],
                 "todo": {
                   "id": 57,
-                  "content": "人工确认后勾选 A-03（画布交互）/ A-04（WebView2 登录）/ A-05（Cookie 提取） ｜ §8 人工验证清单",
+                  "content": "TST-M1-02 人工确认后勾选 A-03（画布交互）/ A-04（WebView2 登录）/ A-05（Cookie 提取） ｜ §8 人工验证清单",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/节点编辑器使用说明.md"
@@ -628,7 +628,7 @@
                 "children": [],
                 "todo": {
                   "id": 59,
-                  "content": "按使用说明 §8 的 22 项清单逐项确认画布交互（可选/多选/框选/连线/右键菜单） ｜ §8",
+                  "content": "TST-M2-01 按使用说明 §8 的 22 项清单逐项确认画布交互（可选/多选/框选/连线/右键菜单） ｜ §8",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/节点编辑器使用说明.md"
@@ -639,7 +639,7 @@
                 "children": [],
                 "todo": {
                   "id": 60,
-                  "content": "每次提交重跑回归基线（七组 PASS / 95-0 / 72-0 / --run-selftest / --run-selftest --web）并回填数字 ｜ §0.4 回归基线",
+                  "content": "TST-M2-02 每次提交重跑回归基线（七组 PASS / 95-0 / 72-0 / --run-selftest / --run-selftest --web）并回填数字 ｜ §0.4 回归基线",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -650,7 +650,7 @@
                 "children": [],
                 "todo": {
                   "id": 61,
-                  "content": "autosave 恢复与版本迁移用例（VC-02 / VC-03）待 PC-01/02/04 落地后补测 ｜ §5.2",
+                  "content": "TST-M2-03 autosave 恢复与版本迁移用例（VC-02 / VC-03）待 PC-01/02/04 落地后补测 ｜ §5.2",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -672,7 +672,7 @@
                 "children": [],
                 "todo": {
                   "id": 63,
-                  "content": "VD-01…VD-08（快捷键无冲突、粘贴坐标、设置面板一致、窗口几何、重跑语义、输出进阶）待 Patch D 后测 ｜ §6.2",
+                  "content": "TST-M3-01 VD-01…VD-08（快捷键无冲突、粘贴坐标、设置面板一致、窗口几何、重跑语义、输出进阶）待 Patch D 后测 ｜ §6.2",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -683,7 +683,7 @@
                 "children": [],
                 "todo": {
                   "id": 64,
-                  "content": "输出面板按钮人工确认（复制全文/该节点/导出）与 VA-01 三处一致断言（PA-03 后补） ｜ §10.5；docs/actionPlan/M_patchA.md · §3.3",
+                  "content": "TST-M3-02 输出面板按钮人工确认（复制全文/该节点/导出）与 VA-01 三处一致断言（PA-03 后补） ｜ §10.5；docs/actionPlan/M_patchA.md · §3.3",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/节点编辑器使用说明.md"
@@ -705,7 +705,7 @@
                 "children": [],
                 "todo": {
                   "id": 66,
-                  "content": "VB-01…VB-09（UI 不卡、取消 1 秒生效、流式拼接一致、参数透传、凭据三优先级、会话失效引导、线程安全）待 Patch B ｜ §4.2",
+                  "content": "TST-M4-01 VB-01…VB-09（UI 不卡、取消 1 秒生效、流式拼接一致、参数透传、凭据三优先级、会话失效引导、线程安全）待 Patch B ｜ §4.2",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -716,7 +716,7 @@
                 "children": [],
                 "todo": {
                   "id": 67,
-                  "content": "V-03 官方 API 生成 / V-08 官方 SSE / V-09 流式输出 三项实测（Patch B 落地后） ｜ 三、技术验证清单",
+                  "content": "TST-M4-02 V-03 官方 API 生成 / V-08 官方 SSE / V-09 流式输出 三项实测（Patch B 落地后） ｜ 三、技术验证清单",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M4.md"
@@ -727,7 +727,7 @@
                 "children": [],
                 "todo": {
                   "id": 68,
-                  "content": "VA-04（错误条定位）/ VA-06（grid_size、running_animation 生效）待 PA-06 / PA-08 ｜ §3.3",
+                  "content": "TST-M4-03 VA-04（错误条定位）/ VA-06（grid_size、running_animation 生效）待 PA-06 / PA-08 ｜ §3.3",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -749,7 +749,7 @@
                 "children": [],
                 "todo": {
                   "id": 70,
-                  "content": "M5 验证清单：VLM 生成、图片预览、Output 窗口历史/自动打开 ｜ 技术验证清单",
+                  "content": "TST-M5-01 M5 验证清单：VLM 生成、图片预览、Output 窗口历史/自动打开 ｜ 技术验证清单",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M5.md"
@@ -771,7 +771,7 @@
                 "children": [],
                 "todo": {
                   "id": 72,
-                  "content": "M6 验证清单与打包冒烟（干净机器首启、缺 WebView2 Runtime 时引导）",
+                  "content": "TST-M6-01 M6 验证清单与打包冒烟（干净机器首启、缺 WebView2 Runtime 时引导）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M6.md"
@@ -782,7 +782,7 @@
                 "children": [],
                 "todo": {
                   "id": 73,
-                  "content": "归档与保留策略人工确认（§10.6：目录/文件/正文一致、keep_history/max_history/ttl_days 生效） ｜ §10.6",
+                  "content": "TST-M6-02 归档与保留策略人工确认（§10.6：目录/文件/正文一致、keep_history/max_history/ttl_days 生效） ｜ §10.6",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/节点编辑器使用说明.md"
@@ -815,7 +815,7 @@
                 "children": [],
                 "todo": {
                   "id": 76,
-                  "content": "V-06/A-06 取证后更新 M1.md 验收表与遗留登记表（保持与代码一致）",
+                  "content": "DOC-M1-01 V-06/A-06 取证后更新 M1.md 验收表与遗留登记表（保持与代码一致）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M1.md"
@@ -837,7 +837,7 @@
                 "children": [],
                 "todo": {
                   "id": 78,
-                  "content": "PA-09 收尾：README 补输出面板/归档/--selftest 命令；M_patchA 进度与勾选回填 ｜ §3.2 PA-09；source/README.md",
+                  "content": "DOC-M2-01 PA-09 收尾：README 补输出面板/归档/--selftest 命令；M_patchA 进度与勾选回填 ｜ §3.2 PA-09；source/README.md",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -859,7 +859,7 @@
                 "children": [],
                 "todo": {
                   "id": 80,
-                  "content": "使用说明补「节点结果摘要 + 参数面板运行结果区」与 Console 复制/导出（PA-03/PA-05 后）",
+                  "content": "DOC-M3-01 使用说明补「节点结果摘要 + 参数面板运行结果区」与 Console 复制/导出（PA-03/PA-05 后）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/节点编辑器使用说明.md"
@@ -881,7 +881,7 @@
                 "children": [],
                 "todo": {
                   "id": 82,
-                  "content": "Patch B 文档：Provider 抽象与官方 API 用法、凭据管理器、会话失效处理、流式行为说明 ｜ §4",
+                  "content": "DOC-M4-01 Patch B 文档：Provider 抽象与官方 API 用法、凭据管理器、会话失效处理、流式行为说明 ｜ §4",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -903,7 +903,7 @@
                 "children": [],
                 "todo": {
                   "id": 84,
-                  "content": "多模态（VLM/图片预览）与 Output 窗口使用说明章节",
+                  "content": "DOC-M5-01 多模态（VLM/图片预览）与 Output 窗口使用说明章节",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M5.md"
@@ -925,7 +925,7 @@
                 "children": [],
                 "todo": {
                   "id": 86,
-                  "content": "打包与首启引导文档 + 设置面板字段说明（含「需重启生效」标注）",
+                  "content": "DOC-M6-01 打包与首启引导文档 + 设置面板字段说明（含「需重启生效」标注）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M6.md"
@@ -936,7 +936,7 @@
                 "children": [],
                 "todo": {
                   "id": 87,
-                  "content": "DevPlan.todo 维护规则：每次提交同步任务状态、勾选完成项并追加新条目",
+                  "content": "DOC-M6-02 DevPlan.todo 维护规则：每次提交同步任务状态、勾选完成项并追加新条目",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/DevPlan.todo"
@@ -969,7 +969,7 @@
                 "children": [],
                 "todo": {
                   "id": 90,
-                  "content": "M1-01…07 全部落地；V-01…V-05 / V-07 / V-08 通过；--login-selftest PASS（Cookie 5 条）",
+                  "content": "ARC-M1-01 M1-01…07 全部落地；V-01…V-05 / V-07 / V-08 通过；--login-selftest PASS（Cookie 5 条）",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/actionPlan/M1.md；docs/M1_技术验证报告.md"
@@ -991,7 +991,7 @@
                 "children": [],
                 "todo": {
                   "id": 92,
-                  "content": "M2-01…07 全绿：数据结构/注册表/拓扑/执行器/序列化/三级校验/撤销重做",
+                  "content": "ARC-M2-01 M2-01…07 全绿：数据结构/注册表/拓扑/执行器/序列化/三级校验/撤销重做",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/actionPlan/M2.md"
@@ -1002,7 +1002,7 @@
                 "children": [],
                 "todo": {
                   "id": 93,
-                  "content": "P3-3 运行按钮接线（▶/■ + 状态栏进度 + Console）与 P3-4 workflow.log、P3-6 工作流打开保存 + recent.json ｜ 实施进度表",
+                  "content": "ARC-M2-02 P3-3 运行按钮接线（▶/■ + 状态栏进度 + Console）与 P3-4 workflow.log、P3-6 工作流打开保存 + recent.json ｜ 实施进度表",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/actionPlan/M2.md"
@@ -1013,7 +1013,7 @@
                 "children": [],
                 "todo": {
                   "id": 94,
-                  "content": "Patch A1：NodeRunInfo/runInfos 只读暴露 + 逐节点耗时入 workflow.log + app_config 配置访问器（exec-selftest 72-0） ｜ §3.2 PA-01/PA-04/PA-07",
+                  "content": "ARC-M2-03 Patch A1：NodeRunInfo/runInfos 只读暴露 + 逐节点耗时入 workflow.log + app_config 配置访问器（exec-selftest 72-0） ｜ §3.2 PA-01/PA-04/PA-07",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -1035,7 +1035,7 @@
                 "children": [],
                 "todo": {
                   "id": 96,
-                  "content": "M3-01/02/03/05/06/07/09 完成：节点/端口/连线渲染、参数面板 9 类控件、画布平移缩放网格、节点库",
+                  "content": "ARC-M3-01 M3-01/02/03/05/06/07/09 完成：节点/端口/连线渲染、参数面板 9 类控件、画布平移缩放网格、节点库",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/actionPlan/M3.md"
@@ -1046,16 +1046,27 @@
                 "children": [],
                 "todo": {
                   "id": 97,
-                  "content": "PA-02 输出面板：逐节点全文 + 复制全文/该节点 + 导出到文件 + VA-07 快照纯净断言 ｜ §3.2 PA-02",
+                  "content": "ARC-M3-02 PA-02 输出面板：逐节点全文 + 复制全文/该节点 + 导出到文件 + VA-07 快照纯净断言 ｜ §3.2 PA-02",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/actionPlan/M_patchA.md"
+                }
+              },
+              {
+                "key": 106,
+                "children": [],
+                "todo": {
+                  "id": 106,
+                  "content": "FEA/DBG-M3-01/02 收口：复制/粘贴重做（右键 + 编辑菜单接线，模型级断言 7 项 OK）、粘贴坐标根因登记为已覆盖；快捷键按设计 §6.7 决定不做",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M3.md · M3-04；docs/DevPlan.todo"
                 }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（2 项）",
+              "content": "M3（3 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1068,7 +1079,7 @@
                 "children": [],
                 "todo": {
                   "id": 99,
-                  "content": "M4-06 网页版生成端到端（PoW 方案 A + 定制 SSE + LLMGenerate 接线）：--run-selftest --web 5/5",
+                  "content": "ARC-M4-01 M4-06 网页版生成端到端（PoW 方案 A + 定制 SSE + LLMGenerate 接线）：--run-selftest --web 5/5",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/网页版协议实测记录.md"
@@ -1079,7 +1090,7 @@
                 "children": [],
                 "todo": {
                   "id": 100,
-                  "content": "M4-08 登录与内存会话（W1）+ M4-09 PoW（方案 A）+ --web-probe / --web-chat 命令 ｜ M4-06/M4-08 进展块",
+                  "content": "ARC-M4-02 M4-08 登录与内存会话（W1）+ M4-09 PoW（方案 A）+ --web-probe / --web-chat 命令 ｜ M4-06/M4-08 进展块",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/actionPlan/M4.md"
@@ -1090,7 +1101,7 @@
                 "children": [],
                 "todo": {
                   "id": 101,
-                  "content": "M4-13 workflow.log 基础 + PA-04 逐节点耗时明细（[运行明细] 行，含失败/跳过） ｜ §3.2 PA-04",
+                  "content": "ARC-M4-03 M4-13 workflow.log 基础 + PA-04 逐节点耗时明细（[运行明细] 行，含失败/跳过） ｜ §3.2 PA-04",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -1112,7 +1123,7 @@
                 "children": [],
                 "todo": {
                   "id": 103,
-                  "content": "PC-05/PC-06 输出归档提前落地：每节点 .txt + run.json + keep_history/max_history/ttl_days ｜ §5.1 PC-05/PC-06",
+                  "content": "ARC-M5-01 PC-05/PC-06 输出归档提前落地：每节点 .txt + run.json + keep_history/max_history/ttl_days ｜ §5.1 PC-05/PC-06",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -1134,7 +1145,7 @@
                 "children": [],
                 "todo": {
                   "id": 105,
-                  "content": "PM-02 文档索引与状态治理：CHANGELOG 索引 + milestone_plan 状态修正 + 每次提交同步规则",
+                  "content": "ARC-M6-01 PM-02 文档索引与状态治理：CHANGELOG 索引 + milestone_plan 状态修正 + 每次提交同步规则",
                   "done": true,
                   "level": "secondary",
                   "fileLink": "docs/actionPlan/milestone_plan.md；docs/CHANGELOG.md"
@@ -1151,7 +1162,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（11 项）",
+          "content": "Archive（12 项）",
           "done": true,
           "level": "success"
         }
@@ -1193,10 +1204,15 @@
       104
     ],
     "add_mode": "bottom",
+    "virtual": false,
+    "showLine": false,
+    "playFontSize": 24,
     "title": "AIwrite · 开发计划（DevPlan）",
+    "autoSort": false,
+    "showEndTime": false,
+    "simpleMode": false,
+    "lang": "en",
     "desc": "**当前基线**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS\n- graph_selftest: 95 通过 / 0 失败\n- exec_selftest: 72 通过 / 0 失败（执行器 + 运行信息 + 归档）\n- run_selftest: PASS（离线 3/5，失败 1 为预期）\n- run_selftest_web: PASS（5/5，约 6–9 s，含 PC-05 归档断言）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n\n**主要风险**\n- 生成期间 UI 同步阻塞、取消无法中断（Patch B 解决）\n- 网页版 PoW 依赖官方 worker chunk，前端发版变化需回归\n- 复制/粘贴仍暂停（画布坐标根因待修）\n- 未接配置字段仍无效果（PA-08 / PD-03）",
-    "lang": "zh-CN",
-    "version": "v0.2.x（M2 已收口；地基补丁 A 进行中 / C 部分提前落地）",
-    "timelines": []
+    "version": "1790228756214"
   }
 }

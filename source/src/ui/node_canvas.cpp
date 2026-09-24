@@ -688,9 +688,13 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         ImGui::Separator();
         show_add_node_menu(state, spawn_position);
         ImGui::Separator();
-        // 复制/粘贴已暂停（UI 入口下线，EditorState 逻辑与剪贴板代码保留）
-        // 根因与重做方向见 CHANGELOG「复制/粘贴暂停」与 sync_positions() 注释
-        ImGui::MenuItem("粘贴（暂停，M2/M3 重做）", nullptr, false, false);
+        // 设计 §6.1：右键画布 → 粘贴
+        if (ImGui::MenuItem("粘贴", nullptr, false, state.has_clipboard())) {
+            state.paste_clipboard();
+        }
+        if (ImGui::IsItemHovered() && !state.has_clipboard()) {
+            ImGui::SetTooltip("剪贴板为空：先在节点右键菜单里「复制」");
+        }
         if (ImGui::MenuItem("删除选中（节点 / 连线）", nullptr, false, state.has_selection())) {
             state.delete_selected();
         }
@@ -700,8 +704,10 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
     if (ImGui::BeginPopup("##node_menu")) {
         ImGui::TextDisabled("节点 %s", context_node.c_str());
         ImGui::Separator();
-        // 复制/粘贴已暂停（UI 入口下线，EditorState 逻辑与剪贴板代码保留）
-        ImGui::MenuItem("复制/粘贴（暂停，M2/M3 重做）", nullptr, false, false);
+        // 设计 §6.1：右键节点 → 复制（粘贴在画布右键菜单）
+        if (ImGui::MenuItem("复制", nullptr, false, state.has_selection())) {
+            state.copy_selection();
+        }
         if (ImGui::MenuItem("改名（右侧参数面板）")) {
             state.request_focus_title = true;
         }

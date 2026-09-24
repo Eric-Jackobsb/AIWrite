@@ -16,6 +16,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <thread>
 #include <string>
@@ -193,7 +194,164 @@ int run_selftest(bool use_web)
         std::filesystem::remove(recent_file, ec);
     }
 
-    const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found;
+    // ---- F1（M3-04 重做）：复制/粘贴的模型级断言（先断言、后接线 UI）----
+    // 说明：画布层守卫见 node_canvas.cpp（clamp_position / 未知手柄反向推送 / 视图跟随前校验），
+    //       这里覆盖模型侧：新 id 唯一、位置偏移且有限、参数复制、选区内部连线重映射、可撤销。
+    bool paste_ok = false;
+    {
+        // 注意：paste_clipboard() 内部会压撤销快照（Graph 重新分配）→ 源节点必须**按值**捕获，
+        //       不能持有 Node* 指针（否则断言读到悬空内存，误报失败）。
+        struct Source {
+            std::string id;
+            std::string type;
+            float       x = 0.0f;
+            float       y = 0.0f;
+            std::vector<std::pair<std::string, nlohmann::json>> params;
+        };
+        std::vector<Source> sources;
+        // 优先取「存在连线」的一对节点（覆盖"选区内部连线被一并粘贴"这条路径）
+        std::vector<std::string> prefer;
+        for (const aiwrite::engine::Edge& edge : state.graph.edges) {
+            const aiwrite::engine::Node* from = state.graph.findNode(edge.from_node);
+            const aiwrite::engine::Node* to   = state.graph.findNode(edge.to_node);
+            if (from != nullptr && to != nullptr && from->type != "ProviderConfig" &&
+                to->type != "ProviderConfig") {
+                prefer = {edge.from_node, edge.to_node};
+                break;
+            }
+        }
+
+        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+            if (sources.size() >= 2) {
+                break;
+            }
+            const bool wanted = !prefer.empty()
+                                    ? (node.id == prefer[0] || node.id == prefer[1])
+                                    : (node.type == "TextInput" || node.type == "PromptTemplate");
+            if (!wanted) {
+                continue;
+            }
+            Source source;
+            source.id   = node.id;
+            source.type = node.type;
+            source.x    = node.x;
+            source.y    = node.y;
+            for (const aiwrite::engine::Param& param : node.params) {
+                source.params.emplace_back(param.id, param.value);
+            }
+            sources.push_back(std::move(source));
+        }
+
+        const auto in_selection = [&sources](const std::string& id) {
+            for (const Source& source : sources) {
+                if (source.id == id) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // 选区**内部**连线数量（这些应被一并粘贴）
+        std::size_t internal_edges = 0;
+        for (const aiwrite::engine::Edge& edge : state.graph.edges) {
+            if (in_selection(edge.from_node) && in_selection(edge.to_node)) {
+                ++internal_edges;
+            }
+        }
+
+        std::set<std::string> ids_before;
+        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+            ids_before.insert(node.id);
+        }
+        const std::size_t nodes_before_paste = state.graph.nodes.size();
+        const std::size_t edges_before_paste = state.graph.edges.size();
+
+        state.selected_nodes.clear();
+        for (const Source& source : sources) {
+            state.selected_nodes.push_back(source.id);
+        }
+        state.copy_selection();
+        const bool copied = state.has_clipboard();
+        const bool pasted = state.paste_clipboard();
+
+        std::vector<const aiwrite::engine::Node*> added;
+        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+            if (ids_before.find(node.id) == ids_before.end()) {
+                added.push_back(&node);
+            }
+        }
+
+        const std::size_t edges_after_paste = state.graph.edges.size();
+
+        const bool count_ok = copied && pasted && added.size() == sources.size() &&
+                              state.graph.nodes.size() == nodes_before_paste + sources.size() &&
+                              edges_after_paste == edges_before_paste + internal_edges;
+
+        // 诊断：粘贴后"新增节点之间的连线"数量（应与选区内部连线数一致）
+        std::size_t added_edges = 0;
+        for (const aiwrite::engine::Edge& edge : state.graph.edges) {
+            bool from_added = false;
+            bool to_added   = false;
+            for (const aiwrite::engine::Node* node : added) {
+                from_added = from_added || node->id == edge.from_node;
+                to_added   = to_added || node->id == edge.to_node;
+            }
+            if (from_added && to_added) {
+                ++added_edges;
+            }
+        }
+
+        bool placement_ok = true;
+        bool params_ok    = true;
+        for (const aiwrite::engine::Node* node : added) {
+            const Source* origin = nullptr;
+            for (const Source& source : sources) {
+                if (source.type == node->type) {
+                    origin = &source;
+                    break;
+                }
+            }
+            if (origin == nullptr) {
+                placement_ok = false;
+                continue;
+            }
+            constexpr float kOffset = 40.0f;
+            if (!std::isfinite(node->x) || !std::isfinite(node->y) ||
+                std::fabs(node->x) > 1.0e6f || std::fabs(node->y) > 1.0e6f ||
+                std::fabs(node->x - (origin->x + kOffset)) > 0.01f ||
+                std::fabs(node->y - (origin->y + kOffset)) > 0.01f) {
+                placement_ok = false;
+            }
+            for (const std::pair<std::string, nlohmann::json>& expected : origin->params) {
+                const aiwrite::engine::Param* actual = node->findParam(expected.first);
+                if (actual == nullptr || actual->value != expected.second) {
+                    params_ok = false;
+                }
+            }
+        }
+
+        const bool selection_ok = state.selected_nodes.size() == 2 &&
+                                  state.request_navigate_to_content; // 视图跟随延后到画布绘制后
+        const bool undo_ok = (state.undo.canUndo() && state.undo_once() &&
+                              state.graph.nodes.size() == nodes_before_paste &&
+                              state.graph.edges.size() == edges_before_paste);
+        // 空剪贴板：清空选择后复制 → 剪贴板应为空，粘贴被拒绝
+        state.selected_nodes.clear();
+        state.copy_selection();
+        const bool empty_ok = !state.has_clipboard() && !state.paste_clipboard();
+
+        paste_ok = count_ok && placement_ok && params_ok && selection_ok && undo_ok && empty_ok;
+        std::printf("[运行自检] F1 复制/粘贴：%s（新增 %zu 节点 / 连线 期望+%zu 实际+%zu 新增节点间 %zu / "
+                    "位置=%s / 参数=%s / 选择与跟随=%s / 可撤销=%s / 空剪贴板=%s）\n",
+                    paste_ok ? "OK" : "失败", added.size(), internal_edges,
+                    edges_after_paste - edges_before_paste, added_edges,
+                    placement_ok ? "OK" : "失败", params_ok ? "OK" : "失败",
+                    selection_ok ? "OK" : "失败", undo_ok ? "OK" : "失败",
+                    empty_ok ? "OK" : "失败");
+    }
+
+    const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
+                      paste_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

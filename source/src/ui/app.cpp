@@ -480,8 +480,13 @@ int run(const AppOptions& options)
                     state.redo_once();
                 }
                 ImGui::Separator();
-                // 复制/粘贴已暂停（UI 入口下线，EditorState 逻辑与剪贴板代码保留）：M2/M3 重做时接回
-                ImGui::MenuItem("复制/粘贴（暂停，M2/M3 重做）", nullptr, false, false);
+                // 设计 §6.1：复制（节点）/ 粘贴（画布）——菜单入口与右键菜单一致
+                if (ImGui::MenuItem("复制", nullptr, false, state.has_selection())) {
+                    state.copy_selection();
+                }
+                if (ImGui::MenuItem("粘贴", nullptr, false, state.has_clipboard())) {
+                    state.paste_clipboard();
+                }
                 ImGui::Separator();
                 if (ImGui::MenuItem("删除选中", nullptr, false, state.has_selection())) {
                     state.delete_selected();
