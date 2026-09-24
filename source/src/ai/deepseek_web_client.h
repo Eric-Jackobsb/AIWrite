@@ -10,6 +10,7 @@
 //  说明：`raw_head` 会带回原始响应前若干行 —— 前端格式随版本变化时用它对齐解析规则。
 // ============================================================================
 
+#include <functional>
 #include <string>
 
 #include "web/session_store.h"
@@ -22,6 +23,8 @@ struct WebChatRequest {
     bool        thinking_enabled = false;     // 深度思考
     bool        search_enabled   = false;     // 联网搜索
     int         raw_head_lines   = 12;        // 诊断：保留原始前 N 行
+    // PB-03（最小化）：每解析到一段 SSE 增量就回调一次（UI 逐字呈现）；为空则只在结束时返回全文
+    std::function<void(const std::string&)> on_delta;
     // 可选覆盖：为空时自动「新建会话（失败则复用最近会话）」
     std::string chat_session_id;
     long long   parent_message_id = 0;        // 0 = 使用会话的 current_message_id

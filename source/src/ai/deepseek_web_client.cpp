@@ -298,7 +298,11 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
         }
         try {
             const nlohmann::json data = nlohmann::json::parse(payload);
-            result.text += delta_text_of(data); // 增量（权威且有序）
+            const std::string    delta = delta_text_of(data); // 增量（权威且有序）
+            result.text += delta;
+            if (!delta.empty() && request.on_delta) {
+                request.on_delta(delta); // PB-03-min：边收边吐 → 执行器 → UI 逐字呈现
+            }
             const std::string snapshot = snapshot_text_of(data);
             if (!snapshot.empty()) {
                 snapshot_text = snapshot; // 记录最后一份完整快照

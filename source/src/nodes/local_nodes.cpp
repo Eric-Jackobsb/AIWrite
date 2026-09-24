@@ -238,6 +238,10 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     request.prompt           = prompt;
     request.model_type       = (model == "expert") ? "expert" : "default";
     request.thinking_enabled = (model == "deepseek-reasoner");
+    // PB-03-min：把执行器的增量回调接到网页版 SSE（边收边吐 → UI 逐字呈现）
+    if (ctx.on_delta) {
+        request.on_delta = ctx.on_delta;
+    }
 
     // 网页版不支持采样参数：参数保持默认即无提示；改过则提示一次（官方 API 生效见 PB-05）
     const double temperature = params.value("temperature", 0.7);

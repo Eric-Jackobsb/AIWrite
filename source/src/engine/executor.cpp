@@ -207,6 +207,20 @@ Executor::Executor()
 {
     ctx_.outputs   = &outputs_;
     ctx_.cancelled = &cancelled_;
+    // PB-03：节点实现按段吐出的增量 → 统一在异步模式下转成事件
+    ctx_.on_delta  = [this](const std::string& text) { handleDelta(text); };
+}
+
+void Executor::handleDelta(const std::string& text)
+{
+    if (text.empty() || !async_mode_.load()) {
+        return; // 同步模式：结果由节点返回值给出（自检路径不变）
+    }
+    RunEvent event;
+    event.kind    = RunEvent::Kind::Delta;
+    event.node_id = current_node_;
+    event.text    = text;
+    pushEvent(std::move(event));
 }
 
 void Executor::setConsoleHandler(std::function<void(const std::string&)> handler)

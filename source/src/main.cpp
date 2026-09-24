@@ -291,11 +291,13 @@ int run_selftest(bool use_web)
         std::size_t output_events = 0;
         std::size_t console_events = 0;
         std::size_t finish_events = 0;
+        std::size_t delta_events  = 0;
         for (const aiwrite::engine::RunEvent& event : events) {
             switch (event.kind) {
             case aiwrite::engine::RunEvent::Kind::NodeState: ++state_events; break;
             case aiwrite::engine::RunEvent::Kind::NodeOutput: ++output_events; break;
             case aiwrite::engine::RunEvent::Kind::Console: ++console_events; break;
+            case aiwrite::engine::RunEvent::Kind::Delta: ++delta_events; break;
             case aiwrite::engine::RunEvent::Kind::Finished: ++finish_events; break;
             }
         }
@@ -338,9 +340,9 @@ int run_selftest(bool use_web)
                    console_events > 0 && graph_untouched && same_view && text_same &&
                    state.executor.state() != aiwrite::engine::ExecState::Running;
         std::printf("[运行自检] PB-01 线程化：%s（启动=%s / 状态事件 %zu / 输出事件 %zu / Console %zu / "
-                    "Finished %zu / Graph 未被工作线程写=%s / 快照一致=%s / 文本一致=%s）\n",
+                    "增量事件 %zu / Finished %zu / Graph 未被工作线程写=%s / 快照一致=%s / 文本一致=%s）\n",
                     async_ok ? "OK" : "失败", started ? "是" : "否", state_events, output_events,
-                    console_events, finish_events, graph_untouched ? "是" : "否",
+                    console_events, delta_events, finish_events, graph_untouched ? "是" : "否",
                     same_view ? "是" : "否", text_same ? "是" : "否");
     }
     else {

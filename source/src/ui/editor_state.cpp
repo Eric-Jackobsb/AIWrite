@@ -494,6 +494,14 @@ void EditorState::pump_run_events()
             view->delta_bytes         = event.text.size();
             break;
         }
+        case engine::RunEvent::Kind::Delta: {
+            // PB-03/PB-08：增量按段追加到读模型（UI 逐字呈现的底座）
+            engine::RunNodeView* view = snapshot_entry(event.node_id);
+            view->text += event.text;
+            view->state       = engine::NodeState::Running;
+            view->delta_bytes = view->text.size();
+            break;
+        }
         case engine::RunEvent::Kind::Console: {
             log::info("[执行] " + event.text); // Console 面板 + app.log
             log::workflow(event.text);         // workflow.log（设计 §11.1）

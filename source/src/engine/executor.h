@@ -80,12 +80,21 @@ struct ExecutionContext {
     std::atomic<bool>*                      cancelled = nullptr; // 协作式取消检查
     std::function<void(const std::string&)> on_console;          // 输出/日志（P3-4 接 workflow.log）
     std::function<void(const std::string&, NodeState)> on_node_state; // UI 状态刷新（P3-3 接画布）
+    // PB-03：流式增量回调（节点实现按段吐出；执行器转成事件给主线程）
+    std::function<void(const std::string&)> on_delta;
 
     bool is_cancelled() const { return cancelled != nullptr && cancelled->load(); }
     void console(const std::string& text) const
     {
         if (on_console) {
             on_console(text);
+        }
+    }
+    // PB-03：向 UI 吐一段增量（无回调时空操作）
+    void delta(const std::string& text) const
+    {
+        if (on_delta && !text.empty()) {
+            on_delta(text);
         }
     }
 };
@@ -112,7 +121,7 @@ const char* execStateName(ExecState state);
 // ------------------------------------------------------------------ PB-01 ----
 // 线程化运行的事件（工作线程 → 主线程；UI 只在主线程消费，绝不跨线程读运行态）
 struct RunEvent {
-    enum class Kind { NodeState, Console, NodeOutput, Finished };
+    enum class Kind { NodeState, Console, NodeOutput, Delta, Finished };
     Kind        kind        = Kind::NodeState;
     std::string node_id;
     std::string text;                          // Console 文本 / 节点输出全文（NodeOutput）
@@ -216,6 +225,7 @@ private:
     // ---- PB-01：线程化运行 ----
     void  workerMain();
     void  pushEvent(RunEvent event);
+    void  handleDelta(const std::string& text); // PB-03：增量 → Delta 事件（主线程追加到读模型）
 
     Graph                    worker_graph_;              // 工作线程专用副本（避免跨线程写 Graph）
     std::thread              worker_;
