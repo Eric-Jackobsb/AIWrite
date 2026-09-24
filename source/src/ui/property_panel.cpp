@@ -187,9 +187,23 @@ void draw_web_session_section()
                        "当前已完成「登录 + 会话 + 协议探测」。");
 }
 
-// 绘制单个参数控件；返回 true 表示本次编辑结束且值已变化
-// begin_edit：控件刚被激活（此时值尚未变化，外层可安全压撤销快照）
-bool draw_param_widget(Node& node, Param& param, bool& begin_edit)
+// 立即写回参数值（**不依赖"失焦判定"**）；返回是否发生变化
+//  * 背景：原先统一写 `Widget(...) && IsItemDeactivatedAfterEdit()`，而"值发生变化"与"控件失焦"
+//    往往不在同一帧（多行文本尤其明显）→ 会出现「改了文本内容，运行结果还是旧值」。
+//    现改为：值变化即写回模型；`edited` 只在编辑结束时通知外层（日志/状态栏不刷屏）。
+bool write_param(Param& param, const nlohmann::json& value)
+{
+    if (param.value == value) {
+        return false;
+    }
+    param.value = value;
+    return true;
+}
+
+// 绘制单个参数控件
+//  返回 edited = 本次编辑结束（失焦/回车）；begin_edit = 控件刚被激活（值尚未变化，
+//  外层在此刻压撤销快照）；changed_now = 值已写回模型（编辑过程中每帧都可能为 true）
+bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed_now)
 {
     bool edited             = false;
     const std::string label = param_label(param);
@@ -211,10 +225,13 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit)
             flags |= ImGuiInputTextFlags_Password;
         }
         ImGui::SetNextItemWidth(-FLT_MIN);
-        if (ImGui::InputTextWithHint("##value", param.display_name.c_str(), &value, flags) &&
-            ImGui::IsItemDeactivatedAfterEdit()) {
-            param.value = value;
-            edited      = true;
+        const bool touched =
+            ImGui::InputTextWithHint("##value", param.display_name.c_str(), &value, flags);
+        if (touched) {
+            changed_now = write_param(param, value);
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            edited = true;
         }
         note_activation();
         break;
@@ -222,11 +239,14 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit)
     case ParamType::Text: {
         std::string value = param.text();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        if (ImGui::InputTextMultiline("##value", &value,
-                                      ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 5.0f)) &&
-            ImGui::IsItemDeactivatedAfterEdit()) {
-            param.value = value;
-            edited      = true;
+        const bool touched =
+            ImGui::InputTextMultiline("##value", &value,
+                                      ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 5.0f));
+        if (touched) {
+            changed_now = write_param(param, value);
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            edited = true;
         }
         note_activation();
         break;
@@ -241,9 +261,11 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit)
             has_range ? ImGui::SliderInt("##value", &value, static_cast<int>(*param.min_value),
                                          static_cast<int>(*param.max_value))
                       : ImGui::InputInt("##value", &value);
-        if (touched && ImGui::IsItemDeactivatedAfterEdit()) {
-            param.value = value;
-            edited      = true;
+        if (touched) {
+            changed_now = write_param(param, value);
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            edited = true;
         }
         note_activation();
         break;
@@ -258,18 +280,22 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit)
             has_range ? ImGui::SliderFloat("##value", &value, static_cast<float>(*param.min_value),
                                            static_cast<float>(*param.max_value), "%.2f")
                       : ImGui::InputFloat("##value", &value, 0.1f, 1.0f, "%.2f");
-        if (touched && ImGui::IsItemDeactivatedAfterEdit()) {
-            param.value = value;
-            edited      = true;
+        if (touched) {
+            changed_now = write_param(param, value);
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            edited = true;
         }
         note_activation();
         break;
     }
     case ParamType::Bool: {
         bool value = param.flag();
-        if (ImGui::Checkbox("##value", &value) && ImGui::IsItemDeactivatedAfterEdit()) {
-            param.value = value;
-            edited      = true;
+        if (ImGui::Checkbox("##value", &value)) {
+            changed_now = write_param(param, value);
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            edited = true;
         }
         note_activation();
         break;
@@ -298,6 +324,7 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit)
                 std::clamp(index, 0, static_cast<int>(param.enum_options.size()) - 1);
             param.value = param.enum_options[static_cast<std::size_t>(safe_index)];
             edited      = true;
+            changed_now = true;
         }
         note_activation();
         break;
@@ -306,10 +333,12 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit)
     case ParamType::Directory: {
         std::string value = param.text();
         ImGui::SetNextItemWidth(-FLT_MIN - 90.0f);
-        if (ImGui::InputTextWithHint("##value", "(未选择)", &value) &&
-            ImGui::IsItemDeactivatedAfterEdit()) {
-            param.value = value;
-            edited      = true;
+        const bool touched = ImGui::InputTextWithHint("##value", "(未选择)", &value);
+        if (touched) {
+            changed_now = write_param(param, value);
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            edited = true;
         }
         note_activation();
         ImGui::SameLine();
@@ -318,8 +347,9 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit)
                                            ? utils::open_file(filters_for(node), param.text())
                                            : utils::pick_folder(param.text());
             if (!picked.empty()) {
-                param.value = picked;
+                write_param(param, picked);
                 edited      = true;
+                changed_now = true;
             }
         }
         break;
@@ -336,13 +366,15 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit)
             }
         }
         ImGui::SetNextItemWidth(-FLT_MIN);
-        if (ImGui::ColorEdit3("##value", rgb) && ImGui::IsItemDeactivatedAfterEdit()) {
+        if (ImGui::ColorEdit3("##value", rgb)) {
             char buffer[16] = {};
             std::snprintf(buffer, sizeof(buffer), "#%02X%02X%02X",
                           static_cast<int>(rgb[0] * 255.0f), static_cast<int>(rgb[1] * 255.0f),
                           static_cast<int>(rgb[2] * 255.0f));
-            param.value = std::string(buffer);
-            edited      = true;
+            changed_now = write_param(param, std::string(buffer));
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            edited = true;
         }
         note_activation();
         break;
@@ -394,8 +426,8 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         editor().request_focus_title = false;
     }
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::InputTextWithHint("##title", "节点标题", &node->title) &&
-        ImGui::IsItemDeactivatedAfterEdit()) {
+    const bool title_touched = ImGui::InputTextWithHint("##title", "节点标题", &node->title);
+    if (title_touched || ImGui::IsItemDeactivatedAfterEdit()) {
         result.renamed = true;
     }
     if (ImGui::IsItemActivated()) {
@@ -492,10 +524,15 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         help_marker(param.description);
         ImGui::PopID();
 
-        bool param_begin_edit = false;
-        if (draw_param_widget(*node, param, param_begin_edit)) {
-            result.changed = true;
-            log::info("参数变更: " + node->id + "." + param.id);
+        bool param_begin_edit  = false;
+        bool param_changed_now = false;
+        const bool param_edit_ended =
+            draw_param_widget(*node, param, param_begin_edit, param_changed_now);
+        if (param_changed_now || param_edit_ended) {
+            result.changed = true; // 值已写回模型（编辑过程中即时生效）
+        }
+        if (param_edit_ended) {
+            log::info("参数变更: " + node->id + "." + param.id); // 每段编辑只记一次
         }
         if (param_begin_edit) {
             result.begin_edit = true;
@@ -572,11 +609,17 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     // ---- 底部操作 ----
     ImGui::Separator();
     if (ImGui::Button("重置为默认值", ImVec2(-FLT_MIN, 0.0f))) {
+        // 先压快照：重置可撤销（D-M3-5 —— 之前重置不压快照，误触后编辑无法回退）
+        editor().snapshot("重置参数为默认值");
         for (Param& param : node->params) {
             param.reset_to_default();
         }
         result.changed = true;
         log::info("参数重置为默认值: " + node->id);
+        editor().set_status("已把 " + node->id + " 的参数重置为默认值（可撤销）");
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("把该节点全部参数恢复为定义中的默认值（会先记录一步撤销，可回退）");
     }
 
     ImGui::End();

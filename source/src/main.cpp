@@ -216,6 +216,52 @@ int run_selftest(bool use_web)
                     consistency_ok ? "OK" : "失败", compared, all.size());
     }
 
+    // ---- P1-c：参数驱动（"无硬编码"断言）----
+    // 改「文本输入」的「文本内容」参数（等价于在参数面板输入框里打字）后重新运行，
+    // 断言：① 该节点运行输出 == 新文本（且与上次不同）② 下游「提示词模板」输出包含新文本
+    // （即：真正发给 AI 的提示词来自输入框，而不是任何写死的示例文本）
+    bool param_driven_ok = false;
+    {
+        const std::string      marker     = "P1C 参数驱动：这段文本来自输入框。";
+        aiwrite::engine::Node* input_node = nullptr;
+        aiwrite::engine::Node* tpl_node   = nullptr;
+        for (aiwrite::engine::Node& node : state.graph.nodes) {
+            if (input_node == nullptr && node.type == "TextInput") {
+                input_node = &node;
+            }
+            if (tpl_node == nullptr && node.type == "PromptTemplate") {
+                tpl_node = &node;
+            }
+        }
+        aiwrite::engine::Param* text_param =
+            (input_node != nullptr) ? input_node->findParam("text") : nullptr;
+        if (input_node != nullptr && tpl_node != nullptr && text_param != nullptr) {
+            const std::string before =
+                aiwrite::ui::node_output_text(state.graph, state.executor, input_node->id);
+            text_param->value = marker; // 模拟"参数面板输入框里改写文本内容"
+            state.start_run();
+            int guard2 = 0;
+            while (state.executor.running() && guard2++ < 4096) {
+                state.tick_run();
+            }
+            const std::string after  = aiwrite::ui::node_output_text(state.graph, state.executor,
+                                                                     input_node->id);
+            const std::string prompt = aiwrite::ui::node_output_text(state.graph, state.executor,
+                                                                     tpl_node->id);
+            const bool        changed = (after == marker) && (after != before);
+            const bool        flowed  = prompt.find(marker) != std::string::npos;
+            param_driven_ok           = changed && flowed;
+            std::printf("[运行自检] P1-c 参数驱动（无硬编码）：%s（节点输出随参数变化=%s / "
+                        "下游提示词含新文本=%s）\n",
+                        param_driven_ok ? "OK" : "失败", changed ? "是" : "否", flowed ? "是" : "否");
+        }
+        else {
+            std::printf("[运行自检] P1-c 参数驱动（无硬编码）：跳过（图中缺少 TextInput / "
+                        "PromptTemplate 节点）\n");
+            param_driven_ok = true;
+        }
+    }
+
     // ---- F1（M3-04 重做）：复制/粘贴的模型级断言（先断言、后接线 UI）----
     // 说明：画布层守卫见 node_canvas.cpp（clamp_position / 未知手柄反向推送 / 视图跟随前校验），
     //       这里覆盖模型侧：新 id 唯一、位置偏移且有限、参数复制、选区内部连线重映射、可撤销。
@@ -373,7 +419,7 @@ int run_selftest(bool use_web)
     }
 
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
-                      consistency_ok && paste_ok;
+                      consistency_ok && param_driven_ok && paste_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

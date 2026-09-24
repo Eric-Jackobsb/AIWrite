@@ -292,11 +292,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md · P1-a/P1-b"
                 }
+              },
+              {
+                "key": 111,
+                "children": [],
+                "todo": {
+                  "id": 111,
+                  "content": "DBG-M3-02 参数编辑写回不可靠：`Widget(...) && IsItemDeactivatedAfterEdit()` 组合在「值变化」与「失焦」不同帧时漏提交（改了文本内容，运行仍用旧值）；已改为值变化即写回，并加 P1-c 参数驱动断言（下游提示词必含新文本） ｜ §6.1 PD-05",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchA.md · P1-c"
+                }
               }
             ],
             "todo": {
               "id": 22,
-              "content": "M3（6 项）",
+              "content": "M3（7 项）",
               "done": false,
               "level": "secondary"
             }
@@ -590,7 +601,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（32 项）",
+          "content": "Feature（33 项）",
           "done": false,
           "level": "default"
         }
@@ -1106,11 +1117,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md · P1-a/P1-b"
                 }
+              },
+              {
+                "key": 112,
+                "children": [],
+                "todo": {
+                  "id": 112,
+                  "content": "ARC-M3-06 P1-c：参数编辑「值变化即写回」（修复「改了输入框但运行仍用旧值」）、「重置为默认值」先压快照（可撤销，D-M3-5）；新增 P1-c 参数驱动断言（离线 + 网页版自检均 OK）",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchA.md · P1-c"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（6 项）",
+              "content": "M3（7 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1206,7 +1228,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（15 项）",
+          "content": "Archive（16 项）",
           "done": true,
           "level": "success"
         }
