@@ -14,12 +14,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <set>
 #include <sstream>
 #include <thread>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -262,6 +264,89 @@ int run_selftest(bool use_web)
         }
     }
 
+    // ---- PB-01：线程化运行（事件队列 + Graph 不被工作线程写 + 快照同源）----
+    bool async_ok = false;
+    if (!use_web) {
+        // 归位到 Idle（上一轮运行把状态写进了 Graph；异步运行只应改副本）
+        for (aiwrite::engine::Node& node : state.graph.nodes) {
+            node.state = aiwrite::engine::NodeState::Idle;
+            node.error_message.clear();
+        }
+
+        std::string start_error;
+        const bool  started = state.executor.startAsync(&state.graph, &start_error);
+
+        std::vector<aiwrite::engine::RunEvent> events;
+        int                                    guard3 = 0;
+        while (state.executor.state() == aiwrite::engine::ExecState::Running && guard3++ < 20000) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            state.executor.pumpEvents(&events);
+        }
+        // 【API 契约】先 join 再取最后一轮事件：会话结束的那一刻 state_ 已翻转为非 Running，
+        // 而 worker 的 Finished 事件可能尚未入队 —— 必须先 stopAsync()（join）再 pumpEvents()
+        state.executor.stopAsync();
+        state.executor.pumpEvents(&events);
+
+        std::size_t state_events = 0;
+        std::size_t output_events = 0;
+        std::size_t console_events = 0;
+        std::size_t finish_events = 0;
+        for (const aiwrite::engine::RunEvent& event : events) {
+            switch (event.kind) {
+            case aiwrite::engine::RunEvent::Kind::NodeState: ++state_events; break;
+            case aiwrite::engine::RunEvent::Kind::NodeOutput: ++output_events; break;
+            case aiwrite::engine::RunEvent::Kind::Console: ++console_events; break;
+            case aiwrite::engine::RunEvent::Kind::Finished: ++finish_events; break;
+            }
+        }
+
+        // ① 主线程尚未应用事件 → Graph 仍是 Idle（证明工作线程只改自己的副本）
+        bool graph_untouched = true;
+        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+            if (node.state != aiwrite::engine::NodeState::Idle) {
+                graph_untouched = false;
+                break;
+            }
+        }
+
+        // ② 快照 == 权威数据（runInfos / outputs）
+        const aiwrite::engine::RunSnapshot snapshot = aiwrite::engine::makeSnapshot(state.executor);
+        bool same_view = snapshot.infos.size() == state.executor.runInfos().size();
+        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
+            const aiwrite::engine::NodeRunInfo* view = snapshot.find(info.node_id);
+            if (view == nullptr || view->state != info.state || view->type != info.type ||
+                std::fabs(view->duration_ms - info.duration_ms) > 0.0001) {
+                same_view = false;
+                break;
+            }
+        }
+
+        bool text_same = true;
+        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
+            const std::string authoritative =
+                aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(), info.node_id);
+            const std::string from_snapshot =
+                aiwrite::engine::nodeOutputText(state.graph, snapshot.outputs, info.node_id);
+            if (authoritative != from_snapshot) {
+                text_same = false;
+                break;
+            }
+        }
+
+        async_ok = started && finish_events == 1 && state_events > 0 && output_events > 0 &&
+                   console_events > 0 && graph_untouched && same_view && text_same &&
+                   state.executor.state() != aiwrite::engine::ExecState::Running;
+        std::printf("[运行自检] PB-01 线程化：%s（启动=%s / 状态事件 %zu / 输出事件 %zu / Console %zu / "
+                    "Finished %zu / Graph 未被工作线程写=%s / 快照一致=%s / 文本一致=%s）\n",
+                    async_ok ? "OK" : "失败", started ? "是" : "否", state_events, output_events,
+                    console_events, finish_events, graph_untouched ? "是" : "否",
+                    same_view ? "是" : "否", text_same ? "是" : "否");
+    }
+    else {
+        std::printf("[运行自检] PB-01 线程化：跳过（--web 模式避免二次联网；该断言在离线模式验证）\n");
+        async_ok = true;
+    }
+
     // ---- F1（M3-04 重做）：复制/粘贴的模型级断言（先断言、后接线 UI）----
     // 说明：画布层守卫见 node_canvas.cpp（clamp_position / 未知手柄反向推送 / 视图跟随前校验），
     //       这里覆盖模型侧：新 id 唯一、位置偏移且有限、参数复制、选区内部连线重映射、可撤销。
@@ -419,7 +504,7 @@ int run_selftest(bool use_web)
     }
 
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
-                      consistency_ok && param_driven_ok && paste_ok;
+                      consistency_ok && param_driven_ok && async_ok && paste_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

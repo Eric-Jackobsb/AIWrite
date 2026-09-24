@@ -174,6 +174,7 @@ void Executor::markDownstreamSkipped(Graph& graph, const std::string& node_id)
 
 void Executor::notifyState(const std::string& node_id, NodeState state) const
 {
+    // PB-01：异步模式下由 startAsync 拦截的回调统一推事件（此处不重复推送，避免状态事件翻倍）
     if (ctx_.on_node_state) {
         ctx_.on_node_state(node_id, state);
     }
@@ -189,6 +190,16 @@ void Executor::recordRun(const Node& node, NodeState state, double duration_ms, 
     info.duration_ms = duration_ms < 0.0 ? 0.0 : duration_ms;
     info.error       = std::move(error);
     run_infos_.push_back(std::move(info));
+
+    // PB-01：异步模式下把"该节点输出全文"作为事件推给主线程（UI 读模型来源）
+    if (async_mode_.load()) {
+        RunEvent event;
+        event.kind    = RunEvent::Kind::NodeOutput;
+        event.node_id = node.id;
+        event.state   = state;
+        event.text    = nodeOutputText(worker_graph_, outputs_, node.id);
+        pushEvent(std::move(event));
+    }
 }
 
 // ---------------------------------------------------------------- Executor ----
@@ -327,6 +338,170 @@ bool Executor::tick(Graph* graph)
     }
     executeNode(*graph, node_id);
     return true;
+}
+
+// ---------------------------------------------------------------- PB-01 ----
+// 线程化运行：工作线程在 Graph 副本上推进 tick，只向事件队列推送；
+// 主线程每帧 pumpEvents() 取事件（写 Graph 状态 / 刷新 UI 读模型）——「Graph 唯一写者」原则。
+bool Executor::startAsync(Graph* graph, std::string* error)
+{
+    if (graph == nullptr) {
+        if (error != nullptr) {
+            *error = "graph 为空";
+        }
+        return false;
+    }
+    if (worker_.joinable()) {
+        if (error != nullptr) {
+            *error = "已有异步运行在进行（请先 stopAsync）";
+        }
+        return false;
+    }
+
+    worker_graph_ = *graph; // 副本：工作线程的节点状态/错误只落在副本上，主线程从事件应用
+    if (!start(worker_graph_, error)) {
+        return false;
+    }
+
+    // 拦截既有回调：改推事件（工作线程不直接写日志 / 触碰 ImGui）
+    ctx_.on_console = [this](const std::string& text) {
+        RunEvent event;
+        event.kind = RunEvent::Kind::Console;
+        event.text = text;
+        pushEvent(std::move(event));
+    };
+    ctx_.on_node_state = [this](const std::string& node_id, NodeState state) {
+        RunEvent event;
+        event.kind    = RunEvent::Kind::NodeState;
+        event.node_id = node_id;
+        event.state   = state;
+        if (state == NodeState::Error) {
+            if (const Node* worker_node = worker_graph_.findNode(node_id)) {
+                event.error = worker_node->error_message; // 错误文本随状态一起给主线程
+            }
+        }
+        pushEvent(std::move(event));
+    };
+
+    stop_requested_.store(false);
+    async_mode_.store(true);
+    worker_ = std::thread([this]() { workerMain(); });
+    return true;
+}
+
+void Executor::workerMain()
+{
+    while (!stop_requested_.load()) {
+        const bool advanced = tick(&worker_graph_);
+        if (state_ != ExecState::Running) {
+            break; // 会话已结束（Finished / Cancelled / Failed）
+        }
+        if (!advanced) {
+            break; // 未推进（理论上不应发生）
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1)); // 节拍：不空转占满 CPU
+    }
+
+    RunEvent finished;
+    finished.kind        = RunEvent::Kind::Finished;
+    finished.summary     = summary();
+    finished.final_state = state_;
+    pushEvent(std::move(finished));
+    async_mode_.store(false);
+}
+
+void Executor::pushEvent(RunEvent event)
+{
+    {
+        std::lock_guard<std::mutex> lock(events_mutex_);
+        events_.push_back(std::move(event));
+    }
+    events_pushed_.fetch_add(1);
+    events_cv_.notify_all();
+}
+
+void Executor::pumpEvents(std::vector<RunEvent>* out)
+{
+    std::lock_guard<std::mutex> lock(events_mutex_);
+    if (out != nullptr) {
+        out->insert(out->end(), events_.begin(), events_.end());
+    }
+    events_.clear();
+}
+
+void Executor::requestStop()
+{
+    stop_requested_.store(true);
+    cancel(); // 既有语义：不再开始新节点（HTTP 级真取消见 PB-02）
+    events_cv_.notify_all();
+}
+
+void Executor::stopAsync()
+{
+    if (!worker_.joinable()) {
+        return;
+    }
+    requestStop();
+    worker_.join();
+}
+
+// 节点输出文本（引擎侧唯一实现；ui::node_output_text 委托到它）
+std::string nodeOutputText(const Graph& graph, const NodeOutputs& outputs, const std::string& node_id)
+{
+    const Node* node = graph.findNode(node_id);
+    if (node == nullptr) {
+        return {};
+    }
+
+    std::string text;
+    for (const Port& port : node->outputs) {
+        const nlohmann::json* value = outputs.find(node_id, port.id);
+        if (value == nullptr) {
+            continue;
+        }
+        std::string item;
+        if (value->is_string()) {
+            item = value->get<std::string>();
+        }
+        else if (!value->is_null()) {
+            item = value->dump();
+        }
+        if (item.empty()) {
+            continue;
+        }
+        if (!text.empty()) {
+            text += "\n";
+        }
+        if (node->outputs.size() > 1) {
+            text += port.display_name + "：";
+        }
+        text += item;
+    }
+    return text;
+}
+
+const NodeRunInfo* RunSnapshot::find(const std::string& node_id) const
+{
+    for (const NodeRunInfo& info : infos) {
+        if (info.node_id == node_id) {
+            return &info;
+        }
+    }
+    return nullptr;
+}
+
+RunSnapshot makeSnapshot(const Executor& executor)
+{
+    RunSnapshot snapshot;
+    snapshot.infos       = executor.runInfos();
+    snapshot.outputs     = executor.outputs();
+    snapshot.summary     = executor.summary();
+    snapshot.running     = executor.running();
+    snapshot.final_state = executor.state();
+    for (const NodeRunInfo& info : snapshot.infos) {
+        snapshot.delta_bytes += info.delta_bytes;
+    }
+    return snapshot;
 }
 
 bool Executor::runToCompletion(Graph* graph, int max_steps)

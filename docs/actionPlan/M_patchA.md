@@ -26,7 +26,11 @@
 | A2 | **PA-06 轻量错误条** | ✅ | `EditorState.last_error{node_id,message,at}` + `refresh_last_error()`（运行结束取首个失败节点，成功运行清空）；新增 `ui/error_bar.{h,cpp}`：状态栏红条（单行省略 + 悬停全文 + × 关闭），**点击选中失败节点并视图跟随**；连续失败覆盖显示不堆积 |
 | A2 | **PA-08 未接配置字段治理** | ✅ | 接线：`ui.console_height`（Console 初始高度）、`ui.running_animation`（运行中节点脉冲光环）；`unwired_config_fields()` 清单 + 启动日志「已接线 / 尚未生效」；`ui.grid_size` 如实登记（vendored imgui-node-editor 的 Style 无网格间距字段 → 归口 PD-03）；`api_probe --selftest` 新增 PA-08 断言（清单含 general.language/timeout./auto_open，且不含已接线的 console_height/running_animation/window_*） |
 | A2 | **PA-09 文档与索引同步** | ✅ | `CHANGELOG`（A2 条目 + 索引）、`M_patchA`（进度/§3.2/§3.3 状态）、`节点编辑器使用说明.md` §10.7（Console 增强 / 错误条 / 配置未接线清单）、`milestone_plan.md` 补「补丁系列」行；`M4.md` 归口说明已就位（M4-05→PB-04/05、M4-12→PA-05+PD-07、M4-13→PA-04） |
-| A2 | PA-05 Console 增强 / PA-06 错误条 / PA-08 未接配置治理 / PA-09 文档收尾 | ✅ A2 收尾完成 | 见上四行 |
+| A2 | PA-05 / PA-06 / PA-08 / PA-09 收尾 | ✅ A2 收尾完成 | 见上四行（Patch A 全部完成） |
+| B | **PB-01 执行线程化（第一步：引擎侧核心）** | 🟡 部分 | `RunEvent` 事件队列 + `startAsync/pumpEvents/requestStop/stopAsync` + **Graph 副本**（工作线程不写主线程 Graph）+ `RunSnapshot/makeSnapshot` + `nodeOutputText` 归一；`--run-selftest` 新增 PB-01 断言（离线 OK：事件完整 / Graph 未被工作线程写 / 快照一致）；**待第二步**：GUI 切 `start_run_async()` + UI 读模型（输出面板 / 节点摘要 / 参数面板）+ 退出·切图 join |
+| B | PB-02 真取消 / PB-05 官方 Provider / PB-06 凭据与网络策略 | ⬜ **延后（用户决议）** | 影响：停止仍在节点边界生效（网页版最坏等 HTTP 读超时）；official 仍不可用；Key 仍只在内存/环境变量 |
+| B | PB-03 流式回调接口 | 🟡 **缩为「仅网页版增量回调」**（作为 PB-08 前置） | 官方 `on_delta` 随 PB-05 延后 |
+| B | PB-08 流式呈现 / PB-07 会话失效引导 | ⬜ 待做（PB-01 之后） | — |
 | 后续 | **工作流变体保存**（用户后续设计） | ⬜ 延后 | 把面板保存为独立 workflow，并把当前 workflow 更新为变体；启动恢复上次工作流一并归入该项（本条**不做**，仅登记） |
 | A2 | 回归基线（PA-02 后） | ✅ | `--selftest` 七组 PASS；`--graph-selftest` 95/0；`--exec-selftest` 62/0；`--run-selftest` PASS（3/5 预期）；`--run-selftest --web` 5/5；构建 0 error / 0 warning |
 | C | PC-05 输出归档（提前落地） | ✅ | 新增 `utils/output_archive.{h,cpp}`：运行结束写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`（每节点 `.txt` 含元信息头 + `run.json`）；同秒多次运行自动加序号且**本次归档永不删除**；工作流名非法字符清洗；不可写路径返回错误不抛异常。`editor_state` 运行结束自动归档 + `last_archive_dir`；输出面板显示归档路径并可「复制归档路径」 |

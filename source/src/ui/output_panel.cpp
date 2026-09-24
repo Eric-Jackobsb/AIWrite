@@ -25,17 +25,6 @@ const ImVec4 kColorDone(0.31f, 0.75f, 0.42f, 1.0f);
 const ImVec4 kColorError(1.00f, 0.35f, 0.35f, 1.0f);
 const ImVec4 kColorSkip(0.85f, 0.70f, 0.30f, 1.0f);
 
-std::string value_text(const nlohmann::json& value)
-{
-    if (value.is_string()) {
-        return value.get<std::string>();
-    }
-    if (value.is_null()) {
-        return {};
-    }
-    return value.dump();
-}
-
 ImVec4 state_color(engine::NodeState state)
 {
     switch (state) {
@@ -57,30 +46,8 @@ std::string node_header(const engine::NodeRunInfo& info)
 std::string node_output_text(const engine::Graph& graph, const engine::Executor& executor,
                              const std::string& node_id)
 {
-    const engine::Node* node = graph.findNode(node_id);
-    if (node == nullptr) {
-        return {};
-    }
-
-    std::string text;
-    for (const engine::Port& port : node->outputs) {
-        const nlohmann::json* value = executor.outputs().find(node_id, port.id);
-        if (value == nullptr) {
-            continue;
-        }
-        const std::string item = value_text(*value);
-        if (item.empty()) {
-            continue;
-        }
-        if (!text.empty()) {
-            text += "\n";
-        }
-        if (node->outputs.size() > 1) {
-            text += port.display_name + "：";
-        }
-        text += item;
-    }
-    return text;
+    // PB-01：委托到引擎侧唯一实现（多线程下只有一份规则）
+    return engine::nodeOutputText(graph, executor.outputs(), node_id);
 }
 
 std::string run_output_text(const engine::Graph& graph, const engine::Executor& executor)

@@ -15,10 +15,13 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <functional>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -106,6 +109,33 @@ enum class ExecState { Idle, Running, Finished, Cancelled, Failed };
 
 const char* execStateName(ExecState state);
 
+// ------------------------------------------------------------------ PB-01 ----
+// 线程化运行的事件（工作线程 → 主线程；UI 只在主线程消费，绝不跨线程读运行态）
+struct RunEvent {
+    enum class Kind { NodeState, Console, NodeOutput, Finished };
+    Kind        kind        = Kind::NodeState;
+    std::string node_id;
+    std::string text;                          // Console 文本 / 节点输出全文（NodeOutput）
+    std::string error;                         // NodeState::Error 时的错误文本
+    NodeState   state       = NodeState::Waiting;
+    ExecState   final_state = ExecState::Idle; // Finished 事件用
+    std::string summary;                       // Finished 事件用
+};
+
+// 运行结果只读快照（PB-01：UI 侧读模型）
+//  * 线程安全：由事件构建（运行中）或运行结束后一次性构建（`makeSnapshot`），UI 只读快照
+//  * 与 Executor 的权威数据同源：`--run-selftest` 断言「快照 == runInfos()/outputs()」
+struct RunSnapshot {
+    std::vector<NodeRunInfo> infos;
+    NodeOutputs              outputs;
+    std::string              summary;
+    bool                     running     = false;
+    ExecState                final_state = ExecState::Idle;
+    std::size_t              delta_bytes = 0; // 流式增量累计（PB-03/PB-08）
+
+    const NodeRunInfo* find(const std::string& node_id) const;
+};
+
 class Executor {
 public:
     Executor();
@@ -126,6 +156,17 @@ public:
 
     void cancel();
     void reset();
+
+    // ---- PB-01：线程化运行（GUI 用；自检/无界面仍用同步 start()/tick()）----
+    //  * 工作线程在 **Graph 副本**上推进 tick，只向事件队列推送（不触碰主线程的 Graph / ImGui / 日志）
+    //  * 主线程每帧 pumpEvents() 取事件：写 Graph 节点状态 + 刷新 UI 读模型
+    //  * startAsync 会拦截既有的 console / state 回调（改为事件），调用方应从事件侧处理输出
+    bool        startAsync(Graph* graph, std::string* error);
+    void        pumpEvents(std::vector<RunEvent>* out); // 主线程调用
+    void        requestStop();                          // 置位 + 唤醒（真取消见 PB-02）
+    void        stopAsync();                            // 请求停止 + join（退出/切图前必调）
+    bool        asyncMode() const { return async_mode_.load(); }
+    std::size_t eventsPushed() const { return events_pushed_.load(); }
 
     ExecState       state() const { return state_; }
     bool            running() const { return state_ == ExecState::Running; }
@@ -163,6 +204,25 @@ private:
     ExecutionContext         ctx_;
     std::chrono::steady_clock::time_point start_time_{};
     std::chrono::steady_clock::time_point end_time_{};
+
+    // ---- PB-01：线程化运行 ----
+    void  workerMain();
+    void  pushEvent(RunEvent event);
+
+    Graph                    worker_graph_;              // 工作线程专用副本（避免跨线程写 Graph）
+    std::thread              worker_;
+    std::atomic<bool>        async_mode_{false};
+    std::atomic<bool>        stop_requested_{false};
+    std::atomic<std::size_t> events_pushed_{0};
+    mutable std::mutex       events_mutex_;
+    std::condition_variable  events_cv_;
+    mutable std::vector<RunEvent> events_;
 };
+
+// PB-01：从执行器当前数据生成快照（主线程在运行结束/空闲时调用）
+RunSnapshot makeSnapshot(const Executor& executor);
+
+// 节点输出文本（引擎侧唯一实现；`ui::node_output_text` 委托到它，保证多线程只有一份规则）
+std::string nodeOutputText(const Graph& graph, const NodeOutputs& outputs, const std::string& node_id);
 
 } // namespace aiwrite::engine
