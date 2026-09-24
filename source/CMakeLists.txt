@@ -173,6 +173,7 @@ add_library(aiwrite_core STATIC
     src/utils/log.cpp
     src/utils/config.cpp
     src/utils/crypto.cpp
+    src/utils/output_archive.cpp
     src/utils/diagnostics.cpp
     src/engine/graph.cpp
     src/engine/node_registry.cpp

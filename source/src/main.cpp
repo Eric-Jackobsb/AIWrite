@@ -6,6 +6,7 @@
 #include "ui/editor_state.h"
 #include "ui/output_panel.h"
 #include "ai/deepseek_web_client.h"
+#include "utils/config.h"
 #include "utils/log.h"
 #include "utils/paths.h"
 #include "web/webview_host.h"
@@ -63,6 +64,20 @@ int run_selftest(bool use_web)
 
     std::printf("[运行自检] 示例工作流：节点 %zu，连线 %zu\n", state.graph.nodes.size(),
                 state.graph.edges.size());
+    // PC-05：本次自检把运行结果归档到临时目录（不污染用户 outputs），便于断言
+    {
+        aiwrite::Config selftest_config         = aiwrite::app_config();
+        const std::filesystem::path archive_root =
+            std::filesystem::temp_directory_path() / "aiwrite_run_selftest_outputs";
+        std::error_code cleanup_ec;
+        std::filesystem::remove_all(archive_root, cleanup_ec);
+        selftest_config.output.archive_dir  = archive_root.string();
+        selftest_config.output.keep_history = false;
+        selftest_config.output.max_history  = 1;
+        selftest_config.output.ttl_days     = 0;
+        aiwrite::set_app_config(selftest_config);
+    }
+
     if (!state.start_run()) {
         std::printf("[运行自检] FAIL：start_run 被拒绝（%s）\n", state.status.c_str());
         return 1;
@@ -127,6 +142,36 @@ int run_selftest(bool use_web)
                 saved ? "OK" : "失败", opened ? "OK" : "失败", same ? "OK" : "不一致",
                 file_error.empty() ? "" : ("（" + file_error + "）").c_str());
 
+    // ---- PC-05：运行结果已自动归档（每节点 .txt + run.json）----
+    bool        archive_ok = false;
+    std::size_t archive_files = 0;
+    bool        doc_found  = false;
+    if (!state.last_archive_dir.empty()) {
+        const std::filesystem::path dir(state.last_archive_dir);
+        archive_ok = std::filesystem::exists(dir / "run.json");
+        for (const std::filesystem::directory_entry& entry :
+             std::filesystem::directory_iterator(dir, ec)) {
+            if (!entry.is_regular_file(ec) || entry.path().extension() != ".txt") {
+                continue;
+            }
+            ++archive_files;
+            std::ifstream     in(entry.path(), std::ios::binary);
+            std::stringstream buffer;
+            buffer << in.rdbuf();
+            const std::string content    = buffer.str();
+            const std::size_t probe_len  = llm_result.size() < 24 ? llm_result.size() : 24;
+            if (!content.empty() &&
+                (llm_result.empty() ||
+                 content.find(llm_result.substr(0, probe_len)) != std::string::npos)) {
+                doc_found = true; // 归档里确实含生成文档（离线模式下 LLM 失败，退化为"有内容"）
+            }
+        }
+    }
+    std::printf("[运行自检] PC-05 归档：%s（目录 %s，节点文件 %zu 个，含生成文档=%s）\n",
+                archive_ok && doc_found ? "OK" : "失败",
+                state.last_archive_dir.empty() ? "（无）" : state.last_archive_dir.c_str(),
+                archive_files, doc_found ? "是" : "否");
+
     // VA-07：保存出来的 JSON 不得包含运行结果（运行态值原则）
     bool json_clean = true;
     if (saved && !llm_result.empty()) {
@@ -148,7 +193,7 @@ int run_selftest(bool use_web)
         std::filesystem::remove(recent_file, ec);
     }
 
-    const bool pass = finished && saved && opened && same && json_clean;
+    const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

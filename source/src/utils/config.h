@@ -28,10 +28,11 @@ struct Config {
     struct Output {
         std::string archive_dir = "~/.brain-ai/outputs";
         int  ttl_days           = 30;
-        bool auto_open_on_complete = false;
+        bool auto_open_on_complete = false;   // 仍留 M5（Patch C 未接）
         bool keep_history       = false;
         int  max_history        = 10;
-    };
+    };   // 说明（PC-05/06 已接线）：运行结束自动归档「每节点 .txt + run.json」到 archive_dir；
+         //      keep_history=false → 只留最近 1 份，true → 保留 max_history 份；ttl_days>0 → 清理超期目录
 
     struct Timeout {
         int connect_ms     = 10000;

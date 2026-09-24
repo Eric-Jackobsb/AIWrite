@@ -45,6 +45,12 @@ struct EditorState {
 
     std::string current_workflow_path;   // 当前文件路径（保存对话框的默认名用）
 
+    // ---- 运行输出归档（PC-05）----
+    // 运行结束自动写入 outputs/<时间>-<工作流名>/（每节点 .txt + run.json）
+    // 参数取 config.output.*（archive_dir / keep_history / max_history / ttl_days）
+    std::string last_archive_dir;        // 最近一次归档目录（输出面板显示 + 自检断言）
+    std::string workflow_display_name() const; // 工作流名（文件名去扩展名；空 → 未命名）
+
     // 画布每帧同步的选择信息
     std::vector<std::string> selected_nodes;
     std::vector<std::string> selected_links;       // 选中的连线（左键点连线 / 框选）
@@ -77,6 +83,9 @@ struct EditorState {
     void        set_status(const std::string& text);
 
     void        log_summary(const std::string& prefix) const;
+
+    // PC-05：把本次运行结果归档到 config.output.archive_dir（失败只记日志）
+    void        archive_run_outputs();
 
 private:
     std::vector<engine::Node> clipboard_nodes_;                        // 复制的节点

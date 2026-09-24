@@ -172,6 +172,19 @@ void draw_output_panel(const char* title, bool* open, const EditorState& state)
 
     ImGui::SameLine();
     ImGui::TextDisabled("｜ 节点 %zu ｜ 总耗时 %.2f s", infos.size(), executor.elapsedSeconds());
+
+    // PC-05：最近一次归档位置（可复制路径，便于去目录里取生成文档）
+    if (!state.last_archive_dir.empty()) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton("复制归档路径")) {
+            ImGui::SetClipboardText(state.last_archive_dir.c_str());
+            log::info("[输出面板] 已复制归档路径：" + state.last_archive_dir);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("运行结果已自动归档：\n%s", state.last_archive_dir.c_str());
+        }
+        ImGui::TextDisabled("已归档：%s", state.last_archive_dir.c_str());
+    }
     ImGui::Separator();
 
     if (infos.empty()) {

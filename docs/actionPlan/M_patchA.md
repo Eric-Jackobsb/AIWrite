@@ -17,6 +17,10 @@
 | A2 | PA-02 无界面验证 | ✅ | `--run-selftest --web`：输出面板文本 **501 字符**、预览 `[n1] TextInput · done · 0 ms`、**VA-07 工作流 JSON 不含运行结果 = OK**、PASS（5.51s）；离线模式 613 字符（含错误/跳过段）、VA-07 OK、PASS |
 | A2 | PA-03 节点摘要 / 参数面板结果区；PA-05 Console 增强；PA-06 错误条；PA-08 配置治理；PA-09 文档收尾 | ⬜ 待做 | — |
 | A2 | 回归基线（PA-02 后） | ✅ | `--selftest` 七组 PASS；`--graph-selftest` 95/0；`--exec-selftest` 62/0；`--run-selftest` PASS（3/5 预期）；`--run-selftest --web` 5/5；构建 0 error / 0 warning |
+| C | PC-05 输出归档（提前落地） | ✅ | 新增 `utils/output_archive.{h,cpp}`：运行结束写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`（每节点 `.txt` 含元信息头 + `run.json`）；同秒多次运行自动加序号且**本次归档永不删除**；工作流名非法字符清洗；不可写路径返回错误不抛异常。`editor_state` 运行结束自动归档 + `last_archive_dir`；输出面板显示归档路径并可「复制归档路径」 |
+| C | PC-06 归档保留策略（部分） | ✅ | **接线 `config.output.{archive_dir, keep_history, max_history, ttl_days}`**：`keep_history=false` 只留 1 份、`true` 按 `max_history`；`ttl_days>0` 清理超期目录（只清理符合命名规则的目录，先统计后删除并写日志）。`auto_open_on_complete` 仍留 M5 |
+| C | PC-05/06 验证 | ✅ | `--exec-selftest` **72 通过 / 0 失败**（+10 项归档断言：run.json、节点 .txt、无输出不写 txt、名字清洗、元信息头、run.json 明细、保留份数、不可写路径、ttl 清理）；`--run-selftest --web` → **PC-05 归档 OK**（4 个节点文件 + run.json，含生成文档=是）；自检用临时目录，**不污染用户 outputs** |
+| B | PB-xx 待做 | ⬜ | 执行线程化 / 流式 / Provider 统一（含官方 API）/ 凭据管理器 / 会话失效引导 |
 > 当前基线（全绿）：`api_probe --selftest` 七组 PASS、`--graph-selftest` 95/0、`--exec-selftest` 56/0、
 > `aiwrite --run-selftest` PASS、`--run-selftest --web` **5/5 ≈10s**、`--web-probe` PASS、`--web-chat` PASS
 
@@ -344,8 +348,8 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | PC-02 | 恢复流程 | 启动时若存在 autosave 且比用户最近打开的工作流新 → 弹出一次询问「恢复未保存的更改？」（可禁用该提示）；恢复后不覆盖原文件，另存需用户确认 | `ui/app.cpp`、`ui/editor_state.*` |
 | PC-03 | 最近列表治理 | 打开前校验存在性；失效条目在菜单中灰显并标注"（文件不存在）"；提供「清理失效条目」 | `engine/recent_files.{h,cpp}`、`ui/app.cpp` |
 | PC-04 | 版本迁移框架 | `workflow_io` 的 `version` 与 `config_version` 建立迁移表（当前只 warn）；未知高版本拒绝并给出提示；新增迁移自检 | `engine/workflow_io.cpp`、`utils/config.cpp` |
-| PC-05 | 输出归档最小集 | 运行完成写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`：每节点一个 `.txt`（含元信息头：节点/类型/耗时/模型/提示词摘要）+ `run.json`（统计）；为 M5 §11 打底 | `engine/executor.cpp` 或 `ui/editor_state.cpp`（运行结束钩子） |
-| PC-06 | 归档 TTL 与上限 | 首次接线 `config.output.ttl_days / max_history / archive_dir`：启动时清理超期/超量归档（先统计再删，日志留痕） | `utils/paths.cpp` 或新增 `utils/output_archive.{h,cpp}` |
+| PC-05 | 输出归档最小集 ✅（2026-09-24 提前落地） | 运行完成写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`：每节点一个 `.txt`（含元信息头：节点/类型/状态/耗时/错误/统计）+ `run.json`（统计 + 逐节点明细）；同秒多次运行加序号，本次归档永不删除 | `utils/output_archive.{h,cpp}`（新）、`ui/editor_state.cpp`（运行结束钩子）、`ui/output_panel.cpp`（显示归档路径） |
+| PC-06 | 归档 TTL 与上限 ✅（2026-09-24 提前落地；`auto_open_on_complete` 留 M5） | 接线 `config.output.{archive_dir, ttl_days, keep_history, max_history}`：`keep_history=false` 只留最近 1 份；`true` 保留 `max_history` 份；`ttl_days>0` 清理超期目录（只清理符合命名规则的目录，先统计后删除并写日志） | `utils/output_archive.cpp`、`utils/config.*`（注释更新） |
 
 ### 5.2 技术验证清单
 
@@ -354,8 +358,8 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | VC-01 | 原子写 | 模拟写入中断不产生半个 JSON（临时文件残留可被清理）；autosave 可被正常加载 |
 | VC-02 | 恢复流程 | 构造"autosave 比工作流新"场景 → 出现询问；选择恢复后图内容与 autosave 一致 |
 | VC-03 | 迁移正确 | 构造 v1.0 旧文件 → 能加载并写回当前版本；构造未来版本 → 明确拒绝并提示 |
-| VC-04 | 归档一致 | 归档文件内容与输出面板一致；`run.json` 统计与实际一致 |
-| VC-05 | TTL 清理 | 造 3 个超期目录 + 2 个新鲜目录 → 只清超期；`ttl_days=0` 视为不清理 |
+| VC-04 | 归档一致 **✅ 已提前验证** | 归档文件内容与输出面板一致（同一 `node_output_text` 实现，`--exec-selftest` 断言元信息头 + 正文；`--run-selftest --web` 断言归档内含生成文档） |
+| VC-05 | TTL 清理 **✅ 已提前验证** | 造 40 天前目录 + `ttl_days=30` → 只清超期且**本次归档保留**；`ttl_days=0` 不清理（`--exec-selftest` 断言） |
 | VC-06 | 无回归 | §0.4 基线全绿 |
 
 ### 5.3 风险与对策

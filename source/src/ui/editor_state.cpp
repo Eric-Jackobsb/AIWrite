@@ -4,8 +4,11 @@
 #include "engine/validate.h"
 #include "engine/workflow_io.h"
 #include "nodes/nodes.h"
+#include "ui/output_panel.h"
+#include "utils/config.h"
 #include "utils/file_dialog.h"
 #include "utils/log.h"
+#include "utils/output_archive.h"
 #include "utils/paths.h"
 
 #include <algorithm>
@@ -405,6 +408,56 @@ void EditorState::tick_run()
     // PA-04：逐节点耗时明细（补 M4-13 登记项；F 类缺口）
     if (!executor.runInfos().empty()) {
         log::workflow(run_detail_text(executor));
+    }
+    // PC-05：运行结果归档（outputs/<时间>-<工作流名>/，每节点 .txt + run.json）
+    archive_run_outputs();
+}
+
+std::string EditorState::workflow_display_name() const
+{
+    if (current_workflow_path.empty()) {
+        return "未命名";
+    }
+    const std::filesystem::path path(current_workflow_path);
+    const std::string           stem = path.stem().string();
+    return stem.empty() ? std::string("未命名") : stem;
+}
+
+void EditorState::archive_run_outputs()
+{
+    // 节点条目与输出面板同源（runInfos + outputs）→ 归档内容与面板一致
+    std::vector<utils::ArchiveNode> nodes;
+    nodes.reserve(executor.runInfos().size());
+    for (const engine::NodeRunInfo& info : executor.runInfos()) {
+        utils::ArchiveNode item;
+        item.node_id     = info.node_id;
+        item.type        = info.type;
+        item.state       = engine::nodeStateName(info.state);
+        item.duration_ms = info.duration_ms;
+        item.error       = info.error;
+        item.text        = node_output_text(graph, executor, info.node_id);
+        nodes.push_back(std::move(item));
+    }
+
+    const Config& config = app_config();
+
+    utils::ArchiveRequest request;
+    request.workflow_name = workflow_display_name();
+    request.archive_dir   = config.output.archive_dir;
+    request.keep_history  = config.output.keep_history;
+    request.max_history   = config.output.max_history;
+    request.ttl_days      = config.output.ttl_days;
+
+    const utils::ArchiveResult result = utils::archive_run(request, nodes, executor.summary());
+    if (result.ok) {
+        last_archive_dir = result.dir;
+        log::info("[归档] 运行输出已写入 " + result.dir + "（" + std::to_string(result.files) +
+                  " 个文件）");
+        log::workflow("[归档] " + result.dir + "（" + std::to_string(result.files) + " 个文件）");
+    }
+    else {
+        log::warn("[归档] 失败：" + result.error);
+        log::workflow("[归档-失败] " + result.error);
     }
 }
 

@@ -30,6 +30,7 @@
 #include "engine/workflow_io.h"
 #include "nodes/nodes.h"
 #include "utils/config.h"
+#include "utils/output_archive.h"
 #include "utils/paths.h"
 #include "web/session_store.h"
 
@@ -42,6 +43,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <ctime>
+#include <iomanip>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -1501,6 +1504,132 @@ int execution_selftest()
         std::string error;
         expect(check, !executor.start(graph, &error) && executor.state() == ExecState::Failed,
                "运行前校验失败：start 拒绝且会话状态 Failed", error);
+    }
+
+    // ------------------------------------------- 8. PC-05 运行输出归档 -------
+    {
+        const std::filesystem::path temp_root =
+            std::filesystem::temp_directory_path() / "aiwrite_archive_selftest";
+        std::error_code ec;
+        std::filesystem::remove_all(temp_root, ec);
+
+        std::vector<aiwrite::utils::ArchiveNode> nodes;
+        aiwrite::utils::ArchiveNode              a;
+        a.node_id = "n1"; a.type = "TextInput";  a.state = "done";  a.duration_ms = 0.5;
+        a.text    = "第一段文本";
+        aiwrite::utils::ArchiveNode b;
+        b.node_id = "n2"; b.type = "TextOutput"; b.state = "done";  b.duration_ms = 1.5;
+        b.text    = "最终生成的文档";
+        aiwrite::utils::ArchiveNode c;
+        c.node_id = "n3"; c.type = "LLMGenerate"; c.state = "error"; c.duration_ms = 12.0;
+        c.error   = "尚未接线";
+        nodes = {a, b, c};
+
+        aiwrite::utils::ArchiveRequest request;
+        request.workflow_name = "自检:非法?名字";
+        request.archive_dir   = temp_root.string();
+        request.keep_history  = false;
+        request.ttl_days      = 0;
+
+        const aiwrite::utils::ArchiveResult first =
+            aiwrite::utils::archive_run(request, nodes, "完成 2/3，失败 1");
+        const std::filesystem::path first_dir(first.dir);
+        expect(check, first.ok && !first.dir.empty(), "归档：首次归档成功", first.error);
+        expect(check, std::filesystem::exists(first_dir / "run.json"), "归档：run.json 已写出");
+        expect(check, std::filesystem::exists(first_dir / "n2-TextOutput.txt"),
+               "归档：有输出的节点写出 .txt");
+        expect(check, !std::filesystem::exists(first_dir / "n3-LLMGenerate.txt"),
+               "归档：无输出的失败节点不写 .txt（仅进 run.json）");
+        const std::string dir_name = first_dir.filename().string();
+        expect(check, dir_name.find('?') == std::string::npos && dir_name.find(':') == std::string::npos,
+               "归档：工作流名中的非法字符被清洗", dir_name);
+        {
+            std::ifstream     in(first_dir / "n2-TextOutput.txt", std::ios::binary);
+            std::stringstream buffer;
+            buffer << in.rdbuf();
+            const std::string content = buffer.str();
+            expect(check,
+                   content.find("最终生成的文档") != std::string::npos &&
+                       content.find("n2") != std::string::npos &&
+                       content.find("状态: done") != std::string::npos,
+                   "归档：节点文件含元信息头与正文");
+        }
+        {
+            std::ifstream     in(first_dir / "run.json", std::ios::binary);
+            std::stringstream buffer;
+            buffer << in.rdbuf();
+            const nlohmann::json run_json = nlohmann::json::parse(buffer.str(), nullptr, false);
+            // 期望：':' 与 '?' 被清洗为 '_'（archive_run 的 sanitize_name 规则）
+            expect(check,
+                   !run_json.is_discarded() &&
+                       run_json.value("workflow", std::string()) == "自检_非法_名字" &&
+                       run_json.contains("nodes") && run_json["nodes"].size() == 3 &&
+                       run_json.value("summary", std::string()) == "完成 2/3，失败 1",
+                   "归档：run.json 记录工作流名 / 统计 / 3 条节点明细");
+        }
+
+        const aiwrite::utils::ArchiveResult second =
+            aiwrite::utils::archive_run(request, nodes, "完成 2/3，失败 1");
+        std::size_t dir_count = 0;
+        for (const std::filesystem::directory_entry& entry :
+             std::filesystem::directory_iterator(temp_root, ec)) {
+            if (entry.is_directory(ec)) {
+                ++dir_count;
+            }
+        }
+        expect(check, second.ok && dir_count == 1,
+               "归档：keep_history=false 只保留最近 1 份", std::to_string(dir_count) + " 份");
+
+        request.archive_dir = (temp_root / "not_a_dir").string();
+        {
+            std::ofstream blocker(request.archive_dir);
+            blocker << "x";
+        }
+        const aiwrite::utils::ArchiveResult failed =
+            aiwrite::utils::archive_run(request, nodes, "x");
+        expect(check, !failed.ok && !failed.error.empty(),
+               "归档：不可写路径返回错误而不抛异常", failed.error);
+
+        // TTL：造一个 40 天前的旧目录 → ttl_days=30 时被清理（同批的新目录保留）
+        {
+            const std::time_t old_time = std::time(nullptr) - 40 * 86400;
+            std::tm           old_tm{};
+#if defined(_WIN32)
+            localtime_s(&old_tm, &old_time);
+#else
+            localtime_r(&old_time, &old_tm);
+#endif
+            std::ostringstream name;
+            name << std::put_time(&old_tm, "%Y%m%d-%H%M%S") << "-旧归档";
+            const std::filesystem::path old_dir = temp_root / name.str();
+            std::filesystem::create_directories(old_dir, ec);
+            std::ofstream marker(old_dir / "run.json");
+            marker << "{}";
+            marker.close();
+
+            aiwrite::utils::ArchiveRequest ttl_request = request;
+            ttl_request.archive_dir = temp_root.string();
+            ttl_request.ttl_days    = 30;
+            const aiwrite::utils::ArchiveResult ttl_result =
+                aiwrite::utils::archive_run(ttl_request, nodes, "ttl 用例");
+
+            std::string remaining;
+            for (const std::filesystem::directory_entry& entry :
+                 std::filesystem::directory_iterator(temp_root, ec)) {
+                if (entry.is_directory(ec)) {
+                    remaining += entry.path().filename().string() + " ";
+                }
+            }
+            expect(check,
+                   ttl_result.ok && !std::filesystem::exists(old_dir) &&
+                       std::filesystem::exists(std::filesystem::path(ttl_result.dir) / "run.json"),
+                   "归档：ttl_days=30 清理超期目录且保留本次归档",
+                   "ok=" + std::to_string(ttl_result.ok) +
+                       " old_exists=" + std::to_string(std::filesystem::exists(old_dir)) +
+                       " new=" + ttl_result.dir + " 剩余[" + remaining + "]");
+        }
+
+        std::filesystem::remove_all(temp_root, ec);
     }
 
     std::printf("=== 执行器自检结果: %d 通过 / %d 失败 ===\n", check.passed, check.failed);

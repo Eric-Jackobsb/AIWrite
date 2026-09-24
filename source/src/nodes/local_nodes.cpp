@@ -207,9 +207,16 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         model = it->value("model", model);
     }
 
-    const std::string prompt = inputs.contains("prompt") ? text_of(inputs["prompt"]) : "";
-    if (prompt.empty()) {
+    const std::string prompt_raw = inputs.contains("prompt") ? text_of(inputs["prompt"]) : "";
+    if (prompt_raw.empty()) {
         throw engine::NodeError("文本生成：提示词为空（请连接 PromptTemplate 或直接填写 prompt）");
+    }
+
+    // 网页版：把 system_prompt 前置拼进 prompt（网页版请求体没有 system 角色槽位）
+    const std::string system_prompt = params.value("system_prompt", std::string());
+    std::string       prompt        = prompt_raw;
+    if (mode == "web" && !system_prompt.empty()) {
+        prompt = system_prompt + "\n\n" + prompt;
     }
 
     if (mode != "web") {
@@ -232,8 +239,19 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     request.model_type       = (model == "expert") ? "expert" : "default";
     request.thinking_enabled = (model == "deepseek-reasoner");
 
+    // 网页版不支持采样参数：参数保持默认即无提示；改过则提示一次（官方 API 生效见 PB-05）
+    const double temperature = params.value("temperature", 0.7);
+    const int    max_tokens  = params.value("max_tokens", 2048);
+    const double top_p       = params.value("top_p", 1.0);
+    if (temperature != 0.7 || max_tokens != 2048 || top_p != 1.0) {
+        ctx.console("[文本生成] 提示：网页版不支持 temperature / max_tokens / top_p，已忽略"
+                    "（这些参数仅对官方 API 生效）");
+    }
+
     ctx.console("[文本生成] 网页版请求：模型 " + model + "，提示词 " +
-                std::to_string(prompt.size()) + " 字节");
+                std::to_string(prompt.size()) + " 字节" +
+                (system_prompt.empty() ? "" : "（含系统提示词 " +
+                                                 std::to_string(system_prompt.size()) + " 字节）"));
     const ai::WebChatResult result = ai::web_chat(session, request);
     if (!result.ok || result.text.empty()) {
         throw engine::NodeError("文本生成（网页版）失败：" +

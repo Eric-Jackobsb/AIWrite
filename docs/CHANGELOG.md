@@ -18,6 +18,28 @@
 
 ## [Unreleased] — M2 节点系统（P1 数据层 + P2 画布交互）已落地
 
+**M_patchA / Patch C 提前落地（PC-05/PC-06）：运行结果自动归档到 outputs + 网页版 system_prompt 透传**
+
+- `utils/output_archive.{h,cpp}`（新）：`archive_run()` 写出 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`
+  - 每节点一份 `<node_id>-<Type>.txt`（元信息头：节点/类型/状态/耗时/错误/时间/统计 + 正文）；无输出的失败节点只进 run.json
+  - `run.json`：归档时间、工作流名、统计、逐节点明细（状态/耗时/错误/文件名/字节数）
+  - 同秒多次运行自动加序号；**本次归档恒排最前且永不删除**
+  - 保留策略：`keep_history=false` → 只留最近 1 份；`true` → 保留 `max_history` 份；`ttl_days>0` → 清理超期目录
+    （只清理符合命名规则的目录，先统计后删除并写日志）；工作流名非法字符自动清洗
+  - 目录不可写等失败只返回 `error`，不抛异常、不影响运行流程
+- `ui/editor_state.{h,cpp}`：运行结束自动归档（节点条目与输出面板同源 `node_output_text` → **归档内容与面板一致**）；
+  新增 `last_archive_dir` 与 `workflow_display_name()`
+- `ui/output_panel.cpp`：显示「已归档：<路径>」+「复制归档路径」按钮（悬停显示完整路径）
+- `nodes/local_nodes.cpp`：**网页版 system_prompt 透传**（前置拼进 prompt，网页版无 system 角色槽位）；
+  当 `temperature/max_tokens/top_p` 非默认时提示"网页版忽略、仅官方 API 生效"
+- `utils/config.h`：`[output]` 四个字段标注为**已接线**（`auto_open_on_complete` 仍留 M5）
+- 自检：`--exec-selftest` **72 通过 / 0 失败**（+10 项归档断言：run.json、节点 .txt、无输出不写 txt、
+  名字清洗、元信息头与正文、run.json 明细、保留份数、不可写路径、ttl 清理）；
+  `--run-selftest` 增加 **PC-05 归档断言**（临时目录，不污染用户 outputs）
+- 实测：`--run-selftest --web` → 5/5、**PC-05 归档 OK**（`n1-TextInput.txt`/`n2-PromptTemplate.txt`/
+  `n3-LLMGenerate.txt`（1063 B，即生成文档）/`n5-ProviderConfig.txt`/`run.json`）、VA-07 OK、PASS；
+  离线模式 PC-05 OK、PASS；`--selftest` 七组 PASS；`--graph-selftest` 95/0；构建 0 error / 0 warning
+
 **M_patchA / A2（PA-02）：输出面板 —— 运行结果可见 / 可复制 / 可导出**
 
 - `ui/output_panel.{h,cpp}`（新）：可停靠输出面板（默认与 Console 同区）
