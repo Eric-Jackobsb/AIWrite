@@ -56,9 +56,9 @@
                 "children": [],
                 "todo": {
                   "id": 7,
-                  "content": "DBG-M4-01 生成期间界面同步阻塞 4–10 秒（执行器未线程化前无解） ｜ §4.1 PB-01",
-                  "done": false,
-                  "level": "default",
+                  "content": "DBG-M4-01 生成期间界面同步阻塞（已修复）：PB-01 线程化后生成期间界面保持响应 ｜ §4.1 PB-01",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -331,9 +331,9 @@
                 "children": [],
                 "todo": {
                   "id": 29,
-                  "content": "FEA-M4-01 执行线程化：tick 移入工作线程 + 线程安全事件队列，Graph 写入仅限主线程 ｜ §4.1 PB-01",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M4-01 执行线程化（已完成，PB-01 三步）：工作线程在 Graph 副本上推进 tick + 事件队列；主线程唯一写 Graph；UI 读 RunSnapshot（含 text/delta_bytes）；退出/切图前 join ｜ §4.1 PB-01",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -353,9 +353,9 @@
                 "children": [],
                 "todo": {
                   "id": 31,
-                  "content": "FEA-M4-03 流式回调：ExecutionContext 增 on_delta，NodeRunInfo.delta_bytes 生效 ｜ §4.1 PB-03",
+                  "content": "FEA-M4-03 流式回调（PB-03）：**已暂停（用户决议 2026-09-24）** —— 链路已打通（on_delta → RunEvent::Delta → 读模型逐段追加），但 httplib v0.15.3 无 POST 响应流式重载，需先解决数据源（A′ 端点探测或 WinHTTP）；详见 docs/网页版协议实测记录.md 附录 A ｜ §4.1 PB-03",
                   "done": false,
-                  "level": "default",
+                  "level": "warning",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -408,9 +408,9 @@
                 "children": [],
                 "todo": {
                   "id": 36,
-                  "content": "FEA-M4-08 流式呈现：输出面板与节点摘要逐字增长，运行中显示「生成中…（N 字）」 ｜ §4.1 PB-08",
+                  "content": "FEA-M4-08 流式呈现（PB-08）：**已暂停（用户决议 2026-09-24）** —— UI 侧已就位（节点摘要 / 输出面板标题 / 状态栏「生成中…（N 字）」+ 按段追加渲染），待数据源接入即可逐字 ｜ §4.1 PB-08",
                   "done": false,
-                  "level": "default",
+                  "level": "warning",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -419,9 +419,9 @@
                 "children": [],
                 "todo": {
                   "id": 37,
-                  "content": "FEA-M4-09 Console 增强：复制全部 / 复制当前过滤 / 导出到文件 / 自动滚动与「回到底部」 ｜ §3.2 PA-05（M4-12）",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M4-09 Console 增强（已完成，PA-05）：复制可见 / 复制全部 / 导出可见到文件；上滚自动暂停 + 「回到底部」 ｜ §3.2 PA-05",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -430,9 +430,9 @@
                 "children": [],
                 "todo": {
                   "id": 38,
-                  "content": "FEA-M4-10 轻量错误条：失败后可关闭、悬停看全文、点击定位到失败节点 ｜ §3.2 PA-06",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M4-10 轻量错误条（已完成，PA-06）：状态栏红条（悬停全文 + × 关闭）+ 点击定位失败节点；成功运行自动清空 ｜ §3.2 PA-06",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -1345,6 +1345,6 @@
     "simpleMode": false,
     "lang": "en",
     "desc": "**当前基线**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS\n- graph_selftest: 95 通过 / 0 失败\n- exec_selftest: 72 通过 / 0 失败（执行器 + 运行信息 + 归档）\n- run_selftest: PASS（离线 3/5，失败 1 为预期）\n- run_selftest_web: PASS（5/5，约 6–9 s，含 PC-05 归档断言）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n\n**主要风险**\n- 生成期间 UI 同步阻塞、取消无法中断（Patch B 解决）\n- 网页版 PoW 依赖官方 worker chunk，前端发版变化需回归\n- 复制/粘贴仍暂停（画布坐标根因待修）\n- 未接配置字段仍无效果（PA-08 / PD-03）",
-    "version": "1790228756214"
+    "version": "1790294206425"
   }
 }
