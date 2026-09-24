@@ -11,6 +11,7 @@
 #include "utils/diagnostics.h"
 #include "utils/log.h"
 #include "utils/paths.h"
+#include "utils/window_geometry.h"
 #include "web/session_store.h"
 
 #include "engine/recent_files.h"
@@ -275,21 +276,46 @@ int run(const AppOptions& options)
         return 1;
     }
 
+    // 配置（M1-07：读配置 / 写日志）—— 必须早于窗口创建：窗口几何（F3 / PD-04）来自 config.toml [ui]
+    Config config;
+    (void)load_config(paths::config_file(), config);
+    // PA-07：灌入进程级缓存，供非 UI 代码（provider / 工具）读取
+    set_app_config(config);
+
     // OpenGL 3.3 Core（M1 Action Plan M1-02）
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+    // ---- 窗口几何（F3 / PD-04）----
+    //  1) 基准尺寸：工作区 90%（上限 1600x1000）
+    //  2) config 记录过尺寸则优先；未记录位置（pos < 0）→ 用工作区左上
+    //  3) 一律经 fit_window_to_workarea 越屏矫正（纯函数，api_probe 有断言覆盖）
     int window_width  = 1600;
     int window_height = 1000;
-    if (GLFWmonitor* monitor = glfwGetPrimaryMonitor()) {
-        int mx = 0, my = 0, mw = 0, mh = 0;
-        glfwGetMonitorWorkarea(monitor, &mx, &my, &mw, &mh);
-        if (mw > 0 && mh > 0) {
-            window_width  = ((mw * 9) / 10 > 1600) ? 1600 : (mw * 9) / 10;
-            window_height = ((mh * 9) / 10 > 1000) ? 1000 : (mh * 9) / 10;
+    utils::WindowRect workarea{};
+    GLFWmonitor*      primary_monitor = glfwGetPrimaryMonitor();
+    if (primary_monitor != nullptr) {
+        glfwGetMonitorWorkarea(primary_monitor, &workarea.x, &workarea.y, &workarea.width,
+                               &workarea.height);
+        if (workarea.width > 0 && workarea.height > 0) {
+            window_width  = ((workarea.width * 9) / 10 > 1600) ? 1600 : (workarea.width * 9) / 10;
+            window_height = ((workarea.height * 9) / 10 > 1000) ? 1000 : (workarea.height * 9) / 10;
         }
     }
+
+    const bool        has_saved_geometry = config.ui.window_width > 0 && config.ui.window_height > 0;
+    const bool        has_saved_position =
+        utils::has_position(utils::WindowRect{config.ui.window_pos_x, config.ui.window_pos_y, 0, 0});
+    utils::WindowRect desired{};
+    desired.width  = has_saved_geometry ? config.ui.window_width : window_width;
+    desired.height = has_saved_geometry ? config.ui.window_height : window_height;
+    desired.x      = has_saved_position ? config.ui.window_pos_x : workarea.x;
+    desired.y      = has_saved_position ? config.ui.window_pos_y : workarea.y;
+
+    const utils::FitResult geometry = utils::fit_window_to_workarea(desired, workarea);
+    window_width                    = geometry.rect.width;
+    window_height                   = geometry.rect.height;
 
     GLFWwindow* window = glfwCreateWindow(window_width, window_height, kAppTitle, nullptr, nullptr);
     if (window == nullptr) {
@@ -297,6 +323,22 @@ int run(const AppOptions& options)
         glfwTerminate();
         return 1;
     }
+
+    glfwSetWindowPos(window, geometry.rect.x, geometry.rect.y);
+    if (config.ui.window_maximized) {
+        glfwMaximizeWindow(window);
+    }
+    // 矫正结果落回内存配置：即便本次没有移动窗口，退出时也会写盘（下次启动即为矫正后的几何）
+    config.ui.window_width  = geometry.rect.width;
+    config.ui.window_height = geometry.rect.height;
+    config.ui.window_pos_x  = geometry.rect.x;
+    config.ui.window_pos_y  = geometry.rect.y;
+    log::info("窗口几何（config.toml [ui]）：尺寸 " + std::to_string(geometry.rect.width) + "x" +
+              std::to_string(geometry.rect.height) + " 位置 " + std::to_string(geometry.rect.x) + "," +
+              std::to_string(geometry.rect.y) +
+              (has_saved_geometry ? "（来自配置）" : "（默认：工作区 90%）") +
+              (geometry.changed ? "｜已越屏矫正" : "") +
+              (config.ui.window_maximized ? "｜最大化=是" : ""));
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
@@ -326,12 +368,6 @@ int run(const AppOptions& options)
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
-
-    // 配置（M1-07：读配置 / 写日志）
-    Config config;
-    (void)load_config(paths::config_file(), config);
-    // PA-07：灌入进程级缓存，供非 UI 代码（provider / 工具）读取
-    set_app_config(config);
 
     CanvasOptions canvas_options;
     canvas_options.show_grid = config.ui.show_grid;
@@ -370,6 +406,53 @@ int run(const AppOptions& options)
     while (glfwWindowShouldClose(window) == GLFW_FALSE) {
         const bool first_frame = (frame_index++ == 0);
         glfwPollEvents();
+
+        // ---- 窗口几何节流保存（F3 / PD-04）：移动/缩放后静默 2s 落盘一次（避免拖拽期间频繁写文件）----
+        {
+            static auto last_geometry_change = std::chrono::steady_clock::now();
+            static bool geometry_dirty       = false;
+            if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) == 0) {
+                const bool maximized = glfwGetWindowAttrib(window, GLFW_MAXIMIZED) != 0;
+                int        window_x  = 0;
+                int        window_y  = 0;
+                int        width     = 0;
+                int        height    = 0;
+                glfwGetWindowPos(window, &window_x, &window_y);
+                glfwGetWindowSize(window, &width, &height);
+
+                bool changed = (config.ui.window_maximized != maximized);
+                config.ui.window_maximized = maximized;
+                if (!maximized) {
+                    // 最大化时不覆盖"还原尺寸/位置"，便于下次启动恢复
+                    changed = changed || config.ui.window_pos_x != window_x ||
+                              config.ui.window_pos_y != window_y || config.ui.window_width != width ||
+                              config.ui.window_height != height;
+                    config.ui.window_pos_x  = window_x;
+                    config.ui.window_pos_y  = window_y;
+                    config.ui.window_width  = width;
+                    config.ui.window_height = height;
+                }
+
+                const auto now = std::chrono::steady_clock::now();
+                if (changed) {
+                    geometry_dirty       = true;
+                    last_geometry_change = now;
+                }
+                else if (geometry_dirty &&
+                         now - last_geometry_change >= std::chrono::seconds(2)) {
+                    geometry_dirty = false;
+                    if (save_config(paths::config_file(), config)) {
+                        set_app_config(config); // PA-07：保持进程缓存与磁盘一致
+                        log::info("[窗口几何] 已保存到 config.toml（" + std::to_string(width) + "x" +
+                                  std::to_string(height) + " @ " + std::to_string(window_x) + "," +
+                                  std::to_string(window_y) + (maximized ? "，最大化=是" : "") + "）");
+                    }
+                    else {
+                        log::warn("[窗口几何] 保存失败：config.toml 不可写？");
+                    }
+                }
+            }
+        }
 
         // ---- 执行会话推进（M2-04：一帧最多推进一个节点；无运行会话时为空操作）----
         editor().tick_run();
@@ -647,6 +730,29 @@ int run(const AppOptions& options)
     }
 
     log::info("主窗口关闭，开始清理");
+
+    // ---- 窗口几何退出落盘（F3 / PD-04）：节流保存之外的最终兜底 ----
+    if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) == 0) {
+        const bool maximized = glfwGetWindowAttrib(window, GLFW_MAXIMIZED) != 0;
+        if (!maximized) {
+            glfwGetWindowPos(window, &config.ui.window_pos_x, &config.ui.window_pos_y);
+            glfwGetWindowSize(window, &config.ui.window_width, &config.ui.window_height);
+        }
+        config.ui.window_maximized = maximized;
+        if (save_config(paths::config_file(), config)) {
+            set_app_config(config);
+            log::info("[窗口几何] 退出时已保存到 config.toml（" +
+                      std::to_string(config.ui.window_width) + "x" +
+                      std::to_string(config.ui.window_height) + " @ " +
+                      std::to_string(config.ui.window_pos_x) + "," +
+                      std::to_string(config.ui.window_pos_y) +
+                      (maximized ? "，最大化=是" : "") + "）");
+        }
+        else {
+            log::warn("[窗口几何] 退出保存失败：config.toml 不可写？");
+        }
+    }
+
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

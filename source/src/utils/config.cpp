@@ -58,6 +58,11 @@ void read_ui(const toml::table& t, Config::Ui& s)
     read_value(t, "show_grid", s.show_grid);
     read_value(t, "grid_size", s.grid_size);
     read_value(t, "running_animation", s.running_animation);
+    read_value(t, "window_width", s.window_width);
+    read_value(t, "window_height", s.window_height);
+    read_value(t, "window_pos_x", s.window_pos_x);
+    read_value(t, "window_pos_y", s.window_pos_y);
+    read_value(t, "window_maximized", s.window_maximized);
 }
 
 void read_output(const toml::table& t, Config::Output& s)
@@ -124,6 +129,11 @@ toml::table to_table(const Config& c)
     write_value(ui, "show_grid", c.ui.show_grid);
     write_value(ui, "grid_size", c.ui.grid_size);
     write_value(ui, "running_animation", c.ui.running_animation);
+    write_value(ui, "window_width", c.ui.window_width);
+    write_value(ui, "window_height", c.ui.window_height);
+    write_value(ui, "window_pos_x", c.ui.window_pos_x);
+    write_value(ui, "window_pos_y", c.ui.window_pos_y);
+    write_value(ui, "window_maximized", c.ui.window_maximized);
     root.insert("ui", std::move(ui));
 
     toml::table output;

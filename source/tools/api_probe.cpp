@@ -20,6 +20,7 @@
 // =============================================================================
 #include "utils/crypto.h"
 #include "utils/log.h"
+#include "utils/window_geometry.h"
 #include "utils/paths.h"
 
 #include "engine/graph.h"
@@ -170,6 +171,12 @@ bool test_config_roundtrip()
     modified.ui.show_grid            = !created.ui.show_grid;
     modified.output.ttl_days         = 7;
     modified.deepseek.model          = "deepseek-reasoner";
+    // F3 / PD-04：窗口几何字段也要能往返
+    modified.ui.window_width     = 1440;
+    modified.ui.window_height    = 900;
+    modified.ui.window_pos_x     = 120;
+    modified.ui.window_pos_y     = 80;
+    modified.ui.window_maximized = true;
     if (!aiwrite::save_config(file, modified)) {
         std::printf("   FAIL  保存配置失败\n");
         return false;
@@ -181,12 +188,18 @@ bool test_config_roundtrip()
         return false;
     }
 
+    const bool geometry_same = reloaded.ui.window_width == modified.ui.window_width &&
+                               reloaded.ui.window_height == modified.ui.window_height &&
+                               reloaded.ui.window_pos_x == modified.ui.window_pos_x &&
+                               reloaded.ui.window_pos_y == modified.ui.window_pos_y &&
+                               reloaded.ui.window_maximized == modified.ui.window_maximized;
     const bool same = generated && reloaded.config_version == modified.config_version &&
                       reloaded.general.language == modified.general.language &&
                       reloaded.ui.show_grid == modified.ui.show_grid &&
                       reloaded.output.ttl_days == modified.output.ttl_days &&
-                      reloaded.deepseek.model == modified.deepseek.model;
-    std::printf("   %-6s 默认生成=%s；字段往返一致=%s（language / show_grid / ttl_days / model）\n",
+                      reloaded.deepseek.model == modified.deepseek.model && geometry_same;
+    std::printf("   %-6s 默认生成=%s；字段往返一致=%s（language / show_grid / ttl_days / model / "
+                "窗口几何）\n",
                 same ? "PASS" : "FAIL", generated ? "是" : "否", same ? "是" : "否");
 
     // PA-07：进程级配置访问器（app_config / set_app_config）
@@ -201,7 +214,43 @@ bool test_config_roundtrip()
                 aiwrite::Config{}.timeout.connect_ms);
 
     std::filesystem::remove(file, ec);
-    return same && cache_ok;
+
+    // ---- F3 / PD-04：越屏矫正纯函数（utils::fit_window_to_workarea）----
+    using aiwrite::utils::WindowRect;
+    const WindowRect workarea{0, 0, 1920, 1040};             // 工作区（已扣除任务栏）
+    const WindowRect inside{100, 80, 1280, 720};             // 完全在工作区内
+    const WindowRect offscreen_right{3000, 200, 1280, 720};  // 完全在右侧屏外
+    const WindowRect offscreen_topleft{-200, -100, 1280, 720};
+    const WindowRect too_large{0, 0, 3000, 2000};            // 尺寸超出工作区
+    const WindowRect too_small{10, 10, 100, 80};             // 尺寸小于最小值保护
+
+    const aiwrite::utils::FitResult keep    = aiwrite::utils::fit_window_to_workarea(inside, workarea);
+    const aiwrite::utils::FitResult pulled  =
+        aiwrite::utils::fit_window_to_workarea(offscreen_right, workarea);
+    const aiwrite::utils::FitResult clamped =
+        aiwrite::utils::fit_window_to_workarea(offscreen_topleft, workarea);
+    const aiwrite::utils::FitResult shrunk  = aiwrite::utils::fit_window_to_workarea(too_large, workarea);
+    const aiwrite::utils::FitResult grown   = aiwrite::utils::fit_window_to_workarea(too_small, workarea);
+    const aiwrite::utils::FitResult no_area =
+        aiwrite::utils::fit_window_to_workarea(inside, WindowRect{});
+
+    const bool fit_ok = !keep.changed && keep.rect.x == 100 && keep.rect.width == 1280 &&
+                        pulled.changed && pulled.rect.x == 640 && pulled.rect.y == 200 &&
+                        clamped.changed && clamped.rect.x == 0 && clamped.rect.y == 0 &&
+                        shrunk.changed && shrunk.rect.width == 1920 && shrunk.rect.height == 1040 &&
+                        grown.changed && grown.rect.width == 640 && grown.rect.height == 480 &&
+                        !no_area.changed && no_area.rect.width == 1280 &&
+                        aiwrite::utils::has_position(inside) &&
+                        !aiwrite::utils::has_position(WindowRect{-1, -1, 0, 0});
+    std::printf("   %-6s 窗口几何越屏矫正：区内不变=%s；越屏拉回=%s（x=%d）；超大收缩=%s（%dx%d）；"
+                "最小保护=%s（%dx%d）；无工作区不变=%s\n",
+                fit_ok ? "PASS" : "FAIL", !keep.changed ? "是" : "否",
+                pulled.rect.x == 640 ? "是" : "否", pulled.rect.x,
+                shrunk.rect.width == 1920 ? "是" : "否", shrunk.rect.width, shrunk.rect.height,
+                grown.rect.width == 640 ? "是" : "否", grown.rect.width, grown.rect.height,
+                !no_area.changed ? "是" : "否");
+
+    return same && cache_ok && fit_ok;
 }
 
 // M2：网页版会话存储 + 参数条件可见性自检（不需要网络）

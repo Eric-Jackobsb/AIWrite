@@ -23,6 +23,16 @@ struct Config {
         bool show_grid           = true;
         int  grid_size           = 20;
         bool running_animation   = true;
+
+        // ---- 窗口几何（F3 / PD-04）：主窗口尺寸 / 位置 / 最大化 ----
+        //  * window_width / height ≤ 0 → 用内置默认（按工作区 90% 且不超过 1600x1000）
+        //  * window_pos_x / pos_y < 0 → 未记录位置（启动时不设置位置，交给系统/居中）
+        //  * 启动读取时经 utils::fit_window_to_workarea 越屏矫正后再应用
+        int  window_width     = 0;
+        int  window_height    = 0;
+        int  window_pos_x     = -1;
+        int  window_pos_y     = -1;
+        bool window_maximized = false;
     };
 
     struct Output {

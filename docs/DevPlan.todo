@@ -265,9 +265,9 @@
                 "children": [],
                 "todo": {
                   "id": 26,
-                  "content": "FEA-M3-04 窗口几何持久化：尺寸/位置/最大化写入 config 并在启动恢复且越屏矫正 ｜ §6.1 PD-04",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M3-04 窗口几何持久化（已完成）：config.toml [ui] 增 window_width/height/pos_x/pos_y/maximized（启动读取 + utils::fit_window_to_workarea 越屏矫正）、移动/缩放节流（静默 2s 落盘）+ 退出兜底保存；纯函数断言 6 项 + 配置往返断言覆盖 ｜ §6.1 PD-04",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -1150,11 +1150,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md · F2（FEA-M3-03）"
                 }
+              },
+              {
+                "key": 115,
+                "children": [],
+                "todo": {
+                  "id": 115,
+                  "content": "ARC-M3-08 F3/PD-04：窗口几何持久化 —— config.toml [ui] 记录尺寸/位置/最大化 + 越屏矫正纯函数（utils::fit_window_to_workarea）+ 节流 2s 与退出兜底保存；「配置往返」组新增窗口几何字段与 6 项矫正断言",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchA.md · F3（FEA-M3-04）"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（8 项）",
+              "content": "M3（9 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1250,7 +1261,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（17 项）",
+          "content": "Archive（18 项）",
           "done": true,
           "level": "success"
         }
