@@ -389,13 +389,18 @@ void EditorState::cancel_run()
         set_status("当前没有正在运行的执行会话");
         return;
     }
-    executor.cancel();
+    executor.requestStop(); // PB-01：置位 + 唤醒（HTTP 级真取消见 PB-02）
     log::warn("已请求停止运行（正在执行的节点会跑完当前步骤）");
     set_status("正在停止…");
 }
 
 void EditorState::tick_run()
 {
+    // PB-01：异步会话 —— 只应用事件（写 Graph 状态 + 维护 run_snapshot）
+    if (session_active_) {
+        pump_run_events();
+        return;
+    }
     if (!executor.running()) {
         return; // 空闲：不推进
     }
@@ -403,15 +408,131 @@ void EditorState::tick_run()
         return; // 本帧推进了一个节点
     }
     // 会话结束（Finished / Cancelled / Failed）
-    set_status("运行结束：" + executor.summary());
-    log::workflow("===== 运行结束：" + executor.summary() + " =====");
-    // PA-04：逐节点耗时明细（补 M4-13 登记项；F 类缺口）
+    finish_run_session();
+}
+
+// ---------------------------------------------------------------- PB-01 -----
+// 线程化运行（状态层）：校验 → startAsync；主线程每帧 pump_run_events() 应用事件
+bool EditorState::start_run_async()
+{
+    aiwrite::nodes::registerAllExecutors(); // 幂等
+
+    engine::ValidationMessages errors;
+    engine::ValidationMessages warnings;
+    if (!engine::validateBeforeRun(graph, &errors, &warnings)) {
+        for (const std::string& text : errors) {
+            log::error("[运行前校验] " + text);
+            log::workflow("[运行前校验-失败] " + text);
+        }
+        set_status("运行被拒绝：" + (errors.empty() ? std::string("未知原因") : errors.front()));
+        return false;
+    }
+    for (const std::string& text : warnings) {
+        log::warn("[运行前校验] " + text);
+        log::workflow("[运行前校验-警告] " + text);
+    }
+
+    std::string error;
+    if (!executor.startAsync(&graph, &error)) {
+        log::error("启动异步运行失败：" + error);
+        log::workflow("[运行启动失败] " + error);
+        set_status("启动运行失败：" + error);
+        return false;
+    }
+
+    run_snapshot      = engine::RunSnapshot{}; // 新会话：清空读模型
+    run_snapshot.running = true;
+    session_active_   = true;
+    log::info("开始运行工作流（后台线程）：计划 " + std::to_string(executor.totalCount()) + " 个节点");
+    log::workflow("===== 运行开始（计划 " + std::to_string(executor.totalCount()) +
+                  " 个节点，异步）=====");
+    set_status("运行中…（界面保持响应；停止在节点边界生效）");
+    return true;
+}
+
+engine::RunNodeView* EditorState::snapshot_entry(const std::string& node_id)
+{
+    for (engine::RunNodeView& view : run_snapshot.nodes) {
+        if (view.node_id == node_id) {
+            return &view;
+        }
+    }
+    engine::RunNodeView view;
+    view.node_id = node_id;
+    if (const engine::Node* node = graph.findNode(node_id)) {
+        view.type = node->type;
+    }
+    run_snapshot.nodes.push_back(std::move(view));
+    return &run_snapshot.nodes.back();
+}
+
+void EditorState::pump_run_events()
+{
+    std::vector<engine::RunEvent> events;
+    executor.pumpEvents(&events);
+
+    for (const engine::RunEvent& event : events) {
+        switch (event.kind) {
+        case engine::RunEvent::Kind::NodeState: {
+            if (engine::Node* node = graph.findNode(event.node_id)) {
+                node->state = event.state; // 主线程写 Graph（唯一写者）
+                if (!event.error.empty()) {
+                    node->error_message = event.error;
+                }
+            }
+            engine::RunNodeView* view = snapshot_entry(event.node_id);
+            view->state               = event.state;
+            if (!event.error.empty()) {
+                view->error = event.error;
+            }
+            break;
+        }
+        case engine::RunEvent::Kind::NodeOutput: {
+            engine::RunNodeView* view = snapshot_entry(event.node_id);
+            view->text                = event.text;
+            view->state               = event.state;
+            view->delta_bytes         = event.text.size();
+            break;
+        }
+        case engine::RunEvent::Kind::Console: {
+            log::info("[执行] " + event.text); // Console 面板 + app.log
+            log::workflow(event.text);         // workflow.log（设计 §11.1）
+            break;
+        }
+        case engine::RunEvent::Kind::Finished: {
+            run_snapshot.summary     = event.summary;
+            run_snapshot.final_state = event.final_state;
+            run_snapshot.running     = false;
+            log::info("[执行器] " + event.summary);
+            log::workflow("[执行器] " + event.summary);
+            finish_run_session();
+            break;
+        }
+        }
+    }
+}
+
+void EditorState::stop_run_async()
+{
+    executor.stopAsync(); // join（幂等；退出 / 切换工作流前必须调用）
+    session_active_ = false;
+}
+
+// 运行收尾：join → 权威快照落定 → 状态栏/日志 → 归档 → 错误条
+void EditorState::finish_run_session()
+{
+    executor.stopAsync();                            // 契约：先 join 再读权威数据
+    run_snapshot     = engine::makeSnapshot(graph, executor); // 最终值覆盖增量（同源）
+    session_active_  = false;
+    set_status("运行结束：" + run_snapshot.summary);
+    log::workflow("===== 运行结束：" + run_snapshot.summary + " =====");
+    // PA-04：逐节点耗时明细（补 M4-13 登记项）
     if (!executor.runInfos().empty()) {
         log::workflow(run_detail_text(executor));
     }
-    // PC-05：运行结果归档（outputs/<时间>-<工作流名>/，每节点 .txt + run.json）
+    // PC-05：运行结果归档
     archive_run_outputs();
-    // PA-06：刷新错误条（首个失败节点；本次无失败则清空）
+    // PA-06：刷新错误条
     refresh_last_error();
 }
 

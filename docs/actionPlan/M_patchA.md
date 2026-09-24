@@ -27,7 +27,7 @@
 | A2 | **PA-08 未接配置字段治理** | ✅ | 接线：`ui.console_height`（Console 初始高度）、`ui.running_animation`（运行中节点脉冲光环）；`unwired_config_fields()` 清单 + 启动日志「已接线 / 尚未生效」；`ui.grid_size` 如实登记（vendored imgui-node-editor 的 Style 无网格间距字段 → 归口 PD-03）；`api_probe --selftest` 新增 PA-08 断言（清单含 general.language/timeout./auto_open，且不含已接线的 console_height/running_animation/window_*） |
 | A2 | **PA-09 文档与索引同步** | ✅ | `CHANGELOG`（A2 条目 + 索引）、`M_patchA`（进度/§3.2/§3.3 状态）、`节点编辑器使用说明.md` §10.7（Console 增强 / 错误条 / 配置未接线清单）、`milestone_plan.md` 补「补丁系列」行；`M4.md` 归口说明已就位（M4-05→PB-04/05、M4-12→PA-05+PD-07、M4-13→PA-04） |
 | A2 | PA-05 / PA-06 / PA-08 / PA-09 收尾 | ✅ A2 收尾完成 | 见上四行（Patch A 全部完成） |
-| B | **PB-01 执行线程化（第一步：引擎侧核心）** | 🟡 部分 | `RunEvent` 事件队列 + `startAsync/pumpEvents/requestStop/stopAsync` + **Graph 副本**（工作线程不写主线程 Graph）+ `RunSnapshot/makeSnapshot` + `nodeOutputText` 归一；`--run-selftest` 新增 PB-01 断言（离线 OK：事件完整 / Graph 未被工作线程写 / 快照一致）；**待第二步**：GUI 切 `start_run_async()` + UI 读模型（输出面板 / 节点摘要 / 参数面板）+ 退出·切图 join |
+| B | **PB-01 执行线程化（第一、二步：引擎核心 + 状态层）** | 🟡 部分 | 引擎：`RunEvent` 事件队列 + `startAsync/pumpEvents/requestStop/stopAsync` + **Graph 副本** + `nodeOutputText` 归一；状态层：`EditorState::start_run_async/pump_run_events/stop_run_async` + **`RunSnapshot`/`RunNodeView`**（含 text/delta_bytes）+ `finish_run_session`（**先 join → 快照落定 → 归档 → 错误条**）。断言：PB-01 线程化 OK + **第二步 OK（快照·Graph == 权威）**。**待第三步**：GUI 入口切异步 + UI 面板改读快照 + 退出·切图 join |
 | B | PB-02 真取消 / PB-05 官方 Provider / PB-06 凭据与网络策略 | ⬜ **延后（用户决议）** | 影响：停止仍在节点边界生效（网页版最坏等 HTTP 读超时）；official 仍不可用；Key 仍只在内存/环境变量 |
 | B | PB-03 流式回调接口 | 🟡 **缩为「仅网页版增量回调」**（作为 PB-08 前置） | 官方 `on_delta` 随 PB-05 延后 |
 | B | PB-08 流式呈现 / PB-07 会话失效引导 | ⬜ 待做（PB-01 之后） | — |

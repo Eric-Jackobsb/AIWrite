@@ -310,10 +310,11 @@ int run_selftest(bool use_web)
         }
 
         // ② 快照 == 权威数据（runInfos / outputs）
-        const aiwrite::engine::RunSnapshot snapshot = aiwrite::engine::makeSnapshot(state.executor);
-        bool same_view = snapshot.infos.size() == state.executor.runInfos().size();
+        const aiwrite::engine::RunSnapshot snapshot =
+            aiwrite::engine::makeSnapshot(state.graph, state.executor);
+        bool same_view = snapshot.nodes.size() == state.executor.runInfos().size();
         for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
-            const aiwrite::engine::NodeRunInfo* view = snapshot.find(info.node_id);
+            const aiwrite::engine::RunNodeView* view = snapshot.find(info.node_id);
             if (view == nullptr || view->state != info.state || view->type != info.type ||
                 std::fabs(view->duration_ms - info.duration_ms) > 0.0001) {
                 same_view = false;
@@ -325,8 +326,8 @@ int run_selftest(bool use_web)
         for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
             const std::string authoritative =
                 aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(), info.node_id);
-            const std::string from_snapshot =
-                aiwrite::engine::nodeOutputText(state.graph, snapshot.outputs, info.node_id);
+            const aiwrite::engine::RunNodeView* view = snapshot.find(info.node_id);
+            const std::string from_snapshot = (view != nullptr) ? view->text : std::string();
             if (authoritative != from_snapshot) {
                 text_same = false;
                 break;
@@ -345,6 +346,49 @@ int run_selftest(bool use_web)
     else {
         std::printf("[运行自检] PB-01 线程化：跳过（--web 模式避免二次联网；该断言在离线模式验证）\n");
         async_ok = true;
+    }
+
+    // ---- PB-01 第二步：EditorState 异步入口（start_run_async + tick_run 泵事件）----
+    bool session_ok = true;
+    if (!use_web) {
+        for (aiwrite::engine::Node& node : state.graph.nodes) {
+            node.state = aiwrite::engine::NodeState::Idle;
+            node.error_message.clear();
+        }
+
+        const bool started = state.start_run_async();
+        int        guard4  = 0;
+        while (state.session_active() && guard4++ < 40000) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            state.tick_run(); // 主线程：pump_run_events（写 Graph + 维护 run_snapshot）
+        }
+        const bool session_ended = !state.session_active();
+
+        // 读模型 == 权威数据（状态 / 类型 / 文本），且 Graph 节点状态已由事件应用到位
+        const aiwrite::engine::RunSnapshot& view = state.run_snapshot_view();
+        bool same_view = view.nodes.size() == state.executor.runInfos().size();
+        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
+            const aiwrite::engine::RunNodeView* item = view.find(info.node_id);
+            const aiwrite::engine::Node*        node = state.graph.findNode(info.node_id);
+            if (item == nullptr || node == nullptr || item->state != info.state ||
+                node->state != info.state ||
+                item->text != aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(),
+                                                              info.node_id)) {
+                same_view = false;
+                break;
+            }
+        }
+        state.stop_run_async(); // 幂等（收尾已 join）
+        session_ok = started && session_ended && same_view &&
+                     state.executor.state() != aiwrite::engine::ExecState::Running;
+        std::printf("[运行自检] PB-01 第二步（EditorState 异步 + RunSnapshot）：%s（启动=%s / 会话结束=%s / "
+                    "快照·Graph == 权威=%s / 节点 %zu 个 / 状态 %s）\n",
+                    session_ok ? "OK" : "失败", started ? "是" : "否", session_ended ? "是" : "否",
+                    same_view ? "是" : "否", view.nodes.size(),
+                    aiwrite::engine::execStateName(state.executor.state()));
+    }
+    else {
+        std::printf("[运行自检] PB-01 第二步：跳过（--web 模式避免二次联网）\n");
     }
 
     // ---- F1（M3-04 重做）：复制/粘贴的模型级断言（先断言、后接线 UI）----
@@ -504,7 +548,7 @@ int run_selftest(bool use_web)
     }
 
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
-                      consistency_ok && param_driven_ok && async_ok && paste_ok;
+                      consistency_ok && param_driven_ok && async_ok && session_ok && paste_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

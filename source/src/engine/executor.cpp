@@ -480,26 +480,32 @@ std::string nodeOutputText(const Graph& graph, const NodeOutputs& outputs, const
     return text;
 }
 
-const NodeRunInfo* RunSnapshot::find(const std::string& node_id) const
+const RunNodeView* RunSnapshot::find(const std::string& node_id) const
 {
-    for (const NodeRunInfo& info : infos) {
-        if (info.node_id == node_id) {
-            return &info;
+    for (const RunNodeView& view : nodes) {
+        if (view.node_id == node_id) {
+            return &view;
         }
     }
     return nullptr;
 }
 
-RunSnapshot makeSnapshot(const Executor& executor)
+RunSnapshot makeSnapshot(const Graph& graph, const Executor& executor)
 {
     RunSnapshot snapshot;
-    snapshot.infos       = executor.runInfos();
-    snapshot.outputs     = executor.outputs();
     snapshot.summary     = executor.summary();
     snapshot.running     = executor.running();
     snapshot.final_state = executor.state();
-    for (const NodeRunInfo& info : snapshot.infos) {
-        snapshot.delta_bytes += info.delta_bytes;
+    for (const NodeRunInfo& info : executor.runInfos()) {
+        RunNodeView view;
+        view.node_id     = info.node_id;
+        view.type        = info.type;
+        view.state       = info.state;
+        view.duration_ms = info.duration_ms;
+        view.error       = info.error;
+        view.text        = nodeOutputText(graph, executor.outputs(), info.node_id);
+        view.delta_bytes = view.text.size();
+        snapshot.nodes.push_back(std::move(view));
     }
     return snapshot;
 }

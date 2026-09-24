@@ -125,15 +125,23 @@ struct RunEvent {
 // 运行结果只读快照（PB-01：UI 侧读模型）
 //  * 线程安全：由事件构建（运行中）或运行结束后一次性构建（`makeSnapshot`），UI 只读快照
 //  * 与 Executor 的权威数据同源：`--run-selftest` 断言「快照 == runInfos()/outputs()」
+struct RunNodeView {
+    std::string node_id;
+    std::string type;
+    std::string text;                        // 节点输出全文（增量时代入，结束时落定为权威值）
+    NodeState   state       = NodeState::Waiting;
+    double      duration_ms = 0.0;
+    std::string error;
+    std::size_t delta_bytes = 0;             // 流式增量累计（PB-03/PB-08）
+};
+
 struct RunSnapshot {
-    std::vector<NodeRunInfo> infos;
-    NodeOutputs              outputs;
+    std::vector<RunNodeView> nodes;
     std::string              summary;
     bool                     running     = false;
     ExecState                final_state = ExecState::Idle;
-    std::size_t              delta_bytes = 0; // 流式增量累计（PB-03/PB-08）
 
-    const NodeRunInfo* find(const std::string& node_id) const;
+    const RunNodeView* find(const std::string& node_id) const;
 };
 
 class Executor {
@@ -220,7 +228,8 @@ private:
 };
 
 // PB-01：从执行器当前数据生成快照（主线程在运行结束/空闲时调用）
-RunSnapshot makeSnapshot(const Executor& executor);
+//  * 需要 graph 以便把「节点输出全文」一并落定（与 ui::node_output_text 同源）
+RunSnapshot makeSnapshot(const Graph& graph, const Executor& executor);
 
 // 节点输出文本（引擎侧唯一实现；`ui::node_output_text` 委托到它，保证多线程只有一份规则）
 std::string nodeOutputText(const Graph& graph, const NodeOutputs& outputs, const std::string& node_id);

@@ -31,6 +31,12 @@ struct EditorState {
 
     // 启动运行：先做运行前校验（失败 → 每条错误写 Console 与状态栏，不启动）
     bool start_run();
+    // PB-01：线程化运行入口（GUI 用）——校验后由执行器在工作线程推进；
+    //  主循环每帧 tick_run() → pump_run_events() 应用事件（写 Graph 状态 + 维护 run_snapshot）
+    bool start_run_async();
+    void pump_run_events();
+    void stop_run_async();   // 退出 / 切图前调用（join，幂等）
+    bool session_active() const { return session_active_; }
     void cancel_run();
     void tick_run();                       // 主循环每帧调用一次
     std::string run_status_text() const;    // 状态栏文本（Idle 时为空）
@@ -48,6 +54,12 @@ struct EditorState {
     // ---- 运行输出归档（PC-05）----
     // 运行结束自动写入 outputs/<时间>-<工作流名>/（每节点 .txt + run.json）
     // 参数取 config.output.*（archive_dir / keep_history / max_history / ttl_days）
+    // ---- PB-01：线程化运行的 UI 读模型 ----
+    //  * 运行中由事件维护（节点状态/输出全文/结束统计）；结束时由 makeSnapshot 用权威数据落定
+    //  * UI 只读它，永不跨线程读 Executor 运行态
+    engine::RunSnapshot run_snapshot;
+    const engine::RunSnapshot& run_snapshot_view() const { return run_snapshot; }
+
     std::string last_archive_dir;        // 最近一次归档目录（输出面板显示 + 自检断言）
     std::string workflow_display_name() const; // 工作流名（文件名去扩展名；空 → 未命名）
 
@@ -101,6 +113,13 @@ struct EditorState {
     void        archive_run_outputs();
 
 private:
+    // PB-01：会话是否活动（异步运行中，或结束事件尚未全部应用）
+    bool session_active_ = false;
+    // PB-01：把结束事件后的收尾（join → 权威快照 → 归档 → 错误条）集中一处
+    void finish_run_session();
+    // PB-01：取/建 run_snapshot 中某节点的条目
+    engine::RunNodeView* snapshot_entry(const std::string& node_id);
+
     std::vector<engine::Node> clipboard_nodes_;                        // 复制的节点
     std::vector<engine::Edge> clipboard_edges_;                        // 选区内部的连线
 };
