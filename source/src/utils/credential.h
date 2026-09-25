@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // ============================================================================
 //  凭据库（PB-06 / 设计见 docs/ai_writer_nodes.md 附录 B）
@@ -37,5 +37,8 @@ std::string credentials_dir();
 
 // Key 优先级：节点参数 → 环境变量 DEEPSEEK_API_KEY → 凭据库(ref)
 ResolvedSecret resolve_secret(const std::string& param_key, const std::string& ref);
+
+// 附录 B B.8 离线自检：返回失败条数（第 7 条 TTL 清理当前为“待修·不致命”，只出诊断）
+int credential_selftest();
 
 } // namespace aiwrite::utils

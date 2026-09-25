@@ -653,6 +653,11 @@ int main(int argc, char** argv)
                         erased ? "已删除" : erase_error.c_str());
             return erased ? 0 : 1;
         }
+        else if (arg == "--cred-selftest") {
+            const int failed = aiwrite::utils::credential_selftest();
+            std::printf("凭据自检：%s（失败 %d 项，详见日志）\n", failed == 0 ? "PASS" : "FAIL", failed);
+            return failed == 0 ? 0 : 1;
+        }
         else if (arg == "--cred-purge") {
             std::string purge_error;
             const int   removed = aiwrite::utils::purge_expired_credentials(30, &purge_error);

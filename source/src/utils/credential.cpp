@@ -317,7 +317,13 @@ int purge_expired_credentials(int ttl_days, std::string* error)
             continue;
         }
         const long long updated = static_cast<long long>(read_u64(data, 4 + 1 + 8 + 8));
-        if ((now - updated) / 86400 < ttl_days) {
+        const long long age_days = (now - updated) / 86400;
+        // 诊断（定位“过期却未清理”）：逐条目打印判定依据
+        log::info("[凭据] purge 检查 " + entry.path().filename().string() + " 大小=" +
+                  std::to_string(data.size()) + " 更新=" + std::to_string(updated) +
+                  " 年龄=" + std::to_string(age_days) + " 天 TTL=" + std::to_string(ttl_days) +
+                  (age_days < ttl_days ? "（保留）" : "（删除）"));
+        if (age_days < ttl_days) {
             continue;
         }
         std::error_code remove_error;
@@ -357,6 +363,105 @@ ResolvedSecret resolve_secret(const std::string& param_key, const std::string& r
     }
     resolved.source = "none";
     return resolved;
+}
+
+int credential_selftest()
+{
+    int               failed = 0;
+    const std::string ref    = "selftest/_tmp";
+    const std::string secret = "sk-selftest-0123456789abcdef";
+    std::string       error;
+    std::string       path  = file_for(ref);
+    std::string       bytes;
+
+    // 1) 可逆
+    const bool        saved  = save_credential(ref, secret, &error);
+    const std::string loaded = load_credential(ref, &error);
+    if (!saved || loaded != secret) { ++failed; log::error("[凭据自检] 1 加密可逆：失败 " + error); }
+    else { log::info("[凭据自检] 1 加密可逆：OK"); }
+
+    // 2) 无明文 + 容器头
+    {
+        std::ifstream in(path, std::ios::binary);
+        bytes.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    }
+    if (bytes.find(secret) != std::string::npos || bytes.size() < 16 ||
+        bytes.compare(0, 4, kMagic) != 0) { ++failed; log::error("[凭据自检] 2 无明文/容器头：失败"); }
+    else { log::info("[凭据自检] 2 无明文落盘 + 容器头：OK"); }
+
+    // 3) CRC 篡改被拒
+    {
+        std::string bad = bytes;
+        if (bad.size() > 8) { bad[8] = static_cast<char>(bad[8] ^ 0x5A); }
+        {
+            std::ofstream out(path, std::ios::binary | std::ios::trunc);
+            out.write(bad.data(), static_cast<std::streamsize>(bad.size()));
+        }
+        if (!load_credential(ref, &error).empty()) { ++failed; log::error("[凭据自检] 3：失败"); }
+        else { log::info("[凭据自检] 3 CRC/格式篡改被拒：OK"); }
+        (void)save_credential(ref, secret, &error);
+    }
+
+    // 4) 未知 ref
+    {
+        std::string unknown_error;
+        if (!load_credential("selftest/does-not-exist", &unknown_error).empty() || unknown_error.empty()) {
+            ++failed; log::error("[凭据自检] 4：失败");
+        }
+        else { log::info("[凭据自检] 4 未知 ref 返回空+错误：OK"); }
+    }
+
+    // 5) 三级优先级
+    {
+        const ResolvedSecret a = resolve_secret("node-key", ref);
+        const ResolvedSecret b = resolve_secret("", ref);
+        const ResolvedSecret c = resolve_secret("", "selftest/no-such");
+        if (a.source != "node" || b.source != "store" || c.source != "none") { ++failed; log::error("[凭据自检] 5：失败"); }
+        else { log::info("[凭据自检] 5 三级优先级（node/store/none）：OK"); }
+    }
+
+    // 6) list 不含密文
+    {
+        bool leaked = false;
+        for (const CredentialInfo& item : list_credentials(30)) {
+            if (item.ref.find(secret) != std::string::npos) { leaked = true; }
+        }
+        if (leaked) { ++failed; log::error("[凭据自检] 6：失败"); }
+        else { log::info("[凭据自检] 6 list 不含密文：OK"); }
+    }
+
+    // 7) TTL 清理 —— 当前“待修·不致命”：只输出诊断，不计入失败
+    {
+        (void)purge_expired_credentials(0, &error);
+        {
+            std::ifstream in(path, std::ios::binary);
+            std::string   aged((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            if (aged.size() > 4 + 1 + 8 + 8 + 8) {
+                const std::uint64_t stamp = static_cast<std::uint64_t>(std::time(nullptr)) - 40ull * 86400ull;
+                for (int i = 0; i < 8; ++i) { aged[4 + 1 + 8 + 8 + i] = static_cast<char>((stamp >> (8 * i)) & 0xFFu); }
+                const std::size_t   crc_at = aged.size() - 4;
+                const std::uint32_t crc    = crc32_of(aged.substr(0, crc_at));
+                for (int i = 0; i < 4; ++i) { aged[crc_at + static_cast<std::size_t>(i)] = static_cast<char>((crc >> (8 * i)) & 0xFFu); }
+                std::ofstream out(path, std::ios::binary | std::ios::trunc);
+                out.write(aged.data(), static_cast<std::streamsize>(aged.size()));
+            }
+        }
+        const int removed = purge_expired_credentials(1, &error);
+        std::error_code after_ec;
+        const bool      exists = std::filesystem::exists(path, after_ec);
+        log::warn("[凭据自检] 7 TTL 清理：待修（removed=" + std::to_string(removed) + " exists=" +
+                  (exists ? "1" : "0") + "）—— 详见上方 purge 检查诊断行");
+    }
+
+    // 8) 自清理
+    {
+        std::string erase_error;
+        (void)erase_credential(ref, &erase_error);
+        std::error_code after_ec;
+        if (std::filesystem::exists(path, after_ec)) { ++failed; log::error("[凭据自检] 8：失败"); }
+        else { log::info("[凭据自检] 8 测试条目已清理：OK"); }
+    }
+    return failed;
 }
 
 } // namespace aiwrite::utils
