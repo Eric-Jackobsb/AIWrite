@@ -7,6 +7,7 @@
 #include "ui/output_panel.h"
 #include "ai/deepseek_web_client.h"
 #include "utils/config.h"
+#include "utils/text_export.h"
 #include "utils/credential.h"
 #include "utils/log.h"
 #include "utils/paths.h"
@@ -652,6 +653,11 @@ int main(int argc, char** argv)
             std::printf("凭据 %s：%s\n", target.c_str(),
                         erased ? "已删除" : erase_error.c_str());
             return erased ? 0 : 1;
+        }
+        else if (arg == "--export-selftest") {
+            const int failed = aiwrite::utils::text_export_selftest();
+            std::printf("文本导出自检：%s（失败 %d 项，详见日志）\n", failed == 0 ? "PASS" : "FAIL", failed);
+            return failed == 0 ? 0 : 1;
         }
         else if (arg == "--cred-selftest") {
             const int failed = aiwrite::utils::credential_selftest();

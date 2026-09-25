@@ -174,6 +174,7 @@ add_library(aiwrite_core STATIC
     src/utils/config.cpp
     src/utils/window_geometry.cpp
     src/utils/credential.cpp
+    src/utils/text_export.cpp
     src/utils/crypto.cpp
     src/utils/output_archive.cpp
     src/utils/diagnostics.cpp
