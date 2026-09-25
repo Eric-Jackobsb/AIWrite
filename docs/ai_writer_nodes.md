@@ -1269,3 +1269,87 @@ api_key_ref = "brain-ai/deepseek"
 **文档结束。**
 **版本：v1.0**
 **状态：MVP 设计完成，可进入 Phase 0 开发。**
+
+---
+
+## 附录 B：API Key 存储、加密与保密设计（PB-06 定稿 · 2026-09-24）
+
+> 本附录**取代** §8.4 中关于「凭据管理器」的简述（原文仅写 Windows Credential Manager）。
+> 决策依据：用户要求把已填好的 API Key 以**二进制加密**形式存放于**专用文件夹**，并具备**保密措施与清理管理**。
+> 状态：**文档先行** —— 代码（`utils/credential.{h,cpp}`）按本附录实现，先落断言再落地。
+
+### B.1 存储位置与形态
+- 专用目录：**`~/.brain-ai/credentials/`**（与 `outputs/`、`logs/`、`workflows/` 同级，独立 ACL）
+- 条目：`api_key_ref`（默认 `brain-ai/deepseek`）→ 文件名 `<safe-ref>.bin`（ref 中的 `/` 等替换为 `_`）
+- 明文**永不**出现在：日志 / Console / 节点摘要 / 参数面板回显 / 工作流 JSON / 撤销快照
+
+### B.2 加密方案（选定）
+- **主加密**：Windows **DPAPI `CryptProtectData`**，作用域=**当前用户**（不设 `CRYPTPROTECT_LOCAL_MACHINE`）
+  - 密钥由系统托管、随用户登录态绑定，**无需自管密钥**、**不引入第三方加密库**
+  - 代价（已在决策时确认）：换机器/换用户后无法解密 → 需重新填写
+- **容器封装**（自描述二进制，便于版本演进与完整性校验）：
+
+| 字段 | 长度 | 说明 |
+|---|---|---|
+| magic | 4 | `"BRNC"` |
+| version | 1 | 当前 `1`；未来新增字段时递增，旧版本可读旧文件 |
+| ref_hash | 8 | `ref` 名的哈希前 8 字节（**不存明文 ref**） |
+| created_at / updated_at | 8+8 | Unix 秒（用于 TTL 清理与审计） |
+| cipher_len | 4 | DPAPI blob 长度 |
+| cipher | N | DPAPI blob（内含明文 Key） |
+| crc32 | 4 | 前文的 CRC32（损坏检测） |
+
+### B.3 保密措施
+1. **ACL**：创建目录/文件后收紧为「仅当前用户」（拒绝继承父目录权限）
+2. **内存**：Key 仅在 `web::SessionStore` / 调用栈内持有；用后立即清零 buffer；不写入 `Graph`
+3. **无回显**：错误信息、自检输出、Console 行**只**给出来源与长度（如 `来源=凭据库(长度 35)`），绝不打印内容
+4. **失败即拒绝**：解密失败（换用户/文件损坏）→ 视为「无 Key」并给出明确提示，**不降级**为明文回退
+5. **审计**：凭据的 save/load/erase/purge 各写一行审计日志（仅 ref 名 + 动作 + 时间）
+
+### B.4 清理管理
+| 能力 | 入口 | 说明 |
+|---|---|---|
+| 列举 | `aiwrite --cred-list` | 只输出 ref 名 / 更新时间 / 剩余 TTL |
+| 删除单条 | `aiwrite --cred-erase <ref>` | 删除并写审计 |
+| 清理过期 | `aiwrite --cred-purge`（启动时也惰性执行一次） | 删除 `updated_at` 超过 `[credentials] ttl_days`（默认 **30**）的条目 |
+| 隔离损坏 | 自动 | CRC 不符 / 解密失败 → 移入 `credentials/corrupt/` 并提示 |
+
+### B.5 Key 解析优先级（PB-04/PB-06 共同约定）
+1. 节点参数（`ProviderConfig.api_key`，仅内存、不落盘）
+2. 环境变量 `DEEPSEEK_API_KEY`
+3. **凭据库**（`ProviderConfig.api_key_ref` → 解密）
+
+每级命中在 Console 打一行 `[凭据] 来源=节点参数/环境变量/凭据库(长度 N)`（**无明文**）。全部未命中 → 报错并提示填写位置。
+
+### B.6 配置项（`config.toml`）
+```toml
+[credentials]
+dir = "~/.brain-ai/credentials"
+ttl_days = 30
+backend = "dpapi"   # dpapi | memory（memory = 只用环境变量/输入框，不落盘）
+```
+
+### B.7 接口（`utils/credential.{h,cpp}`，供 PB-04 的 `provider_factory` 调用）
+```cpp
+namespace aiwrite::utils {
+struct CredentialInfo { std::string ref; long long updated_at; int ttl_remaining_days; };
+bool                save_credential(const std::string& ref, const std::string& secret, std::string* error);
+std::string         load_credential(const std::string& ref, std::string* error);  // 失败返回空串
+bool                erase_credential(const std::string& ref, std::string* error);
+std::vector<CredentialInfo> list_credentials();
+int                 purge_expired_credentials(int ttl_days, std::string* error);  // 返回删除条数
+} // namespace aiwrite::utils
+```
+
+### B.8 自检断言（先行，全部离线可跑）
+1. `save → load` 可逆且**落盘文件扫描不到明文 Key**（按字节包含检查）
+2. 容器头字段完整（magic/version/ref_hash/时间戳/crc32），CRC 被篡改后 `load` 失败
+3. 未知 `ref` → 返回空串 + error，不创建文件
+4. `purge_expired(0)` 不删任何项；`purge_expired(1)` 删掉伪造的 40 天前条目，且**当前条目保留**
+5. 优先级：节点参数 > 环境变量 > 凭据库（用伪造 ref 验证第三级生效）
+6. `list_credentials()` 不返回任何密文；审计日志行**不含** Key
+7. `backend=memory` 时任何 `save` 都拒绝落盘（只允许内存/env）
+
+### B.9 与既有计划的关系
+- `M_patchA.md §4.1 PB-06` 条目按本附录更新（Windows Credential Manager 降级为**可选后端**，不在本批实现）
+- 代理与自签证书策略仍属 PB-06 范围（`HTTPS_PROXY/HTTP_PROXY` + 严格校验默认），随实现一并落地
