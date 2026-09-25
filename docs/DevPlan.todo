@@ -474,9 +474,9 @@
                 "children": [],
                 "todo": {
                   "id": 122,
-                  "content": "FEA-M4-14 最终版预览：TextOutput 作为最终结果出口（label 生效 + 输出面板置顶/高亮 + 节点摘要前缀）",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M4-14 最终版预览（已完成，M_textio P3）：TextOutput 作为最终结果出口 —— 输出面板置顶+高亮【最终输出】、label 参数真正生效（分段标题/摘要/文档标题）、画布摘要前缀 ｜ actionPlan/M_textio.md",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_textio.md · P3"
                 }
               },
@@ -485,9 +485,9 @@
                 "children": [],
                 "todo": {
                   "id": 123,
-                  "content": "FEA-M4-15 导出为文档：TextOutput 上的「导出为文档…」动作按钮（md/txt、原子写、7 条离线断言）",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M4-15 导出为文档（已完成，M_textio P2/P3）：utils/text_export 核心（原子写、同名自动改名、元信息头可选）+ 「导出为文档…」按钮（参数面板/输出面板/工具栏）+ --export-selftest 7/7 断言；**待人工确认**（保存对话框→文件内容逐字符一致） ｜ actionPlan/M_textio.md",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_textio.md · P2/P3"
                 }
               }
@@ -1249,11 +1249,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md · PB-06"
                 }
+              },
+              {
+                "key": 124,
+                "children": [],
+                "todo": {
+                  "id": 124,
+                  "content": "ARC-M3-14 M_textio：文本输出双职能 —— 最终输出预览（置顶/高亮/label 生效）+ 导出为文档（utils/text_export 原子写 + 三处入口 + 7 条离线断言 7/7）",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_textio.md"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（14 项）",
+              "content": "M3（15 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1349,7 +1360,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（23 项）",
+          "content": "Archive（24 项）",
           "done": true,
           "level": "success"
         }

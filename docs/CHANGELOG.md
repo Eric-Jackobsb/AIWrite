@@ -19,6 +19,18 @@
 
 ## [Unreleased] — M2 节点系统（P1 数据层 + P2 画布交互）已落地
 
+**M_textio P2+P3：文本输出 = 最终输出（预览）+ 导出为文档**
+
+- `utils/text_export.{h,cpp}`（新）：`sanitize_file_stem` / `render_document_name` /
+  `build_document_body`（元信息头可选）/ `write_document`（**原子写**：临时文件+rename；同名自动 `-1/-2`）/
+  `export_text_document` / `document_stamp_now` / `document_time_text`
+- `--export-selftest`：**7 条离线断言 7/7 PASS**（文件名渲染+清洗 / 正文含与不含元信息头 / 写盘回读一致 /
+  同名不覆盖自动改名 / 不可写路径明确错误 / 无 .tmp 残留 / label 进入标题）
+- UI：输出面板 **最终输出段置顶 + 高亮**（`【最终输出】<标签>`）、该段与参数面板各加 **「导出为文档…」**、
+  工具栏加「导出最终输出为文档…」；画布节点摘要前缀 `最终输出：`；**`label` 参数从此真正生效**
+- 回归：构建 0/0；`api_probe` 三套 exit 0；`--run-selftest` / `--cred-selftest` / `--export-selftest` 均 exit 0；GUI 冒烟优雅退出
+- 文档：`actionPlan/M_textio.md`（计划）、`ai_writer_nodes.md`（N-08 语义）、使用说明 §10.8（人工确认 6 项）；DevPlan `FEA-M4-14/15` ✅
+
 **PB-05（落地「API 使用」）：官方 DeepSeek API Provider —— `mode=official` 真正可用**
 
 - 新增 `ai/deepseek_official_provider.{h,cpp}`：`POST {api_base}/chat/completions`（OpenAI 兼容）

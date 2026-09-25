@@ -210,7 +210,7 @@ Workflow
 | N-05 | Provider Config | 配置 | — | provider |
 | N-06 | LLM Generate | 推理 | prompt, provider | text |
 | N-07 | VLM Generate | 推理 | prompt, image, provider | text |
-| N-08 | Text Output | 输出 | text | — |
+| N-08 | Text Output（**最终输出**） | 输出 | text | — |
 | N-09 | Image Preview | 输出 | image | — |
 
 ### 4.5 端口类型系统
@@ -621,7 +621,8 @@ nlohmann::json execute(
 | Provider Config | 输出 provider 句柄，校验配置完整性 |
 | LLM Generate | 读取 prompt + provider，调用后端，流式回调 |
 | VLM Generate | 同 LLM，但多了图片输入 |
-| Text Output | 推送文本到 Output 窗口，透传 |
+| Text Output | **最终输出**：正文作为工作流最终结果（输出面板置顶/高亮、画布摘要与参数面板标注）＋
+  **导出为文档**（参数面板/输出面板「导出为文档…」，`.md`/`.txt`，原子写、元信息头可选；见 `actionPlan/M_textio.md`） |
 | Image Preview | 推送图片到 Output 窗口，透传 |
 
 ### 9.3 错误处理
