@@ -395,6 +395,37 @@ int run_selftest(bool use_web)
         std::printf("[运行自检] PB-01 第二步：跳过（--web 模式避免二次联网）\n");
     }
 
+    // ---- M_textio P5：汇点节点（TextOutput）的运行态值可读（回归断言）----
+    bool sink_ok = false;
+    {
+        std::string output_id;
+        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+            if (node.type == "TextOutput") {
+                output_id = node.id;
+            }
+        }
+        std::string source_id;
+        if (!output_id.empty()) {
+            if (const aiwrite::engine::Edge* edge = state.graph.findEdgeIntoInput(output_id, "text")) {
+                source_id = edge->from_node;
+            }
+        }
+        std::string sink_text;
+        std::string source_text;
+        bool sink_same = false;
+        if (!output_id.empty() && !source_id.empty()) {
+            sink_text   = aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(), output_id);
+            source_text = aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(), source_id);
+            const aiwrite::engine::RunSnapshot snap = aiwrite::engine::makeSnapshot(state.graph, state.executor);
+            const aiwrite::engine::RunNodeView* view = snap.find(output_id);
+            sink_same = (sink_text == source_text) && view != nullptr && view->text == source_text;
+        }
+        sink_ok = sink_same;
+        std::printf("[运行自检] M_textio 汇点结果可读：%s（TextOutput=%s / 上游=%s / 汇点 %zu 字符 / 上游 %zu 字符）\n",
+                    sink_ok ? "OK" : "失败", output_id.c_str(), source_id.c_str(), sink_text.size(),
+                    source_text.size());
+    }
+
     // ---- F1（M3-04 重做）：复制/粘贴的模型级断言（先断言、后接线 UI）----
     // 说明：画布层守卫见 node_canvas.cpp（clamp_position / 未知手柄反向推送 / 视图跟随前校验），
     //       这里覆盖模型侧：新 id 唯一、位置偏移且有限、参数复制、选区内部连线重映射、可撤销。
@@ -552,7 +583,7 @@ int run_selftest(bool use_web)
     }
 
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
-                      consistency_ok && param_driven_ok && async_ok && session_ok && paste_ok;
+                      consistency_ok && param_driven_ok && async_ok && session_ok && sink_ok && paste_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

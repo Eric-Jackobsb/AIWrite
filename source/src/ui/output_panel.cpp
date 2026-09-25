@@ -122,10 +122,20 @@ bool export_node_document(EditorState& state, const std::string& node_id)
         }
     }
     const std::string stamp = utils::document_stamp_now();
-    const std::string default_name =
-        utils::render_document_name(state.workflow_display_name(), stamp, "md");
+    std::string stem = state.workflow_display_name(); // M_textio P5：文件名主干可由参数覆盖
+    if (const engine::Param* name_param = node->findParam("file_name")) {
+        const std::string text = name_param->text();
+        if (!text.empty()) {
+            stem = text;
+        }
+    }
+    std::string default_dir; // M_textio P5：导出目录参数作为对话框默认目录
+    if (const engine::Param* dir_param = node->findParam("export_dir")) {
+        default_dir = dir_param->text();
+    }
+    const std::string default_name = utils::render_document_name(stem, stamp, "md");
     const std::string path =
-        utils::save_file({{"Markdown", "md"}, {"文本", "txt"}}, {}, default_name);
+        utils::save_file({{"Markdown", "md"}, {"文本", "txt"}}, default_dir, default_name);
     if (path.empty()) {
         return false; // 用户取消
     }

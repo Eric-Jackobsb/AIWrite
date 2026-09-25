@@ -382,7 +382,16 @@ void registerAllNodes()
         definition.category     = NodeCategory::Output;
         definition.description  = "推送到 Output 窗口并透传";
         definition.inputs       = {input_port("text", "文本", PortType::Text)};
-        definition.params       = {text_param("label", "标签", "输出", ParamType::String)};
+        definition.params       = {
+            text_param("label", "标签", "输出", ParamType::String, false, false,
+                       "最终输出的显示名（分段标题 / 文档标题）"),
+            text_param("export_dir", "导出目录", std::string(), ParamType::Directory, false, false,
+                       "「导出为文档…」的默认目录，也是「运行后自动导出」的目标目录；留空 = outputs/"),
+            text_param("file_name", "文件名主干", std::string(), ParamType::String, false, false,
+                       "留空 = 工作流名-时间戳；非法字符会被清洗"),
+            bool_param("auto_export", "运行后自动导出", false,
+                       "运行结束后把最终输出写入「导出目录」（不覆盖同名，自动 -1/-2）"),
+        };
         registry.registerNode(std::move(definition));
     }
 

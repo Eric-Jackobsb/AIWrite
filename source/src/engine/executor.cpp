@@ -491,6 +491,17 @@ std::string nodeOutputText(const Graph& graph, const NodeOutputs& outputs, const
         }
         text += item;
     }
+    if (text.empty()) {
+        // M_textio P5：汇点节点（无输出端口）的正文存放在虚拟端口 __result
+        if (const nlohmann::json* value = outputs.find(node_id, "__result")) {
+            if (value->is_string()) {
+                text = value->get<std::string>();
+            }
+            else if (!value->is_null()) {
+                text = value->dump();
+            }
+        }
+    }
     return text;
 }
 
@@ -574,6 +585,11 @@ bool Executor::executeNode(Graph& graph, const std::string& node_id)
         // 约定：单输出节点 → 返回值即该端口的值；多输出节点 → {"端口id": 值}
         if (node->outputs.size() == 1) {
             outputs_.set(node_id, node->outputs[0].id, std::move(output));
+        }
+        else if (!output.is_null()) {
+            // M_textio P5：汇点节点（TextOutput / ImagePreview，无输出端口）也要把返回值
+            // 存入运行态值（虚拟端口 __result）—— 否则面板 / 归档 / 预览都读不到正文
+            outputs_.set(node_id, "__result", std::move(output));
         }
         else if (!node->outputs.empty()) {
             if (!output.is_object()) {
