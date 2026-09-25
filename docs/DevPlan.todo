@@ -441,7 +441,7 @@
                 "children": [],
                 "todo": {
                   "id": 39,
-                  "content": "FEA-M4-11 重跑能力：重跑单个节点 / 重跑该节点及下游（复用运行信息与拓扑） ｜ §6.1 PD-06",
+                  "content": "FEA-M4-11 通用重跑能力：重跑该节点 / 该节点及下游（复用上游结果，需执行器支持「从某节点开始」；重跑前清除受影响节点结果与状态）—— 与 FEA-M4-17 的「新 seed 重跑」区分 ｜ §6.1 PD-06",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -501,11 +501,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_textio.md · P5"
                 }
+              },
+              {
+                "key": 126,
+                "children": [],
+                "todo": {
+                  "id": 126,
+                  "content": "FEA-M4-17 文本生成「重新生成（新 seed）」：LLMGenerate 增 seed 参数 + 参数面板按钮（压快照→写新 seed→重新运行）；官方 API 请求体带 seed、网页版忽略并提示；离线断言 3 条 ｜ actionPlan/M_rerun.md",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_rerun.md"
+                }
               }
             ],
             "todo": {
               "id": 28,
-              "content": "M4（16 项）",
+              "content": "M4（17 项）",
               "done": false,
               "level": "secondary"
             }
@@ -656,7 +667,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（38 项）",
+          "content": "Feature（39 项）",
           "done": false,
           "level": "default"
         }

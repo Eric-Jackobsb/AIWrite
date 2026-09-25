@@ -410,7 +410,9 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 | PD-03 | 设置面板（M6-06） | 新增 `ui/settings_panel.{h,cpp}`：分区编辑 `general/ui/output/timeout/error/advanced`；含校验（范围/路径存在性）+ 落盘 + 「需重启生效」标注；`deepseek` 段说明"节点参数为准" | `ui/settings_panel.{h,cpp}`、`ui/app.cpp` |
 | PD-04 | 窗口几何持久化 | `config.ui` 增 `window_width/height/pos_x/pos_y/maximized`；启动恢复 + 越屏矫正（多显示器拔插后回到主屏） | `utils/config.*`、`ui/app.cpp` |
 | PD-05 | 参数面板增强 | 每节点「重置为默认」；按类型批量应用参数；参数搜索过滤 | `ui/property_panel.cpp` |
-| PD-06 | 重跑能力 | 「重跑该节点」「重跑该节点及下游」（依赖 `runInfos` 与拓扑）；重跑前清除受影响节点的结果与状态 | `ui/editor_state.*`、`ui/node_canvas.cpp`、`ui/toolbar.cpp` |
+| PD-06 | 重跑能力 | ① **通用重跑**（「重跑该节点」「重跑该节点及下游」，依赖 `runInfos` 与拓扑；重跑前清除受影响节点结果与状态）→ 仍归口 `FEA-M4-11`；
+② **「重新生成（新 seed）」**（LLMGenerate）：写入新 seed 后重新运行，效果等同「再次运行但用不同 seed」，**不改图结构与其它参数** → 归口 `FEA-M4-17`，详见 [`M_rerun.md`](M_rerun.md) | 
+`ui/property_panel.cpp`、`ui/editor_state.*`、`ui/node_canvas.cpp`、`ui/toolbar.cpp`、`engine/node_registry.cpp`、`ai/deepseek_official_provider.*` |
 | PD-07 | 输出面板进阶 | 历史运行列表（内存 + 最近 N 次）、节点内搜索、复制为 Markdown/JSON | `ui/output_panel.cpp` |
 | PD-08 | i18n 决策 | 二选一：① 最小 i18n（字符串表 + `general.language` 切换，重启生效）；② 从 `config.toml` 暂时移除 `general.language/startup` 并记入 M6（本补丁默认 ②，除非另行指定） | `utils/config.*`、文档 |
 
