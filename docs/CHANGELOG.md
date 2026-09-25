@@ -19,6 +19,22 @@
 
 ## [Unreleased] — M2 节点系统（P1 数据层 + P2 画布交互）已落地
 
+**修复：网页版运行报「未取得网页版凭证」—— 登录窗口已开时不再干等，改为自动补探测**
+
+- 现象：点「▶ 运行」或「重新生成（新 seed）」→ 节点失败 `文本生成（网页版）不可用：未取得网页版凭证…`，且要等约 25 秒才报错
+- 根因：网页版凭证（`userToken`）**只存内存**，每次启动进程都要重新探测一次；而 `web::ensure_session()` 旧逻辑只判断「窗口句柄是否为空」——
+  **窗口已打开就只“等”**，从不发起探测。而用户手动点「打开登录窗口」时用的 `probe_after_load=false`（不探测）→ 内存里永远没有 `userToken` → 白等 25 秒超时。
+  **与 Cookie 过期无关**：实测 `--web-probe` 仍能取到 `userToken`（`/api/v0/users/current` → 200），profile 登录态有效 ⇒ 纯粹是引导逻辑 bug
+- 修复（`web/webview_host.{h,cpp}`）：新增纯逻辑决策 `plan_session_boot(has_token, window_open)`（`HaveToken` / **`ReuseAndProbe`（窗口已开 → 补一次探测）** /
+  `StartAndProbe`），`ensure_session()` 按它执行；等待期间**每 6 秒补探测一次（最多 3 次）**，覆盖「登录动作发生在页面加载之后 / 浏览器尚未就绪」；
+  失败文案改为可操作指引（点「探测网页版协议（dev）」或跑 `--web-probe`）
+- 修复（`ui/property_panel.cpp`）：手动「打开登录窗口（WebView2）」改用 `web::interactive_login_request()` —— 窗口页面加载完成后**自动探测一次**（按钮悬停有说明），
+  之后点「运行 / 重新生成」无需再等
+- 断言（离线）：`api_probe --selftest` V-09 新增「会话自动引导决策」真值表 4 项 + 「手动登录窗口自动探测」→ 实测 `OK`
+- 新增回归（端到端，能直接复现本 bug）：`aiwrite.exe --web-session-selftest` —— 先按用户手动路径开窗口（刻意不探测，断言此刻 `userToken` 为空）→ 再调 `ensure_session()` 必须自己补探测取到凭证；
+  实测 `步骤 1：窗口已开（Cookie 5 条，userToken 空）` / `步骤 2：ensure_session=OK（userToken 长度 64）` / `PASS`，退出码 0
+- 回归：构建 0 error / 0 warning；`api_probe --selftest` exit 0；`--run-selftest` / `--cred-selftest` / `--export-selftest` exit 0；`--run-selftest --web` 完成 5/5 PASS（真实网页版生成不受影响）
+
 **修复（崩溃）：参数滑块范围越界导致选中「文本生成」节点即 abort（ImGui SliderInt 断言）**
 
 - 现象：`Assertion failed: *(const ImS32*)p_min >= IM_S32_MIN / 2 && *(const ImS32*)p_max <= IM_S32_MAX / 2`（imgui_widgets.cpp `SliderBehavior`）→ 选中节点后参数面板渲染即崩

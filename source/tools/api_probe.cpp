@@ -34,6 +34,7 @@
 #include "utils/output_archive.h"
 #include "utils/paths.h"
 #include "web/session_store.h"
+#include "web/webview_host.h" // plan_session_boot / interactive_login_request（纯逻辑断言用）
 
 #include <fstream>
 #include <sstream>
@@ -298,6 +299,19 @@ bool test_web_session_and_visibility()
     const bool cleared_ok = !aiwrite::web::SessionStore::instance().logged_in() &&
                             aiwrite::web::SessionStore::instance().cookie_count() == 0;
 
+    // ---- 会话自动引导决策（2026-09-26 真 bug 的回归断言）----
+    //  旧逻辑：只要“窗口已打开”就只等 → 用户手动开的窗口从不探测 → 25s 超时 →「未取得网页版凭证」
+    using aiwrite::web::SessionBoot;
+    const bool boot_ok =
+        aiwrite::web::plan_session_boot(true, false) == SessionBoot::HaveToken &&
+        aiwrite::web::plan_session_boot(true, true) == SessionBoot::HaveToken &&
+        aiwrite::web::plan_session_boot(false, true) == SessionBoot::ReuseAndProbe &&
+        aiwrite::web::plan_session_boot(false, false) == SessionBoot::StartAndProbe;
+    // 手动「打开登录窗口」必须在页面加载后自动探测一次（否则运行时只能等到超时）
+    const aiwrite::web::LoginRequest interactive = aiwrite::web::interactive_login_request();
+    const bool request_ok = interactive.probe_after_load && !interactive.offscreen &&
+                            interactive.url.find("deepseek.com") != std::string::npos;
+
     // ---- 参数条件可见性：ProviderConfig 在 official 显示 api_key，在 web 隐藏（且不参与校验）----
     aiwrite::engine::registerAllNodes();
     aiwrite::engine::Graph graph;
@@ -322,11 +336,14 @@ bool test_web_session_and_visibility()
             (mode != nullptr) && official_visible && web_hidden && official_valid && web_valid;
     }
 
-    const bool ok = store_ok && cleared_ok && visibility_ok;
+    const bool ok = store_ok && cleared_ok && visibility_ok && boot_ok && request_ok;
     std::printf("   %-6s 会话存储写读=%s%s；参数可见性=%s（official 显示 api_key / web 隐藏 "
                 "api_key·api_base / 两模式校验均通过）\n",
                 ok ? "PASS" : "FAIL", store_ok ? "OK" : "异常", cleared_ok ? "/注销清空 OK" : "/注销异常",
                 visibility_ok ? "OK" : "异常");
+    std::printf("         会话自动引导决策=%s（含「窗口已开→补探测 ReuseAndProbe」真值表 4 项）；"
+                "手动登录窗口自动探测=%s\n",
+                boot_ok ? "OK" : "异常", request_ok ? "OK" : "异常");
     return ok;
 }
 

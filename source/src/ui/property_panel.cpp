@@ -148,16 +148,21 @@ void draw_web_session_section()
     }
     else {
         if (ImGui::Button("打开登录窗口（WebView2）", ImVec2(-FLT_MIN, 0.0f))) {
-            web::LoginRequest request;
-            request.url          = "https://chat.deepseek.com/";
-            request.window_title = "AIwrite · DeepSeek 网页版登录（登录后关闭本窗口）";
-            std::string error;
+            // 页面加载完成后**自动探测一次**：手动开的窗口同样要拿到内存 userToken，
+            // 否则运行时 ensure_session 只能等到超时（2026-09-26 修复）
+            const web::LoginRequest request = web::interactive_login_request();
+            std::string             error;
             if (window.start(request, &error)) {
-                log::info("网页版登录窗口已打开（独立线程，主界面不受影响）");
+                log::info("网页版登录窗口已打开（独立线程，主界面不受影响；页面加载后自动探测凭证）");
             }
             else {
                 log::warn("网页版登录窗口打开失败: " + error);
             }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("profile 会记住登录态；窗口页面加载完成后会自动探测一次（读取内存 userToken），\n"
+                              "之后点「运行 / 重新生成」就无需再等。若提示未取得凭证：\n"
+                              "先确认窗口内已登录，再点下方「探测网页版协议（dev）」后重试。");
         }
         if (session.logged_in) {
             ImGui::Spacing();

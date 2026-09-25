@@ -33,7 +33,7 @@
 | B | **PB-05 官方 Provider（落地「API 使用」）** | ✅ 代码完成 | `ai/deepseek_official_provider.{h,cpp}`（`/chat/completions` + 参数透传 + 错误分类 + 超时）；`mode=official` 真正调用；`unwired_reason` 改为「缺 API Key 才失败」。**待人工验证**：填 Key → official → 真实生成 |
 | B | PB-02 真取消 / PB-06 凭据与网络策略 | ⬜ **延后（用户决议）** | 影响：停止仍在节点边界生效（网页版最坏等 HTTP 读超时）；official 仍不可用；Key 仍只在内存/环境变量 |
 | B | PB-03 流式回调接口 | 🟡 **缩为「仅网页版增量回调」**（作为 PB-08 前置） | 官方 `on_delta` 随 PB-05 延后 |
-| B | PB-08 流式呈现 / PB-07 会话失效引导 | ⬜ 待做（PB-01 之后） | — |
+| B | PB-08 流式呈现 / PB-07 会话失效引导 | ⬜ 待做（PB-01 之后） | **PB-07 部分前置已完成（2026-09-26，FEA-M4-19）**：`ensure_session` 识别「窗口已开 → 补探测」（原来只会干等 25s 报「未取得网页版凭证」）+ 手动登录窗口自动探测 + 离线真值表断言 + 端到端 `--web-session-selftest`；**剩余**：识别 `40002/401` 与「点此重新登录」错误条引导 |
 | 后续 | **工作流变体保存**（用户后续设计） | ⬜ 延后 | 把面板保存为独立 workflow，并把当前 workflow 更新为变体；启动恢复上次工作流一并归入该项（本条**不做**，仅登记） |
 | A2 | 回归基线（PA-02 后） | ✅ | `--selftest` 七组 PASS；`--graph-selftest` 95/0；`--exec-selftest` 62/0；`--run-selftest` PASS（3/5 预期）；`--run-selftest --web` 5/5；构建 0 error / 0 warning |
 | C | PC-05 输出归档（提前落地） | ✅ | 新增 `utils/output_archive.{h,cpp}`：运行结束写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`（每节点 `.txt` 含元信息头 + `run.json`）；同秒多次运行自动加序号且**本次归档永不删除**；工作流名非法字符清洗；不可写路径返回错误不抛异常。`editor_state` 运行结束自动归档 + `last_archive_dir`；输出面板显示归档路径并可「复制归档路径」 |

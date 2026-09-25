@@ -29,6 +29,42 @@ struct LoginRequest {
     bool        auto_close_after_probe = false;   // 探测完成即关闭窗口（命令行自检用）
 };
 
+// ---------------------------------------------------------------------------
+// 会话自动引导决策（**纯逻辑，便于离线断言**；由 ensure_session 使用）
+//
+// 教训（2026-09-26 真 bug）：窗口“已打开”**不等于**内存里有凭证——
+// 用户手动点「打开登录窗口」时页面加载后并不探测，于是 userToken 永远是空的，
+// 而旧版 ensure_session 见到窗口已开就只“等”，必然等到超时 →
+// 「未取得网页版凭证」。因此“窗口已开”必须映射为 **ReuseAndProbe（补一次探测）**。
+// ---------------------------------------------------------------------------
+enum class SessionBoot {
+    HaveToken,      // 内存已有 userToken：直接用，不做任何事
+    ReuseAndProbe,  // 登录窗口已开且浏览器就绪：在现有页面里补一次协议探测
+    StartAndProbe,  // 无可用窗口：离屏起一个（probe_after_load=true 自动探测）
+};
+
+inline SessionBoot plan_session_boot(bool has_token, bool window_open)
+{
+    if (has_token) {
+        return SessionBoot::HaveToken;
+    }
+    // 只看「窗口是否开着」，**不**看浏览器是否已就绪：已开窗口时再 start() 会因
+    // 「已有登录窗口在运行」失败，而探测请求是**可重试**的（ensure_session 每 6 秒补一次），
+    // 所以“还没就绪”只需重试，不该另开窗口。
+    return window_open ? SessionBoot::ReuseAndProbe : SessionBoot::StartAndProbe;
+}
+
+// 参数面板「打开登录窗口（WebView2）」使用的请求：**页面加载完成后自动探测一次**
+// （手动开的窗口同样必须拿到内存凭证，否则运行时 ensure_session 只能等到超时）
+inline LoginRequest interactive_login_request()
+{
+    LoginRequest request;
+    request.url              = "https://chat.deepseek.com/";
+    request.window_title     = "AIwrite · DeepSeek 网页版登录（登录后关闭本窗口）";
+    request.probe_after_load = true;
+    return request;
+}
+
 class LoginWindow {
 public:
     LoginWindow() = default;

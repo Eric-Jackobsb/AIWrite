@@ -523,11 +523,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_rerun.md · §6"
                 }
+              },
+              {
+                "key": 130,
+                "children": [],
+                "todo": {
+                  "id": 130,
+                  "content": "FEA-M4-19 网页版会话自动引导修复（真 bug）：`ensure_session` 旧逻辑把「登录窗口已打开」当成「内存已有凭证」→ 从不探测、干等 25s 后报「未取得网页版凭证」（用户手动开的窗口 probe_after_load=false，内存里永远没有 userToken；实测与 Cookie 过期无关）。修复：纯逻辑决策 `plan_session_boot`（HaveToken / ReuseAndProbe / StartAndProbe）+ 等待期每 6s 补探测（≤3 次）+ 手动「打开登录窗口」改为自动探测 + 离线真值表断言 + 端到端 `--web-session-selftest` ｜ PB-07 前置",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/网页版协议实测记录.md · §6"
+                }
               }
             ],
             "todo": {
               "id": 28,
-              "content": "M4（18 项）",
+              "content": "M4（19 项）",
               "done": false,
               "level": "secondary"
             }
@@ -678,7 +689,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（40 项）",
+          "content": "Feature（41 项）",
           "done": false,
           "level": "default"
         }
@@ -1315,11 +1326,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_rerun.md · §6"
                 }
+              },
+              {
+                "key": 131,
+                "children": [],
+                "todo": {
+                  "id": 131,
+                  "content": "ARC-M3-17 网页版会话自动引导修复（FEA-M4-19）：`ensure_session` 识别「窗口已开 → 补探测 ReuseAndProbe」（原来只会干等超时）+ 手动登录窗口自动探测（`interactive_login_request`）+ 离线真值表断言 + 端到端 `--web-session-selftest` PASS",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/网页版协议实测记录.md · §6"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（17 项）",
+              "content": "M3（18 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1415,7 +1437,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（26 项）",
+          "content": "Archive（27 项）",
           "done": true,
           "level": "success"
         }

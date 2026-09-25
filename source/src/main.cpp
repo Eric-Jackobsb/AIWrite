@@ -43,6 +43,9 @@ void print_usage()
     std::printf("  --web-chat \"<提示词>\"\n");
     std::printf("                   网页版生成：取 PoW 挑战 → C++ 求解 → 调用 /api/v0/chat/completion\n");
     std::printf("                   退出码 0=取到文本 / 1=失败（需先登录过一次）\n");
+    std::printf("  --web-session-selftest\n");
+    std::printf("                   会话自动引导回归：先按用户手动路径开窗口（不探测）→ 再调 ensure_session\n");
+    std::printf("                   应「窗口已开 → 自动补探测」拿到凭证；退出码 0=通过 / 1=失败\n");
     std::printf("  --run-selftest [--web]\n");
     std::printf("                   执行自检：创建示例工作流 → 运行到结束，打印各节点状态与统计\n");
     std::printf("                   --web：LLMGenerate 走网页版真实生成（需已登录过一次）\n");
@@ -707,6 +710,55 @@ int web_chat_selftest(const std::string& prompt)
     return pass ? 0 : 1;
 }
 
+// --web-session-selftest：回归「窗口已打开但内存无凭证」真 bug（2026-09-26）
+//  步骤 1：按**用户手动路径**开登录窗口（probe_after_load=false → 内存里不会有 userToken）
+//  步骤 2：调 web::ensure_session() —— 修复前：只“等” → 25s 超时失败（运行时报「未取得网页版凭证」）
+//                                       修复后：识别「窗口已开 → 补探测」 → 数秒内取到凭证
+int web_session_selftest()
+{
+    aiwrite::web::LoginWindow& window = aiwrite::web::login_window();
+
+    // ---- 步骤 1：模拟用户手动点「打开登录窗口」（历史行为：不自动探测）----
+    aiwrite::web::LoginRequest manual;
+    manual.offscreen        = true;  // 离屏，不打扰用户
+    manual.probe_after_load = false; // 【关键】刻意不探测 → 内存无 userToken
+    std::string error;
+    if (!window.start(manual, &error)) {
+        std::printf("[会话自检] FAIL 启动登录窗口失败：%s\n", error.c_str());
+        return 1;
+    }
+    for (int i = 0; i < 100; ++i) { // ≤10 秒：等页面加载（Cookie 提取即可）
+        if (aiwrite::web::SessionStore::instance().snapshot().logged_in) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    const aiwrite::web::Session before = aiwrite::web::SessionStore::instance().snapshot();
+    const bool                 token_empty = before.user_token.empty();
+    std::printf("[会话自检] 步骤 1：窗口已开（Cookie %zu 条，userToken %s）\n",
+                before.cookie_count(), token_empty ? "空（符合预期）" : "非空（场景不成立）");
+
+    // ---- 步骤 2：ensure_session 必须自己补探测，而不是干等 ----
+    const bool ok = aiwrite::web::ensure_session(30000, &error);
+    const aiwrite::web::Session after = aiwrite::web::SessionStore::instance().snapshot();
+    if (ok) {
+        std::printf("[会话自检] 步骤 2：ensure_session=OK（userToken 长度 %zu，仅内存）\n",
+                    after.user_token.size());
+    }
+    else {
+        std::printf("[会话自检] 步骤 2：ensure_session=失败：%s\n", error.c_str());
+    }
+
+    const bool pass = token_empty && ok;
+    std::printf("[会话自检] %s（判定：开窗口时无凭证=%s / ensure_session 取得凭证=%s）\n",
+                pass ? "PASS" : "FAIL", token_empty ? "是" : "否", ok ? "是" : "否");
+
+    window.request_close(); // 收尾：关闭离屏窗口
+    window.join();
+    aiwrite::web::SessionStore::instance().clear(); // 自检不留会话
+    return pass ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -716,6 +768,7 @@ int main(int argc, char** argv)
     bool run_selftest_flag = false;
     bool run_selftest_web  = false;
     bool web_probe_flag    = false;
+    bool web_session_selftest_flag = false;
     std::string web_chat_prompt;
     int  selftest_timeout = 30;
 
@@ -769,6 +822,9 @@ int main(int argc, char** argv)
         else if (arg == "--web-probe") {
             web_probe_flag = true;
         }
+        else if (arg == "--web-session-selftest") {
+            web_session_selftest_flag = true;
+        }
         else if (arg == "--web-chat") {
             if (i + 1 >= argc) {
                 std::fprintf(stderr, "参数 --web-chat 缺少取值\n");
@@ -808,6 +864,14 @@ int main(int argc, char** argv)
         aiwrite::log::warn("有 " + std::to_string(dir_failures) + " 个数据目录创建失败，请检查权限");
     }
     aiwrite::log::info("数据目录: " + aiwrite::paths::data_root().string());
+
+    // 网页版会话自动引导回归（窗口已开但内存无凭证 → ensure_session 应自动补探测）
+    if (web_session_selftest_flag) {
+        const int session_code = web_session_selftest();
+        aiwrite::log::info("AIwrite 会话自检退出，返回码 " + std::to_string(session_code));
+        aiwrite::log::shutdown();
+        return session_code;
+    }
 
     // 网页版登录自检（不需要 GUI，不进消息循环）
     if (login_selftest) {

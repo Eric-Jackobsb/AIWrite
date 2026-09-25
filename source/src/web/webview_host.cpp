@@ -1060,8 +1060,13 @@ bool ensure_session(int timeout_ms, std::string* error)
         return true;
     }
 
-    // 起（或复用）离屏登录窗口；probe_after_load 会刷新 Cookie 与 userToken
-    if (g_window.load() == nullptr || g_webview == nullptr) {
+    // 【2026-09-26 修复】窗口已打开 ≠ 内存有凭证：必须按 plan_session_boot 决定“补探测 / 开窗口”，
+    //  否则（旧逻辑）只会白等到超时 → 运行时报「未取得网页版凭证」
+    const bool        window_open = g_window.load() != nullptr;
+    const SessionBoot plan        = plan_session_boot(false, window_open);
+
+    if (plan == SessionBoot::StartAndProbe) {
+        // 起（或重建）离屏登录窗口；probe_after_load 会刷新 Cookie 与 userToken
         LoginRequest request;
         request.offscreen        = true;
         request.timeout_seconds  = 0;
@@ -1073,19 +1078,42 @@ bool ensure_session(int timeout_ms, std::string* error)
             }
             return false;
         }
+        log::info("[网页版会话] 内存无凭证：已离屏启动登录窗口（页面加载后自动探测）");
+    }
+    else {
+        // 窗口已开（用户手动开的窗口不会自动探测 / 上次探测失败）→ 显式补一次探测
+        request_protocol_probe();
+        log::info("[网页版会话] 内存无凭证：复用已打开的登录窗口，已请求一次协议探测");
     }
 
-    const DWORD deadline = ::GetTickCount() + static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 30000);
+    const DWORD deadline   = ::GetTickCount() + static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 30000);
+    const DWORD retry_ms   = 6000; // 每 6 秒补一次探测（登录动作可能发生在页面加载之后）
+    int         probes     = (plan == SessionBoot::StartAndProbe) ? 0 : 1;
+    DWORD       next_retry = ::GetTickCount() + retry_ms;
+
     while (::GetTickCount() < deadline) {
         if (!SessionStore::instance().snapshot().user_token.empty()) {
+            log::info("[网页版会话] 已取得内存凭证（userToken 长度 " +
+                      std::to_string(SessionStore::instance().snapshot().user_token.size()) +
+                      "，仅内存；路径=" +
+                      (plan == SessionBoot::ReuseAndProbe ? "复用已开窗口补探测" : "离屏开窗探测") + "）");
             return true;
+        }
+        const DWORD now = ::GetTickCount();
+        if (probes < 3 && now >= next_retry) {
+            ++probes;
+            next_retry = now + retry_ms;
+            request_protocol_probe();
+            log::info("[网页版会话] 仍未取得凭证，补一次协议探测（第 " + std::to_string(probes) +
+                      " 次；窗口" + (window_open ? "已打开" : "本次新开") + "）");
         }
         ::Sleep(100);
     }
 
     if (error != nullptr) {
-        *error = "未取得网页版凭证（请先登录一次：界面「网页版会话 → 打开登录窗口」，"
-                 "或运行 aiwrite.exe --login-selftest）";
+        *error = "未取得网页版凭证（内存里没有 userToken）"
+                 "：请在已登录的登录窗口内点「探测网页版协议（dev）」后重试，"
+                 "或运行 aiwrite.exe --web-probe 确认登录态（退出码 0 = 可用）";
     }
     return false;
 }
