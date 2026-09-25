@@ -70,7 +70,16 @@ std::string unwired_reason(const Graph& graph, const Node& node)
         return {};
     }
     // PB-05 已接线官方 API：只有“缺 API Key”才会必定失败（参数 → 环境变量 DEEPSEEK_API_KEY）
-    const Param* key = node.findParam("api_key");
+    // Key 可能在 provider 输入的来源节点（「提供商配置」）上，其次本节点，最后环境变量
+    const Param* key = nullptr;
+    if (const Edge* provider_edge = graph.findEdgeIntoInput(node.id, "provider")) {
+        if (const Node* source = graph.findNode(provider_edge->from_node)) {
+            key = source->findParam("api_key");
+        }
+    }
+    if (key == nullptr) {
+        key = node.findParam("api_key");
+    }
     const char*  env_key = std::getenv("DEEPSEEK_API_KEY");
     const bool   has_env = (env_key != nullptr && *env_key != '\0');
     if (key != nullptr && !key->is_empty()) {

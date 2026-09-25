@@ -556,6 +556,8 @@ bool Executor::executeNode(Graph& graph, const std::string& node_id)
     node->error_message.clear();
     current_node_ = node_id;
     notifyState(node_id, NodeState::Running);
+    ctx_.graph           = &graph;
+    ctx_.current_node_id = node_id;
     ctx_.console("[" + node_id + "] 开始执行（" + node->type + " · " + node->title + "）");
     const auto started = std::chrono::steady_clock::now(); // PA-01：节点耗时起点
 

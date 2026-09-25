@@ -82,6 +82,10 @@ struct ExecutionContext {
     std::function<void(const std::string&, NodeState)> on_node_state; // UI 状态刷新（P3-3 接画布）
     // PB-03：流式增量回调（节点实现按段吐出；执行器转成事件给主线程）
     std::function<void(const std::string&)> on_delta;
+    // PB-05：只读图引用 + 当前节点 id —— 推理节点据此读取「提供商配置」等配置类节点的参数
+    // （例如官方 API 的 api_key）；仅运行期使用，绝不写入 Graph / 不落盘 / 不打印
+    const Graph* graph = nullptr;
+    std::string  current_node_id;
 
     bool is_cancelled() const { return cancelled != nullptr && cancelled->load(); }
     void console(const std::string& text) const

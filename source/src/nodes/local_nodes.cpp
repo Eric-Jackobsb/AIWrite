@@ -232,7 +232,20 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         official.max_tokens    = params.value("max_tokens", 2048);
         official.top_p         = params.value("top_p", 1.0);
         if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
-            official.api_base = it->value("api_base", official.api_base); // 节点参数为准，provider 覆盖
+            official.api_base = it->value("api_base", official.api_base);
+            // Key 通常在「提供商配置」节点上 → 由 provider 句柄带过来（运行态值）
+            // Key 不在 provider 句柄里（设计 §8.4），改为到来源节点读参数
+            if (official.api_key.empty() && ctx.graph != nullptr &&
+                !ctx.current_node_id.empty()) {
+                if (const engine::Edge* edge =
+                        ctx.graph->findEdgeIntoInput(ctx.current_node_id, "provider")) {
+                    if (const engine::Node* source = ctx.graph->findNode(edge->from_node)) {
+                        if (const engine::Param* key_param = source->findParam("api_key")) {
+                            official.api_key = ai::resolve_api_key(key_param->text());
+                        }
+                    }
+                }
+            }
         }
         if (official.api_key.empty()) {
             throw engine::NodeError("文本生成（官方 API）缺少 API Key：请在「提供商配置」填写 API Key，"
