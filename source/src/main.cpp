@@ -5,6 +5,7 @@
 #include "ui/app.h"
 #include "ui/editor_state.h"
 #include "ui/output_panel.h"
+#include "ai/deepseek_official_provider.h"
 #include "ai/deepseek_web_client.h"
 #include "utils/config.h"
 #include "utils/text_export.h"
@@ -426,6 +427,33 @@ int run_selftest(bool use_web)
                     source_text.size());
     }
 
+    // ---- M_rerun：文本生成「重新生成（新 seed）」断言（离线）----
+    bool seed_ok = false;
+    {
+        aiwrite::ai::OfficialChatRequest request;
+        request.api_key = "sk-selftest";
+        request.prompt  = "hi";
+        request.model   = "deepseek-chat";
+        request.seed    = 12345;
+        const nlohmann::json with_seed = aiwrite::ai::build_request_body(request);
+        request.seed                   = 0;
+        const nlohmann::json without_seed = aiwrite::ai::build_request_body(request);
+        bool has_param = false;
+        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+            if (node.type != "LLMGenerate") {
+                continue;
+            }
+            if (const aiwrite::engine::Param* seed_param = node.findParam("seed")) {
+                has_param = (seed_param->number(-1.0) == 0.0);
+            }
+        }
+        seed_ok = with_seed.contains("seed") && with_seed["seed"].get<int>() == 12345 &&
+                  !without_seed.contains("seed") && has_param;
+        std::printf("[运行自检] M_rerun 新 seed：%s（含 seed=%s / 不含 seed=%s / 节点含 seed 参数=%s）\n",
+                    seed_ok ? "OK" : "失败", with_seed.contains("seed") ? "是" : "否",
+                    without_seed.contains("seed") ? "是" : "否", has_param ? "是" : "否");
+    }
+
     // ---- F1（M3-04 重做）：复制/粘贴的模型级断言（先断言、后接线 UI）----
     // 说明：画布层守卫见 node_canvas.cpp（clamp_position / 未知手柄反向推送 / 视图跟随前校验），
     //       这里覆盖模型侧：新 id 唯一、位置偏移且有限、参数复制、选区内部连线重映射、可撤销。
@@ -583,7 +611,8 @@ int run_selftest(bool use_web)
     }
 
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
-                      consistency_ok && param_driven_ok && async_ok && session_ok && sink_ok && paste_ok;
+                      consistency_ok && param_driven_ok && async_ok && session_ok && sink_ok && seed_ok &&
+                      paste_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

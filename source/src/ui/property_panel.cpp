@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -665,6 +666,37 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                     copy_text(editor().last_archive_dir, "[参数面板] 归档路径");
                 }
             }
+        }
+    }
+
+    // ---- M_rerun：「重新生成（新 seed）」—— 等效“再次运行”，但使用新的随机种子 ----
+    if (node->type == "LLMGenerate") {
+        ImGui::Separator();
+        if (const engine::Param* seed_param = node->findParam("seed")) {
+            ImGui::TextDisabled("随机种子：%d（0 = 不指定；「重新生成」会写入新值）",
+                                static_cast<int>(seed_param->number(0.0)));
+        }
+        const bool rerunning = editor().executor.running() || editor().session_active();
+        ImGui::BeginDisabled(rerunning);
+        if (ImGui::Button("重新生成（新 seed）", ImVec2(-FLT_MIN, 0.0f))) {
+            if (engine::Param* seed_param = node->findParam("seed")) {
+                editor().snapshot("重新生成（新 seed）"); // 先压快照：可撤销
+                const long long stamp = static_cast<long long>(std::time(nullptr));
+                const int       value = static_cast<int>(stamp % 2147483647LL);
+                seed_param->value     = (value > 0) ? value : 1;
+                const int applied     = static_cast<int>(seed_param->number(0.0));
+                log::info("[重跑] " + node->id + " 新 seed=" + std::to_string(applied));
+                editor().set_status("已为 " + node->id + " 设置新 seed=" + std::to_string(applied) +
+                                    "，开始重新生成…");
+                editor().start_run_async();
+            }
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("等效于「再次运行」，但使用新的随机种子：\n"
+                              "· 官方 API：请求体带 seed\n"
+                              "· 网页版：协议无 seed 槽位（忽略，但重跑结果也会不同）\n"
+                              "· 会先记录一步撤销，可回退到旧 seed");
         }
     }
 

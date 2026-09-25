@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // ============================================================================
 //  官方 DeepSeek API Provider（PB-05 / 原 M4-05；落地“API 使用”）
@@ -25,6 +25,7 @@ struct OfficialChatRequest {
     double      temperature = 0.7;
     int         max_tokens  = 2048;
     double      top_p       = 1.0;
+    int         seed        = 0; // M_rerun：>0 时随请求发送（0 = 不指定）
 };
 
 struct OfficialChatResult {

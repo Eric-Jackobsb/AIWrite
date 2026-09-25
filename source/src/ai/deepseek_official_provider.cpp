@@ -1,4 +1,4 @@
-﻿#include "ai/deepseek_official_provider.h"
+#include "ai/deepseek_official_provider.h"
 
 #include "utils/log.h"
 
@@ -66,6 +66,9 @@ nlohmann::json build_request_body(const OfficialChatRequest& request)
     body["temperature"] = request.temperature;
     body["max_tokens"]  = request.max_tokens;
     body["top_p"]       = request.top_p;
+    if (request.seed > 0) {
+        body["seed"] = request.seed; // M_rerun：新 seed 重跑（后端若不支持则忽略）
+    }
     body["messages"]    = nlohmann::json::array();
     if (!request.system_prompt.empty()) {
         body["messages"].push_back({{"role", "system"}, {"content", request.system_prompt}});

@@ -232,6 +232,7 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         official.temperature   = params.value("temperature", 0.7);
         official.max_tokens    = params.value("max_tokens", 2048);
         official.top_p         = params.value("top_p", 1.0);
+        official.seed          = params.value("seed", 0); // M_rerun：新 seed 重跑
         if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
             official.api_base = it->value("api_base", official.api_base);
             // Key 通常在「提供商配置」节点上 → 由 provider 句柄带过来（运行态值）
@@ -312,6 +313,10 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     const double temperature = params.value("temperature", 0.7);
     const int    max_tokens  = params.value("max_tokens", 2048);
     const double top_p       = params.value("top_p", 1.0);
+    if (params.value("seed", 0) > 0) {
+        ctx.console("[文本生成] 提示：网页版不支持 seed，已忽略（重跑本身即会产生不同结果；"
+                    "需要可复现请切官方 API）");
+    }
     if (temperature != 0.7 || max_tokens != 2048 || top_p != 1.0) {
         ctx.console("[文本生成] 提示：网页版不支持 temperature / max_tokens / top_p，已忽略"
                     "（这些参数仅对官方 API 生效）");
