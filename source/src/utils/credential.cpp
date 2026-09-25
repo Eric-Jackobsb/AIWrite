@@ -375,7 +375,8 @@ ResolvedSecret resolve_secret(const std::string& param_key, const std::string& r
             resolved.source = "store";
             return resolved;
         }
-        log::warn("[凭据] 读取失败 ref=" + ref + "：" + error);
+        // 降噪：凭据不存在属正常回退路径（运行前校验会反复查询），只留 info
+        log::info("[凭据] 未找到凭据 ref=" + ref + "（视为无 Key，继续回退）");
     }
     resolved.source = "none";
     return resolved;

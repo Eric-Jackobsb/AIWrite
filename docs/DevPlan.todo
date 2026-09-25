@@ -386,9 +386,9 @@
                 "children": [],
                 "todo": {
                   "id": 34,
-                  "content": "FEA-M4-06 API Key 凭据管理器（CredWrite/Read/Delete + api_key_ref）与代理/证书策略 ｜ §4.1 PB-06（原 M4-07）",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M4-06 API Key 凭据管理器（已完成，PB-06）：加密文件库 utils/credential（DPAPI 当前用户 + BRNC 容器 + ACL 收紧 + SecureZeroMemory + CRC 校验）；三级优先级（节点参数→环境变量→凭据库）与“填一次自动入库”；CLI --cred-list/--cred-erase/--cred-purge + 启动 TTL 惰性清理；--cred-selftest 8 条离线断言（含落盘无明文）｜ §4.1 PB-06",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -457,11 +457,22 @@
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
+              },
+              {
+                "key": 120,
+                "children": [],
+                "todo": {
+                  "id": 120,
+                  "content": "FEA-M4-13 代理与自签证书策略（PB-06 剩余部分）：HTTPS_PROXY/HTTP_PROXY 支持 + 自签证书开关（默认严格校验）+ config.toml [credentials] dir/ttl_days/backend 接线 ｜ §4.1 PB-06",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchA.md · PB-06"
+                }
               }
             ],
             "todo": {
               "id": 28,
-              "content": "M4（12 项）",
+              "content": "M4（13 项）",
               "done": false,
               "level": "secondary"
             }
@@ -612,7 +623,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（34 项）",
+          "content": "Feature（35 项）",
           "done": false,
           "level": "default"
         }
@@ -1205,11 +1216,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md · PB-05"
                 }
+              },
+              {
+                "key": 121,
+                "children": [],
+                "todo": {
+                  "id": 121,
+                  "content": "ARC-M3-13 PB-06 凭据管理器（文档先行→实现→断言闭环）：附录 B 设计（DPAPI+BRNC）、utils/credential（加密库/ACL/三级优先级）、CLI 与启动清理、--cred-selftest 8 条断言；修复 purge 在 Windows 下迭代中删除失败（收集→删除两段式）",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchA.md · PB-06"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（13 项）",
+              "content": "M3（14 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1305,7 +1327,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（22 项）",
+          "content": "Archive（23 项）",
           "done": true,
           "level": "success"
         }
