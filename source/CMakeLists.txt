@@ -186,6 +186,7 @@ src/engine/provider_resolve.cpp
     src/engine/recent_files.cpp
     src/ai/web_pow.cpp
     src/ai/deepseek_web_client.cpp
+    src/ai/deepseek_official_provider.cpp
     src/nodes/local_nodes.cpp
     src/nodes/register_executors.cpp
     src/web/session_store.cpp

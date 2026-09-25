@@ -188,7 +188,7 @@ void draw_toolbar_buttons()
             }
         }
         ImGui::Separator();
-        ImGui::TextDisabled("官方 API（API Key）需 PB-04/PB-05 后才可用；网页版已接线（需先登录一次）。\n"
+        ImGui::TextDisabled("官方 API（API Key）已接线：填好「提供商配置 → API Key」即可；网页版需先登录一次。\n"
                             "「切换为网页版并运行」会把这些来源节点的「模式」改为 web（一次快照，可撤销）。\n"
                             "多模态分支（M5-02）无法通过切换模式修复，仍会失败。");
         ImGui::Separator();

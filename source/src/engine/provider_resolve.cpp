@@ -65,10 +65,21 @@ std::string unwired_reason(const Graph& graph, const Node& node)
     if (node.type != "LLMGenerate") {
         return {};
     }
-    if (!official_not_wired(resolve_effective_provider(graph, node))) {
+    const EffectiveProvider effective = resolve_effective_provider(graph, node);
+    if (effective.mode != "official") {
         return {};
     }
-    return "官方 API 尚未接线（PB-04/PB-05）";
+    // PB-05 已接线官方 API：只有“缺 API Key”才会必定失败（参数 → 环境变量 DEEPSEEK_API_KEY）
+    const Param* key = node.findParam("api_key");
+    const char*  env_key = std::getenv("DEEPSEEK_API_KEY");
+    const bool   has_env = (env_key != nullptr && *env_key != '\0');
+    if (key != nullptr && !key->is_empty()) {
+        return {};
+    }
+    if (has_env) {
+        return {};
+    }
+    return "官方 API 缺少 API Key（请在「提供商配置」填写，或设置环境变量 DEEPSEEK_API_KEY）";
 }
 
 } // namespace aiwrite::engine

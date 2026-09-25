@@ -19,6 +19,23 @@
 
 ## [Unreleased] — M2 节点系统（P1 数据层 + P2 画布交互）已落地
 
+**PB-05（落地「API 使用」）：官方 DeepSeek API Provider —— `mode=official` 真正可用**
+
+- 新增 `ai/deepseek_official_provider.{h,cpp}`：`POST {api_base}/chat/completions`（OpenAI 兼容）
+  - 纯函数（离线可断言）：`build_endpoint()` / `build_request_body()`（含 `model/stream/temperature/max_tokens/top_p`
+    与 `messages[system?, user]`）/ `resolve_api_key()`（节点参数 → 环境变量 `DEEPSEEK_API_KEY`）
+  - `official_chat()`：15s 连接超时 / 180s 读超时；**错误分类**（400 参数 / 401 Key 无效 / 402 余额不足 / 429 限流 /
+    5xx 服务端 / 网络·超时·DNS），错误信息带可操作提示；解析 `choices[0].message.content`
+- `nodes/local_nodes.cpp`：`mode=official` 分支**不再抛“尚未接线”**，改为真正调用官方 API；`api_base` 由
+  provider 输入覆盖（节点参数为准）；缺 Key 时给出明确提示（凭据管理器见 PB-06）
+- `engine/provider_resolve.cpp`：`unwired_reason()` 改为「**缺 API Key** 才必定失败」——配置了 Key（参数或环境变量）
+  即不再出现运行前告警；`validateBeforeRun` 的 warning 与工具栏运行前弹窗同步更新
+- 回归：构建 0 error / 0 warning；`api_probe` 七组 PASS / 111-0 / 73-0+72-0；`--run-selftest` PASS（离线为
+  缺 Key 预期失败）；`--run-selftest --web` 5/5
+- 人工验证（需 API Key）：① 在「提供商配置」填 API Key（或设 `DEEPSEEK_API_KEY`）→ 模式选 official → 运行 →
+  应真实生成；② 故意填错 Key → 应提示 401 且建议检查 Key
+
+
 **PB-03（最小化）+ PB-08：流式呈现 —— 网页版增量回调 → 逐字显示「生成中…（N 字）」**
 
 - `ai/deepseek_web_client.{h,cpp}`：`WebChatRequest` 增 `on_delta`；SSE 解析循环**每解析到一段

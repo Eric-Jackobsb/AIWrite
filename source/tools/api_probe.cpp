@@ -1516,8 +1516,8 @@ int execution_selftest()
         const engine::Node* llm = graph.findNode(l1);
         expect(check, llm != nullptr && llm->state == NodeState::Error,
                "失败传播：LLMGenerate 节点标记 error");
-        expect(check, llm != nullptr && llm->error_message.find("尚未接线") != std::string::npos,
-               "失败传播：错误信息说明「尚未接线」", llm != nullptr ? llm->error_message : std::string());
+        expect(check, llm != nullptr && llm->error_message.find("缺少 API Key") != std::string::npos,
+               "失败传播：错误信息说明「缺少 API Key」", llm != nullptr ? llm->error_message : std::string());
         const engine::Node* downstream = graph.findNode(o1);
         expect(check, downstream != nullptr && downstream->state == NodeState::Skipped,
                "失败传播：下游节点标记 skipped");
@@ -1679,7 +1679,7 @@ int execution_selftest()
         b.text    = "最终生成的文档";
         aiwrite::utils::ArchiveNode c;
         c.node_id = "n3"; c.type = "LLMGenerate"; c.state = "error"; c.duration_ms = 12.0;
-        c.error   = "尚未接线";
+        c.error   = "缺少 API Key";
         nodes = {a, b, c};
 
         aiwrite::utils::ArchiveRequest request;

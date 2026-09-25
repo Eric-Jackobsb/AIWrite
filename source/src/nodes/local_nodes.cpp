@@ -1,5 +1,6 @@
 #include "nodes/nodes.h"
 
+#include "ai/deepseek_official_provider.h"
 #include "ai/deepseek_web_client.h"
 #include "utils/log.h"
 #include "web/session_store.h"
@@ -220,8 +221,36 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     }
 
     if (mode != "web") {
-        throw engine::NodeError("文本生成尚未接线（M4-05 官方 API）：当前 provider.mode = " + mode +
-                                "；可先切到 web（网页版）验证链路，或等待官方 API 接线");
+        // PB-05：官方 API（OpenAI 兼容 /chat/completions）—— 落地“API 使用”
+        ai::OfficialChatRequest official;
+        official.api_base      = params.value("api_base", std::string("https://api.deepseek.com"));
+        official.api_key       = ai::resolve_api_key(params.value("api_key", std::string()));
+        official.model         = model;
+        official.system_prompt = system_prompt;
+        official.prompt        = prompt_raw;
+        official.temperature   = params.value("temperature", 0.7);
+        official.max_tokens    = params.value("max_tokens", 2048);
+        official.top_p         = params.value("top_p", 1.0);
+        if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
+            official.api_base = it->value("api_base", official.api_base); // 节点参数为准，provider 覆盖
+        }
+        if (official.api_key.empty()) {
+            throw engine::NodeError("文本生成（官方 API）缺少 API Key：请在「提供商配置」填写 API Key，"
+                                    "或设置环境变量 DEEPSEEK_API_KEY（凭据管理器见 PB-06）");
+        }
+        ctx.console("[文本生成] 官方 API 请求：" + official.model + "，提示词 " +
+                    std::to_string(official.prompt.size()) + " 字节" +
+                    (system_prompt.empty() ? "" : "（含系统提示词）"));
+        const ai::OfficialChatResult official_result = ai::official_chat(official);
+        if (!official_result.ok || official_result.text.empty()) {
+            throw engine::NodeError("文本生成（官方 API）失败：" +
+                                    (official_result.error.empty() ? std::string("未取到文本")
+                                                                   : official_result.error));
+        }
+        ctx.console("[文本生成] 官方 API 完成：HTTP " + std::to_string(official_result.http_status) +
+                    "，输出 " + std::to_string(official_result.text.size()) + " 字节，耗时 " +
+                    std::to_string(static_cast<long long>(official_result.elapsed_ms)) + " ms");
+        return official_result.text;
     }
 
     // 网页版：凭证（Cookie + userToken）只在内存；没有则自动引导一次（profile 已登录即可用）

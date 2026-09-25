@@ -30,7 +30,8 @@
 | A2 | **PA-09 文档与索引同步** | ✅ | `CHANGELOG`（A2 条目 + 索引）、`M_patchA`（进度/§3.2/§3.3 状态）、`节点编辑器使用说明.md` §10.7（Console 增强 / 错误条 / 配置未接线清单）、`milestone_plan.md` 补「补丁系列」行；`M4.md` 归口说明已就位（M4-05→PB-04/05、M4-12→PA-05+PD-07、M4-13→PA-04） |
 | A2 | PA-05 / PA-06 / PA-08 / PA-09 收尾 | ✅ A2 收尾完成 | 见上四行（Patch A 全部完成） |
 | B | **PB-01 执行线程化（第一、二步：引擎核心 + 状态层）** | 🟡 部分 | 引擎：`RunEvent` 事件队列 + `startAsync/pumpEvents/requestStop/stopAsync` + **Graph 副本** + `nodeOutputText` 归一；状态层：`EditorState::start_run_async/pump_run_events/stop_run_async` + **`RunSnapshot`/`RunNodeView`**（含 text/delta_bytes）+ `finish_run_session`（**先 join → 快照落定 → 归档 → 错误条**）。断言：PB-01 线程化 OK + **第二步 OK（快照·Graph == 权威）**。**待第三步**：GUI 入口切异步 + UI 面板改读快照 + 退出·切图 join |
-| B | PB-02 真取消 / PB-05 官方 Provider / PB-06 凭据与网络策略 | ⬜ **延后（用户决议）** | 影响：停止仍在节点边界生效（网页版最坏等 HTTP 读超时）；official 仍不可用；Key 仍只在内存/环境变量 |
+| B | **PB-05 官方 Provider（落地「API 使用」）** | ✅ 代码完成 | `ai/deepseek_official_provider.{h,cpp}`（`/chat/completions` + 参数透传 + 错误分类 + 超时）；`mode=official` 真正调用；`unwired_reason` 改为「缺 API Key 才失败」。**待人工验证**：填 Key → official → 真实生成 |
+| B | PB-02 真取消 / PB-06 凭据与网络策略 | ⬜ **延后（用户决议）** | 影响：停止仍在节点边界生效（网页版最坏等 HTTP 读超时）；official 仍不可用；Key 仍只在内存/环境变量 |
 | B | PB-03 流式回调接口 | 🟡 **缩为「仅网页版增量回调」**（作为 PB-08 前置） | 官方 `on_delta` 随 PB-05 延后 |
 | B | PB-08 流式呈现 / PB-07 会话失效引导 | ⬜ 待做（PB-01 之后） | — |
 | 后续 | **工作流变体保存**（用户后续设计） | ⬜ 延后 | 把面板保存为独立 workflow，并把当前 workflow 更新为变体；启动恢复上次工作流一并归入该项（本条**不做**，仅登记） |
