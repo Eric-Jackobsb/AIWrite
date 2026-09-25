@@ -19,6 +19,14 @@
 
 ## [Unreleased] — M2 节点系统（P1 数据层 + P2 画布交互）已落地
 
+**修复（崩溃）：参数滑块范围越界导致选中「文本生成」节点即 abort（ImGui SliderInt 断言）**
+
+- 现象：`Assertion failed: *(const ImS32*)p_min >= IM_S32_MIN / 2 && *(const ImS32*)p_max <= IM_S32_MAX / 2`（imgui_widgets.cpp `SliderBehavior`）→ 选中节点后参数面板渲染即崩
+- 根因：上批给 `seed` 写的范围 `0..2147483647` 超出 ImGui Slider 的 half-range 上限（`IM_S32_MAX/2 = 1073741823`）
+- 面板层根治：`ui/property_panel.cpp` 检测范围越界时**自动降级为 `InputInt`/`InputFloat` 并把输入裁回参数范围**（Float 另加 `isfinite` 校验），杜绝同类崩溃
+- 数据层：`seed` 范围改为 `0..1000000000`；「重新生成（新 seed）」派生值同步收窄到 `[0, 1e9]`
+- 断言（防回归）：`--run-selftest` 新增「参数范围安全（ImGui Slider 上限）」——遍历注册表所有带范围参数校验落在 `±1073741823`（Int）/ `±1.7e38`（Float）内，且 `min<=max`
+
 **M_rerun：文本生成「重新生成（新 seed）」—— 重跑等效“再次运行”，但换随机种子**
 
 - 文档先行：`actionPlan/M_rerun.md`（计划）+ `M_patchA §6.1 PD-06` 扩写（区分「通用重跑 FEA-M4-11」与「新 seed 重跑 FEA-M4-17」）

@@ -6,6 +6,7 @@
 #include "ui/editor_state.h"
 #include "ui/output_panel.h"
 #include "ai/deepseek_official_provider.h"
+#include "engine/node_registry.h"
 #include "ai/deepseek_web_client.h"
 #include "utils/config.h"
 #include "utils/text_export.h"
@@ -427,6 +428,40 @@ int run_selftest(bool use_web)
                     source_text.size());
     }
 
+    // ---- 参数范围安全断言（防“Slider 断言崩溃”回归）----
+    //  ImGui 的 Slider* 只接受 half-range（imgui_widgets.cpp SliderBehavior：
+    //  IM_ASSERT(p_max <= T_MAX / 2)）；参数定义越界会让控件一渲染就 abort。
+    bool param_range_ok = true;
+    {
+        std::size_t checked   = 0;
+        std::string first_bad = "";
+        for (const aiwrite::engine::Definition* definition :
+             aiwrite::engine::NodeRegistry::instance().listTypes()) {
+            for (const aiwrite::engine::Param& param : definition->params) {
+                if (!param.min_value.has_value() || !param.max_value.has_value()) {
+                    continue;
+                }
+                ++checked;
+                const double lo    = *param.min_value;
+                const double hi    = *param.max_value;
+                const double limit = (param.type == aiwrite::engine::ParamType::Int)
+                                         ? 1073741823.0
+                                         : 1.7e38; // IM_S32_MAX/2 与 ≈FLT_MAX/2
+                const bool bad = !(lo <= hi) || lo < -limit || hi > limit;
+                if (bad) {
+                    param_range_ok = false;
+                    if (first_bad.empty()) {
+                        first_bad = definition->type + "." + param.id;
+                        std::printf("[运行自检]   越界参数：%s min=%g max=%g（安全上限 ±%g）\n",
+                                    first_bad.c_str(), lo, hi, limit);
+                    }
+                }
+            }
+        }
+        std::printf("[运行自检] 参数范围安全（ImGui Slider 上限）：%s（检查 %zu 个带范围参数）\n",
+                    param_range_ok ? "OK" : "失败", checked);
+    }
+
     // ---- M_rerun：文本生成「重新生成（新 seed）」断言（离线）----
     bool seed_ok = false;
     {
@@ -612,6 +647,7 @@ int run_selftest(bool use_web)
 
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
                       consistency_ok && param_driven_ok && async_ok && session_ok && sink_ok && seed_ok &&
+                      param_range_ok &&
                       paste_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;

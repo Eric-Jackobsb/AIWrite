@@ -512,11 +512,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_rerun.md"
                 }
+              },
+              {
+                "key": 128,
+                "children": [],
+                "todo": {
+                  "id": 128,
+                  "content": "FEA-M4-18 修复崩溃：参数滑块范围越界（ImGui SliderInt 断言，seed 0..2147483647 → 选中节点即 abort）—— 面板降级 InputInt+裁剪 + seed 范围 0..1e9 + 断言「参数范围安全」 ｜ actionPlan/M_rerun.md §6",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_rerun.md · §6"
+                }
               }
             ],
             "todo": {
               "id": 28,
-              "content": "M4（17 项）",
+              "content": "M4（18 项）",
               "done": false,
               "level": "secondary"
             }
@@ -667,7 +678,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（39 项）",
+          "content": "Feature（40 项）",
           "done": false,
           "level": "default"
         }
@@ -1293,11 +1304,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_rerun.md"
                 }
+              },
+              {
+                "key": 129,
+                "children": [],
+                "todo": {
+                  "id": 129,
+                  "content": "ARC-M3-16 崩溃修复：参数范围越界（SliderInt half-range）→ 面板降级 + seed 收窄 + 注册表范围断言",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_rerun.md · §6"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（16 项）",
+              "content": "M3（17 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1393,7 +1415,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（25 项）",
+          "content": "Archive（26 项）",
           "done": true,
           "level": "success"
         }

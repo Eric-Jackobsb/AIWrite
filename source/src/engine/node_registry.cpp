@@ -339,7 +339,8 @@ void registerAllNodes()
             text_param("system_prompt", "系统提示词", std::string(), ParamType::Text),
             enum_param("mode", "模式", {"official", "web"}, "web",
                        "web = 网页版（已接线，需先登录一次）；official = 官方 API（已接线，需 API Key）"),
-            int_param("seed", "随机种子", 0, 0.0, 2147483647.0,
+            // 注意：max 必须 ≤ IM_S32_MAX/2（1073741823），否则参数面板 SliderInt 断言崩溃
+            int_param("seed", "随机种子", 0, 0.0, 1000000000.0,
                       "0 = 不指定；点「重新生成（新 seed）」会写入新值（官方 API 随请求发送，网页版忽略）"),
             enum_param("model", "模型",
                        {"deepseek-chat", "deepseek-reasoner", "expert"}, "deepseek-chat",

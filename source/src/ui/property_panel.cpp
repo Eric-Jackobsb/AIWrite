@@ -27,6 +27,12 @@
 namespace aiwrite::ui {
 namespace {
 
+// ImGui 的 Slider* 只接受 half-range 内的数值（imgui_widgets.cpp SliderBehavior 的
+//  IM_ASSERT(p_max <= T_MAX / 2)）——参数定义一旦越界，控件一渲染就 abort。
+//  这里给出安全上限；越界范围自动降级为 Input* + 手动裁剪（见 draw_param_widget）。
+constexpr double kSliderLimitInt   = 1073741823.0;  // IM_S32_MAX / 2
+constexpr double kSliderLimitFloat = 1.7e38;         // ≈ FLT_MAX / 2
+
 using engine::Node;
 using engine::Param;
 using engine::ParamType;
@@ -268,11 +274,19 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
         int value = static_cast<int>(std::lround(param.number(fallback)));
         ImGui::SetNextItemWidth(-FLT_MIN);
         const bool has_range = param.min_value.has_value() && param.max_value.has_value();
+        // 修复（崩溃）：SliderInt 只支持 ±IM_S32_MAX/2；范围越界（如 0..2147483647）时
+        //  改用 InputInt，并把输入裁回参数声明的范围，避免 ImGui 断言 abort。
+        const bool in_slider_range =
+            has_range && (*param.min_value >= -kSliderLimitInt) && (*param.max_value <= kSliderLimitInt);
         const bool touched =
-            has_range ? ImGui::SliderInt("##value", &value, static_cast<int>(*param.min_value),
-                                         static_cast<int>(*param.max_value))
-                      : ImGui::InputInt("##value", &value);
+            in_slider_range ? ImGui::SliderInt("##value", &value, static_cast<int>(*param.min_value),
+                                              static_cast<int>(*param.max_value))
+                            : ImGui::InputInt("##value", &value);
         if (touched) {
+            if (has_range) {
+                const double clamped = std::clamp(static_cast<double>(value), *param.min_value, *param.max_value);
+                value                = static_cast<int>(std::lround(clamped));
+            }
             changed_now = write_param(param, value);
         }
         if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -287,11 +301,20 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
         float value = static_cast<float>(param.number(fallback));
         ImGui::SetNextItemWidth(-FLT_MIN);
         const bool has_range = param.min_value.has_value() && param.max_value.has_value();
+        // 与 Int 同理：SliderFloat 只支持 ±FLT_MAX/2；越界时降级为 InputFloat + 裁剪。
+        const bool in_slider_range = has_range && std::isfinite(*param.min_value) &&
+                                     std::isfinite(*param.max_value) &&
+                                     (*param.min_value >= -kSliderLimitFloat) &&
+                                     (*param.max_value <= kSliderLimitFloat);
         const bool touched =
-            has_range ? ImGui::SliderFloat("##value", &value, static_cast<float>(*param.min_value),
-                                           static_cast<float>(*param.max_value), "%.2f")
-                      : ImGui::InputFloat("##value", &value, 0.1f, 1.0f, "%.2f");
+            in_slider_range ? ImGui::SliderFloat("##value", &value, static_cast<float>(*param.min_value),
+                                                static_cast<float>(*param.max_value), "%.2f")
+                            : ImGui::InputFloat("##value", &value, 0.1f, 1.0f, "%.2f");
         if (touched) {
+            if (has_range) {
+                value = static_cast<float>(
+                    std::clamp(static_cast<double>(value), *param.min_value, *param.max_value));
+            }
             changed_now = write_param(param, value);
         }
         if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -682,7 +705,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
             if (engine::Param* seed_param = node->findParam("seed")) {
                 editor().snapshot("重新生成（新 seed）"); // 先压快照：可撤销
                 const long long stamp = static_cast<long long>(std::time(nullptr));
-                const int       value = static_cast<int>(stamp % 2147483647LL);
+                const int       value = static_cast<int>(stamp % 1000000000LL); // ∈ 参数范围 [0, 1e9]
                 seed_param->value     = (value > 0) ? value : 1;
                 const int applied     = static_cast<int>(seed_param->number(0.0));
                 log::info("[重跑] " + node->id + " 新 seed=" + std::to_string(applied));
