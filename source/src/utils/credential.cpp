@@ -300,40 +300,56 @@ int purge_expired_credentials(int ttl_days, std::string* error)
     if (ttl_days <= 0) {
         return 0; // 0/负数 = 不清理
     }
-    int               removed = 0;
-    const long long   now     = static_cast<long long>(std::time(nullptr));
+    const long long   now = static_cast<long long>(std::time(nullptr));
     std::error_code   ec;
     const std::string dir = credentials_dir();
     if (!std::filesystem::exists(dir, ec)) {
         return 0;
     }
-    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-        if (!entry.is_regular_file() || entry.path().extension() != ".bin") {
-            continue;
-        }
-        std::ifstream stream(entry.path(), std::ios::binary);
-        std::string   data((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-        if (data.size() < 4 + 1 + 8 + 8 + 8) {
-            continue;
-        }
-        const long long updated = static_cast<long long>(read_u64(data, 4 + 1 + 8 + 8));
-        const long long age_days = (now - updated) / 86400;
-        // 诊断（定位“过期却未清理”）：逐条目打印判定依据
-        log::info("[凭据] purge 检查 " + entry.path().filename().string() + " 大小=" +
-                  std::to_string(data.size()) + " 更新=" + std::to_string(updated) +
-                  " 年龄=" + std::to_string(age_days) + " 天 TTL=" + std::to_string(ttl_days) +
-                  (age_days < ttl_days ? "（保留）" : "（删除）"));
-        if (age_days < ttl_days) {
-            continue;
-        }
-        std::error_code remove_error;
-        std::filesystem::remove(entry.path(), remove_error);
-        if (!remove_error) {
-            ++removed;
-            log::info("[凭据] 已清理过期条目 " + entry.path().filename().string());
+
+    // ① 先收集候选（目录迭代器在本作用域结束时释放句柄 —— 避免 Windows 下“迭代中删除子项”静默失败）
+    std::vector<std::string> victims;
+    {
+        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+            if (!entry.is_regular_file(ec) || entry.path().extension() != ".bin") {
+                continue;
+            }
+            std::string data;
+            {
+                std::ifstream stream(entry.path(), std::ios::binary);
+                data.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+            }
+            if (data.size() < 4 + 1 + 8 + 8 + 8) {
+                continue;
+            }
+            const long long updated  = static_cast<long long>(read_u64(data, 4 + 1 + 8 + 8));
+            const long long age_days = (now - updated) / 86400;
+            log::info("[凭据] purge 检查 " + entry.path().filename().string() + " 大小=" +
+                      std::to_string(data.size()) + " 更新=" + std::to_string(updated) + " 年龄=" +
+                      std::to_string(age_days) + " 天 TTL=" + std::to_string(ttl_days) +
+                      (age_days < ttl_days ? "（保留）" : "（待删）"));
+            if (age_days >= ttl_days) {
+                victims.push_back(entry.path().string());
+            }
         }
     }
-    if (error != nullptr) { error->clear(); }
+
+    // ② 再删除（此时迭代器已销毁，句柄已释放）
+    int removed = 0;
+    for (const std::string& victim : victims) {
+        std::error_code remove_error;
+        std::filesystem::remove(victim, remove_error);
+        if (!remove_error) {
+            ++removed;
+            log::info("[凭据] 已清理过期条目 " + victim);
+        }
+        else {
+            log::warn("[凭据] 清理失败 " + victim + "：" + remove_error.message());
+        }
+    }
+    if (error != nullptr) {
+        error->clear();
+    }
     return removed;
 }
 
@@ -449,8 +465,12 @@ int credential_selftest()
         const int removed = purge_expired_credentials(1, &error);
         std::error_code after_ec;
         const bool      exists = std::filesystem::exists(path, after_ec);
-        log::warn("[凭据自检] 7 TTL 清理：待修（removed=" + std::to_string(removed) + " exists=" +
-                  (exists ? "1" : "0") + "）—— 详见上方 purge 检查诊断行");
+        if (removed != 1 || exists) {
+            ++failed;
+            log::error("[凭据自检] 7 TTL 清理：失败 removed=" + std::to_string(removed) +
+                        " exists=" + (exists ? "1" : "0"));
+        }
+        else { log::info("[凭据自检] 7 TTL 清理（0 不清理 / 过期即删）：OK"); }
     }
 
     // 8) 自清理
