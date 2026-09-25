@@ -78,9 +78,9 @@
                 "children": [],
                 "todo": {
                   "id": 9,
-                  "content": "DBG-M4-03 网页版 PoW 依赖官方 worker chunk，前端发版变化可能导致求解失败 ｜ §3（方案 A 收敛）",
-                  "done": false,
-                  "level": "default",
+                  "content": "DBG-M4-03 网页版 PoW 依赖官方 worker chunk（已收敛，W2 方案 A）：ai/web_pow.cpp 作兜底 ｜ §3",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/网页版协议实测记录.md"
                 }
               },
@@ -89,9 +89,9 @@
                 "children": [],
                 "todo": {
                   "id": 10,
-                  "content": "DBG-M4-04 网页版请求忽略 temperature / max_tokens / top_p（网页前端无对应开关） ｜ §4.1 PB-05",
-                  "done": false,
-                  "level": "default",
+                  "content": "DBG-M4-04 采样参数：官方 API 已透传 temperature/max_tokens/top_p（PB-05）；网页版受前端协议限制仍忽略（非缺陷，切官方模式即可）｜ §4.1 PB-05",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -144,7 +144,7 @@
                 "children": [],
                 "todo": {
                   "id": 15,
-                  "content": "DBG-M6-01 config 多个字段仍无效果（output.auto_open_on_complete / general.* / advanced.log_ttl_days 等） ｜ §3.2 PA-08",
+                  "content": "DBG-M6-01 仍未生效的配置：output.auto_open_on_complete / general.language / general.startup / advanced.log_ttl_days / timeout.* / error.*（归口 PB-06/PB-08/PD-03）；ui.grid_size 受 vendored imgui-node-editor 限制（PD-03）；已接线：console_height / running_animation / 窗口几何 / 归档 ｜ §3.2",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -375,9 +375,9 @@
                 "children": [],
                 "todo": {
                   "id": 33,
-                  "content": "FEA-M4-05 官方 DeepSeek Provider：/chat/completions、参数透传、错误分类、超时重试、官方 SSE ｜ §4.1 PB-05（原 M4-05/M4-10）",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M4-05 官方 DeepSeek Provider（已完成，PB-05）：POST {api_base}/chat/completions + 参数透传（system/temperature/max_tokens/top_p）+ 错误分类（400/401/402/429/5xx/网络超时）+ 15s/180s 超时；API Key 由「提供商配置」节点读取（ExecutionContext 只读 graph + current_node_id，不落盘不打印）｜ §4.1 PB-05",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md"
                 }
               },
@@ -672,7 +672,7 @@
                 "children": [],
                 "todo": {
                   "id": 60,
-                  "content": "TST-M2-02 每次提交重跑回归基线（七组 PASS / 95-0 / 72-0 / --run-selftest / --run-selftest --web）并回填数字 ｜ §0.4 回归基线",
+                  "content": "TST-M2-02 每次提交重跑回归基线并回填数字（当前：七组 PASS / 111-0 / 73-0 + 72-0 / --run-selftest PASS（3/5 预期 + P1-c + PB-01）/ --run-selftest --web 5/5）｜ §0.4",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md"
@@ -1194,11 +1194,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_patchA.md · PB-03/PB-08"
                 }
+              },
+              {
+                "key": 119,
+                "children": [],
+                "todo": {
+                  "id": 119,
+                  "content": "ARC-M3-12 PB-05 落地「API 使用」：官方 DeepSeek API Provider（/chat/completions + 参数透传 + 错误分类 + 超时）→ mode=official 真正可用；修复 API Key 取错节点（改由「提供商配置」读取，经 ExecutionContext 只读 graph 提供）；api_probe 断言文案同步为「缺少 API Key」",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchA.md · PB-05"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（12 项）",
+              "content": "M3（13 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1294,7 +1305,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（21 项）",
+          "content": "Archive（22 项）",
           "done": true,
           "level": "success"
         }
@@ -1345,6 +1356,6 @@
     "simpleMode": false,
     "lang": "en",
     "desc": "**当前基线**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS\n- graph_selftest: 95 通过 / 0 失败\n- exec_selftest: 72 通过 / 0 失败（执行器 + 运行信息 + 归档）\n- run_selftest: PASS（离线 3/5，失败 1 为预期）\n- run_selftest_web: PASS（5/5，约 6–9 s，含 PC-05 归档断言）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n\n**主要风险**\n- 生成期间 UI 同步阻塞、取消无法中断（Patch B 解决）\n- 网页版 PoW 依赖官方 worker chunk，前端发版变化需回归\n- 复制/粘贴仍暂停（画布坐标根因待修）\n- 未接配置字段仍无效果（PA-08 / PD-03）",
-    "version": "1790318569625"
+    "version": "1790319207881"
   }
 }
