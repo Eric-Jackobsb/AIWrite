@@ -1,5 +1,7 @@
 #include "engine/provider_resolve.h"
 
+#include "utils/credential.h"
+
 namespace aiwrite::engine {
 namespace {
 
@@ -88,7 +90,22 @@ std::string unwired_reason(const Graph& graph, const Node& node)
     if (has_env) {
         return {};
     }
-    return "官方 API 缺少 API Key（请在「提供商配置」填写，或设置环境变量 DEEPSEEK_API_KEY）";
+    // PB-06：凭据库里已有该 ref 也算“有 Key”（不打印内容）
+    std::string ref;
+    if (const Edge* provider_edge = graph.findEdgeIntoInput(node.id, "provider")) {
+        if (const Node* source = graph.findNode(provider_edge->from_node)) {
+            if (const Param* ref_param = source->findParam("api_key_ref")) {
+                ref = ref_param->text();
+            }
+        }
+    }
+    if (!ref.empty()) {
+        std::string load_error;
+        if (!utils::load_credential(ref, &load_error).empty()) {
+            return {};
+        }
+    }
+    return "官方 API 缺少 API Key（可在「提供商配置」填写并自动入库，或设置环境变量 DEEPSEEK_API_KEY）";
 }
 
 } // namespace aiwrite::engine

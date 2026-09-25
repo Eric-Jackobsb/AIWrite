@@ -1,6 +1,7 @@
 #include "nodes/nodes.h"
 
 #include "ai/deepseek_official_provider.h"
+#include "utils/credential.h"
 #include "ai/deepseek_web_client.h"
 #include "utils/log.h"
 #include "web/session_store.h"
@@ -240,8 +241,30 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
                 if (const engine::Edge* edge =
                         ctx.graph->findEdgeIntoInput(ctx.current_node_id, "provider")) {
                     if (const engine::Node* source = ctx.graph->findNode(edge->from_node)) {
+                        std::string param_key;
+                        std::string ref;
                         if (const engine::Param* key_param = source->findParam("api_key")) {
-                            official.api_key = ai::resolve_api_key(key_param->text());
+                            param_key = key_param->text();
+                        }
+                        if (const engine::Param* ref_param = source->findParam("api_key_ref")) {
+                            ref = ref_param->text();
+                        }
+                        // PB-06：三级优先级 —— 节点参数 → 环境变量 → 凭据库（api_key_ref）
+                        const utils::ResolvedSecret resolved = utils::resolve_secret(param_key, ref);
+                        official.api_key                    = resolved.key;
+                        if (!resolved.key.empty()) {
+                            ctx.console("[文本生成] 凭据来源=" + resolved.source + "（长度 " +
+                                        std::to_string(resolved.key.size()) + "）");
+                            if (resolved.source == "node" && !ref.empty()) {
+                                std::string save_error;
+                                if (utils::save_credential(ref, resolved.key, &save_error)) {
+                                    ctx.console("[文本生成] 已把 API Key 存入凭据库（ref=" + ref +
+                                                "），下次无需再填");
+                                }
+                                else {
+                                    ctx.console("[文本生成] 凭据库保存失败：" + save_error);
+                                }
+                            }
                         }
                     }
                 }
