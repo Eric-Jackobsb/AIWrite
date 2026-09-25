@@ -7,6 +7,7 @@
 #include "ui/output_panel.h"
 #include "ai/deepseek_web_client.h"
 #include "utils/config.h"
+#include "utils/credential.h"
 #include "utils/log.h"
 #include "utils/paths.h"
 #include "web/webview_host.h"
@@ -628,6 +629,35 @@ int main(int argc, char** argv)
         }
         else if (arg == "--login-selftest") {
             login_selftest = true;
+        }
+        else if (arg == "--cred-list") {
+            const std::vector<aiwrite::utils::CredentialInfo> items =
+                aiwrite::utils::list_credentials(30);
+            std::printf("凭据库（%s）：%zu 条\n", aiwrite::utils::credentials_dir().c_str(),
+                        items.size());
+            for (const aiwrite::utils::CredentialInfo& info : items) {
+                std::printf("  %-28s 更新=%lld 剩余TTL=%d 天\n", info.ref.c_str(),
+                            info.updated_at, info.ttl_remaining_days);
+            }
+            return 0;
+        }
+        else if (arg == "--cred-erase") {
+            if (i + 1 >= argc) {
+                std::printf("用法: aiwrite --cred-erase <ref>\n");
+                return 2;
+            }
+            const std::string target = argv[++i];
+            std::string       erase_error;
+            const bool        erased = aiwrite::utils::erase_credential(target, &erase_error);
+            std::printf("凭据 %s：%s\n", target.c_str(),
+                        erased ? "已删除" : erase_error.c_str());
+            return erased ? 0 : 1;
+        }
+        else if (arg == "--cred-purge") {
+            std::string purge_error;
+            const int   removed = aiwrite::utils::purge_expired_credentials(30, &purge_error);
+            std::printf("已清理过期凭据 %d 个（TTL 30 天）\n", removed);
+            return 0;
         }
         else if (arg == "--web-probe") {
             web_probe_flag = true;

@@ -9,6 +9,7 @@
 #include "ui/property_panel.h"
 #include "ui/toolbar.h"
 #include "utils/config.h"
+#include "utils/credential.h"
 #include "utils/diagnostics.h"
 #include "utils/log.h"
 #include "utils/paths.h"
@@ -292,6 +293,15 @@ int run(const AppOptions& options)
             unwired += (unwired.empty() ? "" : "、") + field;
         }
         log::info("[配置] 以下字段尚未生效（归口补丁见使用说明）：" + unwired);
+    }
+
+    // PB-06：凭据库启动惰性清理（TTL 默认 30 天；[credentials] 配置项见设计附录 B）
+    {
+        std::string purge_error;
+        const int   removed = utils::purge_expired_credentials(30, &purge_error);
+        if (removed > 0) {
+            log::info("[凭据] 启动清理：已移除 " + std::to_string(removed) + " 个过期条目");
+        }
     }
 
     // OpenGL 3.3 Core（M1 Action Plan M1-02）
