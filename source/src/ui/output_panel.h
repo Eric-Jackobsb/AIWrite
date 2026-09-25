@@ -37,6 +37,10 @@ std::string node_output_text(const engine::Graph& graph, const engine::RunSnapsh
 std::string run_output_text(const engine::Graph& graph, const engine::RunSnapshot& snapshot);
 
 // 绘制输出面板（可停靠；默认不显示由调用方控制）
-void draw_output_panel(const char* title, bool* open, const EditorState& state);
+// M_textio P3：把某节点的结果导出为文档（TextOutput = 最终输出）
+//  * 正文与预览同源（node_output_text）；路径由保存对话框给出；失败写状态栏
+bool export_node_document(EditorState& state, const std::string& node_id);
+
+void draw_output_panel(const char* title, bool* open, EditorState& state);
 
 } // namespace aiwrite::ui

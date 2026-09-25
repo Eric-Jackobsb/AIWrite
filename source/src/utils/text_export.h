@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // ============================================================================
 //  文本导出为文档（docs/actionPlan/M_textio.md P2）
@@ -56,6 +56,9 @@ ExportResult export_text_document(const ExportRequest& request);
 
 // 文件名用时间戳 yyyyMMdd-HHmmss
 std::string document_stamp_now();
+
+// 人类可读时间（yyyy-MM-dd HH:mm:ss）：用于文档元信息头
+std::string document_time_text();
 
 // P2 的 7 条离线断言；返回失败条数（跑完清理自己的临时目录）
 int text_export_selftest();

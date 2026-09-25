@@ -389,8 +389,16 @@ NodeResultView result_view_of(const Node& node)
             }
             preview += (ch == '\n' || ch == '\r') ? ' ' : ch;
         }
+        std::string prefix = "结果： ";
+        if (node.type == "TextOutput") { // M_textio P3：最终输出
+            std::string label;
+            if (const engine::Param* label_param = node.findParam("label")) {
+                label = label_param->text();
+            }
+            prefix = label.empty() ? std::string("最终输出： ") : ("最终输出（" + label + "）： ");
+        }
         entry.view.has_content = true;
-        entry.view.text        = "结果： " + preview +
+        entry.view.text        = prefix + preview +
                           (body.size() > preview.size() ? "…" : "") +
                           "（" + std::to_string(body.size()) + " 字符）";
     }

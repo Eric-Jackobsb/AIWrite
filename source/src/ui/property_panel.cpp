@@ -637,6 +637,24 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                     copy_text(body, "[参数面板] " + node->id);
                 }
             }
+            if (node->type == "TextOutput") { // M_textio P3：最终输出
+                std::string label = "输出";
+                if (const engine::Param* label_param = node->findParam("label")) {
+                    const std::string text = label_param->text();
+                    if (!text.empty()) {
+                        label = text;
+                    }
+                }
+                ImGui::TextColored(ImVec4(0.55f, 0.85f, 1.0f, 1.0f), "【最终输出】%s", label.c_str());
+                ImGui::BeginDisabled(body.empty());
+                if (ImGui::Button("导出为文档…")) {
+                    export_node_document(editor(), node->id);
+                }
+                ImGui::EndDisabled();
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                    ImGui::SetTooltip("导出为 .md/.txt（与预览同源，含元信息头）");
+                }
+            }
             else if (run->error.empty()) {
                 ImGui::TextDisabled("（该节点无输出）");
             }

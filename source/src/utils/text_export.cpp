@@ -167,6 +167,11 @@ std::string document_stamp_now()
     return local_time_text("%Y%m%d-%H%M%S");
 }
 
+std::string document_time_text()
+{
+    return local_time_text("%Y-%m-%d %H:%M:%S");
+}
+
 ExportResult export_text_document(const ExportRequest& request)
 {
     ExportResult result;

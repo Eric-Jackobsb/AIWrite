@@ -5,6 +5,7 @@
 #include "ui/editor_state.h"
 #include "ui/text_view.h"
 #include "utils/file_dialog.h"
+#include "utils/text_export.h"
 #include "utils/log.h"
 
 #include <cstddef>
@@ -24,6 +25,7 @@ constexpr std::size_t kDisplayLimit = 40000;
 const ImVec4 kColorDone(0.31f, 0.75f, 0.42f, 1.0f);
 const ImVec4 kColorError(1.00f, 0.35f, 0.35f, 1.0f);
 const ImVec4 kColorSkip(0.85f, 0.70f, 0.30f, 1.0f);
+const ImVec4 kColorFinal(0.55f, 0.85f, 1.00f, 1.0f); // M_textio：最终输出高亮
 
 ImVec4 state_color(engine::NodeState state)
 {
@@ -99,7 +101,59 @@ std::string run_output_text(const engine::Graph& graph, const engine::RunSnapsho
     return text;
 }
 
-void draw_output_panel(const char* title, bool* open, const EditorState& state)
+bool export_node_document(EditorState& state, const std::string& node_id)
+{
+    const engine::Node* node = state.graph.findNode(node_id);
+    if (node == nullptr) {
+        return false;
+    }
+    const engine::RunSnapshot& snapshot = state.run_snapshot_view();
+    const engine::RunNodeView* view     = snapshot.find(node_id);
+    const std::string body = node_output_text(state.graph, snapshot, node_id);
+    if (body.empty()) {
+        state.set_status("该节点暂无可导出的运行结果（请先运行）");
+        return false;
+    }
+    std::string label = "输出";
+    if (const engine::Param* label_param = node->findParam("label")) {
+        const std::string text = label_param->text();
+        if (!text.empty()) {
+            label = text;
+        }
+    }
+    const std::string stamp = utils::document_stamp_now();
+    const std::string default_name =
+        utils::render_document_name(state.workflow_display_name(), stamp, "md");
+    const std::string path =
+        utils::save_file({{"Markdown", "md"}, {"文本", "txt"}}, {}, default_name);
+    if (path.empty()) {
+        return false; // 用户取消
+    }
+    utils::ExportRequest request;
+    request.text          = body;
+    request.label         = label;
+    request.include_meta  = true;
+    request.overwrite     = true; // 已在保存对话框确认
+    request.path          = path;
+    request.meta.workflow = state.workflow_display_name();
+    request.meta.stamp    = utils::document_time_text();
+    if (view != nullptr) {
+        request.meta.node_id     = view->node_id;
+        request.meta.state       = engine::nodeStateName(view->state);
+        request.meta.duration_ms = view->duration_ms;
+    }
+    const utils::ExportResult result = utils::export_text_document(request);
+    if (!result.ok) {
+        state.set_status("导出文档失败：" + result.error);
+        log::error("[输出面板] 导出文档失败：" + result.error);
+        return false;
+    }
+    state.set_status("已导出文档：" + result.path);
+    log::info("[输出面板] 已导出文档：" + result.path);
+    return true;
+}
+
+void draw_output_panel(const char* title, bool* open, EditorState& state)
 {
     if (!ImGui::Begin(title, open)) {
         ImGui::End();
@@ -109,6 +163,22 @@ void draw_output_panel(const char* title, bool* open, const EditorState& state)
     const engine::Executor& executor = state.executor;
     const engine::RunSnapshot& snapshot = state.run_snapshot_view();
     const auto&             infos    = snapshot.nodes;
+
+    // M_textio P3：最终输出（TextOutput）置顶（其余保持原顺序）
+    std::vector<engine::RunNodeView> ordered;
+    ordered.reserve(infos.size());
+    for (const engine::RunNodeView& info : infos) {
+        const engine::Node* node = state.graph.findNode(info.node_id);
+        if (node != nullptr && node->type == "TextOutput") {
+            ordered.push_back(info);
+        }
+    }
+    for (const engine::RunNodeView& info : infos) {
+        const engine::Node* node = state.graph.findNode(info.node_id);
+        if (node == nullptr || node->type != "TextOutput") {
+            ordered.push_back(info);
+        }
+    }
 
     // ---- 顶部工具条 ----
     const std::string all_text = run_output_text(state.graph, snapshot);
@@ -136,6 +206,28 @@ void draw_output_panel(const char* title, bool* open, const EditorState& state)
     }
     ImGui::EndDisabled();
 
+    // M_textio P3：一键导出“最终输出”
+    {
+        std::string final_node;
+        for (const engine::RunNodeView& info : ordered) {
+            const engine::Node* node = state.graph.findNode(info.node_id);
+            if (node != nullptr && node->type == "TextOutput" &&
+                !node_output_text(state.graph, snapshot, info.node_id).empty()) {
+                final_node = info.node_id;
+                break;
+            }
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(final_node.empty());
+        if (ImGui::Button("导出最终输出为文档…")) {
+            export_node_document(state, final_node);
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("把 TextOutput（最终输出）的结果导出为 .md/.txt");
+        }
+    }
+
     ImGui::SameLine();
     ImGui::TextDisabled("｜ 节点 %zu ｜ 总耗时 %.2f s", infos.size(), executor.elapsedSeconds());
 
@@ -159,14 +251,26 @@ void draw_output_panel(const char* title, bool* open, const EditorState& state)
         return;
     }
 
-    // ---- 逐节点分段 ----
-    for (const engine::RunNodeView& info : infos) {
-        const std::string body   = node_output_text(state.graph, snapshot, info.node_id);
-        const std::string header = node_header(info);
-        const bool        leaf   = body.empty() && info.error.empty();
+    // ---- 逐节点分段（M_textio P3：最终输出置顶 + 高亮 + 导出为文档）----
+    for (const engine::RunNodeView& info : ordered) {
+        const std::string   body     = node_output_text(state.graph, snapshot, info.node_id);
+        const engine::Node* node     = state.graph.findNode(info.node_id);
+        const bool          is_final = (node != nullptr && node->type == "TextOutput");
+        std::string         header   = node_header(info);
+        if (is_final) {
+            std::string label = "输出";
+            if (node->findParam("label") != nullptr) {
+                const std::string text = node->findParam("label")->text();
+                if (!text.empty()) {
+                    label = text;
+                }
+            }
+            header = "【最终输出】" + label + "    " + header;
+        }
+        const bool leaf = body.empty() && info.error.empty();
 
         ImGui::PushID(info.node_id.c_str());
-        ImGui::PushStyleColor(ImGuiCol_Text, state_color(info.state));
+        ImGui::PushStyleColor(ImGuiCol_Text, is_final ? kColorFinal : state_color(info.state));
         const bool open_section = ImGui::CollapsingHeader(
             header.c_str(), leaf ? ImGuiTreeNodeFlags_Leaf : ImGuiTreeNodeFlags_DefaultOpen);
         ImGui::PopStyleColor();
@@ -182,6 +286,15 @@ void draw_output_panel(const char* title, bool* open, const EditorState& state)
                 draw_readonly_text(view_id.c_str(), body, 10.0f, kDisplayLimit);
                 if (ImGui::Button("复制该节点")) {
                     copy_text(body, "[输出面板] " + info.node_id);
+                }
+                if (is_final) {
+                    ImGui::SameLine();
+                    if (ImGui::Button("导出为文档…")) {
+                        export_node_document(state, info.node_id);
+                    }
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("把该节点的最终输出导出为 .md/.txt（与预览同源，含元信息头）");
+                    }
                 }
             }
             else if (info.error.empty()) {
