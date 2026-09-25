@@ -468,11 +468,33 @@
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchA.md · PB-06"
                 }
+              },
+              {
+                "key": 122,
+                "children": [],
+                "todo": {
+                  "id": 122,
+                  "content": "FEA-M4-14 最终版预览：TextOutput 作为最终结果出口（label 生效 + 输出面板置顶/高亮 + 节点摘要前缀）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_textio.md · P3"
+                }
+              },
+              {
+                "key": 123,
+                "children": [],
+                "todo": {
+                  "id": 123,
+                  "content": "FEA-M4-15 导出为文档：TextOutput 上的「导出为文档…」动作按钮（md/txt、原子写、7 条离线断言）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_textio.md · P2/P3"
+                }
               }
             ],
             "todo": {
               "id": 28,
-              "content": "M4（13 项）",
+              "content": "M4（15 项）",
               "done": false,
               "level": "secondary"
             }
@@ -623,7 +645,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（35 项）",
+          "content": "Feature（37 项）",
           "done": false,
           "level": "default"
         }
