@@ -490,11 +490,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_textio.md · P2/P3"
                 }
+              },
+              {
+                "key": 125,
+                "children": [],
+                "todo": {
+                  "id": 125,
+                  "content": "FEA-M4-16 汇点节点结果入运行态 + TextOutput 导出路径可配置（已完成，M_textio P5）：虚拟端口 __result（修真 bug：连接线结果读不到）+ export_dir/file_name/auto_export 参数 + 汇点断言",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_textio.md · P5"
+                }
               }
             ],
             "todo": {
               "id": 28,
-              "content": "M4（15 项）",
+              "content": "M4（16 项）",
               "done": false,
               "level": "secondary"
             }
@@ -645,7 +656,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（37 项）",
+          "content": "Feature（38 项）",
           "done": false,
           "level": "default"
         }

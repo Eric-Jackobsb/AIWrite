@@ -19,6 +19,12 @@
 
 ## [Unreleased] — M2 节点系统（P1 数据层 + P2 画布交互）已落地
 
+**M_textio P5（修复 + 路径可配置）：汇点节点结果入运行态 + TextOutput 导出参数/自动导出**
+
+- **修复真 bug**：`nodeOutputText` 只遍历输出端口，而 `TextOutput`/`ImagePreview` 是**无输出端口的汇点** → 运行结果永远读不到（表现为：连接线“像没接上”、输出面板显示“无输出”、归档缺该节点文件、导出无正文）→ `Executor` 对无输出端口节点把返回值写入运行态值**虚拟端口 `__result`**；`nodeOutputText`/`makeSnapshot` 回退读取
+- `TextOutput` 新增参数：**`export_dir`** / **`file_name`** / **`auto_export`**；导出对话框默认目录与默认名取自参数（自动导出不覆盖同名，自动 `-1/-2`）
+- 断言：`--run-selftest` 新增「M_textio 汇点结果可读」（汇点文本 == 上游文本 且 快照可读）
+
 **M_textio P2+P3：文本输出 = 最终输出（预览）+ 导出为文档**
 
 - `utils/text_export.{h,cpp}`（新）：`sanitize_file_stem` / `render_document_name` /
