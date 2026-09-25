@@ -1354,3 +1354,14 @@ int                 purge_expired_credentials(int ttl_days, std::string* error);
 ### B.9 与既有计划的关系
 - `M_patchA.md §4.1 PB-06` 条目按本附录更新（Windows Credential Manager 降级为**可选后端**，不在本批实现）
 - 代理与自签证书策略仍属 PB-06 范围（`HTTPS_PROXY/HTTP_PROXY` + 严格校验默认），随实现一并落地
+
+
+---
+
+## 附录 C：文本生成「重新生成（新 seed）」（M_rerun）
+
+- 入口：选中「文本生成」节点 → 参数面板底部 **「重新生成（新 seed）」**（运行中禁用）
+- 行为：写入新的 `seed`（时间派生；**先压撤销快照**）→ 自动重新运行 → Console 打印 `[重跑] nX 新 seed=…`
+- `seed` 参数：`0` = 不指定（默认）；官方 API 随请求体发送 `seed`（后端若不支持则忽略）；**网页版协议无 seed 槽位**（忽略并提示一次）
+- 注意：本实现是「新 seed 重跑」（整图重新运行，本地上游瞬时重算）；「只重跑该节点/下游并复用上游结果」仍归口 `FEA-M4-11`
+- 详见 [`actionPlan/M_rerun.md`](actionPlan/M_rerun.md)

@@ -507,9 +507,9 @@
                 "children": [],
                 "todo": {
                   "id": 126,
-                  "content": "FEA-M4-17 文本生成「重新生成（新 seed）」：LLMGenerate 增 seed 参数 + 参数面板按钮（压快照→写新 seed→重新运行）；官方 API 请求体带 seed、网页版忽略并提示；离线断言 3 条 ｜ actionPlan/M_rerun.md",
-                  "done": false,
-                  "level": "default",
+                  "content": "FEA-M4-17 文本生成「重新生成（新 seed）」（已完成）：seed 参数 + 参数面板按钮（压快照→写新 seed→异步运行）；官方 API 请求带 seed、网页版忽略并提示；离线断言 3 条 OK ｜ actionPlan/M_rerun.md",
+                  "done": true,
+                  "level": "success",
                   "fileLink": "docs/actionPlan/M_rerun.md"
                 }
               }
@@ -1282,11 +1282,22 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_textio.md"
                 }
+              },
+              {
+                "key": 127,
+                "children": [],
+                "todo": {
+                  "id": 127,
+                  "content": "ARC-M3-15 M_rerun：文本生成「重新生成（新 seed）」—— seed 参数 + 请求体透传 + 参数面板按钮（可撤销）；文档先行（M_rerun.md + PD-06 扩写）；离线断言 OK",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_rerun.md"
+                }
               }
             ],
             "todo": {
               "id": 95,
-              "content": "M3（15 项）",
+              "content": "M3（16 项）",
               "done": true,
               "level": "secondary"
             }
@@ -1382,7 +1393,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（24 项）",
+          "content": "Archive（25 项）",
           "done": true,
           "level": "success"
         }

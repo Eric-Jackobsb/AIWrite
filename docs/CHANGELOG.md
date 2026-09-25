@@ -19,6 +19,16 @@
 
 ## [Unreleased] — M2 节点系统（P1 数据层 + P2 画布交互）已落地
 
+**M_rerun：文本生成「重新生成（新 seed）」—— 重跑等效“再次运行”，但换随机种子**
+
+- 文档先行：`actionPlan/M_rerun.md`（计划）+ `M_patchA §6.1 PD-06` 扩写（区分「通用重跑 FEA-M4-11」与「新 seed 重跑 FEA-M4-17」）
+- `engine/node_registry.cpp`：LLMGenerate 增 `seed` 参数（Int，默认 0 = 不指定；顺带修正 `mode` 的过期描述）
+- `ai/deepseek_official_provider.{h,cpp}`：`OfficialChatRequest.seed`；`build_request_body` 在 `seed > 0` 时加入 `seed`
+- `nodes/local_nodes.cpp`：official 传 seed；网页版在 `seed > 0` 时 Console 提示「网页版不支持 seed，已忽略」
+- `ui/property_panel.cpp`：LLMGenerate 节点新增 **「重新生成（新 seed）」** 按钮（运行中禁用；先压快照→写新 seed→异步运行，**可撤销**）
+- 断言（离线）：请求体含/不含 seed、节点含 seed 且默认 0 → `--run-selftest` 实测 `M_rerun 新 seed：OK`
+- 回归：构建 0 error / 0 warning；6 套自检 exit 0；GUI 冒烟优雅退出
+
 **M_textio P5（修复 + 路径可配置）：汇点节点结果入运行态 + TextOutput 导出参数/自动导出**
 
 - **修复真 bug**：`nodeOutputText` 只遍历输出端口，而 `TextOutput`/`ImagePreview` 是**无输出端口的汇点** → 运行结果永远读不到（表现为：连接线“像没接上”、输出面板显示“无输出”、归档缺该节点文件、导出无正文）→ `Executor` 对无输出端口节点把返回值写入运行态值**虚拟端口 `__result`**；`nodeOutputText`/`makeSnapshot` 回退读取
