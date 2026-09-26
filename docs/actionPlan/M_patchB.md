@@ -1160,6 +1160,11 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | `gemini-web` | Gemini（gemini.google.com） | `https://gemini.google.com/app` | ⚠️ 未核实（抓取失败） | ⬜ | ⬜ | 境外站点 |
 
 - **新增两列（L4 起）**：**可登录** = 该条目的「打开登录窗口 → 手动登录 → 抓取 Cookie」链路已实测通过；**可生成（选择器）** = `web.input_selector` / `send` / `answer_selector` **已实测填好**且端到端生成通过（⬜ = 尚未实测，**不填假值** —— 沿用 `PB2-26` 原则）。**L4 的目标就是把 11 行的「可生成」从 ⬜ 逐站变为 ✅**（`PB2-29`；每站需一次人工登录 + 选择器实测）。
+- **v15 逐站直连实测结果（2026-09-27，详见 [网页版协议实测记录 §7.9](../网页版协议实测记录.md)）**：
+  - **「打开登录窗口」= 12/12 全部真的打开各自的站点** ✅（不再出现「不管选哪个都是 DeepSeek」）；其中 **3 条域名按实测修正为最终域**：`kimi-web`（→ `www.kimi.com`）、`tongyi-web`（→ **`www.qianwen.com`**）、`ernie-web`（→ `wenxin.baidu.com`）。
+  - **输入框选择器已实测 4 条**（`kimi-web` = `div.chat-input-editor`；`qwen-web` = `textarea[placeholder="Ask Qwen"]` + 发送 `div.message-input-right-button-send`；`yuanbao-web` = `div.ql-editor.ql-blank`；`ernie-web` = `#chat-textarea`）→ 已写回 `source/assets/providers.json`，`--provider-dump` 确认这 4 条**只剩 `answer_selector` 未就绪**。
+  - `chatgpt-web` / `claude-web` / `gemini-web` 在本机网络下**均可直连**（境外三站不再是「未核实」）；`chatglm-web` 首屏为 **WAF 挑战页**（需人工过验证）。
+  - **仍未就绪**：11 条的 `answer_selector`（回答容器必须**先有一条回答**才存在 → 需人工登录 + 手动发一条消息后再跑 `--web-dom-dump` 取回）。
 
 
 - **为什么没有选择器**：`adapter=dom` 的生成字段（`input_selector` / `send` / `answer_selector`）与 `cookie_names` / `token_expr` **必须实测**；本轮**不填假值**（避免 L3 落地后误判「已适配」）→ 采用**登录型条目**（`PB2-26`：可加载 + 生成未就绪如实标记）。

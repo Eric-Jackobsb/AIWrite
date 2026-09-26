@@ -826,7 +826,7 @@
                 "children": [],
                 "todo": {
                   "id": 158,
-                  "content": "FEA-M_patchB-29…30 L4 站点数据落地 + 自助闭环：内置站点选择器逐站实测回填（verified:true + 附录 E 两列）+ --run-selftest --web --provider <id> + 面板「测试选择器」+ PB2-24 并入（新建条目 / 重新加载配置表 / 下拉即时刷新） ｜ §3 PB2-29/PB2-30 · 验收 AB2-21/AB2-22 · 清单见附录 E",
+                  "content": "FEA-M_patchB-29…30 L4 站点数据落地 + 自助闭环：内置站点选择器逐站实测回填（verified:true + 附录 E 两列）+ --run-selftest --web --provider <id> + 面板「测试选择器」+ PB2-24 并入（新建条目 / 重新加载配置表 / 下拉即时刷新） ｜ §3 PB2-29/PB2-30 · 验收 AB2-21/AB2-22 · 清单见附录 E ｜ 进度：v15 已完成 **12/12 逐站直连实测**（登录窗口都打开各自站点；3 条域名修正为最终域：kimi→www.kimi.com、tongyi→www.qianwen.com、ernie→wenxin.baidu.com）+ **4 条输入框选择器实测回填**（kimi/qwen/yuanbao/ernie，已进 assets/providers.json；--provider-dump 确认只剩 answer_selector）+ --run-selftest --web --provider <id> ✅ + 新工具 --web-dom-dump（只读枚举候选+建议）；剩余：11 条 answer_selector 需人工登录并手动发一条消息后取回（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchB.md"

@@ -58,7 +58,7 @@
   构建 **0 error / 0 warning**；⚠️ CLI 文案 / 退出码与面板按钮需 GUI 现场实测（`--web-probe --provider kimi-web`）
 - **仍未做**：会话失效识别（`40002`/`401`/`40003`，归 `PB2-25`）；`PB2-29`（选择器逐站实测）；`PB2-30`（端到端自检 + 面板「测试选择器」+ `PB2-24`）
 
-**修复 + 新增（M_patchB L4 / `B2-e` 第三批 · v15）：崩溃修复 + 会话失效识别 + `--web-dom-dump` 选择器枚举**
+**修复 + 新增（M_patchB L4 / `B2-e` 第三批 · v15）：崩溃修复 + 会话失效识别 + `--web-dom-dump` 选择器枚举 + 逐站直连实测**
 
 - **修复 CLI 崩溃 `0xC0000409`（`STATUS_STACK_BUFFER_OVERRUN` / `__fastfail`）** —— 两个独立原因：
   - **调用方式**：`aiwrite.exe` 是 GUI 子系统程序，PowerShell `*>`/管道重定向会与其 `attach_parent_console()`+`freopen("CONOUT$")` 冲突 → 用
@@ -73,6 +73,11 @@
 - **断言/回归**：`api_probe --exec-selftest` **232 → 237 通过 / 0 失败**（`VB2-27` 5 项全 PASS）；`--graph-selftest` 111/0；`--provider-selftest` 50/0；构建 **0 error / 0 warning**；
   `--web-dom-dump --provider kimi-web` exit 0（实测读出 `div.chat-input-editor` 等真实候选）
 - **实测发现（待拍板 `D-30`）**：未登录的 Kimi 也有匿名 Cookie → 仅按「该 origin Cookie 非空」会误报「已登录」；建议改「`cookie_names` 命中优先 + Cookie 非空降级为『未校验』」，并为每站补 `cookie_names`
+- **逐站直连实测（12 条 web 条目，2026-09-27）**：用 `--web-dom-dump` 逐站跑（只读）
+  - **12/12 条目的登录窗口都真的打开了各自站点**；3 条域名按实测修正为**最终域**：`kimi-web`→`www.kimi.com`、`tongyi-web`→**`www.qianwen.com`**、`ernie-web`→`wenxin.baidu.com`
+  - **输入框选择器实测 4 条并写回 `assets/providers.json`**：`kimi-web`=`div.chat-input-editor`、`qwen-web`=`textarea[placeholder="Ask Qwen"]`（发送 `div.message-input-right-button-send`）、`yuanbao-web`=`div.ql-editor.ql-blank`、`ernie-web`=`#chat-textarea`（`--provider-dump` 确认这 4 条只剩 `answer_selector` 未就绪）
+  - `chatgpt-web` / `claude-web` / `gemini-web` 本机网络**可直连**；`chatglm-web` 首屏为 **WAF 挑战页**；`doubao-web`/`spark-web` 未登录不渲染输入框
+  - 完整逐站表格见 [网页版协议实测记录 §7.9](网页版协议实测记录.md)
 
 **特性（M_patchB L1 收口）：网页版站点身份按「生效条目」+ 多站点会话并存 + `config.toml` 多 provider**
 
