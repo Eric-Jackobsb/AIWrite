@@ -743,19 +743,129 @@
                   "level": "success",
                   "fileLink": "docs/actionPlan/M_patchB.md"
                 }
+              },
+              {
+                "key": 145,
+                "children": [],
+                "todo": {
+                  "id": 145,
+                  "content": "FEA-M_patchB-21 用户自建网页版站点条目：正确格式（信封 schema_version + 嵌套 send/done_when）写进文档（附录 D 实测可用）+ 模板 _example_web_dom 改造与 --provider-template 后置 ｜ §3 PB2-21 · 风险 R18",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 146,
+                "children": [],
+                "todo": {
+                  "id": 146,
+                  "content": "FEA-M_patchB-22 网页版站点不再回落（D-22②）：strict_web_spec_for 非 web 条目返回空 + 面板错误块/按钮禁用 + 校验文案「必然失败」+ 运行时 NodeError + 自检断言同步 ｜ §3 PB2-22 · 不变量 I14 · 验收 AB2-16 · 风险 R17",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 147,
+                "children": [],
+                "todo": {
+                  "id": 147,
+                  "content": "FEA-M_patchB-23 solve_pow_via_page 站点参数化 + 「按条目」网页版自检入口（--web-probe --provider <id>） ｜ §3 PB2-23 · 验证 VB2-19",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 149,
+                "children": [],
+                "todo": {
+                  "id": 149,
+                  "content": "FEA-M_patchB-25 网页版会话失效可诊断：--web-probe 判据加「端点 code=0」+ 面板/校验识别会话失效并给重登入口（与 PB-07 合并）+ token 形状变化走 web.token_expr 表驱动覆盖 ｜ §3 PB2-25 · 风险 R19/R20 · 建议验收 AB2-17",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 151,
+                "children": [],
+                "todo": {
+                  "id": 151,
+                  "content": "FEA-M_patchB-26 内置各 AI 网页版登录入口（登录型站点条目）：dom 缺生成字段 error→warning + web_login_only + 字段警告文案细分 + 运行期/CLI 如实显示 + providers.json 新增 11 个站点入口 ｜ §3 PB2-26 · 验证 VB2-21 · 验收 AB2-18 · 清单见附录 E",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
               }
             ],
             "todo": {
               "id": 132,
-              "content": "Patch B · L1 收口（5 项）",
+              "content": "Patch B · L1 收口（10 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 157,
+            "children": [
+              {
+                "key": 156,
+                "children": [],
+                "todo": {
+                  "id": 156,
+                  "content": "FEA-M_patchB-27…28 L4 登录/会话层去 DeepSeek 化：站点无关「已登录」判定（web_session_state() 纯函数）+ 面板/状态栏文案与渲染条件（userToken 行仅当配了 token_expr）+ 探测「不适用」语义（只读诊断分支，不注入 DeepSeek 端点）+ 会话失效识别 ｜ §3 PB2-27/PB2-28 · 不变量 I15/I16 · 验证 VB2-24…VB2-26 · 验收 AB2-20",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 158,
+                "children": [],
+                "todo": {
+                  "id": 158,
+                  "content": "FEA-M_patchB-29…30 L4 站点数据落地 + 自助闭环：内置站点选择器逐站实测回填（verified:true + 附录 E 两列）+ --run-selftest --web --provider <id> + 面板「测试选择器」+ PB2-24 并入（新建条目 / 重新加载配置表 / 下拉即时刷新） ｜ §3 PB2-29/PB2-30 · 验收 AB2-21/AB2-22 · 清单见附录 E",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 157,
+              "content": "Patch B · L4 登录层去 DeepSeek 化 + 站点数据（2 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 153,
+            "children": [
+              {
+                "key": 154,
+                "children": [],
+                "todo": {
+                  "id": 154,
+                  "content": "FEA-M_patchB-13…16 L3 通用 DOM 站点适配器（选择器驱动）+ 选择器探测/诊断 + 用户自定义站点闭环 + 文档：ai/dom_web_client.{h,cpp} + web::run_script_sync（不要求内存 userToken）+ local_nodes DOM 分支 + --web-adapter-selftest ｜ §3 PB2-13…16 · 验证 VB2-22/VB2-23 · 验收 AB2-19",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 153,
+              "content": "Patch B · L3 通用 DOM 适配器（1 项）",
               "done": true,
-              "level": "success"
+              "level": "secondary"
             }
           }
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（46 项）",
+          "content": "Feature（54 项）",
           "done": false,
           "level": "default"
         }
@@ -1202,11 +1312,67 @@
               "level": "default",
               "fileLink": "docs/actionPlan/M_patchB.md"
             }
+          },
+          {
+            "key": 148,
+            "children": [],
+            "todo": {
+              "id": 148,
+              "content": "DOCS-M_patchB-19 第三轮复核 v8（「站点恒 DeepSeek」· 文档先行）：I14 + PB2-21/22/23/24 + B2-a4 + AB2-16 + VB2-19 + R17/R18 + D-22/23/24 + §9.3 + 附录 D（自建站点条目实测可用格式），并同步 CHANGELOG / 使用说明（§9、§8 1d/1e） / 实测记录 §7.5 / docs+source README / DevPlan.todo ｜ M_patchB §9.3",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchB.md"
+            }
+          },
+          {
+            "key": 150,
+            "children": [],
+            "todo": {
+              "id": 150,
+              "content": "DOCS-M_patchB-20 v9 落地文档回填（PB2-22/PB2-23 + 官网侧会话失效登记）：M_patchB（v9 横幅 / §3 落地实测 / B2-a4 / R19/R20 / §8 v9 行 / §9.4 / 新任务 PB2-25）+ CHANGELOG v9 + 使用说明 §8 1c/1d/1e + 实测记录 §7.5 + docs/source README",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchB.md"
+            }
+          },
+          {
+            "key": 152,
+            "children": [],
+            "todo": {
+              "id": 152,
+              "content": "DOCS-M_patchB-21 v10 文档回填（内置站点入口）：M_patchB（v10 横幅 / §3 PB2-26 / AB2-18 / VB2-21 / §8 v10 / §9.5 / 附录 E 清单）+ CHANGELOG v10 + 使用说明（§9 内置清单 + §8 1f）+ 实测记录 §7.6 + docs/source README",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchB.md"
+            }
+          },
+          {
+            "key": 159,
+            "children": [],
+            "todo": {
+              "id": 159,
+              "content": "DOCS-M_patchB-23 v12 文档回填（L4 立项 · 零代码）：M_patchB（v12 横幅 / §0.3 / §2.2 四层 / §2.3 I15·I16 / §3 L4 PB2-27…30 / §4.1 B2-e / §4.2 AB2-20…22 / §4.3 VB2-24…26 / §5 R21…R23 / §6 D-27…29 / 附录 E 两列 / §8 v12 / §9.7）+ CHANGELOG v12 + 使用说明（§9 L4 说明 + §8 1h）+ 实测记录 §7.8 + docs/source README",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchB.md"
+            }
+          },
+
+          {
+            "key": 155,
+            "children": [],
+            "todo": {
+              "id": 155,
+              "content": "DOCS-M_patchB-22 v11 文档回填（L3）：M_patchB（v11 横幅 / §3 PB2-13…16 落地实测 / B2-c / AB2-19 / VB2-22·VB2-23 / §8 v11 / §9.6）+ CHANGELOG v11 + 使用说明（§9 选择器怎么填/调 + §8 1f2/1g + Kimi 域修正）+ 实测记录 §7.7 + docs/source README",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchB.md"
+            }
           }
         ],
         "todo": {
           "id": 74,
-          "content": "Docs（9 项）",
+          "content": "Docs（14 项）",
           "done": false,
           "level": "secondary"
         }
@@ -1609,7 +1775,10 @@
       46,
       132,
       136,
-      139
+      139,
+      157
+
+
     ],
     "add_mode": "bottom",
     "virtual": false,

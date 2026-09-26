@@ -142,7 +142,12 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 
 - **站点身份按「生效条目」**：登录页 / 窗口标题 / 探测路径 / Cookie 名全部取自条目的 `web.*`
   （`src/web/webview_host.h` 的 `interactive_login_request(site,id)` 等）；无参重载 = 旧常量（逐字一致，兼容保留）。
-  未选网页版条目时回落**内置默认站点（DeepSeek 网页版）**，参数面板与运行前校验都会明确提示。
+  ✅ **已落地（v9 · `D-22②` + `D-26`）**：**站点不再回落** —— 条目不是网页版条目（或表外 id / `web.login_url` 为空）时，站点区给**错误块 + 三条引导**（开窗按钮禁用）、运行前校验提示「**本次运行必定失败**」（**不阻断**）、运行期直接 `NodeError`；适配器未实现（如 `dom`）→ 运行期**明确报错**（可登录 / 可探测，生成待 L3）。不变量 `I14`。
+- **加一个网页版站点**：把 `{"schema_version":1,"providers":[ … ]}` 写进 `~/.brain-ai/providers.d/<id>.json` 并**重启**（无 reload 入口 —— `PB2-24`）；`web` 段用**嵌套** `send{kind,value}` / `done_when{kind,selector}` —— 实测可用样例见 [../docs/actionPlan/M_patchB.md](../docs/actionPlan/M_patchB.md) **附录 D**。
+- **内置站点入口（v10 / `PB2-26`）**：配置表已内置 **11 个 AI 的网页版登录入口**（Kimi / 通义千问 / Qwen 国际站 / 智谱清言 / 豆包 / 腾讯元宝 / 文心一言 / 讯飞星火 / ChatGPT / Claude / Gemini）+ 原有 `deepseek-web`；条目为**登录型**（只配 `login_url` + `window_title`）：**能登录 / 能探测**，**生成**需先补齐选择器（DOM 执行器 L3 v11 **已就绪**；选择器由 L4 `PB2-29` 逐站实测回填）→ 未填时点运行会**明确报错**（不静默、不回落 DeepSeek）。完整清单见 [../docs/actionPlan/M_patchB.md](../docs/actionPlan/M_patchB.md) **附录 E**。
+- **L3（v11）：DOM 适配器已接线**（`src/ai/dom_web_client.{h,cpp}`）—— 条目补齐 **`web.input_selector` / `web.send` / `web.answer_selector`**（+ 建议 `web.done_when`）**重启即真正生成**（写入提示词 → 自动发送 → 轮询取答案；到上限/超时**如实返回已取文本 + 警告**）；不要求内存 `userToken`（登录态在浏览器 profile）；选择器不会写就用 **`--web-adapter-selftest --provider <id>`**（只读命中数 + 修复建议）。站点 = 纯数据，**无需改 C++**。
+- **L4（v12 · 文档先行，代码待 `B2-e`）：登录层去 DeepSeek 化 + 站点数据落地 + 自助闭环** —— ①**登录态判据站点无关**（`web_session_state()` 纯函数：按该 origin 的 Cookie / `cookie_names` 判，**不看** `userToken`；`userToken` 行仅当条目配了 `token_expr` 才显示）②**探测「不适用」语义**（条目未配 `probe_paths` / `token_expr` / `endpoints` 时不再注入 DeepSeek 端点 → 只读诊断分支；`deepseek-web` 与无参路径**逐字不变**）③**内置站点选择器逐站实测回填**（`--web-adapter-selftest --provider <id>` → 填条目 → `verified:true`）④**自建站点 UI 闭环**（新建条目 / **重新加载配置表** / 测试选择器；`PB2-24` 并入）。计划：`M_patchB.md` §3 `PB2-27`…`PB2-30`、§9.7。
+
 - **「模式」下拉恒两项**（`src/engine/provider_resolve.cpp` 的 `provider_mode_options`）：`official` / `web` **始终可选**
   （决策 `D-21`：**网页版与官方 API 同等优先级**，**不按条目 `kind` 裁剪**）；切换「提供商」只带出**建议值**
   （网页版条目建议 `web`、官方条目建议 `official`），不一致时给橙色**提示**：非网页版条目 + `web` → 用内置默认站点；
@@ -154,13 +159,13 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 - **窗口串行复用**：同一时刻一个登录窗口；切站点时先关旧窗再按新站点开窗（页面内 PoW 求解依赖该站点页面）。
 - **注销按站点**（`web::logout_site()`）：清该站点内存会话 + 删该 origin 的 Cookie + 清同源 `localStorage`；
   「删除整个 profile（所有站点）」在参数面板「高级」里，需二次确认。
-- 内置配置表 `assets/providers.json` 共 10 条，其中 `kind=web` **仅 `deepseek-web` 1 条**
-  （Kimi 仅为顶层 `_example_web_dom` **模板**，`_` 前缀键不参与加载）；要接入第二个站点，把站点 JSON 放进
+- 内置配置表 `assets/providers.json` 共 **21 条**（official 9 / web 12），其中 `kind=web` 为 `deepseek-web`（**唯一已填选择器、可生成**）+ **11 条登录型站点**（v10 / `PB2-26`；**L4 `PB2-29` 逐站补选择器**）
+  （Kimi 等站点已作为**登录型条目**内置，不再是「仅模板」）；要接入**新**站点，把站点 JSON 放进
   `~/.brain-ai/providers.d/`（照 `_example_web_dom` 抄）。
 - **`config.toml` 多 provider 实例参数**（PB2-06）：`[providers.<id>]` 可多节（`deepseek` 旧节自动迁移，幂等）；
   保存前自动备份 `config.toml.bak`，写入采用 `.tmp` → 原子替换。**厂商元数据仍以配置表（JSON）为准**。
 - 计划与验收：`PB2-17`/`PB2-18`/`PB2-19`/`PB2-06`/`PB2-20`（`D-21` 修订）、`I11`/`I12`/`I13`、`AB2-13`/`AB2-14`/`AB2-15`、`VB2-16`/`VB2-17`/`VB2-18`、`R14`/`R15`/`R16`，
-  见 [../docs/actionPlan/M_patchB.md](../docs/actionPlan/M_patchB.md)（§9「L1 收口」实测基线）与
+  见 [../docs/actionPlan/M_patchB.md](../docs/actionPlan/M_patchB.md)（§9「L1 收口」实测基线；**L4 立项见 §9.7**）与
   [../docs/网页版协议实测记录.md](../docs/网页版协议实测记录.md) §7。
 
 ---
