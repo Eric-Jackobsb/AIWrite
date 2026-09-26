@@ -5,6 +5,7 @@
 #include "ui/editor_state.h"
 #include "ui/output_panel.h"
 #include "ui/text_view.h"
+#include "ui/texture_cache.h"
 #include "utils/file_dialog.h"
 #include "utils/log.h"
 #include "utils/paths.h"
@@ -18,6 +19,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
@@ -478,7 +480,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     }
 
     // ---- 生效提供商（P1-a）：provider 输入优先，覆盖节点自身参数 ----
-    // 解决"改了节点「模式」却不生效"的困惑；official（官方 API，PB-04/PB-05 未接线）给出红字与一键切换
+    // 解决"改了节点「模式」却不生效"的困惑；official（官方 API）与图片理解（M5-02）给出红字与提示
     if (engine::uses_provider(node->type)) {
         const engine::EffectiveProvider effective =
             engine::resolve_effective_provider(editor().graph, *node);
@@ -492,6 +494,12 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                                     effective.mode.c_str());
             }
         }
+        else if (node->type == "VLMGenerate") {
+            // M5-02：图片理解只走 official（OpenAI 兼容多模态）；模型名来自「模型（自定义）」
+            ImGui::TextDisabled("生效：图片理解 · 模式 %s · 模型 %s%s", effective.mode.c_str(),
+                                effective.model.empty() ? "（未设置）" : effective.model.c_str(),
+                                effective.from_edge ? "" : "（provider 输入未连接）");
+        }
 
         const std::string reason = engine::unwired_reason(editor().graph, *node);
         if (!reason.empty()) {
@@ -499,7 +507,8 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
             ImGui::TextWrapped("%s：本次运行该节点必定失败，下游会被跳过。", reason.c_str());
             ImGui::PopStyleColor();
 
-            if (engine::official_not_wired(effective)) {
+            // 「已接线」提示与一键切换只针对文本生成（图片理解没有网页版入口，见 M5-02）
+            if (node->type == "LLMGenerate" && engine::official_not_wired(effective)) {
                 ImGui::TextDisabled(
                     "网页版已接线（provider.mode = web）：切换后即可真实生成，需先登录一次。");
 
@@ -518,7 +527,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("网页版走 DeepSeek 网页版会话（需已登录一次）；\n"
-                                      "官方 API（API Key）待 PB-04/PB-05 接线后可用");
+                                      "官方 API（API Key）已接线（PB-05）：填 Key 即可用");
                 }
             }
         }
@@ -641,6 +650,25 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         }
     }
 
+    // M5-01 收尾：图片输入的尺寸摘要（只读文件头，不需要 GL 上下文）
+    if (node->type == "ImageInput") {
+        const engine::Param* path_param = node->findParam("path");
+        const std::string    image_path = path_param != nullptr ? path_param->text() : std::string();
+        if (!image_path.empty()) {
+            int         width  = 0;
+            int         height = 0;
+            std::string error;
+            if (image_size(image_path, &width, &height, &error)) {
+                ImGui::TextDisabled("图片尺寸：%d×%d", width, height);
+            }
+            else {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+                ImGui::TextWrapped("%s", error.c_str());
+                ImGui::PopStyleColor();
+            }
+        }
+    }
+
     // ---- 运行结果（PA-03）：只读展示 + 复制（与输出面板 / 画布节点摘要同源）----
     ImGui::Separator();
     if (ImGui::CollapsingHeader("运行结果", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -657,6 +685,32 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
                 ImGui::TextWrapped("错误：%s", run->error.c_str());
                 ImGui::PopStyleColor();
+            }
+
+            // M5-03：图片结果预览（与输出面板共用纹理缓存）
+            if (!run->images.empty()) {
+                for (std::size_t index = 0; index < run->images.size(); ++index) {
+                    ImGui::PushID(static_cast<int>(3000 + index));
+                    const TextureInfo texture = texture_for(run->images[index]);
+                    if (texture.texture != 0) {
+                        const float limit  = std::min(ImGui::GetContentRegionAvail().x, 320.0f);
+                        float       width  = static_cast<float>(texture.width);
+                        float       height = static_cast<float>(texture.height);
+                        if (width > limit && width > 0.0f) {
+                            const float shrink = limit / width;
+                            width *= shrink;
+                            height *= shrink;
+                        }
+                        ImGui::Image(
+                            reinterpret_cast<ImTextureID>(static_cast<std::intptr_t>(texture.texture)),
+                            ImVec2(width, height));
+                        ImGui::TextDisabled("预览 %d×%d", texture.width, texture.height);
+                    }
+                    else {
+                        ImGui::TextDisabled("图片不可用：%s", texture.error.c_str());
+                    }
+                    ImGui::PopID();
+                }
             }
 
             const std::string body = node_output_text(editor().graph, snapshot, node->id);
@@ -684,7 +738,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                     ImGui::SetTooltip("导出为 .md/.txt（与预览同源，含元信息头）");
                 }
             }
-            else if (run->error.empty()) {
+            else if (run->error.empty() && run->images.empty()) {
                 ImGui::TextDisabled("（该节点无输出）");
             }
 

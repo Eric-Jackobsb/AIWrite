@@ -515,6 +515,56 @@ const RunNodeView* RunSnapshot::find(const std::string& node_id) const
     return nullptr;
 }
 
+namespace {
+
+// M5-03：收集节点 Image 端口的运行结果（本地图片路径，按端口顺序）
+//  * 普通节点：Image 类型的输出端口（如 ImageInput.image）
+//  * 汇点节点（ImagePreview）：结果存在虚拟端口 __result（见 executeNode）
+std::vector<std::string> node_image_paths(const Graph& graph, const NodeOutputs& outputs,
+                                          const std::string& node_id)
+{
+    std::vector<std::string> images;
+    const Node*              node = graph.findNode(node_id);
+    if (node == nullptr) {
+        return images;
+    }
+    const auto collect = [&images, &outputs, &node_id](const std::string& port_id) {
+        const nlohmann::json* value = outputs.find(node_id, port_id);
+        if (value == nullptr) {
+            return;
+        }
+        if (value->is_string()) {
+            images.push_back(value->get<std::string>());
+            return;
+        }
+        if (value->is_array()) {
+            for (const nlohmann::json& item : *value) {
+                if (item.is_string()) {
+                    images.push_back(item.get<std::string>());
+                }
+            }
+        }
+    };
+    bool has_image_input = false;
+    for (const Port& port : node->inputs) {
+        if (port.type == PortType::Image) {
+            has_image_input = true;
+            break;
+        }
+    }
+    for (const Port& port : node->outputs) {
+        if (port.type == PortType::Image) {
+            collect(port.id);
+        }
+    }
+    if (has_image_input && node->outputs.empty()) {
+        collect("__result"); // ImagePreview 等汇点节点
+    }
+    return images;
+}
+
+} // namespace
+
 RunSnapshot makeSnapshot(const Graph& graph, const Executor& executor)
 {
     RunSnapshot snapshot;
@@ -530,6 +580,7 @@ RunSnapshot makeSnapshot(const Graph& graph, const Executor& executor)
         view.error       = info.error;
         view.text        = nodeOutputText(graph, executor.outputs(), info.node_id);
         view.delta_bytes = view.text.size();
+        view.images      = node_image_paths(graph, executor.outputs(), info.node_id); // M5-03
         snapshot.nodes.push_back(std::move(view));
     }
     return snapshot;

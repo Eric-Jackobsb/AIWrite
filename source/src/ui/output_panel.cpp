@@ -4,11 +4,14 @@
 #include "engine/graph.h"
 #include "ui/editor_state.h"
 #include "ui/text_view.h"
+#include "ui/texture_cache.h"
 #include "utils/file_dialog.h"
 #include "utils/text_export.h"
 #include "utils/log.h"
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -54,6 +57,47 @@ std::string node_header(const engine::RunNodeView& info)
         header += " · 生成中（" + std::to_string(info.delta_bytes) + " 字）";
     }
     return header;
+}
+
+// M5-03：渲染节点结果里的图片（缩略图 + 打开所在文件夹）
+//  * 纹理按「路径 + 修改时间 + 大小」缓存（`ui/texture_cache`），重复运行不重复解码
+//  * image_height > 0 时限制最大显示高度（保持宽高比）
+//  * 图片不可用时给出原因（一行红字，不占版面）
+void draw_result_images(const engine::RunNodeView& info, float image_height)
+{
+    for (std::size_t index = 0; index < info.images.size(); ++index) {
+        const std::string& path = info.images[index];
+        ImGui::PushID(static_cast<int>(index));
+        const TextureInfo texture = texture_for(path);
+        if (texture.texture != 0) {
+            const float available = ImGui::GetContentRegionAvail().x;
+            float       width     = static_cast<float>(texture.width);
+            float       height    = static_cast<float>(texture.height);
+            if (available > 32.0f && width > available) {
+                const float shrink = available / width;
+                width *= shrink;
+                height *= shrink;
+            }
+            if (image_height > 0.0f && height > image_height) {
+                const float shrink = image_height / height;
+                width *= shrink;
+                height *= shrink;
+            }
+            ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<std::intptr_t>(texture.texture)),
+                         ImVec2(width, height));
+        }
+        else {
+            ImGui::PushStyleColor(ImGuiCol_Text, kColorError);
+            ImGui::TextWrapped("图片不可用：%s", texture.error.c_str());
+            ImGui::PopStyleColor();
+        }
+        if (ImGui::SmallButton("打开所在文件夹")) {
+            utils::open_in_explorer(path);
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s（%d×%d）", path.c_str(), texture.width, texture.height);
+        ImGui::PopID();
+    }
 }
 
 } // namespace
@@ -277,7 +321,7 @@ void draw_output_panel(const char* title, bool* open, EditorState& state)
             }
             header = "【最终输出】" + label + "    " + header;
         }
-        const bool leaf = body.empty() && info.error.empty();
+        const bool leaf = body.empty() && info.error.empty() && info.images.empty();
 
         ImGui::PushID(info.node_id.c_str());
         ImGui::PushStyleColor(ImGuiCol_Text, is_final ? kColorFinal : state_color(info.state));
@@ -307,7 +351,11 @@ void draw_output_panel(const char* title, bool* open, EditorState& state)
                     }
                 }
             }
-            else if (info.error.empty()) {
+            // M5-03：图片结果（ImageInput 透传 / ImagePreview 预览）
+            if (!info.images.empty()) {
+                draw_result_images(info, 480.0f);
+            }
+            if (body.empty() && info.images.empty() && info.error.empty()) {
                 ImGui::TextDisabled("（该节点无输出）");
             }
         }

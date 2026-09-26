@@ -146,6 +146,8 @@ struct RunNodeView {
     double      duration_ms = 0.0;
     std::string error;
     std::size_t delta_bytes = 0;             // 流式增量累计（PB-03/PB-08）
+    // M5-03：Image 端口的结果（本地图片路径，按端口顺序）—— 输出面板据此渲染缩略图
+    std::vector<std::string> images;
 };
 
 struct RunSnapshot {

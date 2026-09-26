@@ -4,8 +4,14 @@
 
 #include <nfd.hpp>
 
+#include <filesystem>
 #include <string>
 #include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>
+#include <shellapi.h> // ShellExecuteW（打开资源管理器）
+#endif
 
 namespace aiwrite::utils {
 namespace {
@@ -139,6 +145,40 @@ std::string save_file(const std::vector<FileFilter>& filters, const std::string&
     const std::string path = to_string(out_path);
     log::info("[文件对话框] 保存为: " + path);
     return path;
+}
+
+// M5-03：在资源管理器中定位文件（文件不存在时打开其所在目录）
+bool open_in_explorer(const std::string& path)
+{
+    if (path.empty()) {
+        return false;
+    }
+#if defined(_WIN32)
+    std::error_code                     code;
+    const std::filesystem::path         target = std::filesystem::path(path).lexically_normal();
+    std::wstring                        argument;
+    if (std::filesystem::exists(target, code)) {
+        argument = L"/select,\"" + target.wstring() + L"\"";
+    }
+    else if (std::filesystem::exists(target.parent_path(), code)) {
+        argument = L"\"" + target.parent_path().wstring() + L"\"";
+    }
+    else {
+        log::error("[文件对话框] 打开位置失败（路径不存在）: " + path);
+        return false;
+    }
+    const HINSTANCE instance =
+        ShellExecuteW(nullptr, L"open", L"explorer.exe", argument.c_str(), nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(instance) <= 32) {
+        log::error("[文件对话框] 打开位置失败（ShellExecuteW）: " + path);
+        return false;
+    }
+    log::info("[文件对话框] 已在资源管理器中定位: " + path);
+    return true;
+#else
+    log::error("[文件对话框] open_in_explorer 仅支持 Windows: " + path);
+    return false;
+#endif
 }
 
 } // namespace aiwrite::utils

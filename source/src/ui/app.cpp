@@ -7,6 +7,7 @@
 #include "ui/node_library.h"
 #include "ui/output_panel.h"
 #include "ui/property_panel.h"
+#include "ui/texture_cache.h"
 #include "ui/toolbar.h"
 #include "utils/config.h"
 #include "utils/credential.h"
@@ -782,6 +783,9 @@ int run(const AppOptions& options)
             log::warn("[窗口几何] 退出保存失败：config.toml 不可写？");
         }
     }
+
+    // M5-03：纹理缓存持有 GL 资源 → 必须先于上下文销毁释放
+    ui::release_textures();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

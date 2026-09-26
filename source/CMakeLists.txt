@@ -99,6 +99,11 @@ set_target_properties(aiwrite_tomlplusplus PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${AIWRITE_TOMLPLUSPLUS_INCLUDE_DIR}")
 message(STATUS "AIwrite: toml++ = ${_aiwrite_toml_lib}")
 
+# stb（图片解码，M5-03/M5-08）：vcpkg 端口只装头文件（无 CMake config），同样手工取 include 目录
+find_path(AIWRITE_STB_INCLUDE_DIR NAMES "stb_image.h"
+    PATHS "${_aiwrite_toml_root}/include" NO_DEFAULT_PATH REQUIRED)
+message(STATUS "AIwrite: stb = ${AIWRITE_STB_INCLUDE_DIR}")
+
 find_package(unofficial-webview2 CONFIG REQUIRED)
 find_package(nfd CONFIG REQUIRED)               # nativefiledialog-extended（overlay port）
 
@@ -240,13 +245,17 @@ add_executable(aiwrite WIN32
     src/utils/file_dialog.cpp
     src/ui/output_panel.cpp
     src/ui/error_bar.cpp
-    src/ui/text_view.cpp)
+    src/ui/text_view.cpp
+    src/ui/texture_cache.cpp)
 target_link_libraries(aiwrite PRIVATE
     aiwrite_core
     imgui_node_editor
     glfw
     OpenGL::GL
-    nfd::nfd)
+    nfd::nfd
+    shell32)   # M5-03：ShellExecuteW（在资源管理器中定位图片）
+# stb_image（图片解码）：端口无 CMake config，头文件目录手工挂上
+target_include_directories(aiwrite PRIVATE "${AIWRITE_STB_INCLUDE_DIR}")
 if(MSVC)
     target_compile_options(aiwrite PRIVATE /W4)
     # GUI 程序但保留 main() 入口（便于命令行参数解析）

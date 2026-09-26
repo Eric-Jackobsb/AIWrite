@@ -30,6 +30,9 @@ std::string save_file(const std::vector<FileFilter>& filters = {},
 // 选择目录；取消/失败返回空字符串
 std::string pick_folder(const std::string& default_path = {});
 
+// M5-03：在资源管理器中定位文件（不存在时退回打开所在目录）；返回是否已发起
+bool open_in_explorer(const std::string& path);
+
 // 依赖是否可用（NFD 能否初始化）
 bool file_dialog_available();
 

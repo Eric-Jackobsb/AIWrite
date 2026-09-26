@@ -2058,6 +2058,41 @@ int execution_selftest()
             }
         }
 
+        // ---- 8) 快照图片通道（M5-03：无 GL 也能验，UI 据此渲染缩略图）----
+        {
+            Graph             graph;
+            const std::string img     = add_node(check, graph, "ImageInput", "快照图片输入");
+            const std::string preview = add_node(check, graph, "ImagePreview", "快照图片预览");
+            const std::string text    = add_node(check, graph, "TextInput", "快照文本");
+            const std::string output  = add_node(check, graph, "TextOutput", "快照文本输出");
+            set_param(graph, img, "path", png_a.string());
+            set_param(graph, text, "text", "纯文本");
+            graph.edges.push_back(make_edge("s1", img, "image", preview, "image"));
+            graph.edges.push_back(make_edge("s2", text, "text", output, "text"));
+
+            Executor    executor;
+            std::string error;
+            const bool  started = executor.start(graph, &error);
+            expect(check, started, "M5-03 快照：图片链路 start 通过", error);
+            if (started) {
+                executor.runToCompletion(&graph, 64);
+                const engine::RunSnapshot snapshot = engine::makeSnapshot(graph, executor);
+                const engine::RunNodeView* img_view = snapshot.find(img);
+                expect(check,
+                       img_view != nullptr && img_view->images.size() == 1 &&
+                           img_view->images[0] == png_a.string(),
+                       "M5-03 快照：ImageInput 的 image 端口进入 RunNodeView.images");
+                const engine::RunNodeView* preview_view = snapshot.find(preview);
+                expect(check,
+                       preview_view != nullptr && preview_view->images.size() == 1 &&
+                           preview_view->images[0] == png_a.string(),
+                       "M5-03 快照：ImagePreview（汇点 __result）也进入 images");
+                const engine::RunNodeView* text_view = snapshot.find(output);
+                expect(check, text_view != nullptr && text_view->images.empty(),
+                       "M5-03 快照：纯文本节点的 images 为空（不误判为图片）");
+            }
+        }
+
         std::filesystem::remove_all(vlm_root, ec);
     }
 
