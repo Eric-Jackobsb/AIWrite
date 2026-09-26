@@ -423,6 +423,157 @@ bool write_param(Param& param, const nlohmann::json& value)
     return true;
 }
 
+// ============================================================================
+//  M_patchB L4 / v16（**仅界面层**）：提供商下拉的「合并显示」
+//
+//  背景：配置表里同一家 AI 常有两条 —— 官方 API 条目（`deepseek`）与网页版条目（`deepseek-web`），
+//        下拉里就出现两个名字（且 `-web` 后缀像内部 id，用户困惑）。
+//  规则（**只改界面**：配置表 / `ai/**` / `engine/**` / `nodes/**` 一律不动）：
+//    ① `xxx-web` 存在同名无后缀条目 `xxx`（如 `deepseek`+`deepseek-web`、`gemini`+`gemini-web`）
+//       → **合并为一项**（显示 `xxx`，下拉里不再出现 `xxx-web`）：
+//          · 「模式」= web      → 节点 `provider` 写入 `xxx-web`（运行期照常解析该网页站点）
+//          · 「模式」= official → 写入 `xxx`
+//    ② `xxx-web` 没有同名无后缀条目（如 `kimi-web` / `chatgpt-web`）→ 仍**独立一项**，
+//       但显示名**去掉 `-web` 后缀**（即下拉里永远不会出现 `-web` 字样）
+//    ③ 其它条目（官方 API / 自定义）原样显示
+//  关键性质：合并只是「一个显示项 ↔ 两个真实 id」。写进节点的 id **始终是表内真实存在的 id**，
+//            因此生效解析、`--provider-*` 自检、工作流 JSON、网页版会话键控全部无需改动。
+// ============================================================================
+struct ProviderChoice {
+    std::string id;     // 主 id（无后缀条目；无后缀可用时 = 该 web 条目自身）
+    std::string web_id; // 网页版孪生 id（空 = 无孪生）
+    std::string label;  // 下拉显示名（永不含 `-web`）
+};
+
+// `base_id` 是否有网页版孪生（`base_id-web` 且 kind=web）
+std::string web_twin_of(const ai::ProviderSpecs& table, const std::string& base_id)
+{
+    const std::string       candidate = base_id + "-web";
+    const ai::ProviderSpec* spec      = table.find(candidate);
+    return (spec != nullptr && spec->kind == "web") ? candidate : std::string();
+}
+
+// `id` 是否是「已被合并」的 web 条目（存在同名无后缀条目）
+bool is_merged_web_id(const ai::ProviderSpecs& table, const std::string& id)
+{
+    const std::string suffix = "-web";
+    if (id.size() <= suffix.size() ||
+        id.compare(id.size() - suffix.size(), suffix.size(), suffix) != 0) {
+        return false;
+    }
+    return table.find(id.substr(0, id.size() - suffix.size())) != nullptr;
+}
+
+// 构建下拉项（每次绘制重建：条目很少，且「重新加载配置表」后立即生效）
+//  配对来源两条（**只在界面层**）：
+//   ① 同名后缀规则：`xxx` ↔ `xxx-web`（deepseek / gemini …）
+//   ② 品牌别名表：id 不同名但同属一家（openai ↔ chatgpt-web、anthropic ↔ claude-web、zhipu ↔ chatglm-web）
+std::vector<ProviderChoice> build_provider_choices()
+{
+    const ai::ProviderSpecs& table = ai::provider_specs();
+
+    struct AliasPair {
+        const char* official;
+        const char* web;
+    };
+    static const AliasPair kAliases[] = {
+        {"openai", "chatgpt-web"},     // OpenAI（API） ↔ ChatGPT 网页版
+        {"anthropic", "claude-web"},   // Anthropic Claude（API） ↔ Claude 网页版
+        {"zhipu", "chatglm-web"},      // 智谱 GLM（API） ↔ 智谱清言网页版
+        {"deepseek", "deepseek-web"},  // 与后缀规则一致（冗余写明，便于阅读）
+        {"gemini", "gemini-web"},
+    };
+
+    std::vector<ProviderChoice> out;
+    out.reserve(table.items.size());
+    std::vector<std::string> merged_web_ids; // 已被合并的 web id（不再单列）
+    for (const ai::ProviderSpec& spec : table.items) {
+        if (spec.kind != "web") {
+            continue;
+        }
+        if (is_merged_web_id(table, spec.id)) {
+            merged_web_ids.push_back(spec.id);
+            continue;
+        }
+        for (const AliasPair& alias : kAliases) {
+            if (spec.id == alias.web && table.find(alias.official) != nullptr) {
+                merged_web_ids.push_back(spec.id);
+                break;
+            }
+        }
+    }
+    const auto is_merged = [&merged_web_ids](const std::string& id) {
+        return std::find(merged_web_ids.begin(), merged_web_ids.end(), id) != merged_web_ids.end();
+    };
+
+    for (const ai::ProviderSpec& spec : table.items) {
+        if (spec.kind == "web" && is_merged(spec.id)) {
+            continue; // → 合并进它的官方条目，不再单列
+        }
+        ProviderChoice item;
+        if (spec.kind == "web") {
+            item.id    = spec.id;
+            item.label = spec.id.size() > 4 ? spec.id.substr(0, spec.id.size() - 4) : spec.id;
+        }
+        else {
+            item.id     = spec.id;
+            item.label  = spec.id;
+            item.web_id = web_twin_of(table, spec.id); // ① 同名后缀
+            if (item.web_id.empty()) {                 // ② 品牌别名
+                for (const AliasPair& alias : kAliases) {
+                    if (spec.id == alias.official && table.find(alias.web) != nullptr) {
+                        item.web_id = alias.web;
+                        break;
+                    }
+                }
+            }
+        }
+        out.push_back(item);
+    }
+
+    // 诊断（仅在结果变化时打印一次）：便于核对「合并后下拉里到底有哪些项」
+    {
+        static std::string last_signature;
+        std::string        signature;
+        for (const ProviderChoice& choice : out) {
+            signature += choice.label + "[" + choice.id +
+                         (choice.web_id.empty() ? "" : ("/" + choice.web_id)) + "] ";
+        }
+        if (signature != last_signature) {
+            last_signature = signature;
+            log::info("[提供商标] 下拉合并结果（界面层）：" + signature);
+        }
+    }
+    return out;
+}
+
+// 切换「模式」时让 `provider` 跟随其孪生 id（official ↔ web）——**只改节点的参数值**，
+// 使「不带 -web 的条目」在 web 模式下也能正常工作（写进去的仍是表内真实 id）
+void sync_provider_id_with_mode(Node& node)
+{
+    const engine::Param* mode_param = node.findParam("mode");
+    engine::Param*       provider   = node.findParam("provider");
+    if (mode_param == nullptr || provider == nullptr) {
+        return;
+    }
+    const std::string mode    = mode_param->text();
+    const std::string current = provider->text();
+    for (const ProviderChoice& choice : build_provider_choices()) {
+        if (choice.id != current && (choice.web_id.empty() || choice.web_id != current)) {
+            continue;
+        }
+        const std::string wanted =
+            (mode == "web" && !choice.web_id.empty()) ? choice.web_id : choice.id;
+        if (wanted == current) {
+            return;
+        }
+        provider->value = wanted;
+        log::info("参数变更: " + node.id + ".provider → " + wanted +
+                  "（随「模式」配对到该条目的网页版 / 官方版；可撤销）");
+        return;
+    }
+}
+
 // 绘制单个参数控件
 //  返回 edited = 本次编辑结束（失焦/回车）；begin_edit = 控件刚被激活（值尚未变化，
 //  外层在此刻压撤销快照）；changed_now = 值已写回模型（编辑过程中每帧都可能为 true）
@@ -543,6 +694,50 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
     }
     case ParamType::Enum: {
         const std::string current = param.text();
+        // ---- v16（仅界面）：提供商下拉「合并显示」（`-web` 项合并 / 去后缀；见上方说明）----
+        if (param.id == "provider") {
+            const std::vector<ProviderChoice> choices    = build_provider_choices();
+            const engine::Param*              mode_param = node.findParam("mode");
+            const std::string mode = mode_param != nullptr ? mode_param->text() : std::string();
+            std::vector<std::string> labels;
+            std::vector<std::string> values; // 与 labels 对齐：选中后写入 `provider` 的真实 id
+            labels.reserve(choices.size() + 1);
+            values.reserve(choices.size() + 1);
+            int index = -1;
+            for (const ProviderChoice& choice : choices) {
+                labels.push_back(choice.label);
+                values.push_back((mode == "web" && !choice.web_id.empty()) ? choice.web_id
+                                                                          : choice.id);
+                if (choice.id == current ||
+                    (!choice.web_id.empty() && choice.web_id == current)) {
+                    index = static_cast<int>(labels.size()) - 1;
+                }
+            }
+            if (index < 0) {
+                // 表外值（手改 JSON / 旧工作流里的其它 id）：**如实显示**，不静默替换
+                labels.insert(labels.begin(), current);
+                values.insert(values.begin(), current);
+                index = 0;
+            }
+            std::vector<const char*> items;
+            items.reserve(labels.size());
+            for (const std::string& choice_label : labels) {
+                items.push_back(choice_label.c_str());
+            }
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (!items.empty() &&
+                ImGui::Combo("##value", &index, items.data(), static_cast<int>(items.size()))) {
+                const int safe_index = std::clamp(index, 0, static_cast<int>(values.size()) - 1);
+                const std::string wanted = values[static_cast<std::size_t>(safe_index)];
+                if (wanted != current) {
+                    write_param(param, wanted); // 写入的始终是表内真实 id（运行期照常解析）
+                }
+                edited      = true;
+                changed_now = true;
+            }
+            note_activation();
+            break;
+        }
         // 允许调用方按上下文覆盖可选项（扩展位）。
         //  * ⚠️ M_patchB L2（PB2-20 / 决策 D-21）：**不得**用它裁剪 ProviderConfig 的「模式」
         //    （恒 {official, web}，不变量 I13）；目前无调用方传入
@@ -575,6 +770,12 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
             param.value          = options[static_cast<std::size_t>(safe_index)];
             edited               = true;
             changed_now          = true;
+        }
+        // ---- v16（仅界面）：切换「模式」→ 让 `provider` 配对到该条目的网页版 / 官方版 ----
+        //  * 使「不带 `-web` 的条目」（如 `deepseek` / `gemini`）在 web 模式下直接可用
+        //  * 写入的仍是表内真实 id → 运行期与自检无需任何改动；可撤销
+        if (param.id == "mode" && changed_now) {
+            sync_provider_id_with_mode(node);
         }
         note_activation();
         break;
