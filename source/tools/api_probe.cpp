@@ -28,6 +28,7 @@
 #include "engine/recent_files.h"
 #include "engine/undo_stack.h"
 #include "engine/validate.h"
+#include "engine/provider_resolve.h" // M5-02：生效提供商 / 模型名断言
 #include "engine/workflow_io.h"
 #include "nodes/nodes.h"
 #include "utils/config.h"
@@ -1952,6 +1953,109 @@ int execution_selftest()
             expect(check,
                    body["messages"].size() == 1 && body["messages"][0]["content"].is_string(),
                    "M5-02 降级：不可用图片被跳过（退化为纯文本请求体）");
+        }
+
+        // ---- 7) 节点接线（离线，无 HTTP）：模型名覆盖 / VLM 的模式与 Key 校验 ----
+        {
+            // 7a) 提供商配置句柄：model_custom 覆盖生效模型名
+            {
+                nlohmann::json params;
+                params["provider"]     = "deepseek";
+                params["mode"]         = "official";
+                params["api_base"]     = "https://open.bigmodel.cn/api/paas/v4";
+                params["model"]        = "deepseek-chat";
+                params["model_custom"] = "glm-4v-flash";
+                engine::ExecutionContext context;
+                const nlohmann::json     handle =
+                    aiwrite::nodes::execute_provider_config(nlohmann::json::object(), params,
+                                                           context);
+                expect(check,
+                       handle["model"] == "glm-4v-flash" &&
+                           handle["model_custom"] == "glm-4v-flash",
+                       "M5-02b 提供商配置：model_custom 覆盖 provider 句柄的生效模型名");
+            }
+
+            // 7b) 引擎侧生效解析（界面与执行共用同一函数）
+            {
+                Graph             graph;
+                const std::string provider = add_node(check, graph, "ProviderConfig", "解析用配置");
+                const std::string llm      = add_node(check, graph, "LLMGenerate", "解析用推理");
+                set_param(graph, provider, "model", "deepseek-chat");
+                set_param(graph, provider, "model_custom", "glm-4v-flash");
+                graph.edges.push_back(make_edge("m1", provider, "provider", llm, "provider"));
+                if (const engine::Node* llm_node = graph.findNode(llm)) {
+                    const engine::EffectiveProvider effective =
+                        engine::resolve_effective_provider(graph, *llm_node);
+                    expect(check,
+                           effective.from_edge && effective.model == "glm-4v-flash" &&
+                               effective.model_custom == "glm-4v-flash",
+                           "M5-02b 生效解析：来源节点 model_custom 覆盖枚举模型名",
+                           effective.model);
+                }
+            }
+
+            // 7c) 图片理解 + 网页版 → 明确拒绝（不发起 HTTP）
+            {
+                Graph             graph;
+                const std::string img      = add_node(check, graph, "ImageInput", "VLM 图片输入");
+                const std::string text     = add_node(check, graph, "TextInput", "VLM 提示词");
+                const std::string vlm      = add_node(check, graph, "VLMGenerate", "图片理解");
+                const std::string provider = add_node(check, graph, "ProviderConfig", "VLM 配置 web");
+                set_param(graph, img, "path", png_a.string());
+                set_param(graph, text, "text", "描述这张图");
+                set_param(graph, provider, "mode", "web");
+                graph.edges.push_back(make_edge("v1", img, "image", vlm, "image"));
+                graph.edges.push_back(make_edge("v2", text, "text", vlm, "prompt"));
+                graph.edges.push_back(make_edge("v3", provider, "provider", vlm, "provider"));
+
+                Executor    executor;
+                std::string error;
+                const bool  started = executor.start(graph, &error);
+                expect(check, started,
+                       "M5-02b 接线：图片理解（web 模式）运行前校验不阻断（仅警告）", error);
+                if (started) {
+                    executor.runToCompletion(&graph, 64);
+                    const engine::Node* node = graph.findNode(vlm);
+                    expect(check,
+                           node != nullptr && node->state == engine::NodeState::Error &&
+                               node->error_message.find("暂不支持网页版") != std::string::npos,
+                           "M5-02b 接线：web 模式 → 「图片理解暂不支持网页版」",
+                           node != nullptr ? node->error_message : std::string());
+                }
+            }
+
+            // 7d) 图片理解 + official 且无 Key → 可操作错误（不发起 HTTP）
+            {
+                Graph             graph;
+                const std::string img      = add_node(check, graph, "ImageInput", "VLM 图片输入 2");
+                const std::string text     = add_node(check, graph, "TextInput", "VLM 提示词 2");
+                const std::string vlm      = add_node(check, graph, "VLMGenerate", "图片理解 2");
+                const std::string provider = add_node(check, graph, "ProviderConfig", "VLM 配置 official");
+                set_param(graph, img, "path", png_a.string());
+                set_param(graph, text, "text", "描述这张图");
+                set_param(graph, provider, "mode", "official");
+                set_param(graph, provider, "model_custom", "glm-4v-flash");
+                // 指向一个不存在的凭据条目：确保「无 Key」这一分支可离线复现（不读真实凭据）
+                set_param(graph, provider, "api_key_ref", "aiwrite-selftest/absent");
+                graph.edges.push_back(make_edge("x1", img, "image", vlm, "image"));
+                graph.edges.push_back(make_edge("x2", text, "text", vlm, "prompt"));
+                graph.edges.push_back(make_edge("x3", provider, "provider", vlm, "provider"));
+
+                Executor    executor;
+                std::string error;
+                const bool  started = executor.start(graph, &error);
+                expect(check, started,
+                       "M5-02b 接线：图片理解（official 无 Key）运行前校验不阻断", error);
+                if (started) {
+                    executor.runToCompletion(&graph, 64);
+                    const engine::Node* node = graph.findNode(vlm);
+                    expect(check,
+                           node != nullptr && node->state == engine::NodeState::Error &&
+                               node->error_message.find("缺少 API Key") != std::string::npos,
+                           "M5-02b 接线：无 Key → 可操作错误（指向「提供商配置」）",
+                           node != nullptr ? node->error_message : std::string());
+                }
+            }
         }
 
         std::filesystem::remove_all(vlm_root, ec);

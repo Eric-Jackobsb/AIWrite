@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace aiwrite::nodes {
 namespace {
@@ -50,6 +51,65 @@ std::string unescape(const std::string& text)
         }
     }
     return result;
+}
+
+// ---- 推理节点公共：官方 / 兼容 API 的 Key 解析（PB-06 三级优先级 + 首次自动入库）----
+//  1) 节点参数 api_key → 2) 环境变量 DEEPSEEK_API_KEY（由 ai::resolve_api_key 处理）
+//  3) provider 输入来源「提供商配置」节点的 api_key / api_key_ref（凭据库）
+//  * tag：Console 前缀（"[文本生成]" / "[图片理解]"），保证既有日志文案不变
+//  * 返回空 key = 未配置（由调用方给出可操作错误）
+struct OfficialKeyResolution {
+    std::string key;
+    std::string source;
+    std::string ref;
+};
+
+OfficialKeyResolution resolve_official_key(const json& params, const json& inputs,
+                                           const engine::ExecutionContext& ctx,
+                                           const std::string& tag)
+{
+    OfficialKeyResolution resolution;
+    resolution.key = ai::resolve_api_key(params.value("api_key", std::string()));
+    if (!resolution.key.empty()) {
+        resolution.source = "node";
+    }
+    if (!resolution.key.empty() || ctx.graph == nullptr || ctx.current_node_id.empty()) {
+        return resolution;
+    }
+    const engine::Edge* edge = ctx.graph->findEdgeIntoInput(ctx.current_node_id, "provider");
+    if (edge == nullptr) {
+        return resolution;
+    }
+    const engine::Node* source_node = ctx.graph->findNode(edge->from_node);
+    if (source_node == nullptr) {
+        return resolution;
+    }
+    std::string param_key;
+    if (const engine::Param* key_param = source_node->findParam("api_key")) {
+        param_key = key_param->text();
+    }
+    if (const engine::Param* ref_param = source_node->findParam("api_key_ref")) {
+        resolution.ref = ref_param->text();
+    }
+    const utils::ResolvedSecret resolved = utils::resolve_secret(param_key, resolution.ref);
+    resolution.key                       = resolved.key;
+    resolution.source                    = resolved.source;
+    if (resolved.key.empty()) {
+        return resolution;
+    }
+    ctx.console(tag + " 凭据来源=" + resolved.source + "（长度 " +
+                std::to_string(resolved.key.size()) + "）");
+    if (resolved.source == "node" && !resolution.ref.empty()) {
+        std::string save_error;
+        if (utils::save_credential(resolution.ref, resolved.key, &save_error)) {
+            ctx.console(tag + " 已把 API Key 存入凭据库（ref=" + resolution.ref + "），下次无需再填");
+        }
+        else {
+            ctx.console(tag + " 凭据库保存失败：" + save_error);
+        }
+    }
+    (void)inputs;
+    return resolution;
 }
 
 } // namespace
@@ -162,12 +222,19 @@ json execute_provider_config(const json& /*inputs*/, const json& params,
     provider["provider"]    = params.value("provider", std::string("deepseek"));
     provider["mode"]        = params.value("mode", std::string("official"));
     provider["api_base"]    = params.value("api_base", std::string("https://api.deepseek.com"));
-    provider["model"]       = params.value("model", std::string("deepseek-chat"));
-    provider["has_api_key"] = !params.value("api_key", std::string()).empty();
+    // M5-02：模型名 —— model_custom 非空时覆盖枚举（与 engine::resolve_effective_provider 同规则）
+    const std::string model_custom = params.value("model_custom", std::string());
+    const std::string model        = model_custom.empty()
+                                         ? params.value("model", std::string("deepseek-chat"))
+                                         : model_custom;
+    provider["model"]        = model;        // 生效模型名（推理节点据此调用）
+    provider["model_custom"] = model_custom; // 原样透出（供界面 / 诊断）
+    provider["has_api_key"]  = !params.value("api_key", std::string()).empty();
 
     ctx.console("[提供商配置] " + provider["provider"].get<std::string>() + " / " +
-                provider["mode"].get<std::string>() + " / " + provider["model"].get<std::string>() +
-                "（API Key " + (provider["has_api_key"].get<bool>() ? "已配置" : "未配置") + "）");
+                provider["mode"].get<std::string>() + " / " + model +
+                (model_custom.empty() ? "" : "（自定义模型名）") + "（API Key " +
+                (provider["has_api_key"].get<bool>() ? "已配置" : "未配置") + "）");
     return provider;
 }
 
@@ -225,7 +292,6 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         // PB-05：官方 API（OpenAI 兼容 /chat/completions）—— 落地“API 使用”
         ai::OfficialChatRequest official;
         official.api_base      = params.value("api_base", std::string("https://api.deepseek.com"));
-        official.api_key       = ai::resolve_api_key(params.value("api_key", std::string()));
         official.model         = model;
         official.system_prompt = system_prompt;
         official.prompt        = prompt_raw;
@@ -235,42 +301,10 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         official.seed          = params.value("seed", 0); // M_rerun：新 seed 重跑
         if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
             official.api_base = it->value("api_base", official.api_base);
-            // Key 通常在「提供商配置」节点上 → 由 provider 句柄带过来（运行态值）
-            // Key 不在 provider 句柄里（设计 §8.4），改为到来源节点读参数
-            if (official.api_key.empty() && ctx.graph != nullptr &&
-                !ctx.current_node_id.empty()) {
-                if (const engine::Edge* edge =
-                        ctx.graph->findEdgeIntoInput(ctx.current_node_id, "provider")) {
-                    if (const engine::Node* source = ctx.graph->findNode(edge->from_node)) {
-                        std::string param_key;
-                        std::string ref;
-                        if (const engine::Param* key_param = source->findParam("api_key")) {
-                            param_key = key_param->text();
-                        }
-                        if (const engine::Param* ref_param = source->findParam("api_key_ref")) {
-                            ref = ref_param->text();
-                        }
-                        // PB-06：三级优先级 —— 节点参数 → 环境变量 → 凭据库（api_key_ref）
-                        const utils::ResolvedSecret resolved = utils::resolve_secret(param_key, ref);
-                        official.api_key                    = resolved.key;
-                        if (!resolved.key.empty()) {
-                            ctx.console("[文本生成] 凭据来源=" + resolved.source + "（长度 " +
-                                        std::to_string(resolved.key.size()) + "）");
-                            if (resolved.source == "node" && !ref.empty()) {
-                                std::string save_error;
-                                if (utils::save_credential(ref, resolved.key, &save_error)) {
-                                    ctx.console("[文本生成] 已把 API Key 存入凭据库（ref=" + ref +
-                                                "），下次无需再填");
-                                }
-                                else {
-                                    ctx.console("[文本生成] 凭据库保存失败：" + save_error);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
+        // PB-06：Key 三级优先级 —— 节点参数 → 环境变量 → provider 来源节点的凭据库引用
+        // （Key 不在 provider 句柄里，设计 §8.4；解析与首存日志统一在 resolve_official_key）
+        official.api_key = resolve_official_key(params, inputs, ctx, "[文本生成]").key;
         if (official.api_key.empty()) {
             throw engine::NodeError("文本生成（官方 API）缺少 API Key：请在「提供商配置」填写 API Key，"
                                     "或设置环境变量 DEEPSEEK_API_KEY（凭据管理器见 PB-06）");
@@ -338,15 +372,99 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     return result.text;
 }
 
-// --- N-07 多模态生成（M2 占位：等待 Provider 接线）---------------------------
-json execute_vlm_generate(const json& inputs, const json& /*params*/,
-                          engine::ExecutionContext& /*ctx*/)
+// --- N-07 图片理解（M5-02：OpenAI 兼容多模态 /chat/completions）---------------
+//  * 输入：prompt + image（可多张）+ provider 句柄
+//  * 图片 → data URL（`ai::encode_image_data_url`）→ `messages[].content` 数组
+//  * 模型名：provider 句柄的 model（「提供商配置 → 模型（自定义）」优先，见 D-07）
+//  * 网页版没有图片入口 → 明确报错并指向 official
+json execute_vlm_generate(const json& inputs, const json& params, engine::ExecutionContext& ctx)
 {
-    std::string model = "deepseek-vl";
+    std::string mode  = "official";
+    std::string model = std::string();
     if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
+        mode  = it->value("mode", mode);
         model = it->value("model", model);
     }
-    throw engine::NodeError("多模态生成尚未接线（M5-02）：模型 " + model);
+
+    const std::string prompt = inputs.contains("prompt") ? text_of(inputs["prompt"]) : std::string();
+    if (prompt.empty()) {
+        throw engine::NodeError("图片理解：提示词为空（请连接「提示词模板」或「文本输入」到 prompt）");
+    }
+
+    // 图片来自 image 输入：可为单值（ImageInput）或数组（多图场景）
+    std::vector<std::string> images;
+    if (const auto it = inputs.find("image"); it != inputs.end()) {
+        if (it->is_array()) {
+            for (const json& item : *it) {
+                const std::string path = text_of(item);
+                if (!path.empty()) {
+                    images.push_back(path);
+                }
+            }
+        }
+        else {
+            const std::string path = text_of(*it);
+            if (!path.empty()) {
+                images.push_back(path);
+            }
+        }
+    }
+    if (images.empty()) {
+        throw engine::NodeError("图片理解：未连接图片（请把「图片输入」节点的 image 连到本节点 image 端口）");
+    }
+
+    if (mode == "web") {
+        throw engine::NodeError("图片理解暂不支持网页版：请把「提供商配置」的模式改为 official，"
+                                "并在「模型（自定义）」填写第三方/本地视觉模型名（如 glm-4v-flash）");
+    }
+    if (model.empty()) {
+        throw engine::NodeError("图片理解：未解析到模型名（请连接「提供商配置」节点，"
+                                "并在「模型（自定义）」填写视觉模型名，如 glm-4v-flash）");
+    }
+    if (model == "deepseek-chat" || model == "deepseek-reasoner") {
+        ctx.console("[图片理解] 提示：DeepSeek 官方 API 无视觉模型；请把「提供商配置」的 API 地址与"
+                    "「模型（自定义）」改为兼容的视觉服务（如智谱 https://open.bigmodel.cn/api/paas/v4 + "
+                    "glm-4v-flash）");
+    }
+    for (const std::string& path : images) {
+        std::error_code code;
+        if (!std::filesystem::exists(std::filesystem::path(path), code)) {
+            throw engine::NodeError("图片理解：图片文件不存在: " + path);
+        }
+    }
+
+    const std::string system_prompt = params.value("system_prompt", std::string());
+
+    ai::OfficialChatRequest official;
+    official.api_base      = params.value("api_base", std::string("https://api.deepseek.com"));
+    official.model         = model;
+    official.system_prompt = system_prompt;
+    official.prompt        = prompt;
+    official.images        = images;
+    official.temperature   = params.value("temperature", 0.7);
+    official.max_tokens    = params.value("max_tokens", 2048);
+    official.top_p         = params.value("top_p", 1.0);
+    if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
+        official.api_base = it->value("api_base", official.api_base);
+    }
+    official.api_key = resolve_official_key(params, inputs, ctx, "[图片理解]").key;
+    if (official.api_key.empty()) {
+        throw engine::NodeError("图片理解（官方/兼容 API）缺少 API Key：请在「提供商配置」填写 API Key"
+                                "（会自动入库），或设置环境变量 DEEPSEEK_API_KEY");
+    }
+
+    ctx.console("[图片理解] 请求：" + official.model + "，图片 " + std::to_string(images.size()) +
+                " 张，提示词 " + std::to_string(prompt.size()) + " 字节" +
+                (system_prompt.empty() ? "" : "（含系统提示词）"));
+    const ai::OfficialChatResult result = ai::official_chat(official);
+    if (!result.ok || result.text.empty()) {
+        throw engine::NodeError("图片理解失败：" +
+                                (result.error.empty() ? std::string("未取到文本") : result.error));
+    }
+    ctx.console("[图片理解] 完成：HTTP " + std::to_string(result.http_status) + "，输出 " +
+                std::to_string(result.text.size()) + " 字节，耗时 " +
+                std::to_string(static_cast<long long>(result.elapsed_ms)) + " ms");
+    return result.text;
 }
 
 } // namespace aiwrite::nodes

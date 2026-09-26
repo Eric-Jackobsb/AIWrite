@@ -36,6 +36,7 @@ EffectiveProvider resolve_effective_provider(const Graph& graph, const Node& nod
     result.provider     = param_text(node, "provider", result.provider);
     result.mode         = param_text(node, "mode", result.mode);
     result.model        = param_text(node, "model", result.model);
+    result.model_custom = param_text(node, "model_custom", std::string());
 
     // ---- 1) provider 输入连线优先（覆盖节点自身参数）----
     const Edge* edge = graph.findEdgeIntoInput(node.id, "provider");
@@ -46,11 +47,16 @@ EffectiveProvider resolve_effective_provider(const Graph& graph, const Node& nod
     if (source == nullptr) {
         return result;
     }
-    result.from_edge   = true;
-    result.source_node = source->id;
-    result.provider    = param_text(*source, "provider", result.provider);
-    result.mode        = param_text(*source, "mode", result.mode);
-    result.model       = param_text(*source, "model", result.model);
+    result.from_edge    = true;
+    result.source_node  = source->id;
+    result.provider     = param_text(*source, "provider", result.provider);
+    result.mode         = param_text(*source, "mode", result.mode);
+    result.model        = param_text(*source, "model", result.model);
+    result.model_custom = param_text(*source, "model_custom", std::string());
+    // M5-02：自定义模型名非空 → 覆盖枚举值（界面与执行同一规则）
+    if (!result.model_custom.empty()) {
+        result.model = result.model_custom;
+    }
     return result;
 }
 
@@ -61,13 +67,19 @@ bool official_not_wired(const EffectiveProvider& provider)
 
 std::string unwired_reason(const Graph& graph, const Node& node)
 {
-    if (node.type == "VLMGenerate") {
-        return "多模态生成（图片理解）尚未接线（M5-02）";
-    }
-    if (node.type != "LLMGenerate") {
+    if (!uses_provider(node.type)) {
         return {};
     }
     const EffectiveProvider effective = resolve_effective_provider(graph, node);
+
+    // M5-02：图片理解已接线（official / OpenAI 兼容多模态）；网页版没有图片入口 → 提示改 official
+    if (node.type == "VLMGenerate" && effective.mode == "web") {
+        return "图片理解暂不支持网页版：请把「提供商配置」的模式改为 official，"
+               "并在「模型（自定义）」填写第三方/本地视觉模型名（如 glm-4v-flash）";
+    }
+    if (node.type != "LLMGenerate" && node.type != "VLMGenerate") {
+        return {};
+    }
     if (effective.mode != "official") {
         return {};
     }
@@ -104,6 +116,10 @@ std::string unwired_reason(const Graph& graph, const Node& node)
         if (!utils::load_credential(ref, &load_error).empty()) {
             return {};
         }
+    }
+    if (node.type == "VLMGenerate") {
+        return "图片理解缺少 API Key（可在「提供商配置」填写并自动入库，或设置环境变量 "
+               "DEEPSEEK_API_KEY）；模型名请在「提供商配置 → 模型（自定义）」填写视觉模型";
     }
     return "官方 API 缺少 API Key（可在「提供商配置」填写并自动入库，或设置环境变量 DEEPSEEK_API_KEY）";
 }

@@ -305,17 +305,21 @@ void registerAllNodes()
                        "official = 官方 API Key；web = 网页版登录（M4 实现）"),
             text_param("api_base", "API 地址", "https://api.deepseek.com", ParamType::String),
             enum_param("model", "模型", {"deepseek-chat", "deepseek-reasoner"}, "deepseek-chat"),
+            // M5-02：模型名解锁 —— 留空用上方枚举；填第三方/本地模型名则覆盖
+            // （DeepSeek 官方 API 无视觉模型，图片理解需指向兼容 VLM，如智谱 glm-4v-flash）
+            text_param("model_custom", "模型（自定义）", std::string(), ParamType::String, false, false,
+                       "留空 = 用上方「模型」；填写则覆盖（例：glm-4v-flash / Qwen/Qwen2.5-VL-72B-Instruct）"),
             text_param("api_key", "API Key", std::string(), ParamType::String,
                        /*required*/ false, /*secret*/ true,
                        "仅保存在内存中；M4-07 起改用 Windows Credential Manager"),
             text_param("api_key_ref", "Key 引用名", "brain-ai/deepseek", ParamType::String,
                        false, false, "凭据管理器中的条目名（M4-07）"),
         };
-        // mode=web 时隐藏 official 专属参数（API 地址 / 模型 / Key / 引用名）
+        // mode=web 时隐藏 official 专属参数（API 地址 / 模型 / 自定义模型 / Key / 引用名）
         // 可见性判定见 engine::param_visible()：参数面板、画布预览与运行前校验共用同一份规则
         for (Param& param : definition.params) {
-            if (param.id == "api_base" || param.id == "model" || param.id == "api_key" ||
-                param.id == "api_key_ref") {
+            if (param.id == "api_base" || param.id == "model" || param.id == "model_custom" ||
+                param.id == "api_key" || param.id == "api_key_ref") {
                 param.visible_when_param = "mode";
                 param.visible_when_value = "official";
             }

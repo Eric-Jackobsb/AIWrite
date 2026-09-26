@@ -28,7 +28,9 @@ struct EffectiveProvider {
     std::string source_node;                  // 来源节点 id（from_edge 为 true 时有效）
     std::string provider = "deepseek";
     std::string mode     = "official";
-    std::string model    = "deepseek-chat";
+    // M5-02：`model` 恒为**生效模型名**（`model_custom` 非空时覆盖枚举 model）
+    std::string model        = "deepseek-chat";
+    std::string model_custom;                 // 自定义模型名（空 = 未覆盖，用枚举/默认值）
 };
 
 // 是否使用 provider 句柄的推理节点（LLMGenerate / VLMGenerate）
@@ -41,8 +43,8 @@ EffectiveProvider resolve_effective_provider(const Graph& graph, const Node& nod
 bool official_not_wired(const EffectiveProvider& provider);
 
 // 该节点「本次运行必定失败」的原因（空串 = 未发现已知必定失败）
-//  * LLMGenerate + 生效 mode=official → 官方 API 尚未接线（PB-04/PB-05）
-//  * VLMGenerate                     → 多模态生成尚未接线（M5-02）
+//  * LLMGenerate + 生效 mode=official + 无 Key → 缺少 API Key（PB-05/PB-06）
+//  * VLMGenerate  + 生效 mode=web             → 图片理解暂不支持网页版（M5-02）
 std::string unwired_reason(const Graph& graph, const Node& node);
 
 } // namespace aiwrite::engine
