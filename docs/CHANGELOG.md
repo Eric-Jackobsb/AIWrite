@@ -40,7 +40,23 @@
 - **文案（`ai/provider_spec.cpp`）**：字段警告「无法自动探测凭证」→「**协议探测不适用**（DOM 站点…）」；加载报告 →「登录可用；协议探测：不适用（DOM 站点）」
 - **断言/回归**：`api_probe --exec-selftest` **219 → 227 通过 / 0 失败**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）；
   `--graph-selftest` **111/0**；`--provider-selftest` **50/0**；构建 **0 error / 0 warning**；`grep ds_session_id`（`ui/**`+`web/**`）零命中
-- **仍未做**：`PB2-28`（探测只读诊断分支 + CLI 判据 + 会话失效识别）、`PB2-29`（11 站选择器逐站实测回填）、`PB2-30`（`--run-selftest --web --provider <id>` + 面板「测试选择器」+ `PB2-24` 自助闭环）
+- **仍未做**：`PB2-28`④（会话失效识别，归 `PB2-25`）、`PB2-29`（11 站选择器逐站实测回填）、`PB2-30`（`--run-selftest --web --provider <id>` + 面板「测试选择器」+ `PB2-24` 自助闭环）
+
+**修复（M_patchB L4 / `B2-e` 第二批 `PB2-28`）：协议探测「不适用」语义 —— 只读诊断 + CLI 判据**
+
+- **问题**：`probe_paths` / `token_expr` 为空时探测脚本**保持内置 DeepSeek 端点与 `userToken` 读取** → 在 Kimi / 通义等站点必然 404
+  → 面板红字「探测错误」，用户读作「登录失败」。
+- **改动**
+  - `web/webview_host.cpp`：新增 `kProbeKickoffScriptReadOnly` —— 只读 `location.href` / `document.title` / `localStorage` **键名与个数** /
+    `document.cookie` **名与个数** / 输入框与按钮候选数；**脚本内既无 `/api/v0/` 也无 `localStorage.getItem('userToken')`**；
+    输出字段与内置脚本同名 → `poll_protocol_probe()` 解析零改动
+  - `probe_kickoff_script()`：按 `LoginRequest.probe_applicable` 分支（默认 `true` → 内置站点 / `--web-probe` / `--web-chat` / `--login-selftest` **逐字不变**，守 `I2`）
+  - `protocol_probe_with(base, spec, label, timeout)`：不适用站点打印「协议探测：**不适用**（该站点不是内置协议站点）→ 只读诊断」+
+    诊断摘要 + **站点无关**登录态结论（`ai::web_session_state`；退出码 0=已登录 / 2=未登录或未确认 / 1=诊断失败），**不再打印「未取得凭证」**
+  - `ui/property_panel.cpp`：按钮标题按适用性切换为「探测网页版协议（dev）」或「**只读诊断（该站点不适用协议探测）**」+ 对应 tooltip
+- **断言/回归**：`api_probe --exec-selftest` **227 → 232 通过 / 0 失败**（`VB2-25` 5 项全 PASS）；`--graph-selftest` **111/0**；`--provider-selftest` **50/0**；
+  构建 **0 error / 0 warning**；⚠️ CLI 文案 / 退出码与面板按钮需 GUI 现场实测（`--web-probe --provider kimi-web`）
+- **仍未做**：会话失效识别（`40002`/`401`/`40003`，归 `PB2-25`）；`PB2-29`（选择器逐站实测）；`PB2-30`（端到端自检 + 面板「测试选择器」+ `PB2-24`）
 
 **特性（M_patchB L1 收口）：网页版站点身份按「生效条目」+ 多站点会话并存 + `config.toml` 多 provider**
 

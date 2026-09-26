@@ -39,6 +39,7 @@
 >
 > 🟡 **2026-09-26 L4 立项（v12 · 文档先行，零代码变更）**：登录/会话层去 DeepSeek 化（站点无关「已登录」判据 + 探测「不适用」语义）+ 内置站点**逐站选择器实测回填** + 自建站点 UI 闭环（`PB2-24` 并入）。**未开工**；`B2-c`（L3）已 ✅，**代码与数据改动待 `B2-e`**（§9.7）
 >
+> ✅ **2026-09-27 `PB2-28` 已落地（v14 · 代码批次，①②③）**：**协议探测「不适用」语义** —— 新增只读诊断脚本 `kProbeKickoffScriptReadOnly`（读 URL / 标题 / localStorage 键名与个数 / Cookie 名与个数 / 输入框与按钮候选数；**脚本内既无 `/api/v0/` 也无 `localStorage.getItem('userToken')`**，输出结构与内置脚本同名 → 解析逻辑零改动）；`probe_kickoff_script()` 按 `probe_applicable` 分支（默认 `true` → 内置站点与 CLI/无参路径**逐字不变**，守 `I2`）；CLI `--web-probe --provider <id>` 与面板按钮对不适用站点改打「协议探测：**不适用**」+ 只读诊断 + **站点无关**登录态结论（退出码 0=已登录 / 2=未登录 / 1=诊断失败）。实测：构建 **0/0**、`--exec-selftest` **227 → 232 / 0**（`VB2-25` 5 项全 PASS）、`--graph-selftest` **111/0**、`--provider-selftest` **50/0**（§9.9）。④ 会话失效识别（`40002`/`401`/`40003`）仍归 `PB2-25` 待做；`PB2-29`（逐站选择器）、`PB2-30` 待做
 > ✅ **2026-09-27 `PB2-27` 已落地（v13 · 代码批次）**：登录/会话层的「判据 + 文案」去 DeepSeek 化 —— 新增纯函数 `ai::web_session_state(spec, evidence)`（判据 = 条目 `cookie_names` 命中 **∪** 该 origin Cookie 非空，**不看** `userToken`，`D-27`/`I15`）+ `ai::probe_is_applicable()`（DOM 站点**协议探测不适用**，`I16`）+ `ai::web_shows_user_token()`（`D-28`①）；`web::ensure_session()` 对 DOM 站点改用**站点无关**就绪判据（**不再空等 15/25 s 的 `userToken`**）；面板/状态栏/字段警告/加载警告文案全部站点无关；`ui/**` 与 `web/**` 已无任何厂商专有 Cookie 名（删除 `kDefaultCookieName`）。实测：构建 **0 error / 0 warning**、`--exec-selftest` **219 → 227 / 0**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**（§9.8）。`PB2-28`（探测只读诊断分支 + CLI 判据）、`PB2-29`（逐站选择器）、`PB2-30` 待做
 >
 
@@ -743,10 +744,12 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 - **实测（2026-09-27 · 全绿）**：构建 **0 error / 0 warning**；`api_probe --exec-selftest` **219 → 227 / 0**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）；`--graph-selftest` **111 / 0**；`--provider-selftest` **50 / 0**；`grep ds_session_id` 在 `ui/**`、`web/**` **零命中**（详见 §9.8）。
 - **验收**：`AB2-20` / `VB2-24` / `VB2-26`（`AB2-20` 的**手测**部分仍需现场：手动登录任一站点点「运行」看 Console）。
 
-#### PB2-28 非 DeepSeek 站点「协议探测不适用」语义（脚本分支 + CLI 判据 + 会话失效识别）
+#### PB2-28 非 DeepSeek 站点「协议探测不适用」语义（脚本分支 + CLI 判据 + 会话失效识别）—— 🟡 **部分完成（v14 · 2026-09-27；①②③ 已落地，④ 仍待做）**
 
 - **现状证据**：`web/webview_host.cpp:1060-1086` —— `probe_paths` / `token_expr` 为空时**保持内置 DeepSeek 值**（`/api/v0/users/current`、`/api/v0/chat_session/fetch_page`、`localStorage.getItem('userToken')`）→ 在 Kimi / 通义等站点**必然 404** → 面板出现红字「探测错误」（`ui/property_panel.cpp:244-246`），用户读作「登录失败」。
-- **改动**：① 新增 `ai::probe_is_applicable(spec)` + **只读诊断脚本**分支：未配 `probe_paths` / `token_expr` / `endpoints` 时，探测改为读 `location.href` / `document.title` / `localStorage` 键名与个数 / `document.cookie` 名与个数 / 输入框候选数，**不注入任何 DeepSeek 端点**；② `deepseek-web`（`builtin:deepseek`）与**无站点参数**路径**逐字不变**（守 `I2`）；③ CLI：`--web-probe` / `--web-adapter-selftest` 对不适用站点打印「**协议探测：不适用（DOM 站点）**」+ 登录态结论（不再打印「未取得凭证」）；④ 会话失效（`40002` / `401` / `40003`）识别与 `PB2-25` 合并（`D-29`）。
+- **改动（①②③ 已按此落地）**：① 新增 `ai::probe_is_applicable(spec)`（`PB2-27` 已提供）+ **只读诊断脚本**分支 `kProbeKickoffScriptReadOnly`：探测改读 `location.href` / `document.title` / `localStorage` 键名与个数 / `document.cookie` 名与个数 / 输入框与按钮候选数，**不注入任何 DeepSeek 端点、不读取 `localStorage` 的值**（脚本内既无 `/api/v0/` 也无 `localStorage.getItem('userToken')`）；输出结构与内置脚本**同名** → `poll_protocol_probe()` 解析逻辑零改动；② `deepseek-web`（`builtin:deepseek`）与**无站点参数**路径**逐字不变**（`probe_applicable` 默认 `true` → 守 `I2`）；③ CLI + 面板：`--web-probe --provider <id>` / 面板按钮对不适用站点打印「**协议探测：不适用（DOM 站点）**→ 只读诊断」+ **站点无关**登录态结论（`ai::web_session_state`；退出码 0 = 已登录 / 2 = 未登录或未确认 / 1 = 诊断本身失败），**不再打印「未取得凭证」**；面板按钮标题改为「只读诊断（该站点不适用协议探测）」。
+- **仍待做**：④ 会话失效（`40002` / `401` / `40003`）识别与 `PB2-25` 合并（`D-29`）—— 需真实失效响应才能对齐（官网侧实测见 §9.4）。
+- **实测（2026-09-27 · 全绿）**：`api_probe --exec-selftest` **227 → 232 / 0**（`VB2-25` 5 项全 PASS）；`--graph-selftest` **111 / 0**；`--provider-selftest` **50 / 0**；构建 **0 error / 0 warning**。⚠️ CLI 文案与退出码需 **GUI 现场实测**（`--web-probe --provider kimi-web`）。
 - **验收**：`AB2-20`②③ / `VB2-25`。
 
 #### PB2-29 内置站点**选择器逐站实测与回填**（数据批次 · **逐站独立验收**）
@@ -777,7 +780,7 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | **B2-b** | `PB2-08` → `PB2-12`（L2：接口 + 工厂 + **DeepSeekWebProvider 收编** + Anthropic/Gemini + 能力驱动接线） | `feat(ai): M_patchB L2 InferenceProvider 接口与工厂（openai/anthropic/gemini/deepseek-web 按表分派）+ 能力驱动接线` | 2–3 天 |
 | **B2-c** | ✅ **已完成（v11 · 2026-09-26）**（`PB2-13` → `PB2-16`：**DOM 站点执行器** + 选择器探测/诊断 + 用户自定义站点闭环 + 文档） | `feat(ai+web): M_patchB L3 通用 DOM 站点适配器（选择器 JSON 驱动）+ 选择器探测/诊断 + --web-adapter-selftest` | 5–8 天 |
 | **B2-d** | 文档收尾（可并入各批） | `docs(patchB): …` | 0.5 天 |
-| **B2-e** | 🟡 **进行中**（L4）：**`PB2-27` ✅ 已落地（v13 · 2026-09-27）** → `PB2-28` → `PB2-29`（逐站）→ `PB2-30` + `PB2-24` 并入；不变量 `I15`/`I16`，验收 `AB2-20…22`，验证 `VB2-24…26`，风险 `R21…R23` | `fix(web+ui): M_patchB L4 登录层去 DeepSeek 化（站点无关登录态 + 探测不适用语义）+ 内置站点选择器实测回填 + 自建站点 UI 闭环` | 3–5 天 |
+| **B2-e** | 🟡 **进行中**（L4）：**`PB2-27` ✅（v13）+ `PB2-28` ①②③ ✅（v14）** → `PB2-28`④（会话失效识别，并入 `PB2-25`）→ `PB2-29`（逐站选择器）→ `PB2-30` + `PB2-24` 并入；不变量 `I15`/`I16`，验收 `AB2-20…22`，验证 `VB2-24…26`，风险 `R21…R23` | `fix(web+ui): M_patchB L4 登录层去 DeepSeek 化（站点无关登录态 + 探测不适用语义）+ 内置站点选择器实测回填 + 自建站点 UI 闭环` | 3–5 天 |
 
 > `B2-a` 与 `B2-b` 可**完全离线自检**；`B2-c` 与 `B2-e`（L4）需现场手测（GUI + 真实站点 + **逐站人工登录**），建议**单独排期**。
 > 配置表数据文件（`source/assets/providers.json`）**已经先于代码落盘**（见 §8 变更记录 v2），`B2-a` 要做的是「让它真的被读取」。
@@ -1173,7 +1176,8 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | 2026-09-26 | **v10（当前）** | **内置各 AI 网页版登录入口（登录型站点条目）**：`PB2-26`（`adapter=dom` 缺生成字段 → **警告可加载** + `web_login_only()` + 字段警告文案细分 + 运行期/CLI 如实显示「端点不适用 / 生成未就绪」，并改写 `provider_spec_selftest` 的旧期望）+ `assets/providers.json` **新增 11 个站点入口**（附录 E）+ `VB2-21` 5 项 + `AB2-18`；实测 `--provider-dump` **21 条（official 9 / web 12）**、`--exec-selftest` **214/0**、`--graph-selftest` 111/0、`--selftest` 七组 PASS、`--provider-selftest` 50/0、构建 **0 error / 0 warning**；**未做**：L3 DOM 执行器与选择器实测（`PB2-13…16`）、`PB2-25`（会话失效可诊断）、`PB2-24`（自建站点 UI 闭环） |
 | 2026-09-26 | **v11（当前）** | **L3 落地（代码批次）：通用 DOM 站点适配器 + 选择器探测** —— ① 新增 `ai/dom_web_client.{h,cpp}`：`clamp_poll_params` / `dom_cfg_json`（转义安全）/ `dom_kickoff_script`（contenteditable `insertText` + input/textarea 原生 setter + `send{kind=key|click}`）/ `dom_poll_script`（`answer_selector` 末节点 innerText + `done_when`）/ `dom_probe_script` / `dom_chat`（**超时如实返回 + 警告**，R13）/ `dom_adapter_selftest`（PB2-15 诊断 + 可操作建议）② `webview_host` 增 `run_script_sync`（窗口内同步执行脚本；三级前置，**不要求内存 userToken**）+ `run_script_now`/`wait_page_ready` ③ `local_nodes` DOM 分支 + 登录型条目拦截 ④ `main.cpp` `--web-adapter-selftest` ⑤ `api_probe` `VB2-22` 5 项 ⑥ `implemented_protocols`/`implemented_web_adapters` 增 `dom`；实测 `--exec-selftest` **219/0**、`--graph-selftest` 111/0、`--selftest` 七组 PASS、`--provider-selftest` 50/0、`--provider-dump` 21 条（web 12，含 `dom`）、`--web-adapter-selftest --provider kimi-web` 端到端跑通（页面脚本真实执行）→ **发现 `kimi.moonshot.cn` 301 到 `www.kimi.com`**（条目已修正）；构建 0 error / 0 warning；文档已回填（§3 `PB2-13…16` 落地实测 / §4.1 `B2-c` / §4.2 `AB2-19` / §4.3 `VB2-22`·`VB2-23` / §9.6 / 使用说明 §9+§8 `1g` / 实测记录 §7.7 / README×2 / DevPlan） |
 | 2026-09-26 | **v12** | **第四轮复核（文档先行 · 零代码变更）：登录层仍绑 DeepSeek** —— 用户实测「所有 AI 都无法登录，只能切回 DeepSeek」。复核：L3 只治**生成引擎**（`dom_chat()` 对「未取到内存凭证」仅给警告、`run_script_sync()` 不要求 `userToken`），未治 ①**登录态判据**（`has_token()` = `user_token` 非空 → 通用站点恒 false；面板恒显「userToken：未获取」；Cookie 名回落 `ds_session_id`；状态栏只看内存槽）②**探测脚本**对非 DeepSeek 站点注入 DeepSeek 端点（`probe_kickoff_script()` 空字段保持内置值 → 必然 404 → 假「探测错误」）③**11 条内置站点无选择器**（登录型条目）+ **无界面入口**（`PB2-24`）。**新增 L4 层**、任务 **`PB2-27`…`PB2-30`**（`PB2-24` 并入）、批次 **`B2-e`**、不变量 **`I15`/`I16`**、验收 **`AB2-20`…`AB2-22`**、验证 **`VB2-24`…`VB2-26`**、风险 **`R21`…`R23`**、待确认 **`D-27`/`D-28`/`D-29`**；新增 §9.7（L4 立项：用户诉求 / 逐层证据 / 与 L3 的边界 / 下一步） |
-| 2026-09-27 | **v13（当前）** | **`PB2-27` 落地（代码批次）：登录/会话层去 DeepSeek 化（判据 + 文案）** —— ① 新增纯函数 `ai::web_session_state(spec, evidence)`（判据 = 条目 `cookie_names` 命中 ∪ 该 origin Cookie 非空；**不看** `userToken`；`D-27` / `I15`）+ `ai::WebSessionEvidence`（`web::web_session_evidence(session)` 转换，ai 层不依赖 `web/**`）② `ai::probe_is_applicable()`（内置适配器适用 / `dom` 站点**不适用**；`I16`）③ `ai::web_shows_user_token()`（`D-28`①：仅配了 `token_expr` 才显示 `userToken` 行）④ `LoginRequest.probe_applicable`（默认 `true` → CLI/无参路径逐字不变，守 `I2`）⑤ **`web::ensure_session()` 站点无关就绪判据**（DOM 站点只看该 origin Cookie，**不再空等 `userToken` 15/25 s**）⑥ 面板状态（已登录/未登录/未确认 + 站点无关原因）/ 状态栏（按生效条目站点键）/ `web_site_field_warnings()`（「协议探测不适用」）/ 加载报告（「登录可用；协议探测：不适用（DOM 站点）」）文案去 DeepSeek 化；**删除 `kDefaultCookieName`** → `ui/**`、`web/**` 零 `ds_session_id`。实测：构建 **0 error / 0 warning**、`--exec-selftest` **219 → 227 / 0**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**、`grep ds_session_id`（`ui/**`+`web/**`）零命中；文档已回填（§3 `PB2-27` ✅ + §4.1 `B2-e` 进行中 + §8 + §9.8） |
+| 2026-09-27 | **v13** | **`PB2-27` 落地（代码批次）：登录/会话层去 DeepSeek 化（判据 + 文案）** —— ① 新增纯函数 `ai::web_session_state(spec, evidence)`（判据 = 条目 `cookie_names` 命中 ∪ 该 origin Cookie 非空；**不看** `userToken`；`D-27` / `I15`）+ `ai::WebSessionEvidence`（`web::web_session_evidence(session)` 转换，ai 层不依赖 `web/**`）② `ai::probe_is_applicable()`（内置适配器适用 / `dom` 站点**不适用**；`I16`）③ `ai::web_shows_user_token()`（`D-28`①：仅配了 `token_expr` 才显示 `userToken` 行）④ `LoginRequest.probe_applicable`（默认 `true` → CLI/无参路径逐字不变，守 `I2`）⑤ **`web::ensure_session()` 站点无关就绪判据**（DOM 站点只看该 origin Cookie，**不再空等 `userToken` 15/25 s**）⑥ 面板状态（已登录/未登录/未确认 + 站点无关原因）/ 状态栏（按生效条目站点键）/ `web_site_field_warnings()`（「协议探测不适用」）/ 加载报告（「登录可用；协议探测：不适用（DOM 站点）」）文案去 DeepSeek 化；**删除 `kDefaultCookieName`** → `ui/**`、`web/**` 零 `ds_session_id`。实测：构建 **0 error / 0 warning**、`--exec-selftest` **219 → 227 / 0**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**、`grep ds_session_id`（`ui/**`+`web/**`）零命中；文档已回填（§3 `PB2-27` ✅ + §4.1 `B2-e` 进行中 + §8 + §9.8） |
+| 2026-09-27 | **v14（当前）** | **`PB2-28` 落地（代码批次，①②③）：协议探测「不适用」语义** —— ① 新增只读诊断脚本 `kProbeKickoffScriptReadOnly`（读 `location.href` / `document.title` / `localStorage` 键名与个数 / `document.cookie` 名与个数 / 输入框与按钮候选数；**脚本内既无 `/api/v0/` 也无 `localStorage.getItem('userToken')`**；输出字段与内置脚本同名 → `poll_protocol_probe()` 零改动）② `probe_kickoff_script()` 按 `probe_applicable` 分支（默认 `true` → 内置站点与 CLI/无参路径**逐字不变**，守 `I2`）③ CLI `--web-probe --provider <id>` + 面板按钮：不适用站点打印「**协议探测：不适用（DOM 站点）**→ 只读诊断」+ **站点无关**登录态结论（`ai::web_session_state`；退出码 0=已登录 / 2=未登录或未确认 / 1=诊断失败），按钮标题改「只读诊断（该站点不适用协议探测）」；④ 会话失效识别（`40002`/`401`/`40003`）**未做** → 仍归 `PB2-25`。实测：构建 **0 error / 0 warning**、`--exec-selftest` **227 → 232 / 0**（`VB2-25` 5 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**；文档已回填（§3 `PB2-28` 🟡 + §4.1 + §8 + §9.9） |
 
 ---
 
@@ -1491,5 +1495,35 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 **4) 仍未做（后续）**：`PB2-28`（探测「不适用」**只读诊断脚本**分支 + CLI `--web-probe` / `--web-adapter-selftest` 判据 + 会话失效 40002/401/40003 识别并入 `PB2-25`）、`PB2-29`（11 站选择器**逐站实测回填**，Kimi 先行；每站需界面手动登录一次）、`PB2-30`（`--run-selftest --web --provider <id>` + 面板「测试选择器」+ `PB2-24` 自助闭环）。
 
 **5) 待确认**：`D-27`（判据 = 并集，已按建议值实现）/ `D-28`①（`userToken` 行仅当配了 `token_expr`，已按建议值实现）/ `D-29`（归口：`PB2-24` 并入 L4，`PB2-25` 并入 `PB2-28`）—— 用户 2026-09-27 指示「直接按 `PB2-27`…`PB2-30` 开工」，故本批按**建议值**实现；若需改动，改判据即可（单点：`ai::web_session_state()`）。
+
+---
+
+### 第九批（v14 · 代码批次）：`PB2-28` 落地 —— 协议探测「不适用」只读诊断 + CLI 判据（2026-09-27）
+
+**1) 目标（承接 §9.7 的 ②）**：非 DeepSeek 站点上「探测网页版协议」**必然 404** → 面板红字「探测错误」被用户读作「登录失败」。修法：**不适用**的站点改跑**只读诊断**，且**不注入任何 DeepSeek 协议细节**（不变量 `I16`）。
+
+**2) 改动（代码）**
+
+| 位置 | 改动 | 对应 |
+|---|---|---|
+| `web/webview_host.cpp` | 新增 `kProbeKickoffScriptReadOnly`（只读：`location.href` / `document.title` / `localStorage` **键名与个数** / `document.cookie` **名与个数** / 输入框与按钮候选数；**无 `/api/v0/`、无 `localStorage.getItem('userToken')`**；输出字段与内置脚本同名 → 解析零改动） | `PB2-28`① / `I16` |
+| `web/webview_host.cpp` | `probe_kickoff_script()`：`probe_applicable == false` → 返回只读脚本；否则**逐字**走原逻辑（内置站点 / CLI / 无参路径不变） | `PB2-28`② / `I2` |
+| `web/webview_host.cpp` | `protocol_probe_with(base, spec, label, timeout)`：不适用站点打印「协议探测：**不适用**（该站点不是内置协议站点）→ 只读诊断」，输出诊断摘要 + **站点无关**登录态结论（`ai::web_session_state`）与引导；退出码 **0 = 已登录 / 2 = 未登录或未确认 / 1 = 诊断本身失败** | `PB2-28`③ |
+| `web/webview_host.cpp` | `protocol_probe_for_provider()` 传入该条目的 `spec`（`protocol_probe()` 传 `nullptr`，行为不变） | `PB2-28`③ |
+| `ui/property_panel.cpp` | 按钮标题按适用性切换：适用 → 「探测网页版协议（dev）」；不适用 → 「**只读诊断（该站点不适用协议探测）**」+ 对应 tooltip（明示不请求端点、不读 `userToken`） | `PB2-28`③ |
+| `tools/api_probe.cpp` | 新增 `VB2-25` 5 项：① `deepseek-web` 适用 ② `kimi-web` 不适用 ③ 自建 `dom` 条目（无字段 → 不适用；配 `probe_paths` / `token_expr` → 适用）④ 默认参数脚本仍是内置 DeepSeek 行为（`probe_applicable` 默认 true，守 `I2`）⑤ 只读脚本**不含** `/api/v0/` 与 `localStorage.getItem('userToken')` | `VB2-25` |
+
+**3) 实测（全绿）**
+
+| 项 | 结果 |
+|---|---|
+| 构建 | **0 error / 0 warning** |
+| `api_probe --exec-selftest` | **232 通过 / 0 失败**（227 → +5：`VB2-25` ①②③④⑤ **全 PASS**） |
+| `api_probe --graph-selftest` | **111 通过 / 0 失败** |
+| `aiwrite --provider-selftest` | **50 项通过 / 0 失败** |
+| ⚠️ 需 GUI 现场实测 | `--web-probe --provider kimi-web` 应打印「协议探测：**不适用**…」+ 只读诊断 + 登录态结论（退出码 0/2）；面板按钮应显示「只读诊断（该站点不适用协议探测）」 |
+
+**4) 仍未做**：④ **会话失效识别**（`40002` / `401` / `40003`）—— 归 `PB2-25`，需真实失效响应对齐（§9.4 记录过官网侧 `40003` + `userToken` 形状变化）；`PB2-29`（11 站选择器逐站实测回填，Kimi 先行；每站需界面手动登录一次）；`PB2-30`（`--run-selftest --web --provider <id>` + 面板「测试选择器」+ `PB2-24` 自助闭环）。
+
 
 
