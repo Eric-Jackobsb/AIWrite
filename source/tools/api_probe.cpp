@@ -35,6 +35,7 @@
 #include "utils/paths.h"
 #include "web/session_store.h"
 #include "web/webview_host.h" // plan_session_boot / interactive_login_request（纯逻辑断言用）
+#include "ai/deepseek_official_provider.h" // M5-02：多模态请求体断言
 
 #include <fstream>
 #include <sstream>
@@ -1804,6 +1805,156 @@ int execution_selftest()
         }
 
         std::filesystem::remove_all(temp_root, ec);
+    }
+
+    // --------------------------------------- M5-02：多模态请求体（离线断言）-----
+    {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        const fs::path  vlm_root = fs::temp_directory_path(ec) / "aiwrite-selftest-vlm";
+        std::filesystem::remove_all(vlm_root, ec);
+        fs::create_directories(vlm_root, ec);
+        const fs::path png_a      = vlm_root / "样例图.PNG";  // 大写扩展名：顺带验 MIME 大小写
+        const fs::path png_b      = vlm_root / "第二张.png";
+        const fs::path empty_file = vlm_root / "空图.png";
+
+        // Python 生成的合法 1×1 PNG（黑 / 红）——十六进制转字节写盘，保证断言可复现
+        const std::string png_a_hex =
+            "89504E470D0A1A0A0000000D4948445200000001000000010802000000907753"
+            "DE0000000C4944415478DA63606060000000040001C8EAEBF90000000049454E"
+            "44AE426082"
+;
+        const std::string png_b_hex =
+            "89504E470D0A1A0A0000000D4948445200000001000000010802000000907753"
+            "DE0000000C4944415478DA63F8CFC0000003010100F70341430000000049454E"
+            "44AE426082"
+;
+        const auto write_hex = [](const std::filesystem::path& path,
+                                  const std::string& hex) {
+            std::ofstream out(path, std::ios::binary);
+            for (std::size_t i = 0; i + 1 < hex.size(); i += 2) {
+                const char byte = static_cast<char>(std::stoi(hex.substr(i, 2), nullptr, 16));
+                out.write(&byte, 1);
+            }
+        };
+        write_hex(png_a, png_a_hex);
+        write_hex(png_b, png_b_hex);
+        {
+            std::ofstream empty(empty_file, std::ios::binary);
+        }
+        expect(check, fs::exists(png_a) && fs::file_size(png_a) > 0 && fs::exists(png_b),
+               "M5-02 夹具：两张 1×1 PNG 已写入临时目录");
+
+        // ---- 1) MIME 推断（大小写不敏感；未知扩展名回退 image/png）----
+        expect_eq(check, aiwrite::ai::image_mime_from_path("a.PNG"), "image/png",
+                  "M5-02 MIME：.PNG（大写）→ image/png");
+        expect_eq(check, aiwrite::ai::image_mime_from_path("b.JpEg"), "image/jpeg",
+                  "M5-02 MIME：.JpEg → image/jpeg");
+        expect_eq(check, aiwrite::ai::image_mime_from_path("c.webp"), "image/webp",
+                  "M5-02 MIME：.webp → image/webp");
+        expect_eq(check, aiwrite::ai::image_mime_from_path("d.tif"), "image/png",
+                  "M5-02 MIME：未知扩展名回退 image/png");
+
+        // ---- 2) 编码成功路径（与 Python 参考实现的 base64 逐字符比对）----
+        {
+            std::string       error;
+            const std::string encoded =
+                aiwrite::ai::encode_image_data_url(png_a.string(), 8 * 1024 * 1024, &error);
+            expect_eq(check, encoded, std::string("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mNgYGAAAAAEAAHI6uv5AAAAAElFTkSuQmCC"),
+                      "M5-02 编码：1×1 PNG → data URL（base64 与参考实现一致）");
+            expect(check, error.empty(), "M5-02 编码：成功时不写错误");
+        }
+
+        // ---- 3) 编码失败路径（不存在 / 目录 / 空文件 / 超限）----
+        {
+            std::string error;
+            expect(check,
+                   aiwrite::ai::encode_image_data_url((vlm_root / "不存在.png").string(), 0,
+                                                      &error).empty() &&
+                       error.find("不存在") != std::string::npos,
+                   "M5-02 编码：文件不存在 → 空串 + 可读错误", error);
+            error.clear();
+            expect(check,
+                   aiwrite::ai::encode_image_data_url(vlm_root.string(), 0, &error).empty() &&
+                       error.find("不存在") != std::string::npos,
+                   "M5-02 编码：目录不是图片 → 报错", error);
+            error.clear();
+            expect(check,
+                   aiwrite::ai::encode_image_data_url(empty_file.string(), 0, &error).empty() &&
+                       error.find("为空") != std::string::npos,
+                   "M5-02 编码：空文件 → 报错", error);
+            error.clear();
+            expect(check,
+                   aiwrite::ai::encode_image_data_url(png_a.string(), 4, &error).empty() &&
+                       error.find("过大") != std::string::npos,
+                   "M5-02 编码：超过上限 → 报错并给出上限", error);
+        }
+
+        // ---- 4) 请求体（多模态）：content 数组 + 文本块在前 + 图片按序 ----
+        {
+            aiwrite::ai::OfficialChatRequest request;
+            request.api_base      = "https://open.bigmodel.cn/api/paas/v4";
+            request.model         = "glm-4v-flash";
+            request.system_prompt = "你是编辑";
+            request.prompt        = "这张图讲了什么？";
+            request.temperature   = 1.0;
+            request.images        = {png_a.string(), png_b.string()};
+
+            const nlohmann::json body = aiwrite::ai::build_request_body(request);
+            expect_eq(check, aiwrite::ai::build_endpoint(request.api_base),
+                      "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+                      "M5-02 端点：智谱 api_base 拼接正确");
+            expect(check,
+                   body["messages"].size() == 2 && body["messages"][0]["role"] == "system" &&
+                       body["messages"][0]["content"] == "你是编辑",
+                   "M5-02 请求体：system 消息保持字符串形态");
+            const nlohmann::json& content = body["messages"][1]["content"];
+            expect(check, content.is_array() && content.size() == 3,
+                   "M5-02 请求体：有图时 user content = 数组（1 文本 + 2 图）",
+                   content.dump().substr(0, 60));
+            expect(check,
+                   content.is_array() && content[0]["type"] == "text" &&
+                       content[0]["text"] == "这张图讲了什么？",
+                   "M5-02 请求体：文本块在前且内容一致");
+            expect(check,
+                   content.is_array() && content[1]["type"] == "image_url" &&
+                       content[1]["image_url"]["url"] == std::string("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mNgYGAAAAAEAAHI6uv5AAAAAElFTkSuQmCC") &&
+                       content[2]["type"] == "image_url" &&
+                       content[2]["image_url"]["url"] == std::string("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP4z8AAAAMBAQD3A0FDAAAAAElFTkSuQmCC"),
+                   "M5-02 请求体：两张图按输入顺序编码为 data URL");
+            expect(check,
+                   body["model"] == "glm-4v-flash" && body["stream"] == false &&
+                       body["temperature"] == 1.0 && !body.contains("seed"),
+                   "M5-02 请求体：model / stream=false / 采样参数 / 无 seed 时不发 seed");
+        }
+
+        // ---- 5) 纯文本回归：content 必须是字符串（PB-05 行为不变）----
+        {
+            aiwrite::ai::OfficialChatRequest request;
+            request.system_prompt     = "系统";
+            request.prompt            = "纯文本提示";
+            const nlohmann::json body = aiwrite::ai::build_request_body(request);
+            expect(check,
+                   body["messages"].size() == 2 && body["messages"][0]["content"].is_string() &&
+                       body["messages"][1]["content"].is_string() &&
+                       body["messages"][1]["content"] == "纯文本提示",
+                   "M5-02 回归：无图时 content 仍为字符串（旧行为不变）");
+            expect(check, body["stream"] == false && !body["messages"][1].contains("type"),
+                   "M5-02 回归：无图请求体不含多模态字段");
+        }
+
+        // ---- 6) 不可用的图片被跳过（纯函数重载的降级行为）----
+        {
+            aiwrite::ai::OfficialChatRequest request;
+            request.prompt            = "只有一张坏图";
+            request.images            = {(vlm_root / "坏图.png").string()};
+            const nlohmann::json body = aiwrite::ai::build_request_body(request);
+            expect(check,
+                   body["messages"].size() == 1 && body["messages"][0]["content"].is_string(),
+                   "M5-02 降级：不可用图片被跳过（退化为纯文本请求体）");
+        }
+
+        std::filesystem::remove_all(vlm_root, ec);
     }
 
     std::printf("=== 执行器自检结果: %d 通过 / %d 失败 ===\n", check.passed, check.failed);

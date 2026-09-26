@@ -8,9 +8,16 @@
 //  * 阻塞调用；UI 场景由执行器的工作线程承载（PB-01 已线程化）
 //  * API Key 优先级：节点参数 → 环境变量 DEEPSEEK_API_KEY（凭据管理器见 PB-06）
 //  * 官方 SSE 流式（stream=true）随“实时返回”计划暂停（见 M_patchA PB-03/PB-08）
+//
+//  M5-02（多模态）：`images` 非空时 user content 变为数组
+//  （`[{type:"text",text},{type:"image_url",image_url:{url:"data:<mime>;base64,..."}}]`），
+//  即 OpenAI 兼容的视觉请求格式（智谱 GLM 视觉系列 / 硅基流动 / 本地 Ollama 通用）。
+//  图片路径编码为 data URL 的纯函数 `encode_image_data_url` 同样供离线断言使用。
 // ============================================================================
 
+#include <cstddef>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -22,6 +29,10 @@ struct OfficialChatRequest {
     std::string model     = "deepseek-chat";
     std::string system_prompt;
     std::string prompt;
+    // M5-02：图片输入（按序，本地路径）；非空 → 走多模态 content 数组
+    std::vector<std::string> images;
+    // 单张图片上限（0 = 不限制）；超限报可操作错误，不做隐式压缩
+    std::size_t image_max_bytes = 8u * 1024u * 1024u;
     double      temperature = 0.7;
     int         max_tokens  = 2048;
     double      top_p       = 1.0;
@@ -40,7 +51,17 @@ struct OfficialChatResult {
 // ---- 纯函数（离线断言用）----
 std::string    build_endpoint(const std::string& api_base);
 std::string    resolve_api_key(const std::string& param_key);
+
+// M5-02：扩展名 → MIME（png/jpg/jpeg/bmp/webp/gif；未知回退 image/png）
+std::string    image_mime_from_path(const std::string& path);
+// M5-02：读文件 → "data:<mime>;base64,<...>"；失败返回空串并把原因写入 *error
+std::string    encode_image_data_url(const std::string& path, std::size_t max_bytes,
+                                     std::string* error);
+
 nlohmann::json build_request_body(const OfficialChatRequest& request);
+// M5-02：已编码图片版本的请求体（official_chat 用它避免重复编码；失败图不应出现在列表里）
+nlohmann::json build_request_body(const OfficialChatRequest& request,
+                                  const std::vector<std::string>& image_data_urls);
 
 // 实际调用（阻塞）
 OfficialChatResult official_chat(const OfficialChatRequest& request);
