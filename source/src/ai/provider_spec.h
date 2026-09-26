@@ -147,6 +147,23 @@ const ProviderSpecs&                 provider_specs();
 std::shared_ptr<const ProviderSpecs> provider_specs_snapshot();
 void                                 reload_provider_specs();
 
+// ---- M_patchB L1 续（PB2-17）：节点生效条目 → 网页版站点参数 ----
+//  * 生效条目是 web 条目 → 用它自己的 `web` 段
+//  * 否则（official 条目 / 表里没有该 id / nullptr）→ 回落**表内第一个 web 条目**
+//    （内置表即 `deepseek-web`），保持改造前行为「未选网页版条目时用内置默认站点」；
+//    字段为空时由调用方按内置默认回落（见 `web::login_request_of`）
+//  * `table` 可为快照（工作线程请传 `provider_specs_snapshot().get()`，避免 reload 竞态）
+ProviderWebSpec web_spec_for(const ProviderSpec* spec, const ProviderSpecs* table);
+std::string     web_provider_id_for(const ProviderSpec* spec, const ProviderSpecs* table);
+inline ProviderWebSpec web_spec_for(const ProviderSpec* spec)
+{
+    return web_spec_for(spec, &provider_specs());
+}
+inline std::string web_provider_id_for(const ProviderSpec* spec)
+{
+    return web_provider_id_for(spec, &provider_specs());
+}
+
 // ---- 本版本「代码能力」清单（提示「表里有、程序还没实现」的条目，R9/R12）----
 std::vector<std::string> implemented_protocols();      // 例：{"openai", "deepseek-web"}
 std::vector<std::string> implemented_web_adapters();   // 例：{"builtin:deepseek"}

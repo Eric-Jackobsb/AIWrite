@@ -138,6 +138,31 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 画布设置文件 `~/.brain-ai/node_editor.json` 保存节点坐标与视图；若被写坏会导致 CPU 打满 + 界面无响应，
 程序启动时会自动校验并备份为 `node_editor_bad_<时间>.json` 后重建（详见 `docs/节点编辑器使用说明.md` §9）。
 
+### 4.1 网页版登录与多站点（2026-09-26 已支持）
+
+- **站点身份按「生效条目」**：登录页 / 窗口标题 / 探测路径 / Cookie 名全部取自条目的 `web.*`
+  （`src/web/webview_host.h` 的 `interactive_login_request(site,id)` 等）；无参重载 = 旧常量（逐字一致，兼容保留）。
+  未选网页版条目时回落**内置默认站点（DeepSeek 网页版）**，参数面板与运行前校验都会明确提示。
+- **「模式」下拉恒两项**（`src/engine/provider_resolve.cpp` 的 `provider_mode_options`）：`official` / `web` **始终可选**
+  （决策 `D-21`：**网页版与官方 API 同等优先级**，**不按条目 `kind` 裁剪**）；切换「提供商」只带出**建议值**
+  （网页版条目建议 `web`、官方条目建议 `official`），不一致时给橙色**提示**：非网页版条目 + `web` → 用内置默认站点；
+  网页版条目 + `official` → 该条目没有官方 API 通道（按表内 `api_base` 解析，缺失则明确报错）。
+  > ✅ **已修复（2026-09-26 · 任务 `PB2-20`）**：候选**恒两项**、`kind` 与 `mode` 不一致**只提示不改写**（守 `I13`）；
+  > 参数面板 / 运行前校验改按 `resolve_display_provider()`（**该节点自身条目**）解析 —— 站点条目 / 登录页 / 提示不再误回落 DeepSeek（`VB2-18②③`）。
+- **会话按站点键控**（`src/web/session_store.h`，`site_key_of()` = origin）：`std::map<站点, Session>`，
+  旧无键 API 保留为「默认槽」薄封装 → `--login-selftest` / `--web-probe` / `--web-chat` / `--web-session-selftest` 行为不变。
+- **窗口串行复用**：同一时刻一个登录窗口；切站点时先关旧窗再按新站点开窗（页面内 PoW 求解依赖该站点页面）。
+- **注销按站点**（`web::logout_site()`）：清该站点内存会话 + 删该 origin 的 Cookie + 清同源 `localStorage`；
+  「删除整个 profile（所有站点）」在参数面板「高级」里，需二次确认。
+- 内置配置表 `assets/providers.json` 共 10 条，其中 `kind=web` **仅 `deepseek-web` 1 条**
+  （Kimi 仅为顶层 `_example_web_dom` **模板**，`_` 前缀键不参与加载）；要接入第二个站点，把站点 JSON 放进
+  `~/.brain-ai/providers.d/`（照 `_example_web_dom` 抄）。
+- **`config.toml` 多 provider 实例参数**（PB2-06）：`[providers.<id>]` 可多节（`deepseek` 旧节自动迁移，幂等）；
+  保存前自动备份 `config.toml.bak`，写入采用 `.tmp` → 原子替换。**厂商元数据仍以配置表（JSON）为准**。
+- 计划与验收：`PB2-17`/`PB2-18`/`PB2-19`/`PB2-06`/`PB2-20`（`D-21` 修订）、`I11`/`I12`/`I13`、`AB2-13`/`AB2-14`/`AB2-15`、`VB2-16`/`VB2-17`/`VB2-18`、`R14`/`R15`/`R16`，
+  见 [../docs/actionPlan/M_patchB.md](../docs/actionPlan/M_patchB.md)（§9「L1 收口」实测基线）与
+  [../docs/网页版协议实测记录.md](../docs/网页版协议实测记录.md) §7。
+
 ---
 
 ## 5. 在 VS Code 中调试（F5）

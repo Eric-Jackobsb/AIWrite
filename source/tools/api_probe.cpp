@@ -219,6 +219,55 @@ bool test_config_roundtrip()
 
     std::filesystem::remove(file, ec);
 
+    // ---- M_patchB L1（PB2-06）：多 provider 实例参数 + 旧单节迁移 + 备份 ----
+    bool multi_ok = false;
+    {
+        const std::filesystem::path multi_file =
+            std::filesystem::temp_directory_path() / "aiwrite_config_multi.toml";
+        std::error_code ec2;
+        std::filesystem::remove(multi_file, ec2);
+        std::filesystem::remove(multi_file.string() + ".bak", ec2);
+
+        // ① 旧格式（只有 [providers.deepseek]）→ 加载应自动迁移进映射（幂等）
+        {
+            std::ofstream out(multi_file, std::ios::binary | std::ios::trunc);
+            out << "config_version = 1\n\n[providers.deepseek]\nprovider = \"deepseek\"\n"
+                   "mode = \"web\"\napi_base = \"https://api.deepseek.com\"\n"
+                   "model = \"deepseek-reasoner\"\napi_key_ref = \"brain-ai/deepseek\"\n";
+        }
+        aiwrite::Config legacy;
+        const bool      loaded   = aiwrite::load_config(multi_file, legacy);
+        const bool      migrated = loaded && legacy.providers.count("deepseek") == 1 &&
+                              legacy.providers["deepseek"].mode == "web" &&
+                              legacy.providers["deepseek"].model == "deepseek-reasoner" &&
+                              legacy.deepseek.model == "deepseek-reasoner";
+
+        // ② 增加第二个 provider → 保存 → 重新加载：两条都在；`.bak` 已生成
+        legacy.providers["zhipu"].provider    = "zhipu";
+        legacy.providers["zhipu"].api_base    = "https://open.bigmodel.cn/api/paas/v4";
+        legacy.providers["zhipu"].model       = "glm-4-flash";
+        legacy.providers["zhipu"].api_key_ref = "brain-ai/zhipu";
+        legacy.deepseek.model                 = "deepseek-chat"; // 旧成员 = deepseek 条的权威
+        const bool saved     = aiwrite::save_config(multi_file, legacy);
+        const bool backed_up = std::filesystem::exists(multi_file.string() + ".bak", ec2);
+
+        aiwrite::Config again;
+        const bool      reloaded_ok = aiwrite::load_config(multi_file, again);
+        const bool      multi       = reloaded_ok && again.providers.size() == 2 &&
+                          again.providers["zhipu"].model == "glm-4-flash" &&
+                          again.providers["zhipu"].api_base == "https://open.bigmodel.cn/api/paas/v4" &&
+                          again.providers["deepseek"].model == "deepseek-chat" &&
+                          again.deepseek.model == "deepseek-chat";
+        multi_ok = migrated && saved && backed_up && multi;
+        std::printf("   %-6s PB2-06 多 provider 实例参数：旧单节迁移=%s；新增条目往返=%s；"
+                    "保存前备份 .bak=%s\n",
+                    multi_ok ? "PASS" : "FAIL", migrated ? "OK" : "异常", multi ? "OK" : "异常",
+                    backed_up ? "已生成" : "缺失");
+
+        std::filesystem::remove(multi_file, ec2);
+        std::filesystem::remove(multi_file.string() + ".bak", ec2);
+    }
+
     // ---- F3 / PD-04：越屏矫正纯函数（utils::fit_window_to_workarea）----
     using aiwrite::utils::WindowRect;
     const WindowRect workarea{0, 0, 1920, 1040};             // 工作区（已扣除任务栏）
@@ -277,7 +326,7 @@ bool test_config_roundtrip()
                     ? "是"
                     : "否");
 
-    return same && cache_ok && fit_ok && unwired_ok;
+    return same && cache_ok && fit_ok && unwired_ok && multi_ok;
 }
 
 // M2：网页版会话存储 + 参数条件可见性自检（不需要网络）
@@ -311,9 +360,13 @@ bool test_web_session_and_visibility()
         aiwrite::web::plan_session_boot(false, true) == SessionBoot::ReuseAndProbe &&
         aiwrite::web::plan_session_boot(false, false) == SessionBoot::StartAndProbe;
     // 手动「打开登录窗口」必须在页面加载后自动探测一次（否则运行时只能等到超时）
+    // M_patchB L1 续（PB2-17）：无参重载 = 旧常量（逐字一致，钉住不变量 I2）；站点参数的按条目的
+    // 断言在 --exec-selftest 的 VB2-17 块（改表即换站点）
     const aiwrite::web::LoginRequest interactive = aiwrite::web::interactive_login_request();
     const bool request_ok = interactive.probe_after_load && !interactive.offscreen &&
-                            interactive.url.find("deepseek.com") != std::string::npos;
+                            interactive.url == "https://chat.deepseek.com/" &&
+                            interactive.window_title ==
+                                "AIwrite · DeepSeek 网页版登录（登录后关闭本窗口）";
 
     // ---- 参数条件可见性：ProviderConfig 在 official 显示 api_key，在 web 隐藏（且不参与校验）----
     aiwrite::engine::registerAllNodes();
@@ -2209,6 +2262,200 @@ int execution_selftest()
                "PB2-05 探测脚本：站点路径来自配置表（改表即改探测目标）");
         expect(check, custom_script.find("'/api/v0/chat/completion'") == std::string::npos,
                "PB2-05 探测脚本：自定义站点后不再残留内置路径");
+    }
+
+    {
+        std::printf("   -- 网页版站点参数按条目（M_patchB L1 续 / VB2-17）--\n");
+
+        // ---- VB2-17：登录请求按**生效条目**构造（改表即换站点，零改码）----
+        const aiwrite::web::LoginRequest legacy = aiwrite::web::interactive_login_request();
+        expect(check, legacy.probe_after_load && !legacy.offscreen &&
+                          legacy.url == "https://chat.deepseek.com/" &&
+                          legacy.window_title == "AIwrite · DeepSeek 网页版登录（登录后关闭本窗口）",
+               "VB2-17 兼容：无参 interactive_login_request 与旧常量逐字一致（不变量 I2）");
+
+        const aiwrite::ai::ProviderSpecs table    = aiwrite::ai::load_provider_specs();
+        const aiwrite::ai::ProviderSpec* web_spec = table.find("deepseek-web");
+        bool                             table_ok = false;
+        if (web_spec != nullptr) {
+            const aiwrite::web::LoginRequest from_table =
+                aiwrite::web::interactive_login_request(web_spec->web, web_spec->id);
+            table_ok = from_table.url == web_spec->web.login_url &&
+                       from_table.window_title == web_spec->web.window_title &&
+                       from_table.provider_id == "deepseek-web" && from_table.probe_after_load &&
+                       !from_table.offscreen &&
+                       from_table.probe_paths == web_spec->web.probe_paths &&
+                       from_table.challenge_path == web_spec->web.endpoints.challenge_path &&
+                       aiwrite::web::login_request_site(from_table) == "https://chat.deepseek.com";
+        }
+        expect(check, table_ok, "VB2-17 表驱动：登录页 / 窗口标题 / 探测路径 / 站点键取自条目");
+
+        const aiwrite::ai::ProviderWebSpec empty_spec;
+        const aiwrite::web::LoginRequest   fallback =
+            aiwrite::web::interactive_login_request(empty_spec, std::string());
+        expect(check, fallback.url == legacy.url && fallback.window_title == legacy.window_title &&
+                          fallback.probe_after_load,
+               "VB2-17 回落：条目缺字段时回落到内置默认站点（DeepSeek）");
+
+        const aiwrite::web::LoginRequest probe_req = aiwrite::web::probe_login_request(
+            web_spec != nullptr ? web_spec->web : empty_spec,
+            web_spec != nullptr ? web_spec->id : std::string());
+        expect(check, probe_req.probe_after_load && !probe_req.url.empty(),
+               "VB2-17 探测窗口：同样按条目构造（probe_after_load=true）");
+
+        // ---- 站点键（origin）----
+        const bool origin_ok =
+            aiwrite::web::site_key_of("https://chat.deepseek.com/") == "https://chat.deepseek.com" &&
+            aiwrite::web::site_key_of("HTTPS://Chat.DeepSeek.com/a/b?x=1") ==
+                "https://chat.deepseek.com" &&
+            aiwrite::web::site_key_of("about:blank") == "about:blank" &&
+            aiwrite::web::site_key_of("").empty();
+        expect(check, origin_ok, "VB2-16 站点键 = origin（忽略路径/查询/大小写；非 URL 原样）");
+
+        // ---- VB2-18 / PB2-20（决策 D-21）：「模式」候选恒两项 + ProviderConfig 自参数解析 ----
+        {
+            aiwrite::engine::registerAllNodes();
+            aiwrite::engine::Graph     mode_graph;
+            std::string                mode_error;
+            const std::string          mode_id =
+                mode_graph.addNode("ProviderConfig", 0.0f, 0.0f, &mode_error);
+            aiwrite::engine::Node* mode_node = mode_graph.findNode(mode_id);
+            bool                   options_ok       = false;
+            bool                   self_web_ok      = false;
+            bool                   not_rewritten_ok = false;
+            bool                   unknown_ok       = false;
+            if (mode_node != nullptr) {
+                const auto select_provider = [mode_node](const std::string& provider) {
+                    if (aiwrite::engine::Param* p = mode_node->findParam("provider")) {
+                        p->value = provider;
+                    }
+                };
+                const auto set_mode = [mode_node](const std::string& value) {
+                    if (aiwrite::engine::Param* p = mode_node->findParam("mode")) {
+                        p->value = value;
+                    }
+                };
+
+                // ① 候选**恒为 {official, web}**（official 条目 / web 条目 / 表外 id 都一样）
+                const std::vector<std::string> expect_modes{"official", "web"};
+                select_provider("deepseek-web");
+                const std::vector<std::string> web_modes =
+                    aiwrite::engine::provider_mode_options(*mode_node);
+                select_provider("zhipu");
+                const std::vector<std::string> api_modes =
+                    aiwrite::engine::provider_mode_options(*mode_node);
+                select_provider("no-such-provider");
+                const std::vector<std::string> unknown_modes =
+                    aiwrite::engine::provider_mode_options(*mode_node);
+                options_ok = web_modes == expect_modes && api_modes == expect_modes &&
+                             unknown_modes == expect_modes;
+
+                // ② web 条目：自参数解析（面板/校验统一入口）→ 命中**该条目**（kind / 显示名 / 站点）
+                select_provider("deepseek-web");
+                const aiwrite::engine::EffectiveProvider web_self =
+                    aiwrite::engine::resolve_display_provider(mode_graph, *mode_node);
+                const aiwrite::ai::ProviderWebSpec web_site =
+                    aiwrite::ai::web_spec_for(web_self.spec, web_self.specs.get());
+                self_web_ok = web_self.resolved && !web_self.from_edge && web_self.spec != nullptr &&
+                              web_self.kind == "web" && !web_self.display.empty() &&
+                              web_self.spec->id == "deepseek-web" && !web_site.login_url.empty() &&
+                              web_site.login_url == web_self.spec->web.login_url &&
+                              aiwrite::ai::web_provider_id_for(web_self.spec, web_self.specs.get()) ==
+                                  std::string("deepseek-web");
+
+                // ③ kind 与 mode 不一致时**不改写** mode：
+                //    official 条目 + web → kind 仍 official、mode 保持 web（将用内置默认站点）
+                //    web 条目 + official → mode **保持 official**（撤回「静默改写为 web」的回归位）
+                select_provider("deepseek");
+                set_mode("web");
+                const aiwrite::engine::EffectiveProvider official_self =
+                    aiwrite::engine::resolve_display_provider(mode_graph, *mode_node);
+                select_provider("deepseek-web");
+                set_mode("official");
+                const aiwrite::engine::EffectiveProvider web_official =
+                    aiwrite::engine::resolve_display_provider(mode_graph, *mode_node);
+                not_rewritten_ok =
+                    official_self.kind == "official" && official_self.mode == "web" &&
+                    web_official.kind == "web" && web_official.mode == "official" &&
+                    !aiwrite::engine::mode_kind_hint(official_self).empty() &&
+                    !aiwrite::engine::mode_kind_hint(web_official).empty();
+
+                // ④ 表外 id → 条目为空（**不**回落显示为 official / 不猜条目）
+                select_provider("no-such-provider");
+                const aiwrite::engine::EffectiveProvider unknown_self =
+                    aiwrite::engine::resolve_display_provider(mode_graph, *mode_node);
+                unknown_ok = unknown_self.resolved && unknown_self.spec == nullptr &&
+                             unknown_self.kind.empty();
+            }
+            expect(check, options_ok,
+                   "VB2-18① 「模式」候选恒 {official, web}（official / web 条目、表外 id 都一样；D-21）");
+            expect(check, self_web_ok,
+                   "VB2-18② ProviderConfig 自参数解析按自身条目（kind=web / 显示名 / 站点与登录页取自条目）");
+            expect(check, not_rewritten_ok,
+                   "VB2-18③ kind 与 mode 不一致时**不改写** mode（official+web 保持 web；web+official 保持 official）");
+            expect(check, unknown_ok,
+                   "VB2-18④ 表外 id → 条目为空（不回落显示为 official）");
+        }
+    }
+
+    {
+        std::printf("   -- 会话按站点键控（M_patchB L1 续 / PB2-16）--\n");
+
+        using aiwrite::web::Session;
+        using aiwrite::web::SessionStore;
+        SessionStore::instance().clear_all(); // 先清干净，避免影响其他自检
+
+        Session session_a;
+        session_a.site = "https://a.example.com";
+        session_a.cookies.push_back({"site_a", "va", false, true, 0.0});
+        SessionStore::instance().set(session_a);
+        Session session_b;
+        session_b.site = "https://b.example.com";
+        session_b.cookies.push_back({"site_b", "vb", false, true, 0.0});
+        SessionStore::instance().set(session_b);
+        expect(check,
+               SessionStore::instance().logged_in("https://a.example.com") &&
+                   SessionStore::instance().snapshot("https://a.example.com").has("site_a") &&
+                   SessionStore::instance().logged_in("https://b.example.com"),
+               "VB2-16 多站点并存：写入 B 后 A 仍在（互不覆盖）");
+
+        aiwrite::web::ProbeResult probe_a;
+        probe_a.ok        = true;
+        probe_a.token_raw = "token-a";
+        SessionStore::instance().set_probe(std::move(probe_a), "https://a.example.com");
+        aiwrite::web::ProbeResult probe_b;
+        probe_b.ok        = true;
+        probe_b.token_raw = "token-b";
+        SessionStore::instance().set_probe(std::move(probe_b), "https://b.example.com");
+        expect(check, SessionStore::instance().has_token("https://a.example.com") &&
+                          SessionStore::instance().has_token("https://b.example.com"),
+               "VB2-16 凭证按站点：两个站点各自持有 userToken");
+
+        SessionStore::instance().clear("https://a.example.com");
+        expect(check, !SessionStore::instance().has_token("https://a.example.com") &&
+                          !SessionStore::instance().logged_in("https://a.example.com") &&
+                          SessionStore::instance().has_token("https://b.example.com") &&
+                          SessionStore::instance().logged_in("https://b.example.com"),
+               "VB2-16 按站点注销：清 A 不影响 B");
+
+        const std::vector<std::string> sites = SessionStore::instance().sites();
+        expect(check, sites.size() == 1 && sites.front() == "https://b.example.com",
+               "VB2-16 sites()：只列出仍有会话的站点（顺序稳定）");
+
+        // ---- 兼容：不传站点的旧 API（默认槽）行为与改造前一致 ----
+        SessionStore::instance().clear_all();
+        Session plain; // 不带站点 = 改造前的用法
+        plain.url = "https://chat.deepseek.com/";
+        plain.cookies.push_back({"ds_session_id", "vv", false, true, 0.0});
+        SessionStore::instance().set(plain);
+        const bool legacy_slot_ok = SessionStore::instance().logged_in() &&
+                                    SessionStore::instance().cookie_count() == 1 &&
+                                    SessionStore::instance().snapshot().has("ds_session_id");
+        SessionStore::instance().clear();
+        expect(check, legacy_slot_ok && !SessionStore::instance().logged_in() &&
+                          SessionStore::instance().cookie_count() == 0,
+               "VB2-16 兼容：不传站点的旧 API（默认槽）行为不变");
+        SessionStore::instance().clear_all(); // 归还干净状态
     }
 
     {

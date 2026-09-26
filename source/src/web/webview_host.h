@@ -17,12 +17,24 @@
 #include <thread>
 #include <vector>
 
+#include "ai/provider_spec.h"     // M_patchB L1 续（PB2-17）：站点参数来自配置表条目
+#include "web/session_store.h"    // 站点键（origin）/ 会话归档
+
 namespace aiwrite::web {
 
+// ---- 内置默认站点（= 改造前写死在 webview_host.h / property_panel.cpp 的常量）----
+//  * 集中定义，保证「内置条目字段值 == 旧常量」（不变量 I2：`--web-probe` / `--web-chat` /
+//    `--web-session-selftest` 结果与改造前一致）
+//  * 配置表条目的对应字段为空时，一律回落到这里
+inline constexpr const char* kDefaultSiteLoginUrl    = "https://chat.deepseek.com/";
+inline constexpr const char* kDefaultSiteWindowTitle = "AIwrite · DeepSeek 网页版登录（登录后关闭本窗口）";
+inline constexpr const char* kDefaultSiteProbeTitle  = "AIwrite · 网页版协议探测（登录后自动探测）";
+inline constexpr const char* kDefaultCookieName      = "ds_session_id";
+
 struct LoginRequest {
-    std::string url          = "https://chat.deepseek.com/";
+    std::string url          = kDefaultSiteLoginUrl;
     std::string profile_dir;                                  // 空 = ~/.brain-ai/webview2
-    std::string window_title = "AIwrite · 网页版登录（登录后关闭窗口即可）";
+    std::string window_title = kDefaultSiteWindowTitle;
     bool        offscreen       = false;  // true：窗口放在桌面可见区域之外（自检用）
     int         timeout_seconds = 0;      // >0：到时自动关闭（自检用；0 = 直到用户关闭）
     bool        auto_close_after_cookies = false; // true：取到 Cookie 且稳定 3 秒后自动关闭（自检用）
@@ -32,7 +44,77 @@ struct LoginRequest {
     std::vector<std::string> probe_paths;         // 协议探测路径（空 = 默认两条）
     std::string              challenge_path;      // PoW 挑战路径（空 = 默认）
     std::string              completion_path;     // 生成路径（空 = 默认）
+    // ---- M_patchB L1 续（PB2-17）：站点身份 / 归属 ----
+    std::string              provider_id;         // 配置表条目 id（诊断 / 界面显示）
+    std::string              token_expr;          // 页面内取 token 表达式（空 = 内置脚本原样）
+    std::vector<std::string> cookie_names;        // 需要的 Cookie 名（空 = 界面按内置默认显示）
 };
+
+// 登录请求所属站点键（origin）—— 会话归档 / 窗口归属判定（与 SessionStore 同源）
+inline std::string login_request_site(const LoginRequest& request)
+{
+    return site_key_of(request.url);
+}
+
+// 由配置表条目的 `web` 段构造请求（空字段回落内置默认 → 与改造前行为一致）
+//  * for_probe：探测窗口（标题缺省用「协议探测」模板）
+inline LoginRequest login_request_of(const ai::ProviderWebSpec& site, const std::string& provider_id,
+                                     bool for_probe, bool offscreen)
+{
+    LoginRequest request;
+    if (!site.login_url.empty()) {
+        request.url = site.login_url;
+    }
+    if (!site.window_title.empty()) {
+        request.window_title = site.window_title;
+    }
+    else if (for_probe) {
+        request.window_title = kDefaultSiteProbeTitle;
+    }
+    request.provider_id      = provider_id;
+    request.offscreen        = offscreen;
+    request.probe_paths      = site.probe_paths;
+    request.challenge_path   = site.endpoints.challenge_path;
+    request.completion_path  = site.endpoints.completion_path;
+    request.token_expr       = site.token_expr;
+    request.cookie_names     = site.cookie_names;
+    return request;
+}
+
+// 兼容（= 旧常量，逐字一致）：手动登录窗口 → 页面加载后自动探测一次
+inline LoginRequest interactive_login_request()
+{
+    LoginRequest request;
+    request.url              = kDefaultSiteLoginUrl;
+    request.window_title     = kDefaultSiteWindowTitle;
+    request.probe_after_load = true;
+    return request;
+}
+
+// 参数面板「打开登录窗口（WebView2）」：按生效条目的站点（PB2-17）
+inline LoginRequest interactive_login_request(const ai::ProviderWebSpec& site,
+                                             const std::string& provider_id)
+{
+    LoginRequest request = login_request_of(site, provider_id, /*for_probe=*/false, /*offscreen=*/false);
+    request.probe_after_load = true;
+    return request;
+}
+
+// 参数面板「探测网页版协议（dev）」：按生效条目的站点（PB2-17）
+inline LoginRequest probe_login_request(const ai::ProviderWebSpec& site, const std::string& provider_id)
+{
+    LoginRequest request = login_request_of(site, provider_id, /*for_probe=*/true, /*offscreen=*/false);
+    request.probe_after_load = true;
+    return request;
+}
+
+// 会话自动引导（ensure_session）用的离屏请求：按生效条目的站点（PB2-17）
+inline LoginRequest boot_login_request(const ai::ProviderWebSpec& site, const std::string& provider_id)
+{
+    LoginRequest request = login_request_of(site, provider_id, /*for_probe=*/false, /*offscreen=*/true);
+    request.probe_after_load = true;
+    return request;
+}
 
 // 渲染「协议探测 kickoff 脚本」：把站点路径从 LoginRequest 注入 JS 模板
 //  * 不传任何站点参数时，渲染结果与改造前的常量脚本**逐字一致**
@@ -65,14 +147,8 @@ inline SessionBoot plan_session_boot(bool has_token, bool window_open)
 
 // 参数面板「打开登录窗口（WebView2）」使用的请求：**页面加载完成后自动探测一次**
 // （手动开的窗口同样必须拿到内存凭证，否则运行时 ensure_session 只能等到超时）
-inline LoginRequest interactive_login_request()
-{
-    LoginRequest request;
-    request.url              = "https://chat.deepseek.com/";
-    request.window_title     = "AIwrite · DeepSeek 网页版登录（登录后关闭本窗口）";
-    request.probe_after_load = true;
-    return request;
-}
+//  * 无参重载 = 改造前的内置默认站点（DeepSeek），行为逐字不变（不变量 I2）
+//  * 带站点参数的重载见上方 `interactive_login_request(web, id)`（PB2-17）
 
 class LoginWindow {
 public:
@@ -124,6 +200,18 @@ long long solve_pow_via_page(const std::string& challenge_json, int timeout_ms,
 // 确保内存会话里有可用凭证（Cookie + userToken）：没有则离屏起登录窗口并等一次协议探测完成
 // 返回 true 表示已具备凭证（幂等，已有凭证时立即返回）
 bool ensure_session(int timeout_ms, std::string* error);
+
+// ---- M_patchB L1 续（PB2-17/18/19）：按站点 ----
+// 当前登录窗口所属站点键（origin；无窗口 / 未启动 = 空）
+std::string current_window_site();
+// 登录窗口是否已开在指定站点上
+bool        window_on_site(const std::string& site);
+// 按**站点**确保凭证：站点与当前窗口不一致时**串行复用**同一个窗口（先关旧窗再按目标站点开窗，
+// 决策 D-20）；轮询期间只补探测，不重复开窗
+bool        ensure_session(const LoginRequest& site_request, int timeout_ms, std::string* error);
+// 按**站点**注销：清该站点的内存会话 + 删除该站点 origin 的 Cookie 与 localStorage
+// （不删除整个 profile，故不影响其他站点；PB2-19）
+bool        logout_site(const LoginRequest& site_request, int timeout_ms, std::string* error);
 
 // 进程内单例：参数面板与状态栏共用一个登录窗口（故意不析构，避免退出期竞态）
 LoginWindow& login_window();

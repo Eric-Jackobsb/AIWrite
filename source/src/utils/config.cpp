@@ -41,7 +41,8 @@ std::vector<std::string> unwired_config_fields()
         "timeout.*",                    // 连接 / 首字节 / 流空闲超时（Patch B：PB-08）
         "error.*",                      // 重试开关 / 次数 / 间隔（Patch B：PB-08）
         "advanced.log_ttl_days",        // 日志清理（Patch D：PD-06）
-        "providers.deepseek.*",         // 仅作默认值来源：实际以 ProviderConfig 节点参数为准
+        "providers.deepseek.*",     // 仅作默认值来源：实际以 ProviderConfig 节点参数为准
+                                    // （PB2-06 起支持 [providers.<id>] 多节；厂商元数据以配置表为准）
     };
 }
 
@@ -177,15 +178,21 @@ toml::table to_table(const Config& c)
     write_value(advanced, "log_ttl_days", c.advanced.log_ttl_days);
     root.insert("advanced", std::move(advanced));
 
-    toml::table deepseek;
-    write_value(deepseek, "provider", c.deepseek.provider);
-    write_value(deepseek, "mode", c.deepseek.mode);
-    write_value(deepseek, "api_base", c.deepseek.api_base);
-    write_value(deepseek, "model", c.deepseek.model);
-    write_value(deepseek, "api_key_ref", c.deepseek.api_key_ref);
-
     toml::table providers;
-    providers.insert("deepseek", std::move(deepseek));
+    // M_patchB L1（PB2-06）：多 provider —— 写出全部 `[providers.<id>]`；
+    //  * 旧成员 `deepseek` 始终作为 `deepseek` 条目的权威（兼容既有代码/自检）
+    //  * 映射为空时也写出 `[providers.deepseek]`（保持旧文件形态不变）
+    std::map<std::string, Config::Provider> entries = c.providers;
+    entries["deepseek"]                             = c.deepseek;
+    for (const auto& item : entries) {
+        toml::table section;
+        write_value(section, "provider", item.second.provider);
+        write_value(section, "mode", item.second.mode);
+        write_value(section, "api_base", item.second.api_base);
+        write_value(section, "model", item.second.model);
+        write_value(section, "api_key_ref", item.second.api_key_ref);
+        providers.insert(item.first, std::move(section));
+    }
     root.insert("providers", std::move(providers));
 
     return root;
@@ -214,10 +221,21 @@ bool load_config(const std::filesystem::path& file, Config& out)
         if (const toml::table* section = root["error"].as_table())   read_error(*section, out.error);
         if (const toml::table* section = root["advanced"].as_table()) read_advanced(*section, out.advanced);
 
+        // M_patchB L1（PB2-06）：多 provider 实例参数 —— 任意 `[providers.<id>]` 节都读入映射
+        // （旧文件的 `[providers.deepseek]` 据此自动迁移，幂等）；随后与旧成员 `deepseek` 同步镜像
         if (const toml::table* providers = root["providers"].as_table()) {
-            if (const toml::table* deepseek = (*providers)["deepseek"].as_table()) {
-                read_provider(*deepseek, out.deepseek);
+            for (const auto& item : *providers) {
+                const toml::table* section = item.second.as_table();
+                if (section == nullptr) {
+                    continue;
+                }
+                Config::Provider parsed;
+                read_provider(*section, parsed);
+                out.providers[std::string(item.first.str())] = parsed;
             }
+        }
+        if (const auto it = out.providers.find("deepseek"); it != out.providers.end()) {
+            out.deepseek = it->second; // 镜像（旧代码读 Config::deepseek）
         }
 
         log::info("配置已加载: " + file.string() + " (config_version=" +
@@ -242,18 +260,42 @@ bool save_config(const std::filesystem::path& file, const Config& config)
             std::filesystem::create_directories(file.parent_path(), ec);
         }
 
-        std::ofstream stream(file, std::ios::binary | std::ios::trunc);
-        if (!stream) {
-            log::error("无法写入配置文件: " + file.string());
-            return false;
+        // M_patchB L1（PB2-06）：写盘前备份原文件（旧配置迁移/写失败时都不丢原配置）
+        if (std::filesystem::exists(file, ec)) {
+            const std::filesystem::path backup = file.string() + ".bak";
+            std::filesystem::copy_file(file, backup,
+                                       std::filesystem::copy_options::overwrite_existing, ec);
+            if (ec) {
+                log::warn("配置备份失败（继续保存）: " + backup.string() + "（" + ec.message() + "）");
+                ec.clear();
+            }
         }
 
-        stream << "# AIwrite 配置文件（字段见设计文档 20.2 节）\n"
-               << "# 程序启动时读取，设置面板（M6）保存\n\n"
-               << to_table(config);
+        // 先写临时文件、再原子替换：任何写入失败都不会破坏原配置（VB2-06）
+        const std::filesystem::path temp = file.string() + ".tmp";
+        {
+            std::ofstream stream(temp, std::ios::binary | std::ios::trunc);
+            if (!stream) {
+                log::error("无法写入配置文件: " + temp.string());
+                return false;
+            }
 
-        if (!stream.good()) {
-            log::error("配置文件写入不完整: " + file.string());
+            stream << "# AIwrite 配置文件（字段见设计文档 20.2 节）\n"
+                   << "# 程序启动时读取，设置面板（M6）保存\n\n"
+                   << to_table(config);
+
+            if (!stream.good()) {
+                log::error("配置文件写入不完整: " + temp.string() + "（原文件保持不变）");
+                stream.close();
+                std::filesystem::remove(temp, ec);
+                return false;
+            }
+        }
+
+        std::filesystem::rename(temp, file, ec);
+        if (ec) {
+            log::error("配置替换失败: " + file.string() + "（" + ec.message() + "）");
+            std::filesystem::remove(temp, ec);
             return false;
         }
 

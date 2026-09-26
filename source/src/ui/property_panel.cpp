@@ -84,11 +84,59 @@ bool is_web_mode(const Node& node)
     return mode != nullptr && mode->text() == "web";
 }
 
-// 注销：清内存会话 + 删除 WebView2 profile（强制下次重新登录）
-void logout_web_session()
+// ------------------------------------------------------------ 生效站点上下文 --
+// M_patchB L1 续（PB2-17/18）：ProviderConfig 的「生效条目 → 站点参数 → 会话键」
+//  * 生效条目 = 按**该节点自身参数**解析（PB2-20：ProviderConfig 自己就是配置来源，不看 provider 连线）
+//  * 站点参数全部来自生效条目（未选网页版条目时回落内置默认站点，见 ai::web_spec_for）
+//  * 会话键 = 站点 origin（SessionStore 按站点归档；决策 D-19）
+struct WebSiteContext {
+    engine::EffectiveProvider effective;
+    ai::ProviderWebSpec       site;
+    std::string               provider_id;   // 生效 web 条目 id（回落时为表内第一个 web 条目）
+    bool                      on_web_entry = false; // 生效条目本身是不是网页版条目
+    std::string               login_url;     // 生效登录页（或内置默认）
+    std::string               site_key;      // 站点键（origin）
+    web::LoginRequest         manual;        // 「打开登录窗口」用（页面加载后自动探测）
+    web::LoginRequest         probe;         // 「探测网页版协议」用
+};
+
+WebSiteContext web_site_context(const engine::Node& node, const engine::Graph& graph)
+{
+    WebSiteContext ctx;
+    ctx.effective    = engine::resolve_display_provider(graph, node); // PB2-20：按自身条目解析
+    ctx.on_web_entry = ctx.effective.is_web();
+    ctx.site         = ai::web_spec_for(ctx.effective.spec, ctx.effective.specs.get());
+    ctx.provider_id  = ai::web_provider_id_for(ctx.effective.spec, ctx.effective.specs.get());
+    ctx.manual       = web::interactive_login_request(ctx.site, ctx.provider_id);
+    ctx.probe        = web::probe_login_request(ctx.site, ctx.provider_id);
+    ctx.login_url    = ctx.manual.url;
+    ctx.site_key     = web::login_request_site(ctx.manual);
+    return ctx;
+}
+
+// 该站点用于界面展示的 Cookie 名（表内 cookie_names 第一项；空 = 内置默认 ds_session_id）
+std::string site_cookie_name(const WebSiteContext& ctx)
+{
+    return ctx.site.cookie_names.empty() ? std::string(web::kDefaultCookieName)
+                                         : ctx.site.cookie_names.front();
+}
+
+// 按**站点**注销（PB2-19）：清该站点的内存会话 + 删该 origin 的 Cookie / localStorage
+// （**不影响**其他站点；不删除登录 profile）
+void logout_web_session(const WebSiteContext& ctx)
+{
+    std::string error;
+    if (!web::logout_site(ctx.manual, 20000, &error)) {
+        log::warn("网页版按站点注销失败: " + error);
+    }
+}
+
+// 高级操作：删除**整个**登录 profile（= 清掉所有站点；PB2-19 / R14 边界说明）
+void delete_web_profile()
 {
     web::login_window().request_close();
-    web::SessionStore::instance().clear();
+    web::login_window().join();
+    web::SessionStore::instance().clear_all();
 
     std::error_code ec;
     const std::filesystem::path profile = paths::webview2_profile();
@@ -97,31 +145,52 @@ void logout_web_session()
         log::warn("网页版注销：profile 目录删除失败 " + profile.string() + "（" + ec.message() + "）");
     }
     else {
-        log::info("网页版注销：profile 已删除 " + profile.string());
+        log::info("网页版注销：profile 已删除 " + profile.string() + "（**全部站点**，下次需重新登录）");
     }
 }
 
-// ProviderConfig 节点在 web 模式下显示「会话状态 + 登录入口」（设计 §8.5）
-void draw_web_session_section()
+// ProviderConfig 节点在 web 模式下显示「生效站点 + 会话状态 + 登录入口」（PB2-17/18/19）
+//  * 站点身份唯一来源 = **生效条目**（不变量 I11）：登录页 / 窗口标题 / 探测路径 / Cookie 名
+//  * 状态与按钮都针对**该站点**的会话（会话按站点键控：多站点互不覆盖）
+void draw_web_session_section(const engine::Node& node, const engine::Graph& graph)
 {
+    const WebSiteContext ctx     = web_site_context(node, graph);
+    const web::Session   session = web::SessionStore::instance().snapshot(ctx.site_key);
+
     ImGui::Separator();
     ImGui::TextUnformatted("网页版会话（Cookie 只存内存，程序退出即销毁）");
 
-    web::LoginWindow&  window  = web::login_window();
-    const web::Session session = web::SessionStore::instance().snapshot();
-    const bool         running = window.running();
+    // ---- 生效站点（按条目）----
+    if (ctx.on_web_entry) {
+        ImGui::TextDisabled("站点条目：%s（来源 %s）",
+                            ctx.effective.display.empty() ? ctx.effective.provider.c_str()
+                                                          : ctx.effective.display.c_str(),
+                            ctx.effective.spec_origin.empty() ? "未知" : ctx.effective.spec_origin.c_str());
+    }
+    else {
+        ImGui::TextColored(ImVec4(1.0f, 0.62f, 0.25f, 1.0f),
+                           "⚠ 当前「提供商」不是网页版条目");
+        ImGui::TextDisabled("将使用内置默认站点（DeepSeek 网页版）；如需按表配置站点，"
+                            "请把「提供商」改为网页版条目（如 deepseek-web）");
+    }
+    ImGui::TextDisabled("登录页：%s", ctx.login_url.c_str());
+    ImGui::TextDisabled("适配器：%s",
+                        ctx.site.adapter.empty() ? "builtin" : ctx.site.adapter.c_str());
 
+    // ---- 该站点会话状态 ----
+    const std::string cookie_name = site_cookie_name(ctx);
     if (session.logged_in) {
         ImGui::TextColored(ImVec4(0.31f, 0.75f, 0.42f, 1.0f), "状态：已登录（Cookie %zu 条）",
                            session.cookie_count());
         ImGui::TextDisabled("来源：%s", session.url.c_str());
         ImGui::TextDisabled("更新：%s", session.updated_at.c_str());
-        if (const web::Cookie* cookie = session.find("ds_session_id")) {
-            ImGui::TextDisabled("ds_session_id = %s", web::mask_value(cookie->value).c_str());
+        if (const web::Cookie* cookie = session.find(cookie_name)) {
+            ImGui::TextDisabled("%s = %s", cookie_name.c_str(),
+                                web::mask_value(cookie->value).c_str());
         }
     }
     else {
-        ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f), "状态：未登录");
+        ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f), "状态：未登录（该站点）");
     }
 
     // 协议探测状态（M4-06/M4-08 逆向用）：网页版接口真正需要的是 userToken（不是 Cookie）
@@ -141,65 +210,127 @@ void draw_web_session_section()
         ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "探测错误：%s", probe.error.c_str());
     }
 
-    if (running) {
-        ImGui::TextDisabled("登录窗口已打开：请在窗口中完成登录，然后关闭它。");
+    web::LoginWindow& window      = web::login_window();
+    const bool        window_here = web::window_on_site(ctx.site_key);
+    if (window.running()) {
+        if (window_here) {
+            ImGui::TextDisabled("登录窗口已打开（该站点）：请在窗口中完成登录，然后关闭它。");
+        }
+        else {
+            ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f), "登录窗口正开着其他站点：%s",
+                               web::current_window_site().c_str());
+            ImGui::TextDisabled("点「打开登录窗口」会按串行策略切到本节点站点（先关旧窗）");
+        }
         ImGui::TextDisabled("当前：%s", window.status().c_str());
         if (ImGui::Button("关闭登录窗口", ImVec2(-FLT_MIN, 0.0f))) {
             window.request_close();
         }
     }
-    else {
-        if (ImGui::Button("打开登录窗口（WebView2）", ImVec2(-FLT_MIN, 0.0f))) {
-            // 页面加载完成后**自动探测一次**：手动开的窗口同样要拿到内存 userToken，
-            // 否则运行时 ensure_session 只能等到超时（2026-09-26 修复）
-            const web::LoginRequest request = web::interactive_login_request();
-            std::string             error;
-            if (window.start(request, &error)) {
-                log::info("网页版登录窗口已打开（独立线程，主界面不受影响；页面加载后自动探测凭证）");
+
+    ImGui::Spacing();
+    if (ImGui::Button("打开登录窗口（WebView2）", ImVec2(-FLT_MIN, 0.0f))) {
+        // 站点参数来自**生效条目**（PB2-17）；页面加载完成后自动探测一次（与改造前一致）
+        if (window.running() && !window_here) {
+            window.request_close(); // 串行复用：先关旧站点窗口（PB2-19 / D-20）
+            window.join();
+        }
+        std::string error;
+        if (!window.running()) {
+            if (window.start(ctx.manual, &error)) {
+                log::info("网页版登录窗口已打开（站点 " + ctx.login_url +
+                          "；独立线程，页面加载后自动探测凭证）");
             }
             else {
                 log::warn("网页版登录窗口打开失败: " + error);
             }
         }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("profile 会记住登录态；窗口页面加载完成后会自动探测一次（读取内存 userToken），\n"
-                              "之后点「运行 / 重新生成」就无需再等。若提示未取得凭证：\n"
-                              "先确认窗口内已登录，再点下方「探测网页版协议（dev）」后重试。");
-        }
-        if (session.logged_in) {
-            ImGui::Spacing();
-            if (ImGui::Button("注销（清会话 + 删除登录 profile）", ImVec2(-FLT_MIN, 0.0f))) {
-                logout_web_session();
-            }
-        }
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("站点取自「生效条目」：%s\n"
+                          "profile 会记住登录态；窗口页面加载完成后自动探测一次（读取内存 userToken），\n"
+                          "之后点运行无需再等。切换网页版条目时会改用该条目的登录页（先关旧窗口）。",
+                          ctx.login_url.c_str());
     }
 
     ImGui::Spacing();
     if (ImGui::Button("探测网页版协议（dev）", ImVec2(-FLT_MIN, 0.0f))) {
-        if (window.running()) {
-            web::request_protocol_probe(); // 窗口已开：直接在当前页面里探测
+        if (web::window_on_site(ctx.site_key)) {
+            web::request_protocol_probe(); // 窗口已开在该站点：直接在当前页面里探测
         }
         else {
-            web::LoginRequest request;
-            request.url              = "https://chat.deepseek.com/";
-            request.window_title     = "AIwrite · 网页版协议探测（登录后自动探测）";
-            request.probe_after_load = true; // 页面加载完成 → 自动探测
+            if (window.running()) {
+                window.request_close();
+                window.join();
+            }
             std::string error;
-            if (!window.start(request, &error)) {
+            if (!window.start(ctx.probe, &error)) {
                 log::warn("启动探测窗口失败: " + error);
             }
         }
-        log::info("已触发网页版协议探测（结果写入 Console 与 app.log）");
+        log::info("已触发网页版协议探测（站点 " + ctx.login_url + "；结果写入 Console 与 app.log）");
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("在已登录页面内读取 userToken 并请求 PoW 挑战（同源，绕过跨域与反爬），\n"
-                          "结果用于 M4-06 网页版 Provider 的实现；Token 只以脱敏形式记录");
+        ImGui::SetTooltip("在已登录页面内读取 userToken 并请求 PoW 挑战（同源，绕过跨域与反爬）；\n"
+                          "Token 只以脱敏形式记录");
+    }
+
+    if (session.logged_in) {
+        ImGui::Spacing();
+        if (ImGui::Button("注销该站点（清会话 + 删该站点 Cookie）", ImVec2(-FLT_MIN, 0.0f))) {
+            logout_web_session(ctx);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("只影响本站点：内存会话 + 该 origin 的 Cookie / localStorage；\n"
+                              "其他站点（例如另一个网页版条目）的登录态不受影响。");
+        }
+    }
+
+    // ---- 已登录站点列表（多站点并存的可视化 + 逐站点注销；PB2-18/19）----
+    const std::vector<std::string> sites = web::SessionStore::instance().sites();
+    if (!sites.empty()) {
+        ImGui::Spacing();
+        ImGui::TextDisabled("已登录站点（%zu）", sites.size());
+        for (const std::string& site : sites) {
+            const web::Session item = web::SessionStore::instance().snapshot(site);
+            ImGui::PushID(site.c_str());
+            ImGui::TextDisabled("%s（Cookie %zu%s）", site.c_str(), item.cookie_count(),
+                                item.user_token.empty() ? "" : "，有凭证");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("注销")) {
+                web::LoginRequest other;
+                other.url = site; // 只需 origin：注销按站点
+                std::string error;
+                if (!web::logout_site(other, 20000, &error)) {
+                    log::warn("按站点注销失败（" + site + "）: " + error);
+                }
+            }
+            ImGui::PopID();
+        }
+    }
+
+    // ---- 高级：删除整个登录 profile（= 清掉**所有**站点；二次确认）----
+    ImGui::Spacing();
+    static bool confirm_delete_profile = false;
+    if (!confirm_delete_profile) {
+        if (ImGui::SmallButton("高级：删除整个登录 profile（所有站点）")) {
+            confirm_delete_profile = true;
+        }
+    }
+    else {
+        ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
+                           "将删除 ~/.brain-ai/webview2 —— 所有站点都要重新登录");
+        if (ImGui::SmallButton("确认删除##profile")) {
+            delete_web_profile();
+            confirm_delete_profile = false;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("取消##profile")) {
+            confirm_delete_profile = false;
+        }
     }
 
     ImGui::Spacing();
-    ImGui::TextWrapped("登录窗口内：Ctrl+Alt+C 立即重新提取 Cookie，ESC 关闭窗口。"
-                       "网页版推理（PoW 求解 / 定制 SSE）在 M4-06 / M4-08 落地；"
-                       "当前已完成「登录 + 会话 + 协议探测」。");
+    ImGui::TextWrapped("登录窗口内：Ctrl+Alt+C 立即重新提取 Cookie，ESC 关闭窗口。");
 }
 
 // 小写副本（参数搜索过滤用：ASCII 大小写不敏感，中文按字节比较）
@@ -227,7 +358,8 @@ bool write_param(Param& param, const nlohmann::json& value)
 // 绘制单个参数控件
 //  返回 edited = 本次编辑结束（失焦/回车）；begin_edit = 控件刚被激活（值尚未变化，
 //  外层在此刻压撤销快照）；changed_now = 值已写回模型（编辑过程中每帧都可能为 true）
-bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed_now)
+bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed_now,
+                       const std::vector<std::string>* enum_override = nullptr)
 {
     bool edited             = false;
     const std::string label = param_label(param);
@@ -343,16 +475,26 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
     }
     case ParamType::Enum: {
         const std::string current = param.text();
-        int index                 = 0;
-        for (std::size_t i = 0; i < param.enum_options.size(); ++i) {
-            if (param.enum_options[i] == current) {
+        // 允许调用方按上下文覆盖可选项（扩展位）。
+        //  * ⚠️ M_patchB L2（PB2-20 / 决策 D-21）：**不得**用它裁剪 ProviderConfig 的「模式」
+        //    （恒 {official, web}，不变量 I13）；目前无调用方传入
+        //  * 若当前值不在可选项里，**如实显示当前值**（调用方给出提示）
+        std::vector<std::string> options =
+            enum_override != nullptr ? *enum_override : param.enum_options;
+        if (!current.empty() &&
+            std::find(options.begin(), options.end(), current) == options.end()) {
+            options.insert(options.begin(), current);
+        }
+        int index = 0;
+        for (std::size_t i = 0; i < options.size(); ++i) {
+            if (options[i] == current) {
                 index = static_cast<int>(i);
                 break;
             }
         }
         std::vector<const char*> items;
-        items.reserve(param.enum_options.size());
-        for (const std::string& option : param.enum_options) {
+        items.reserve(options.size());
+        for (const std::string& option : options) {
             items.push_back(option.c_str());
         }
         ImGui::SetNextItemWidth(-FLT_MIN);
@@ -361,11 +503,10 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
         // 因此这里必须"值变化即写回"，否则会出现「选了 Web 但模式没变」的现象。
         if (!items.empty() &&
             ImGui::Combo("##value", &index, items.data(), static_cast<int>(items.size()))) {
-            const int safe_index =
-                std::clamp(index, 0, static_cast<int>(param.enum_options.size()) - 1);
-            param.value = param.enum_options[static_cast<std::size_t>(safe_index)];
-            edited      = true;
-            changed_now = true;
+            const int safe_index = std::clamp(index, 0, static_cast<int>(options.size()) - 1);
+            param.value          = options[static_cast<std::size_t>(safe_index)];
+            edited               = true;
+            changed_now          = true;
         }
         note_activation();
         break;
@@ -579,6 +720,16 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                lower_copy(param.description).find(filter_text) != std::string::npos;
     };
 
+    // ---- M_patchB L1 续（PB2-17）+ L2 修订（PB2-20）：ProviderConfig 自己的生效条目 ----
+    //  * 按**该节点自身参数**解析（此前误用 resolve_effective_provider()：它对 ProviderConfig
+    //    恒返回默认构造 → 站点区/提示永远回落内置默认，见 M_patchB §9.1）
+    //  * **撤回**「web 条目自动锁 mode=web」（决策 D-21）：只提示、不静默改写
+    const bool                is_provider_node = node->type == "ProviderConfig";
+    engine::EffectiveProvider provider_effective;
+    if (is_provider_node) {
+        provider_effective = engine::resolve_display_provider(editor().graph, *node);
+    }
+
     if (node->params.empty()) {
         ImGui::TextDisabled("该节点没有参数");
     }
@@ -608,10 +759,33 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         help_marker(param.description);
         ImGui::PopID();
 
+        // M_patchB L2 修订（PB2-20 / 决策 D-21）：ProviderConfig 的「模式」**恒为 {official, web}**
+        //  * **不再**按条目 kind 裁剪候选 / 覆盖下拉项（不变量 I13：两项始终可选）
+        //  * 与条目类型不一致时只给**橙色提示**（mode_kind_hint），绝不静默改写用户选择
         bool param_begin_edit  = false;
         bool param_changed_now = false;
         const bool param_edit_ended =
             draw_param_widget(*node, param, param_begin_edit, param_changed_now);
+        if (is_provider_node && param.id == "mode") {
+            const std::string hint = engine::mode_kind_hint(provider_effective);
+            if (!hint.empty()) {
+                ImGui::TextColored(ImVec4(1.0f, 0.62f, 0.25f, 1.0f), "  ⚠ %s", hint.c_str());
+            }
+        }
+        // 「切换提供商」→ 带出一次「模式」建议值（web 条目建议 web / official 条目建议 official）
+        //  * 只带出一次建议：之后用户可任意改选，**不再**被改写（D-21）
+        if (is_provider_node && param.id == "provider" && (param_changed_now || param_edit_ended)) {
+            if (engine::Param* mode_param = node->findParam("mode")) {
+                const std::string suggestion = engine::provider_mode_suggestion(*node);
+                if (!suggestion.empty() && mode_param->text() != suggestion) {
+                    result.begin_edit = true; // 外层据此压一次撤销快照（可撤销）
+                    mode_param->value = suggestion;
+                    result.changed    = true;
+                    log::info("参数变更: " + node->id + ".mode → " + suggestion +
+                              "（切换提供商带出的建议值，可再改回）");
+                }
+            }
+        }
         if (param_changed_now || param_edit_ended) {
             result.changed = true; // 值已写回模型（编辑过程中即时生效）
         }
@@ -638,15 +812,22 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                             matched_params, filtered_params, matched_params + filtered_params);
     }
 
-    // ---- 网页版（web 模式）：会话状态 + 登录入口（设计 §8.5）----
+    // ---- 网页版（web 模式）：会话状态 + 登录入口（PB2-17/18/19）----
     if (node->type == "ProviderConfig") {
         if (is_web_mode(*node)) {
-            draw_web_session_section();
+            draw_web_session_section(*node, editor().graph);
         }
         else {
             ImGui::Spacing();
-            ImGui::TextDisabled("提示：把「模式」切到 web 可在此处打开 DeepSeek 网页版登录窗口"
-                                "（Cookie 只存内存）。");
+            if (provider_effective.is_web()) {
+                ImGui::TextDisabled("该提供商是网页版条目（建议「模式」= web）：把「模式」切到 web "
+                                    "即可在此处打开该站点的登录窗口。");
+            }
+            else {
+                ImGui::TextDisabled("提示：把「模式」切到 web 可在此处打开网页版登录窗口"
+                                    "（Cookie 只存内存）；当前条目不是网页版条目时，"
+                                    "将使用内置默认站点（DeepSeek 网页版）。");
+            }
         }
     }
 

@@ -411,33 +411,42 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         return official_result.text;
     }
 
-    // 网页版：凭证（Cookie + userToken）只在内存；没有则自动引导一次（profile 已登录即可用）
-    if (web::SessionStore::instance().snapshot().user_token.empty()) {
+    // 网页版：凭证（Cookie + userToken）只在内存，且**按站点**归档（PB2-18）
+    //  * 站点参数来自生效条目（PB2-17）：未选网页版条目时回落内置默认站点（DeepSeek）
+    //  * 站点与当前登录窗口不一致时，ensure_session 按串行策略重开窗口
+    //    （页面内 PoW 求解依赖该站点页面；决策 D-20）
+    const ai::ProviderWebSpec site    = ai::web_spec_for(effective.spec, effective.specs.get());
+    const std::string        site_id  = ai::web_provider_id_for(effective.spec, effective.specs.get());
+    const web::LoginRequest  boot     = web::boot_login_request(site, site_id);
+    const std::string        site_key = web::login_request_site(boot);
+    const std::string site_label = site.login_url.empty() ? std::string("内置默认站点") : site.login_url;
+
+    if (!web::SessionStore::instance().has_token(site_key) || !web::window_on_site(site_key)) {
         std::string boot_error;
-        ctx.console("[文本生成] 正在准备网页版会话（首次约数秒）…");
-        if (!web::ensure_session(25000, &boot_error)) {
+        ctx.console("[文本生成] 正在准备网页版会话（站点 " + site_label + "；首次约数秒）…");
+        if (!web::ensure_session(boot, 25000, &boot_error)) {
             throw engine::NodeError("文本生成（网页版）不可用：" + boot_error);
         }
     }
-    const web::Session session = web::SessionStore::instance().snapshot();
+    const web::Session session = web::SessionStore::instance().snapshot(site_key);
 
     ai::WebChatRequest request;
     request.prompt           = prompt;
     request.model_type       = (model == "expert") ? "expert" : "default";
     request.thinking_enabled = (model == "deepseek-reasoner");
-    // M_patchB L1（PB2-05）：站点端点来自配置表条目（未选网页版条目时用内置默认 DeepSeek）
-    if (effective.spec != nullptr && !effective.spec->web.endpoints.host.empty()) {
-        request.endpoints = effective.spec->web.endpoints;
+    // M_patchB L1（PB2-05 / PB2-17）：站点端点来自**生效条目**（未选网页版条目时用内置默认 DeepSeek）
+    if (!site.endpoints.host.empty()) {
+        request.endpoints = site.endpoints;
     }
     console_provider_line(ctx, "[文本生成]", effective, "web");
     if (effective.resolved && !effective.is_web()) {
         ctx.console("[文本生成] 提示：当前「提供商」不是网页版条目，站点参数用内置默认"
                     "（DeepSeek 网页版）；如需按表配置站点，请在「提供商配置 → 提供商」选择 "
-                    "deepseek-web");
+                    "一个网页版条目（如 deepseek-web）");
     }
-    else if (effective.is_web() && effective.spec != nullptr) {
-        ctx.console("[文本生成] 站点：" + effective.spec->web.login_url + "（适配器 " +
-                    effective.spec->web.adapter + "）");
+    else if (effective.is_web()) {
+        ctx.console("[文本生成] 站点：" + site_label + "（适配器 " +
+                    (site.adapter.empty() ? std::string("builtin") : site.adapter) + "）");
     }
     // PB-03-min：把执行器的增量回调接到网页版 SSE（边收边吐 → UI 逐字呈现）
     if (ctx.on_delta) {

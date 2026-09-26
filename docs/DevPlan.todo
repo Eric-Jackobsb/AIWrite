@@ -685,11 +685,77 @@
               "done": false,
               "level": "secondary"
             }
+          },
+          {
+            "key": 132,
+            "children": [
+              {
+                "key": 133,
+                "children": [],
+                "todo": {
+                  "id": 133,
+                  "content": "FEA-M_patchB-17 网页版登录入口按生效条目：登录 URL / 窗口标题 / 面板入口 / 运行时默认站点 ｜ §3 PB2-17 · 不变量 I11 · 验收 AB2-13（⚠️「mode 按 kind 过滤」已按 D-21 撤回，见 §9.1）",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 134,
+                "children": [],
+                "todo": {
+                  "id": 134,
+                  "content": "FEA-M_patchB-18 多站点会话并存：SessionStore 按站点 origin 键控 + 节点各用各的凭证 ｜ §3 PB2-18 · 不变量 I12 · 验收 AB2-14",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 135,
+                "children": [],
+                "todo": {
+                  "id": 135,
+                  "content": "FEA-M_patchB-19 网页版窗口串行复用 + 按站点注销（删除整个 profile 降级为高级操作） ｜ §3 PB2-19 · 决策 D-20 · 风险 R14",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 141,
+                "children": [],
+                "todo": {
+                  "id": 141,
+                  "content": "FEA-M_patchB-06 config.toml 多 provider 实例参数：Config::providers + [providers.<id>] 读写 + 旧单节迁移（幂等）+ 保存前 .bak + .tmp 原子替换 ｜ §3 PB2-06 · 验证 VB2-06",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 142,
+                "children": [],
+                "todo": {
+                  "id": 142,
+                  "content": "FEA-M_patchB-20 [PB2-20] mode 恒两项修复：provider_mode_options 恒 {official,web} + 撤回按 kind 过滤与 web 自动锁 + 面板/校验按 ProviderConfig 自身条目解析站点 ｜ §3 PB2-20 · 决策 D-21 · 不变量 I13 · 验收 AB2-15 · 风险 R16",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 132,
+              "content": "Patch B · L1 收口（5 项）",
+              "done": true,
+              "level": "success"
+            }
           }
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（41 项）",
+          "content": "Feature（46 项）",
           "done": false,
           "level": "default"
         }
@@ -905,11 +971,55 @@
               "done": false,
               "level": "secondary"
             }
+          },
+          {
+            "key": 136,
+            "children": [
+              {
+                "key": 137,
+                "children": [],
+                "todo": {
+                  "id": 137,
+                  "content": "TST-M_patchB-16 [VB2-16] 键控会话断言：写站点 A → 写 B → A 仍在 / clear(A) 不影响 B / legacy 无键行为不变 ｜ PB2-18（--exec-selftest 6 项）",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 138,
+                "children": [],
+                "todo": {
+                  "id": 138,
+                  "content": "TST-M_patchB-17 [VB2-17] 登录请求按生效条目构造：deepseek-web 与旧常量逐字一致 + DOM 站点按表 + 缺 web 段回落告警 ｜ PB2-17 · 风险 R15（--exec-selftest 4 项）",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              },
+              {
+                "key": 143,
+                "children": [],
+                "todo": {
+                  "id": 143,
+                  "content": "TST-M_patchB-18 [VB2-18] 模式候选 + 自参数解析断言：provider_mode_options 恒含 web / 自参数解析 kind+站点 / 不静默改写 mode / 表外 id 不回落 official ｜ PB2-20（--exec-selftest 4 项）",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 136,
+              "content": "Patch B · 网页版站点身份与多站点（3 项）",
+              "done": false,
+              "level": "secondary"
+            }
           }
         ],
         "todo": {
           "id": 54,
-          "content": "Test（13 项）",
+          "content": "Test（16 项）",
           "done": false,
           "level": "warning"
         }
@@ -1059,11 +1169,44 @@
               "done": false,
               "level": "secondary"
             }
+          },
+          {
+            "key": 139,
+            "children": [
+              {
+                "key": 140,
+                "children": [],
+                "todo": {
+                  "id": 140,
+                  "content": "DOCS-M_patchB-17 文档先行批次：M_patchB v4 复核（PB2-05 漏项 + PB2-17/18/19 + I11/I12 + AB2-13/14 + VB2-16/17 + D-19/20 + R14/15）并同步 CHANGELOG / 实测记录 / 使用说明 / README ｜ §8 v4 · §9 B2-b",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 139,
+              "content": "Patch B · 网页版站点身份与多站点（1 项）",
+              "done": true,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 144,
+            "children": [],
+            "todo": {
+              "id": 144,
+              "content": "DOCS-M_patchB-18 第二轮修订 v6（文档先行 · 零代码变更）：D-21/I13/PB2-20/B2-a3/AB2-15/VB2-18/R16 + §9.1 根因登记，并同步 CHANGELOG / 使用说明 / 实测记录 / docs+source README ｜ M_patchB §9.1",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchB.md"
+            }
           }
         ],
         "todo": {
           "id": 74,
-          "content": "Docs（7 项）",
+          "content": "Docs（9 项）",
           "done": false,
           "level": "secondary"
         }
@@ -1463,7 +1606,10 @@
       98,
       102,
       104,
-      46
+      46,
+      132,
+      136,
+      139
     ],
     "add_mode": "bottom",
     "virtual": false,

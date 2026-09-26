@@ -1,7 +1,7 @@
 # AIwrite 文档中心
 
 > 项目：AI 小说/剧本创作软件（节点工作流 + DeepSeek 后端）
-> 当前进度：**M1 ✅ / M2 ✅**；**M3 🟡**（节点编辑器）、**M4 ✅ 核心完成**（文本生成链路）、**M5 🟡 核心切片完成**（图片理解 + 图片显示）；补丁系列 A ✅ / B 进行中（**PB-04 Provider 可插拔化展开计划 [M_patchB.md](actionPlan/M_patchB.md) 待审核**）；M6 未开始
+> 当前进度：**M1 ✅ / M2 ✅**；**M3 🟡**（节点编辑器）、**M4 ✅ 核心完成**（文本生成链路）、**M5 🟡 核心切片完成**（图片理解 + 图片显示）；补丁系列 A ✅ / B 进行中（**PB-04 Provider 可插拔化展开计划 [M_patchB.md](actionPlan/M_patchB.md)：L1 已收口 ✅** —— 配置表 / 用户覆盖 / API 参数化 / **网页版去硬编码** / **多站点会话并存** / `config.toml` 多 provider / `--provider-selftest`；剩余 L2 工厂与协议收编、L3 DOM 站点）；M6 未开始
 > 最近更新：2026-09-26
 
 ---
@@ -12,7 +12,7 @@
 |---|---|---|
 | [ai_writer_nodes.md](ai_writer_nodes.md) | **项目设计文档 v1.0**：需求、架构、数据结构、节点、执行引擎、UI、日志、配置、开发计划、附录 | 了解整体设计 / 写代码前对齐规范 |
 | [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6）与节奏、总体验收对照 | 看整体排期与当前进度 |
-| [actionPlan/](actionPlan/)（M3–M6 + 补丁 A/B） | **进行中 / 待开发**的里程碑与补丁 Action Plan（含 [M_patchB.md](actionPlan/M_patchB.md) Provider 可插拔化 / JSON 配置表草案） | 开发某个里程碑 / 补丁前 |
+| [actionPlan/](actionPlan/)（M3–M6 + 补丁 A/B） | **进行中 / 待开发**的里程碑与补丁 Action Plan（含 [M_patchB.md](actionPlan/M_patchB.md) Provider 可插拔化 / JSON 配置表：**L1 已收口**（含网页版去硬编码与多站点会话），第二轮修订 v6 的修复项 `PB2-20` **已落地（v7）**（`mode` 恒按 `D-21` 提供 `official`/`web` 两项、面板与校验按**节点自身条目**解析站点）；剩余 L2/L3 与 `PB2-07` 界面按钮，见该文档 §9「L1 收口」/ §9.1「第二轮修订」） | 开发某个里程碑 / 补丁前 |
 | [Archive/actionPlan/](Archive/actionPlan/)（M1 · M2 · M_rerun · M_textio） | **已完成**的里程碑 / 补丁计划（归档保留） | 追溯历史决策与验收依据 |
 | [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) | M1 实测环境、分层验证结果、V/A 验收对照、问题与解决记录 | 想知道“为什么这么搭环境/踩过哪些坑” |
 | [节点编辑器使用说明.md](节点编辑器使用说明.md) | **M2 节点系统 P1/P2** 操作手册（鼠标操作全表、9 节点说明、参数校验、撤销规则、自检命令、20 项人工验证清单、已知限制） | 上手操作节点画布 / 做人工验收 |

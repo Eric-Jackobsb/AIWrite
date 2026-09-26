@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "ai/provider_spec.h"   // M_patchB L1：生效条目（表驱动）
 #include "engine/graph.h"
@@ -52,11 +53,38 @@ struct EffectiveProvider {
 // 是否使用 provider 句柄的推理节点（LLMGenerate / VLMGenerate）
 bool uses_provider(const std::string& node_type);
 
-// 解析节点生效的提供商配置（provider 输入优先）
+// 解析节点生效的提供商配置（provider 输入优先；仅对推理节点有意义）
 EffectiveProvider resolve_effective_provider(const Graph& graph, const Node& node);
+
+// 解析节点**自身参数**的生效提供商配置（不理会 provider 连线）
+//  * 用途：「提供商配置」节点**本身就是配置来源** —— 参数面板 / 运行前校验必须按**它自己的条目**解析
+//  * M_patchB L2 修订（PB2-20）：这两处此前误用 resolve_effective_provider()，而该函数对
+//    非推理节点恒返回默认构造（spec = nullptr）→ 站点区/提示永远回落内置默认（见 §9.1）
+EffectiveProvider resolve_self_provider(const Node& node);
+
+// 界面 / 校验统一入口（PB2-20）：
+//  * 推理节点（LLMGenerate / VLMGenerate）→ resolve_effective_provider（provider 连线优先）
+//  * 其他节点（ProviderConfig 等）        → resolve_self_provider（按自身参数）
+EffectiveProvider resolve_display_provider(const Graph& graph, const Node& node);
 
 // 是否处于「官方 API 尚未接线」的必定失败组合（mode = official）
 bool official_not_wired(const EffectiveProvider& provider);
+
+// M_patchB L1 续（PB2-17）+ L2 修订（PB2-20 / 决策 D-21）：「模式」可选项 —— **恒为 {official, web}**
+//  * **网页版与官方 API 同等优先级**：候选**不得**按条目 `kind` 裁剪（不变量 I13）
+//  * `kind` 只影响 ① 切换提供商时的建议值（provider_mode_suggestion）② 不一致时的提示（mode_kind_hint）
+//  * 入参保留 = 单点开关（将来若产品需要收窄，只改这一处）
+std::vector<std::string> provider_mode_options(const Node& node);
+
+// 「模式」的**建议值**（按当前「提供商」条目的 `kind`；表里没有该 id / kind 未知 → 空串）
+//  * 仅供「切换提供商」时带出一次建议；**不**静默改写用户已选的值（D-21）
+std::string provider_mode_suggestion(const Node& node);
+
+// 「提供商」条目 `kind` 与「模式」不一致时的**提示文案**（空串 = 一致 / 无提示）
+//  * official 条目 + `web`   → 将使用**内置默认站点**（DeepSeek 网页版）
+//  * web 条目 + `official`   → 该条目**没有官方 API 通道**（按表内 `api_base` 解析，缺失会明确报错）
+//  * 只提示、不改写：参数面板按橙色显示；运行前校验按 note 输出（D-21 / I13）
+std::string mode_kind_hint(const EffectiveProvider& provider);
 
 // 该节点「本次运行必定失败」的原因（空串 = 未发现已知必定失败）
 //  * LLMGenerate + 生效 mode=official + 无 Key → 缺少 API Key（PB-05/PB-06）

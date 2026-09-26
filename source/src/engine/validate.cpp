@@ -133,10 +133,38 @@ bool validateBeforeRun(const Graph& graph, ValidationMessages* errors,
 
         const Param*      mode       = node.findParam("mode");
         const std::string mode_value = mode != nullptr ? mode->text() : "official";
+        // M_patchB L2 修订（PB2-20 / 决策 D-21）：按**该节点自己的条目**解析
+        //  * 此前误用 resolve_effective_provider()：它对 ProviderConfig 恒返回默认构造
+        //    → 提示里的站点永远回落内置默认（换 Kimi 条目也显示 DeepSeek）
+        const EffectiveProvider effective = resolve_display_provider(graph, node);
+
         if (mode_value == "web") {
-            notes.push_back("[" + node.id +
-                            "] 网页版模式：请确认已在参数面板完成登录（会话只存内存；推理接线见 M4）");
+            // M_patchB L1 续（PB2-17）：按**生效条目**给出提示（避免「以为在登录 A，其实在登录 DeepSeek」）
+            const ai::ProviderWebSpec site =
+                ai::web_spec_for(effective.spec, effective.specs.get());
+            const std::string site_url =
+                site.login_url.empty() ? std::string("内置默认站点（DeepSeek 网页版）") : site.login_url;
+            std::string text = "[" + node.id + "] 网页版模式：站点 " + site_url;
+            if (effective.spec != nullptr && effective.kind != "web") {
+                const std::string display =
+                    effective.display.empty() ? effective.provider : effective.display;
+                text += "（「" + display +
+                        "」不是网页版条目 → 将使用**内置默认站点**；建议把「提供商」改为网页版条目"
+                        "（如 deepseek-web），或把「模式」改回 official）";
+            }
+            text += "，请确认已在参数面板完成该站点的登录（会话只存内存，且按站点独立）";
+            notes.push_back(text);
             continue;
+        }
+
+        // ---- 网页版条目 + official（决策 D-21）：该条目没有官方 API 通道 → 明确提示 ----
+        //  （不再继续提示 API Key：避免「填了 Key 才发现地址为空」的误导）
+        {
+            const std::string kind_hint = mode_kind_hint(effective);
+            if (!kind_hint.empty()) {
+                notes.push_back("[" + node.id + "] " + kind_hint);
+                continue;
+            }
         }
 
         const Param* key       = node.findParam("api_key");

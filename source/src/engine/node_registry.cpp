@@ -317,7 +317,9 @@ void registerAllNodes()
             enum_param("provider", "提供商", provider_ids, default_provider,
                        "来自配置表 assets/providers.json；自定义条目放 ~/.brain-ai/providers.d/"),
             enum_param("mode", "模式", {"official", "web"}, "official",
-                       "official = API Key；web = 网页版（选中网页版条目时自动锁定为 web）"),
+                       "official = 官方 API（API Key）；web = 网页版（需先登录一次）。两项都可选"
+                       "（网页版与官方 API 同等优先级）；切换提供商时会带出建议值，"
+                       "与条目类型不一致时只给提示、不自动改写"),
             text_param("api_base", "API 地址", std::string(), ParamType::String, false, false,
                        "留空 = 用该提供商的默认地址（见配置表）；自定义条目请填完整前缀（含 /v1）"),
             enum_param("model", "模型", {"deepseek-chat", "deepseek-reasoner"}, "deepseek-chat",

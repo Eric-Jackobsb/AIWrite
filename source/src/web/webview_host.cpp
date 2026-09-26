@@ -37,6 +37,7 @@ constexpr int            kHotkeyExtract = 1;     // Ctrl+Alt+C：立即重新提
 constexpr int            kHotkeyClose   = 2;     // ESC：关闭窗口
 constexpr UINT           kProbeMessage  = WM_APP + 1; // 请求协议探测（可在任意线程 Post）
 constexpr UINT           kSolvePowMessage = WM_APP + 2; // 请求在页面内求解 PoW（任意线程 Post）
+constexpr UINT           kLogoutMessage   = WM_APP + 3; // 请求按站点注销（删该 origin 的 Cookie + 清 localStorage）
 // 页面加载完成后到开始协议探测的等待（给 SPA 一点就绪时间）
 constexpr DWORD kProbeDelayMs = 1500;
 
@@ -219,6 +220,14 @@ int                     g_pow_stage      = 0;   // 0=空闲 / 1=已注入（轮�
 int                     g_pow_attempt    = 0;
 DWORD                   g_pow_last_poll  = 0;
 constexpr int           kPowMaxAttempts  = 240; // 240 × 500ms ≈ 120 秒
+
+// 按站点注销（PB2-19）：跨线程同步（调用方等待，窗口线程删 Cookie + 清 localStorage）
+std::mutex              g_logout_mutex;
+std::condition_variable g_logout_cv;
+bool                    g_logout_done  = false;
+bool                    g_logout_ok    = false;
+std::string             g_logout_error;
+unsigned                g_logout_deleted = 0;
 DWORD                 g_start_tick = 0;
 DWORD                 g_last_poll  = 0;
 
@@ -283,11 +292,14 @@ void resize_webview()
     g_controller->put_Bounds(bounds);
 }
 
+// 写会话：按**站点**（origin）归档 —— 多站点互不覆盖（PB2-18）
 void write_session(const std::vector<Cookie>& cookies)
 {
     Session session;
-    session.url     = g_request.url;
-    session.cookies = cookies;
+    session.url         = g_request.url;
+    session.cookies     = cookies;
+    session.site        = site_key_of(g_request.url);
+    session.provider_id = g_request.provider_id;
     SessionStore::instance().set(std::move(session));
 }
 
@@ -418,7 +430,7 @@ void finish_protocol_probe(ProbeResult probe)
     }
 
     const bool ok = probe.ok;
-    SessionStore::instance().set_probe(std::move(probe));
+    SessionStore::instance().set_probe(std::move(probe), site_key_of(g_request.url)); // 按站点归档（PB2-18）
 
     if (g_request.auto_close_after_probe) {
         log::info("[网页版探测] 已自动收尾（关闭登录窗口）");
@@ -648,6 +660,84 @@ void poll_pow_solve()
     }
 }
 
+// ------------------------------------------------------------ 按站点注销 -----
+// PB2-19：在**窗口线程内**删除该站点 origin 的 Cookie 并清同源 localStorage / sessionStorage。
+//  * 不触碰其他站点（profile 虽共享，但 cookie / localStorage 按 origin 隔离 —— 决策 D-19 / R14）
+//  * 完成后由 logout_site() 关闭窗口并已提前清掉该站点的内存会话
+void finish_logout(bool ok, std::string error)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_logout_mutex);
+        g_logout_ok    = ok;
+        g_logout_error = std::move(error);
+        g_logout_done  = true;
+    }
+    g_logout_cv.notify_all();
+}
+
+void run_logout_in_page()
+{
+    if (g_webview == nullptr) {
+        finish_logout(false, "WebView2 尚未就绪");
+        return;
+    }
+
+    ComPtr<ICoreWebView2_2> webview2;
+    if (FAILED(g_webview.As(&webview2)) || webview2 == nullptr) {
+        finish_logout(false, "当前 WebView2 运行时过旧，不支持 CookieManager（请更新 Runtime）");
+        return;
+    }
+    ComPtr<ICoreWebView2CookieManager> manager;
+    if (FAILED(webview2->get_CookieManager(&manager)) || manager == nullptr) {
+        finish_logout(false, "获取 ICoreWebView2CookieManager 失败");
+        return;
+    }
+
+    const std::wstring target_url = to_wide(g_request.url);
+    const HRESULT      hr         = manager->GetCookies(
+        target_url.c_str(),
+        Callback<ICoreWebView2GetCookiesCompletedHandler>(
+            [manager](HRESULT result, ICoreWebView2CookieList* list) -> HRESULT {
+                UINT     count   = 0;
+                unsigned deleted = 0;
+                if (SUCCEEDED(result) && list != nullptr) {
+                    list->get_Count(&count);
+                    for (UINT i = 0; i < count; ++i) {
+                        ComPtr<ICoreWebView2Cookie> cookie;
+                        if (SUCCEEDED(list->GetValueAtIndex(i, &cookie)) && cookie != nullptr &&
+                            SUCCEEDED(manager->DeleteCookie(cookie.Get()))) {
+                            ++deleted;
+                        }
+                    }
+                }
+                g_logout_deleted = deleted;
+                log::info("[网页版注销] 站点 Cookie 删除：" + std::to_string(deleted) + " / " +
+                          std::to_string(count) + " 条（" + g_request.url + "）");
+
+                if (g_webview == nullptr) {
+                    finish_logout(true, std::string());
+                    return S_OK;
+                }
+                // 同源 localStorage / sessionStorage 一并清掉（网页版 token 就存在 localStorage）
+                const HRESULT script_hr = g_webview->ExecuteScript(
+                    L"try { localStorage.clear(); sessionStorage.clear(); } catch (e) { }",
+                    Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+                        [](HRESULT, LPCWSTR /*json*/) -> HRESULT {
+                            finish_logout(true, std::string());
+                            return S_OK;
+                        })
+                        .Get());
+                if (FAILED(script_hr)) {
+                    finish_logout(true, std::string()); // Cookie 已删；localStorage 清理失败不致命
+                }
+                return S_OK;
+            })
+            .Get());
+    if (FAILED(hr)) {
+        finish_logout(false, "调用 CookieManager->GetCookies 失败");
+    }
+}
+
 HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
 {
     if (FAILED(result) || controller == nullptr) {
@@ -807,6 +897,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         run_pow_solve_in_page();
         return 0;
 
+    case kLogoutMessage:
+        run_logout_in_page();
+        return 0;
+
     case WM_CLOSE:
         extract_cookies("窗口关闭前最后一次提取"); // 异步；紧接着销毁窗口
         ::DestroyWindow(window);
@@ -923,6 +1017,10 @@ std::string probe_kickoff_script(const LoginRequest& request)
         replace_all_token(&script, "['/api/v0/users/current', '/api/v0/chat_session/fetch_page']",
                           "[" + list + "]");
     }
+    // M_patchB L1 续（PB2-17）：取 token 表达式按站点（空 = 内置脚本原样 → 逐字一致）
+    if (!request.token_expr.empty()) {
+        replace_all_token(&script, "localStorage.getItem('userToken')", request.token_expr);
+    }
     return script;
 }
 
@@ -956,6 +1054,13 @@ bool LoginWindow::start(const LoginRequest& request, std::string* error)
     g_probe_stage      = 0;
     g_probe_attempt    = 0;
     g_window           = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_logout_mutex);
+        g_logout_done    = false;
+        g_logout_ok      = false;
+        g_logout_error.clear();
+        g_logout_deleted = 0;
+    }
 
     std::error_code ec;
     std::filesystem::create_directories(g_request.profile_dir, ec);
@@ -1090,50 +1195,101 @@ void request_protocol_probe()
     ::PostMessageW(window, kProbeMessage, 0, 0);
 }
 
+// 当前登录窗口所属站点（origin；无窗口 = 空）
+std::string current_window_site()
+{
+    if (g_window.load() == nullptr) {
+        return {};
+    }
+    return site_key_of(g_request.url);
+}
+
+bool window_on_site(const std::string& site)
+{
+    return g_window.load() != nullptr && !site.empty() && current_window_site() == site;
+}
+
+// 兼容路径（不指定站点）：改造前语义 —— 当前会话 / 内置默认站点，行为逐字不变
 bool ensure_session(int timeout_ms, std::string* error)
 {
-    // 已有凭证 → 幂等返回
+    // 已有凭证 → 幂等返回（默认槽 = 最近写入的站点）
     if (!SessionStore::instance().snapshot().user_token.empty()) {
         return true;
     }
 
-    // 【2026-09-26 修复】窗口已打开 ≠ 内存有凭证：必须按 plan_session_boot 决定“补探测 / 开窗口”，
-    //  否则（旧逻辑）只会白等到超时 → 运行时报「未取得网页版凭证」
-    const bool        window_open = g_window.load() != nullptr;
-    const SessionBoot plan        = plan_session_boot(false, window_open);
+    LoginRequest request; // 默认 = 内置默认站点（DeepSeek）
+    if (g_window.load() != nullptr && !g_request.url.empty()) {
+        // 窗口已开：沿用其站点与站点参数（原地补探测，不另开窗）
+        request.url             = g_request.url;
+        request.window_title    = g_request.window_title;
+        request.profile_dir     = g_request.profile_dir;
+        request.provider_id     = g_request.provider_id;
+        request.probe_paths     = g_request.probe_paths;
+        request.challenge_path  = g_request.challenge_path;
+        request.completion_path = g_request.completion_path;
+        request.token_expr      = g_request.token_expr;
+    }
+    return ensure_session(request, timeout_ms, error);
+}
 
-    if (plan == SessionBoot::StartAndProbe) {
+// M_patchB L1 续（PB2-17/18/19）：按**站点**确保凭证 + 窗口对齐
+//  * 窗口必须开在**目标站点**上：页面内 PoW 求解依赖该站点页面（否则会拿错站点的页面）
+//  * 站点与当前窗口不一致 → **串行复用**同一个窗口（先关旧窗再按目标站点开窗；决策 D-20）
+//  * 因此多个网页版条目可「各自登录一次、运行时各用各的凭证」（内存会话按站点键控）
+bool ensure_session(const LoginRequest& site_request, int timeout_ms, std::string* error)
+{
+    const std::string site = site_key_of(site_request.url);
+    const DWORD       deadline =
+        ::GetTickCount() + static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 30000);
+
+    bool window_ready = window_on_site(site);
+    if (!window_ready) {
+        // ---- 串行复用：目标站点 ≠ 当前窗口站点（或无窗口）→ 关旧窗 + 按目标站点开窗 ----
+        if (g_window.load() != nullptr) {
+            log::info("[网页版会话] 切换站点：" + current_window_site() + " → " + site +
+                      "（串行复用登录窗口：先关闭旧窗口）");
+            login_window().request_close();
+            login_window().join();
+        }
         // 起（或重建）离屏登录窗口；probe_after_load 会刷新 Cookie 与 userToken
-        LoginRequest request;
-        request.offscreen        = true;
+        LoginRequest request     = site_request;
+        request.offscreen        = true;   // 离屏可见窗口（完全隐藏时 WebView2 不创建控制器）
         request.timeout_seconds  = 0;
         request.probe_after_load = true;
         std::string start_error;
         if (!login_window().start(request, &start_error)) {
             if (error != nullptr) {
-                *error = "启动登录窗口失败: " + start_error;
+                *error = "启动登录窗口失败" + (site.empty() ? std::string() : "（站点 " + site + "）") +
+                         ": " + start_error;
             }
             return false;
         }
-        log::info("[网页版会话] 内存无凭证：已离屏启动登录窗口（页面加载后自动探测）");
+        log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
+                  (SessionStore::instance().has_token(site)
+                       ? " 已有凭证但窗口不在该站点：已按串行策略重新打开（页面内 PoW 求解依赖该站点页面）"
+                       : " 内存无凭证：已离屏启动登录窗口（页面加载后自动探测）"));
+    }
+    else if (SessionStore::instance().has_token(site)) {
+        return true; // 幂等：窗口与凭证都已就绪
     }
     else {
-        // 窗口已开（用户手动开的窗口不会自动探测 / 上次探测失败）→ 显式补一次探测
+        // 窗口已在该站点但没有凭证（用户手动开的窗口不会自动探测 / 上次探测失败）→ 显式补一次探测
         request_protocol_probe();
-        log::info("[网页版会话] 内存无凭证：复用已打开的登录窗口，已请求一次协议探测");
+        log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
+                  " 内存无凭证：复用已打开的登录窗口，已请求一次协议探测");
     }
 
-    const DWORD deadline   = ::GetTickCount() + static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 30000);
+    // ---- 等该站点的凭证（页面加载后自动探测 / 每 6 秒补一次）----
     const DWORD retry_ms   = 6000; // 每 6 秒补一次探测（登录动作可能发生在页面加载之后）
-    int         probes     = (plan == SessionBoot::StartAndProbe) ? 0 : 1;
+    int         probes     = window_ready ? 1 : 0;
     DWORD       next_retry = ::GetTickCount() + retry_ms;
 
     while (::GetTickCount() < deadline) {
-        if (!SessionStore::instance().snapshot().user_token.empty()) {
-            log::info("[网页版会话] 已取得内存凭证（userToken 长度 " +
-                      std::to_string(SessionStore::instance().snapshot().user_token.size()) +
-                      "，仅内存；路径=" +
-                      (plan == SessionBoot::ReuseAndProbe ? "复用已开窗口补探测" : "离屏开窗探测") + "）");
+        if (SessionStore::instance().has_token(site)) {
+            log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
+                      " 已取得内存凭证（userToken 长度 " +
+                      std::to_string(SessionStore::instance().snapshot(site).user_token.size()) +
+                      "，仅内存；路径=" + (window_ready ? "复用已开窗口补探测" : "离屏开窗探测") + "）");
             return true;
         }
         const DWORD now = ::GetTickCount();
@@ -1141,18 +1297,102 @@ bool ensure_session(int timeout_ms, std::string* error)
             ++probes;
             next_retry = now + retry_ms;
             request_protocol_probe();
-            log::info("[网页版会话] 仍未取得凭证，补一次协议探测（第 " + std::to_string(probes) +
-                      " 次；窗口" + (window_open ? "已打开" : "本次新开") + "）");
+            log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
+                      " 仍未取得凭证，补一次协议探测（第 " + std::to_string(probes) +
+                      " 次；窗口" + (window_ready ? "已打开" : "本次新开") + "）");
         }
         ::Sleep(100);
     }
 
     if (error != nullptr) {
-        *error = "未取得网页版凭证（内存里没有 userToken）"
+        *error = (site.empty() ? std::string() : "站点 " + site + " ") +
+                 "未取得网页版凭证（内存里没有 userToken）"
                  "：请在已登录的登录窗口内点「探测网页版协议（dev）」后重试，"
                  "或运行 aiwrite.exe --web-probe 确认登录态（退出码 0 = 可用）";
     }
     return false;
+}
+
+// M_patchB L1 续（PB2-19）：按**站点**注销
+//  * 清该站点的**内存会话**（立即生效，其他站点不受影响）
+//  * 删除该站点 origin 的 **Cookie** 与 **localStorage / sessionStorage**（在窗口线程内完成）
+//  * **不**删除登录 profile：删除整个 profile（= 清掉所有站点）属高级操作，由参数面板单独入口提供
+bool logout_site(const LoginRequest& site_request, int timeout_ms, std::string* error)
+{
+    const std::string site = site_key_of(site_request.url);
+
+    // 1) 先清内存会话：UI 立刻看到「未登录」，且不影响其他站点
+    SessionStore::instance().clear(site);
+
+    // 2) 窗口不在目标站点 → 按串行策略切过去（离屏，仅用于删 Cookie / localStorage）
+    if (g_window.load() != nullptr && !window_on_site(site)) {
+        log::info("[网页版会话] 按站点注销：窗口从 " + current_window_site() + " 切到 " + site);
+        login_window().request_close();
+        login_window().join();
+    }
+    if (g_window.load() == nullptr) {
+        LoginRequest request     = site_request;
+        request.offscreen        = true;
+        request.timeout_seconds  = 0;
+        request.probe_after_load = false; // 注销不需要探测
+        std::string start_error;
+        if (!login_window().start(request, &start_error)) {
+            if (error != nullptr) {
+                *error = "按站点注销需要打开该站点窗口（站点 " + site + "）：" + start_error;
+            }
+            return false;
+        }
+        // 等控制器就绪：CookieManager 需要 ICoreWebView2_2
+        const DWORD ready_deadline = ::GetTickCount() + 10000;
+        while (g_webview == nullptr && ::GetTickCount() < ready_deadline) {
+            ::Sleep(100);
+        }
+        if (g_webview == nullptr) {
+            login_window().request_close();
+            login_window().join();
+            if (error != nullptr) {
+                *error = "按站点注销：WebView2 在 10 秒内未就绪（站点 " + site + "）";
+            }
+            return false;
+        }
+    }
+
+    // 3) 窗口线程执行：删该 origin 的 Cookie + 清同源 localStorage
+    {
+        std::lock_guard<std::mutex> lock(g_logout_mutex);
+        g_logout_done    = false;
+        g_logout_ok      = false;
+        g_logout_error.clear();
+        g_logout_deleted = 0;
+    }
+    if (HWND window = g_window.load(); window != nullptr) {
+        ::PostMessageW(window, kLogoutMessage, 0, 0);
+    }
+
+    bool        ok  = false;
+    std::string why;
+    {
+        std::unique_lock<std::mutex> lock(g_logout_mutex);
+        const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 15000);
+        if (g_logout_cv.wait_for(lock, wait_ms, [] { return g_logout_done; })) {
+            ok  = g_logout_ok;
+            why = g_logout_error;
+        }
+        else {
+            why = "按站点注销超时（Cookie 删除未在时限内完成）";
+        }
+    }
+
+    // 4) 收尾：关闭窗口（该站点已登出）
+    login_window().request_close();
+    login_window().join();
+
+    if (!ok && error != nullptr) {
+        *error = why;
+    }
+    log::info("[网页版会话] 按站点注销：" + site +
+              (ok ? " 完成（内存会话 + Cookie + localStorage 已清）" : " 失败（" + why + "）"));
+    return ok;
 }
 
 long long solve_pow_via_page(const std::string& challenge_json, int timeout_ms, std::string* error)

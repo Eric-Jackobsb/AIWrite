@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -77,7 +78,15 @@ struct Config {
     Timeout  timeout;
     Error    error;
     Advanced advanced;
+    // 旧成员（兼容）：与 `providers["deepseek"]` 互为镜像（加载时同步；保存时作为 deepseek 条的权威）
     Provider deepseek;
+
+    // M_patchB L1（PB2-06）：多 provider **实例参数**（配置表条目 id → 实例参数）
+    //  * `config.toml` 的 `[providers.<id>]` 节；**厂商元数据**仍以配置表（`assets/providers.json`
+    //    + 用户覆盖层）为准，这里只存「用哪个 provider / 地址覆盖 / 默认模型 / 引用名」
+    //  * 旧文件只有 `[providers.deepseek]` 一节 → 加载时自动迁移为映射里的一条（幂等）
+    //  * 保存前自动备份 `config.toml.bak`（写失败不覆盖原文件）
+    std::map<std::string, Provider> providers;
 };
 
 // 读取配置；文件不存在时生成默认配置并落盘。返回是否成功。

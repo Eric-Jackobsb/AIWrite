@@ -265,6 +265,39 @@ const ProviderWebEndpoints& default_deepseek_web_endpoints()
     return endpoints;
 }
 
+// M_patchB L1 续（PB2-17）：生效条目 → 网页版站点参数（web 条目用自己；否则回落表内第一个 web 条目）
+ProviderWebSpec web_spec_for(const ProviderSpec* spec, const ProviderSpecs* table)
+{
+    if (spec != nullptr && spec->kind == "web") {
+        return spec->web;
+    }
+    if (table == nullptr) {
+        return ProviderWebSpec{};
+    }
+    for (const ProviderSpec& item : table->items) {
+        if (item.kind == "web") {
+            return item.web; // 内置表第一个 web 条目 = deepseek-web（保持改造前行为）
+        }
+    }
+    return ProviderWebSpec{};
+}
+
+std::string web_provider_id_for(const ProviderSpec* spec, const ProviderSpecs* table)
+{
+    if (spec != nullptr && spec->kind == "web") {
+        return spec->id;
+    }
+    if (table == nullptr) {
+        return {};
+    }
+    for (const ProviderSpec& item : table->items) {
+        if (item.kind == "web") {
+            return item.id;
+        }
+    }
+    return {};
+}
+
 const ProviderModelSpec* ProviderSpec::find_model(const std::string& model_id) const
 {
     for (const ProviderModelSpec& model : models) {
