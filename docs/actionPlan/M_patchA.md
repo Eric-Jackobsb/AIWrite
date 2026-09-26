@@ -1,6 +1,6 @@
 # M_patchA：地基补丁系列 —— 结果回流与可观测性
 
-> 类型：跨里程碑「地基补丁」（不占用 M1–M6 编号，与 `M1.md … M6.md` 平级互链）
+> 类型：跨里程碑「地基补丁」（不占用 M1–M6 编号，与 `M1.md … M6.md` 平级互链；已完成的里程碑计划见 [../Archive/actionPlan/](../Archive/actionPlan/)）
 > 依据：2026-09-23 全库底层逻辑审计（见 §1）
 > 版本目标：v0.2.x（在已收口的 M2 之上补体验地基）
 > 预计工期：全系列 5–6 天（全职）/ 12–15 天（业余）；**Patch A 单批 ≈1.2 天**
@@ -411,7 +411,7 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 | PD-04 | 窗口几何持久化 | `config.ui` 增 `window_width/height/pos_x/pos_y/maximized`；启动恢复 + 越屏矫正（多显示器拔插后回到主屏） | `utils/config.*`、`ui/app.cpp` |
 | PD-05 | 参数面板增强 | 每节点「重置为默认」；按类型批量应用参数；参数搜索过滤 | `ui/property_panel.cpp` |
 | PD-06 | 重跑能力 | ① **通用重跑**（「重跑该节点」「重跑该节点及下游」，依赖 `runInfos` 与拓扑；重跑前清除受影响节点结果与状态）→ 仍归口 `FEA-M4-11`；
-② **「重新生成（新 seed）」**（LLMGenerate）：写入新 seed 后重新运行，效果等同「再次运行但用不同 seed」，**不改图结构与其它参数** → 归口 `FEA-M4-17`，详见 [`M_rerun.md`](M_rerun.md) | 
+② **「重新生成（新 seed）」**（LLMGenerate）：写入新 seed 后重新运行，效果等同「再次运行但用不同 seed」，**不改图结构与其它参数** → 归口 `FEA-M4-17`，详见 [`M_rerun.md`](../Archive/actionPlan/M_rerun.md) | 
 `ui/property_panel.cpp`、`ui/editor_state.*`、`ui/node_canvas.cpp`、`ui/toolbar.cpp`、`engine/node_registry.cpp`、`ai/deepseek_official_provider.*` |
 | PD-07 | 输出面板进阶 | 历史运行列表（内存 + 最近 N 次）、节点内搜索、复制为 Markdown/JSON | `ui/output_panel.cpp` |
 | PD-08 | i18n 决策 | 二选一：① 最小 i18n（字符串表 + `general.language` 切换，重启生效）；② 从 `config.toml` 暂时移除 `general.language/startup` 并记入 M6（本补丁默认 ②，除非另行指定） | `utils/config.*`、文档 |

@@ -6,7 +6,7 @@
 > 技术栈：C++20 / MSVC 14.50（VS 2026）/ CMake 4.4.3 + `Visual Studio 18 2026` 生成器 / vcpkg / Dear ImGui 1.90.7 (docking) / imgui-node-editor 0.9.3 / nlohmann/json
 > 后端：DeepSeek 官方 API + 网页版逆向（不使用本地模型）
 
-> 相关文档：[CHANGELOG.md](CHANGELOG.md) ｜ [M1_技术验证报告.md](M1_技术验证报告.md) ｜ [actionPlan/](actionPlan/) ｜ [../source/README.md](../source/README.md)
+> 相关文档：[CHANGELOG.md](CHANGELOG.md) ｜ [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) ｜ [actionPlan/](actionPlan/) ｜ [../source/README.md](../source/README.md)
 
 ---
 
@@ -622,7 +622,7 @@ nlohmann::json execute(
 | LLM Generate | 读取 prompt + provider，调用后端，流式回调 |
 | VLM Generate | 同 LLM，但多了图片输入 |
 | Text Output | **最终输出**：正文作为工作流最终结果（输出面板置顶/高亮、画布摘要与参数面板标注）＋
-  **导出为文档**（参数面板/输出面板「导出为文档…」，`.md`/`.txt`，原子写、元信息头可选；见 `actionPlan/M_textio.md`） |
+  **导出为文档**（参数面板/输出面板「导出为文档…」，`.md`/`.txt`，原子写、元信息头可选；见 `Archive/actionPlan/M_textio.md`） |
 | Image Preview | 推送图片到 Output 窗口，透传 |
 
 ### 9.3 错误处理
@@ -1087,7 +1087,7 @@ void Executor::cancel() {
 
 | 里程碑 | 版本 | 标志 | 状态 |
 |---|---|---|---|
-| M1：技术验证 | v0.1 | ImGui + 节点编辑器 + API 跑通 | ✅ ImGui 与节点编辑器已跑通；API 待 Key（见 [M1_技术验证报告.md](M1_技术验证报告.md)） |
+| M1：技术验证 | v0.1 | ImGui + 节点编辑器 + API 跑通 | ✅ ImGui 与节点编辑器已跑通；API 待 Key（见 [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md)） |
 | M2：引擎跑通 | v0.2 | 能加载 JSON 工作流并执行 | ⏳ 未开始 |
 | M3：可视化编辑 | v0.3 | 能拖拽编辑工作流 | ⏳ 未开始 |
 | M4：文本生成 | v0.4 | 能生成文本 | ⏳ 未开始 |
@@ -1364,4 +1364,4 @@ int                 purge_expired_credentials(int ttl_days, std::string* error);
 - 行为：写入新的 `seed`（时间派生；**先压撤销快照**）→ 自动重新运行 → Console 打印 `[重跑] nX 新 seed=…`
 - `seed` 参数：`0` = 不指定（默认）；官方 API 随请求体发送 `seed`（后端若不支持则忽略）；**网页版协议无 seed 槽位**（忽略并提示一次）
 - 注意：本实现是「新 seed 重跑」（整图重新运行，本地上游瞬时重算）；「只重跑该节点/下游并复用上游结果」仍归口 `FEA-M4-11`
-- 详见 [`actionPlan/M_rerun.md`](actionPlan/M_rerun.md)
+- 详见 [`Archive/actionPlan/M_rerun.md`](Archive/actionPlan/M_rerun.md)

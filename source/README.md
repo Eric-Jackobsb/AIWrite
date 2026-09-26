@@ -1,7 +1,7 @@
 # AIwrite 源码工程（M1 骨架 + M2 节点系统 P1/P2）
 
-> 设计文档：`../docs/ai_writer_nodes.md`　Action Plan：`../docs/actionPlan/`（[M1](../docs/actionPlan/M1.md)、[M2](../docs/actionPlan/M2.md)…）
-> 验证报告：`../docs/M1_技术验证报告.md`　节点编辑器手册：`../docs/节点编辑器使用说明.md`
+> 设计文档：`../docs/ai_writer_nodes.md`　Action Plan：`../docs/actionPlan/`（进行中：M3–M6 + 补丁；已完成归档 → [../docs/Archive/actionPlan/](../docs/Archive/actionPlan/)）
+> 验证报告：`../docs/Archive/M1_技术验证报告.md`　节点编辑器手册：`../docs/节点编辑器使用说明.md`
 > 变更记录：`../docs/CHANGELOG.md`　文档总览：`../docs/README.md`
 > 技术栈：C++20 / MSVC 14.50（VS 2026 Insiders）/ CMake **4.4.3**（系统安装）/ VS 2026 生成器 / vcpkg / Dear ImGui 1.90.7(docking) / imgui-node-editor v0.9.3 / nativefiledialog-extended 1.3.0（overlay port）
 

@@ -15,7 +15,7 @@
                   "content": "DBG-M1-01 WebView2 Runtime 缺失时仅有日志提示与退出码 1，缺少面向用户的引导 ｜ 遗留表（M6-02/M6-08）",
                   "done": false,
                   "level": "default",
-                  "fileLink": "docs/actionPlan/M1.md"
+                  "fileLink": "docs/Archive/actionPlan/M1.md"
                 }
               }
             ],
@@ -477,7 +477,7 @@
                   "content": "FEA-M4-14 最终版预览（已完成，M_textio P3）：TextOutput 作为最终结果出口 —— 输出面板置顶+高亮【最终输出】、label 参数真正生效（分段标题/摘要/文档标题）、画布摘要前缀 ｜ actionPlan/M_textio.md",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/actionPlan/M_textio.md · P3"
+                  "fileLink": "docs/Archive/actionPlan/M_textio.md · P3"
                 }
               },
               {
@@ -488,7 +488,7 @@
                   "content": "FEA-M4-15 导出为文档（已完成，M_textio P2/P3）：utils/text_export 核心（原子写、同名自动改名、元信息头可选）+ 「导出为文档…」按钮（参数面板/输出面板/工具栏）+ --export-selftest 7/7 断言；**待人工确认**（保存对话框→文件内容逐字符一致） ｜ actionPlan/M_textio.md",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/actionPlan/M_textio.md · P2/P3"
+                  "fileLink": "docs/Archive/actionPlan/M_textio.md · P2/P3"
                 }
               },
               {
@@ -499,7 +499,7 @@
                   "content": "FEA-M4-16 汇点节点结果入运行态 + TextOutput 导出路径可配置（已完成，M_textio P5）：虚拟端口 __result（修真 bug：连接线结果读不到）+ export_dir/file_name/auto_export 参数 + 汇点断言",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/actionPlan/M_textio.md · P5"
+                  "fileLink": "docs/Archive/actionPlan/M_textio.md · P5"
                 }
               },
               {
@@ -510,7 +510,7 @@
                   "content": "FEA-M4-17 文本生成「重新生成（新 seed）」（已完成）：seed 参数 + 参数面板按钮（压快照→写新 seed→异步运行）；官方 API 请求带 seed、网页版忽略并提示；离线断言 3 条 OK ｜ actionPlan/M_rerun.md",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/actionPlan/M_rerun.md"
+                  "fileLink": "docs/Archive/actionPlan/M_rerun.md"
                 }
               },
               {
@@ -521,7 +521,7 @@
                   "content": "FEA-M4-18 修复崩溃：参数滑块范围越界（ImGui SliderInt 断言，seed 0..2147483647 → 选中节点即 abort）—— 面板降级 InputInt+裁剪 + seed 范围 0..1e9 + 断言「参数范围安全」 ｜ actionPlan/M_rerun.md §6",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/actionPlan/M_rerun.md · §6"
+                  "fileLink": "docs/Archive/actionPlan/M_rerun.md · §6"
                 }
               },
               {
@@ -708,7 +708,7 @@
                   "content": "TST-M1-01 设置 DEEPSEEK_API_KEY 后跑 api_probe --chat 实测官方 API 生成，取证 M1 V-06 / A-06 ｜ 验收表 A-06；source/README.md",
                   "done": false,
                   "level": "default",
-                  "fileLink": "docs/actionPlan/M1.md"
+                  "fileLink": "docs/Archive/actionPlan/M1.md"
                 }
               },
               {
@@ -928,7 +928,7 @@
                   "content": "DOC-M1-01 V-06/A-06 取证后更新 M1.md 验收表与遗留登记表（保持与代码一致）",
                   "done": false,
                   "level": "default",
-                  "fileLink": "docs/actionPlan/M1.md"
+                  "fileLink": "docs/Archive/actionPlan/M1.md"
                 }
               }
             ],
@@ -1082,7 +1082,7 @@
                   "content": "ARC-M1-01 M1-01…07 全部落地；V-01…V-05 / V-07 / V-08 通过；--login-selftest PASS（Cookie 5 条）",
                   "done": true,
                   "level": "secondary",
-                  "fileLink": "docs/actionPlan/M1.md；docs/M1_技术验证报告.md"
+                  "fileLink": "docs/Archive/actionPlan/M1.md；docs/Archive/M1_技术验证报告.md"
                 }
               }
             ],
@@ -1104,7 +1104,7 @@
                   "content": "ARC-M2-01 M2-01…07 全绿：数据结构/注册表/拓扑/执行器/序列化/三级校验/撤销重做",
                   "done": true,
                   "level": "secondary",
-                  "fileLink": "docs/actionPlan/M2.md"
+                  "fileLink": "docs/Archive/actionPlan/M2.md"
                 }
               },
               {
@@ -1115,7 +1115,7 @@
                   "content": "ARC-M2-02 P3-3 运行按钮接线（▶/■ + 状态栏进度 + Console）与 P3-4 workflow.log、P3-6 工作流打开保存 + recent.json ｜ 实施进度表",
                   "done": true,
                   "level": "secondary",
-                  "fileLink": "docs/actionPlan/M2.md"
+                  "fileLink": "docs/Archive/actionPlan/M2.md"
                 }
               },
               {
@@ -1302,7 +1302,7 @@
                   "content": "ARC-M3-14 M_textio：文本输出双职能 —— 最终输出预览（置顶/高亮/label 生效）+ 导出为文档（utils/text_export 原子写 + 三处入口 + 7 条离线断言 7/7）",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/actionPlan/M_textio.md"
+                  "fileLink": "docs/Archive/actionPlan/M_textio.md"
                 }
               },
               {
@@ -1313,7 +1313,7 @@
                   "content": "ARC-M3-15 M_rerun：文本生成「重新生成（新 seed）」—— seed 参数 + 请求体透传 + 参数面板按钮（可撤销）；文档先行（M_rerun.md + PD-06 扩写）；离线断言 OK",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/actionPlan/M_rerun.md"
+                  "fileLink": "docs/Archive/actionPlan/M_rerun.md"
                 }
               },
               {
@@ -1324,7 +1324,7 @@
                   "content": "ARC-M3-16 崩溃修复：参数范围越界（SliderInt half-range）→ 面板降级 + seed 收窄 + 注册表范围断言",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/actionPlan/M_rerun.md · §6"
+                  "fileLink": "docs/Archive/actionPlan/M_rerun.md · §6"
                 }
               },
               {
@@ -1444,39 +1444,26 @@
       }
     ],
     "expandKeys": [
-      1,
       2,
       4,
       6,
       12,
       14,
       17,
-      18,
-      22,
-      28,
-      41,
-      46,
-      54,
-      55,
-      58,
-      62,
-      65,
-      69,
       71,
-      74,
       75,
       77,
       79,
       81,
       83,
       85,
-      88,
       89,
       91,
       95,
       98,
       102,
-      104
+      104,
+      46
     ],
     "add_mode": "bottom",
     "virtual": false,
@@ -1488,6 +1475,6 @@
     "simpleMode": false,
     "lang": "en",
     "desc": "**当前基线**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS\n- graph_selftest: 95 通过 / 0 失败\n- exec_selftest: 72 通过 / 0 失败（执行器 + 运行信息 + 归档）\n- run_selftest: PASS（离线 3/5，失败 1 为预期）\n- run_selftest_web: PASS（5/5，约 6–9 s，含 PC-05 归档断言）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n\n**主要风险**\n- 生成期间 UI 同步阻塞、取消无法中断（Patch B 解决）\n- 网页版 PoW 依赖官方 worker chunk，前端发版变化需回归\n- 复制/粘贴仍暂停（画布坐标根因待修）\n- 未接配置字段仍无效果（PA-08 / PD-03）",
-    "version": "1790319222082"
+    "version": "1790355242931"
   }
 }
