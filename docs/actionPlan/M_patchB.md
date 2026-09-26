@@ -261,7 +261,7 @@ nodes/local_nodes.cpp ──if(mode=="web")──► ai::web_chat()      ← Dee
 
 ## §3 任务分解
 
-### L1 —— JSON 配置表（数据驱动 + 用户可自定义）
+### L1 —— JSON 配置表（**API 与网页版同表同机制** + 用户可自定义）
 
 #### PB2-01 新增 `ai/provider_spec.{h,cpp}`：配置表加载 / 合并 / 校验（**纯函数**）
 
@@ -381,7 +381,7 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 - **改动**：`Config::Provider` 保留（兼容旧文件）；新增 `std::map<std::string, Provider> providers`；读写 `[providers.<id>]`；加载时**旧单节自动迁移**（`deepseek` 节原样搬家）；写盘前备份 `config.toml.bak`。
 - **验收**：`VB2-06`（往返读写 / 旧配置迁移幂等 / 迁移失败不覆盖原文件）
 
-#### PB2-07 「测试连接」+ `--provider-selftest`（含**配置表校验**）
+#### PB2-07 「测试连接」+ `--provider-selftest`（表校验 + **API 与网页版两条路径**）
 
 - **CLI**：`aiwrite.exe --provider-selftest [--provider <id>] [--api-base <url>] [--model <名>] [--key-ref <ref>] [--image <路径>] [--timeout N]`
   - **开关复用**：`--api-base / --model / --key-ref / --image / --timeout` **已存在**（`--vlm-selftest`、`--web-probe`、`--login-selftest` 在用）；本项**只新增** `--provider` 与 `--provider-selftest`
@@ -393,7 +393,7 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 - **UI**：参数面板「测试连接」按钮（异步、不阻塞界面；结果进 Console + 状态栏）
 - **验收**：`VB2-07`（无 Key 退出码 2 且离线断言全 PASS；坏表场景下报错文案可操作）
 
-### L2 —— 接口 + 工厂（落地设计 §8.1 / PB-04）
+### L2 —— 协议 / 适配器实现（工厂按表分派；落地设计 §8.1 / PB-04）
 
 #### PB2-08 新增 `ai/inference_provider.h`（接口 + 值类型）
 
