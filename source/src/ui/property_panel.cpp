@@ -305,9 +305,13 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
     }
 
     ImGui::Spacing();
-    if (ImGui::Button("探测网页版协议（dev）", ImVec2(-FLT_MIN, 0.0f))) {
+    // L4（PB2-28 / I16）：协议探测只对**内置协议站点**适用；DOM 站点改跑**只读诊断**
+    const bool probe_applicable = ai::probe_is_applicable(ctx.site);
+    if (ImGui::Button(probe_applicable ? "探测网页版协议（dev）"
+                                       : "只读诊断（该站点不适用协议探测）",
+                      ImVec2(-FLT_MIN, 0.0f))) {
         if (web::window_on_site(ctx.site_key)) {
-            web::request_protocol_probe(); // 窗口已开在该站点：直接在当前页面里探测
+            web::request_protocol_probe(); // 窗口已开在该站点：直接在当前页面里探测 / 诊断
         }
         else {
             if (window.running()) {
@@ -319,11 +323,21 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
                 log::warn("启动探测窗口失败: " + error);
             }
         }
-        log::info("已触发网页版协议探测（站点 " + ctx.login_url + "；结果写入 Console 与 app.log）");
+        log::info(probe_applicable
+                      ? ("已触发网页版协议探测（站点 " + ctx.login_url + "；结果写入 Console 与 app.log）")
+                      : ("已触发只读诊断（站点 " + ctx.login_url +
+                         "；该站点不适用协议探测：只读页面信息，不请求端点、不读 userToken）"));
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("在已登录页面内读取 userToken 并请求 PoW 挑战（同源，绕过跨域与反爬）；\n"
-                          "Token 只以脱敏形式记录");
+        if (probe_applicable) {
+            ImGui::SetTooltip("在已登录页面内读取 userToken 并请求 PoW 挑战（同源，绕过跨域与反爬）；\n"
+                              "Token 只以脱敏形式记录");
+        }
+        else {
+            ImGui::SetTooltip("该条目不是内置协议站点（无 PoW / 站点端点）：只读检查页面 URL / 标题 /\n"
+                              "localStorage 键名 / Cookie 名 / 输入框候选数 —— **不**请求任何站点端点，\n"
+                              "也**不**读取 userToken；登录态由该站点 Cookie 判定。");
+        }
     }
 
     if (verdict.state == ai::WebSessionState::logged_in) {

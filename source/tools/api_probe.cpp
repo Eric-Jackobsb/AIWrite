@@ -39,6 +39,7 @@
 #include "ai/deepseek_official_provider.h" // M5-02：多模态请求体断言
 #include "ai/provider_spec.h"              // M_patchB L1：Provider 配置表断言
 #include "ai/dom_web_client.h"             // L3（PB2-13/15）：DOM 适配器纯函数断言（VB2-22）
+#include "web/webview_host.h"              // L4（PB2-28）：探测脚本适用性断言（VB2-25）
 
 #include <fstream>
 #include <sstream>
@@ -2647,6 +2648,50 @@ int execution_selftest()
                        kimi_verdict.reason.find("/api/v0/") == std::string::npos &&
                        ds_verdict.reason.find("/api/v0/") == std::string::npos,
                    "VB2-26③ 会话结论文案只描述**站点无关**原因（Cookie / 页面），无 DeepSeek 专有名词");
+        }
+
+        // ---- VB2-25：协议探测适用性（纯函数 + 脚本分支；PB2-28 / 不变量 I16）----
+        {
+            const aiwrite::ai::ProviderSpecs  table        = aiwrite::ai::load_provider_specs();
+            const aiwrite::ai::ProviderSpec*  deepseek_web = table.find("deepseek-web");
+            const aiwrite::ai::ProviderSpec*  kimi_web     = table.find("kimi-web");
+
+            aiwrite::ai::ProviderWebSpec custom_dom; // 自建 dom 条目：无任何探测字段
+            custom_dom.adapter   = "dom";
+            custom_dom.login_url = "https://site.example.com/";
+            aiwrite::ai::ProviderWebSpec dom_with_paths = custom_dom;
+            dom_with_paths.probe_paths                   = {"/api/mine/me"};
+            aiwrite::ai::ProviderWebSpec dom_with_token = custom_dom;
+            dom_with_token.token_expr                   = "localStorage.getItem('myToken')";
+
+            expect(check, aiwrite::ai::probe_is_applicable(deepseek_web),
+                   "VB2-25① 内置协议站点（deepseek-web）→ 协议探测**适用**");
+            expect(check, kimi_web != nullptr && !aiwrite::ai::probe_is_applicable(kimi_web),
+                   "VB2-25② DOM 站点（kimi-web）→ 协议探测**不适用**（I16）");
+            expect(check,
+                   !aiwrite::ai::probe_is_applicable(custom_dom) &&
+                       aiwrite::ai::probe_is_applicable(dom_with_paths) &&
+                       aiwrite::ai::probe_is_applicable(dom_with_token),
+                   "VB2-25③ 自建 dom 条目：无探测字段 → 不适用；显式配 probe_paths / token_expr → 适用");
+
+            const aiwrite::web::LoginRequest builtin_request; // 默认 = 无参 / CLI 路径
+            const std::string builtin_script = aiwrite::web::probe_kickoff_script(builtin_request);
+            expect(check,
+                   builtin_request.probe_applicable &&
+                       builtin_script.find("/api/v0/chat/create_pow_challenge") != std::string::npos &&
+                       builtin_script.find("localStorage.getItem('userToken')") != std::string::npos,
+                   "VB2-25④ 默认参数 → 脚本仍是内置 DeepSeek 行为（probe_applicable 默认 true；守 I2）");
+
+            aiwrite::web::LoginRequest readonly_request;
+            readonly_request.probe_applicable = false;
+            const std::string readonly_script =
+                aiwrite::web::probe_kickoff_script(readonly_request);
+            expect(check,
+                   readonly_script.find("/api/v0/") == std::string::npos &&
+                       readonly_script.find("localStorage.getItem('userToken')") == std::string::npos &&
+                       readonly_script.find("location.href") != std::string::npos &&
+                       readonly_script.find("document.cookie") != std::string::npos,
+                   "VB2-25⑤ 不适用分支脚本**不含** `/api/v0/` 与 `localStorage.getItem('userToken')`（只读诊断；I16）");
         }
     }
 

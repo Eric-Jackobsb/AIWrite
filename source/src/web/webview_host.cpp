@@ -125,6 +125,38 @@ constexpr const char* kSolvePowPollScript = R"JS(
 })();
 )JS";
 
+// ---- M_patchB L4（PB2-28 / 不变量 I16）：**协议探测不适用**站点的只读诊断脚本 ----
+//  * 用于 `adapter=dom` 等**不产生 DeepSeek 协议**的站点：探测按钮 / `--web-probe` 改走本脚本
+//  * **绝不**请求任何站点端点（脚本内不出现 `/api/v0/`）、**绝不**读取 localStorage 的**值**
+//    （只读键名，故不出现 `localStorage.getItem('userToken')`）
+//  * 输出结构与内置探测脚本**完全一致**（`window.__aiwriteProbe.data` 的 JSON 字段同名），
+//    故 `poll_protocol_probe()` 的解析逻辑**无需改动**
+constexpr const char* kProbeKickoffScriptReadOnly = R"JS(
+(function () {
+  window.__aiwriteProbe = { done: false, data: '' };
+  const out = { keys: '', hasUserToken: false, userTokenMasked: '', settingsJwtMasked: '', tokenRaw: '', challenge: '', endpoints: '', error: '' };
+  try {
+    const lines = [];
+    lines.push('URL: ' + location.href);
+    lines.push('标题: ' + (document.title || '(空)'));
+    const lsKeys = Object.keys(localStorage);          // 只读**键名**，不读取任何值
+    out.keys = lsKeys.join(',');
+    lines.push('localStorage 键数: ' + lsKeys.length + '（只读键名，不读值）');
+    const cookieNames = (document.cookie || '').split(';')
+        .map(function (p) { return p.split('=')[0].trim(); })
+        .filter(function (n) { return n.length > 0; });
+    lines.push('Cookie 名数: ' + cookieNames.length + '（' + cookieNames.slice(0, 12).join(',') + '）');
+    lines.push('输入框候选数: ' + document.querySelectorAll("input, textarea, [contenteditable='true']").length +
+               '（input / textarea / contenteditable）');
+    lines.push('按钮候选数: ' + document.querySelectorAll('button, [role="button"]').length);
+    out.endpoints = lines.join(' || ');
+  } catch (e) { out.error = 'readonly:' + e; }
+  window.__aiwriteProbe.data = JSON.stringify(out);
+  window.__aiwriteProbe.done = true;
+  return 'started';
+})();
+)JS";
+
 // 协议探测脚本（在**已登录页面内**执行：同源 fetch，可绕过跨域/反爬）
 //  两段式：kickoff 注入异步任务并把结果写到 window.__aiwriteProbe；poll 轮询取回
 //  （不用 ExecuteScript 的 Promise 等待：部分运行时不会 await，会拿到空的 {}）
@@ -1059,6 +1091,13 @@ int run_login_window(const LoginRequest& request)
 //  * 不传站点参数时，渲染结果与改造前的常量脚本逐字一致（行为不变）
 std::string probe_kickoff_script(const LoginRequest& request)
 {
+    // ---- M_patchB L4（PB2-28 / 不变量 I16）：**不适用**协议探测的站点 → 只读诊断脚本 ----
+    //  * 不请求任何站点端点（无 `/api/v0/*`）、不读取 localStorage 的值（含 `userToken`）
+    //  * `probe_applicable` 默认 true → 无参 / CLI（`--web-probe`、`--web-chat`、`--login-selftest`）
+    //    与内置站点路径**逐字不变**（守 I2）
+    if (!request.probe_applicable) {
+        return std::string(kProbeKickoffScriptReadOnly);
+    }
     std::string       script(kProbeKickoffScript);
     const std::string challenge =
         request.challenge_path.empty() ? std::string("/api/v0/chat/create_pow_challenge")
@@ -1649,8 +1688,8 @@ long long solve_pow_via_page(const std::string& site_url, const std::string& cha
 }
 
 // PB2-23：探测主体抽出，供「默认站点」与「按条目」两个入口共用（行为逐字一致）
-static int protocol_probe_with(const LoginRequest& base_request, const std::string& site_label,
-                               int timeout_seconds)
+static int protocol_probe_with(const LoginRequest& base_request, const ai::ProviderSpec* spec,
+                               const std::string& site_label, int timeout_seconds)
 {
     attach_parent_console();
 
@@ -1663,8 +1702,15 @@ static int protocol_probe_with(const LoginRequest& base_request, const std::stri
     LoginRequest request            = base_request;
     request.offscreen              = true;
     request.timeout_seconds        = timeout;
-    request.probe_after_load       = true; // 页面加载完成后自动探测
+    request.probe_after_load       = true; // 页面加载完成后自动执行（适用 → 协议探测；不适用 → 只读诊断）
     request.auto_close_after_probe = true; // 探测完成即关窗退出
+
+    // L4（PB2-28 / 不变量 I16）：**不适用**协议探测的站点（如 DOM）→ 说明清楚，不再打印「未取得凭证」
+    if (!request.probe_applicable) {
+        std::printf("[网页版探测] 协议探测：**不适用**（该站点不是内置协议站点）—— 改跑**只读诊断**：\n"
+                    "             URL / 标题 / localStorage 键名与个数 / Cookie 名与个数 / 输入框与按钮候选数；\n"
+                    "             **不**请求任何站点端点，**不**读取 localStorage 的值（含 userToken）\n");
+    }
 
     LoginWindow window;
     std::string error;
@@ -1675,7 +1721,35 @@ static int protocol_probe_with(const LoginRequest& base_request, const std::stri
     window.join();
 
     const Session      session = SessionStore::instance().snapshot();
+    const Session      site_session = SessionStore::instance().snapshot(site_key_of(request.url));
     const ProbeResult& probe   = session.probe;
+
+    // ---- L4（PB2-28 / I16）：不适用站点 → 只读诊断输出 + **站点无关**登录态结论 ----
+    if (!request.probe_applicable) {
+        std::printf("\n===== 网页版只读诊断（脱敏；该站点不适用协议探测）=====\n");
+        std::printf("诊断            : %s\n", probe.endpoints_report.c_str());
+        std::printf("localStorage 键 : %s\n", probe.local_storage_keys.c_str());
+        std::printf("错误            : %s\n", probe.error.c_str());
+
+        const ai::WebSessionVerdict verdict =
+            ai::web_session_state(spec, web_session_evidence(site_session));
+        std::printf("站点            : %s\n", request.url.c_str());
+        std::printf("登录态          : %s（Cookie %zu 条）\n",
+                    ai::web_session_state_label(verdict.state).c_str(), site_session.cookies.size());
+        std::printf("判据            : %s\n", verdict.reason.c_str());
+        std::printf("================================================\n");
+        if (verdict.state != ai::WebSessionState::logged_in) {
+            std::printf("[网页版探测] 提示：该站点未登录 → 请点界面参数面板的「打开登录窗口」**手动登录**；\n"
+                        "             该站点不适用协议探测，登录后**无需**再点「探测网页版协议」\n");
+        }
+        log::info("[网页版探测] 只读诊断结束（不适用协议探测）：" + verdict.reason);
+
+        SessionStore::instance().clear(site_key_of(request.url)); // 自检不留会话
+        if (!probe.ok) {
+            return 1; // 诊断脚本本身失败（页面没加载 / WebView2 异常）
+        }
+        return verdict.state == ai::WebSessionState::logged_in ? 0 : 2; // 2 = 未登录 / 未确认
+    }
 
     std::printf("\n===== 网页版协议探测（脱敏）=====\n");
     std::printf("localStorage 键 : %s\n", probe.local_storage_keys.c_str());
@@ -1702,7 +1776,7 @@ static int protocol_probe_with(const LoginRequest& base_request, const std::stri
 // PB2-23：「默认站点」入口（旧行为，逐字不变 —— 守 I2）
 int protocol_probe(int timeout_seconds)
 {
-    return protocol_probe_with(LoginRequest{}, std::string(), timeout_seconds);
+    return protocol_probe_with(LoginRequest{}, nullptr, std::string(), timeout_seconds);
 }
 
 // PB2-23：「按条目」入口 —— 严格解析站点（**不**回落）；不可用 → 打印原因 + 返回 2（不开窗、不发请求）
@@ -1728,7 +1802,8 @@ int protocol_probe_for_provider(const std::string& provider_id, int timeout_seco
                     "—— 登录 / 探测可用，**生成**会明确报错（L3 PB2-13…16）\n",
                     site.adapter.c_str());
     }
-    return protocol_probe_with(request, request.url, timeout_seconds);
+    // L4（PB2-28）：不适用协议探测的站点 → 只读诊断 + 登录态结论（不再打印「未取得凭证」）
+    return protocol_probe_with(request, spec, request.url, timeout_seconds);
 }
 
 void stop_login_window()
