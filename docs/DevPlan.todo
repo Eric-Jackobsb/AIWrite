@@ -831,11 +831,22 @@
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchB.md"
                 }
+              },
+              {
+                "key": 160,
+                "children": [],
+                "todo": {
+                  "id": 160,
+                  "content": "FEA-M_patchB-31 提供商下拉「合并显示」（**仅 ImGui 层**，v16）：21 条表项 → 16 个下拉项 —— 同名后缀配对（deepseek↔deepseek-web、gemini↔gemini-web）+ 品牌别名（openai↔chatgpt-web、anthropic↔claude-web、zhipu↔chatglm-web）+ 无孪生 web 条目显示名去 -web 后缀（kimi/tongyi/qwen/doubao/yuanbao/ernie/spark）；选中后写入当前模式对应的**真实 id** + 切换「模式」自动配对 provider + 合并结果诊断日志。业务代码（ai/engine/nodes/web）与配置表**零改动** ｜ §3 PB2-24 · M_patchB §9.11 ｜ ✅ 用户界面验证通过（2026-09-27）：构建 0 error / 0 warning、--provider-selftest 50/0、--exec-selftest 237/0、--graph-selftest 111/0",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchB.md"
+                }
               }
             ],
             "todo": {
               "id": 157,
-              "content": "Patch B · L4 登录层去 DeepSeek 化 + 站点数据（2 项）",
+              "content": "Patch B · L4 登录层去 DeepSeek 化 + 站点数据（3 项）",
               "done": false,
               "level": "secondary"
             }
@@ -1776,7 +1787,8 @@
       132,
       136,
       139,
-      157
+      157,
+      160
 
 
     ],

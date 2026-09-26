@@ -91,6 +91,7 @@
   - 合并结果变化时打印一次诊断：`[提供商标] 下拉合并结果（界面层）：…`
 - **关键性质**：写进节点的 id 永远是**配置表里真实存在的 id** → 生效解析 / 网页版会话键控 / `--provider-*` 自检 / 工作流 JSON / `--run-selftest --web --provider <id>` 全部无需改动。
 - **结果**：21 条表项 → **16 个下拉项**；实测构建 **0 error / 0 warning**、`--provider-selftest` **50/0**、`--exec-selftest` 237/0、`--graph-selftest` 111/0。
+- **✅ 完成（用户界面验证通过 · 2026-09-27）**：下拉无 `-web` 重复项、合并行为与上方表格一致 → 本项标记完成（DevPlan 任务 **160** `done: true`）。
 
 **特性（M_patchB L1 收口）：网页版站点身份按「生效条目」+ 多站点会话并存 + `config.toml` 多 provider**
 
