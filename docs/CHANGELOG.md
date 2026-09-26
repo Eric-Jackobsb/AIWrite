@@ -21,6 +21,27 @@
 
 ## [Unreleased] — M5 核心切片（M5-C）图片理解链路 + 图片显示 已落地
 
+**修复（M_patchB L4 / `B2-e` 第一批 `PB2-27`）：登录/会话层去 DeepSeek 化 —— 站点无关判据 + 文案**
+
+- **问题（用户实测）**：选任一非 DeepSeek 网页版条目 → 面板恒显示「该站点无法自动探测凭证」「userToken：未获取（请先登录）」，
+  点运行空等 15/25 秒后报「未取得网页版凭证（内存里没有 userToken）」→ 用户读作「所有 AI 都无法登录」。
+  根因：登录态判据是 DeepSeek 专有物（`SessionStore::has_token()` = `user_token` 非空）→ 通用站点恒 false。
+- **新增纯函数（`ai/provider_spec.{h,cpp}`）**
+  - `web_session_state(spec, evidence)` → `{unknown / logged_in / logged_out}` + **站点无关**原因串；
+    判据 = 条目 `cookie_names` 命中 **∪** 该 origin Cookie 非空（决策 `D-27`）；**不看** `userToken` / `ds_session_id` / `/api/v0/*`（不变量 `I15`）
+  - `probe_is_applicable(web/spec)`：内置适配器适用；`dom` 站点仅在显式配了 `probe_paths` / `token_expr` 时适用，否则**不适用**（不变量 `I16`）
+  - `web_shows_user_token(spec)`：`userToken` 行**仅当**条目配了 `token_expr` 才显示（`D-28` ①）
+- **`web/session_store.{h,cpp}`**：`web_session_evidence(session)`（Cookie 维度证据；`cookies_known` = 该站点写过会话快照）
+- **`web/webview_host.{h,cpp}`**：`LoginRequest.probe_applicable`（默认 `true` → CLI / 无参路径**逐字不变**，守 `I2`）；
+  `ensure_session()` 对 DOM 站点改判**该 origin 有没有 Cookie**（不再空等 `userToken`），且不触发协议探测，超时文案站点无关；
+  **删除 `kDefaultCookieName`**（`web/**` 不再出现 `ds_session_id`）
+- **界面（`ui/property_panel.cpp` / `ui/app.cpp`）**：状态行 → 「已登录（该站点，Cookie N 条）」/「未登录（该站点）」/「未确认（该站点）」+ 原因 + 引导；
+  `userToken` 行按 `D-28` ① 渲染；「探测错误」红字只对**适用**站点显示；状态栏按**生效条目自己的站点键**判状态；`ui/**` 零 `ds_session_id`
+- **文案（`ai/provider_spec.cpp`）**：字段警告「无法自动探测凭证」→「**协议探测不适用**（DOM 站点…）」；加载报告 →「登录可用；协议探测：不适用（DOM 站点）」
+- **断言/回归**：`api_probe --exec-selftest` **219 → 227 通过 / 0 失败**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）；
+  `--graph-selftest` **111/0**；`--provider-selftest` **50/0**；构建 **0 error / 0 warning**；`grep ds_session_id`（`ui/**`+`web/**`）零命中
+- **仍未做**：`PB2-28`（探测只读诊断分支 + CLI 判据 + 会话失效识别）、`PB2-29`（11 站选择器逐站实测回填）、`PB2-30`（`--run-selftest --web --provider <id>` + 面板「测试选择器」+ `PB2-24` 自助闭环）
+
 **特性（M_patchB L1 收口）：网页版站点身份按「生效条目」+ 多站点会话并存 + `config.toml` 多 provider**
 
 - **`PB2-05` 补完 = `PB2-17` 网页版登录入口去硬编码（不变量 I11）**

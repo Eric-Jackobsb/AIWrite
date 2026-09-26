@@ -815,7 +815,7 @@
                 "children": [],
                 "todo": {
                   "id": 156,
-                  "content": "FEA-M_patchB-27…28 L4 登录/会话层去 DeepSeek 化：站点无关「已登录」判定（web_session_state() 纯函数）+ 面板/状态栏文案与渲染条件（userToken 行仅当配了 token_expr）+ 探测「不适用」语义（只读诊断分支，不注入 DeepSeek 端点）+ 会话失效识别 ｜ §3 PB2-27/PB2-28 · 不变量 I15/I16 · 验证 VB2-24…VB2-26 · 验收 AB2-20",
+                  "content": "FEA-M_patchB-27…28 L4 登录/会话层去 DeepSeek 化：站点无关「已登录」判定（web_session_state() 纯函数）+ 面板/状态栏文案与渲染条件（userToken 行仅当配了 token_expr）+ 探测「不适用」语义（只读诊断分支，不注入 DeepSeek 端点）+ 会话失效识别 ｜ §3 PB2-27/PB2-28 · 不变量 I15/I16 · 验证 VB2-24…VB2-26 · 验收 AB2-20 ｜ 进度：PB2-27 ✅ 已落地（v13 · 2026-09-27；exec-selftest 219→227/0，VB2-24·VB2-26 全 PASS）；PB2-28 待做",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchB.md"
