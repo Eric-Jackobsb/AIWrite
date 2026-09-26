@@ -141,7 +141,8 @@ constexpr const char* kProbeScript = R"JS(
 //  * 纯只读：不写入、不发送、不读取任何值（与 `kProbeScript` 同族）
 constexpr const char* kDiscoverScript = R"JS(
 (function () {
-  const out = { url: location.href, title: document.title || '', inputs: [], sends: [], answers: [] };
+  const out = { url: location.href, title: document.title || '', inputs: [], sends: [], answers: [],
+                cookies: [], keys: '', input_candidates: 0 };
   const visible = function (el) {
     try { const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; } catch (e) { return false; }
   };
@@ -162,12 +163,17 @@ constexpr const char* kDiscoverScript = R"JS(
   };
   const push = function (list, el, limit) { if (list.length < limit) { list.push(desc(el)); } };
   try {
-    document.querySelectorAll('textarea, input[type="text"], input[type="search"], input:not([type]), [contenteditable="true"], [contenteditable=""], [role="textbox"]')
-      .forEach(function (el) { push(out.inputs, el, 14); });
+    const inputs = document.querySelectorAll('textarea, input[type="text"], input[type="search"], input:not([type]), [contenteditable="true"], [contenteditable=""], [role="textbox"]');
+    out.input_candidates = inputs.length;
+    inputs.forEach(function (el) { push(out.inputs, el, 14); });
     document.querySelectorAll('button, [role="button"], [type="submit"], a[class*="send"], [class*="send"]')
       .forEach(function (el) { push(out.sends, el, 14); });
     document.querySelectorAll('[class*="markdown"], [class*="message"], [class*="answer"], [class*="chat-content"], [class*="response"], article, [role="listitem"]')
       .forEach(function (el) { push(out.answers, el, 14); });
+    out.cookies = (document.cookie || '').split(';')
+      .map(function (p) { return p.split('=')[0].trim(); })
+      .filter(function (n) { return n.length > 0; });
+    try { out.keys = Object.keys(localStorage).slice(0, 40).join(','); } catch (e) { out.keys = ''; }
   } catch (e) { out.error = (e && e.message) ? e.message : String(e); }
   return JSON.stringify(out);
 })();
@@ -460,6 +466,25 @@ int dom_selector_dump(const std::string& provider_id, int timeout_ms)
     }
     std::printf("\nURL      : %s\n", root.value("url", std::string("?")).c_str());
     std::printf("标题     : %s\n", root.value("title", std::string("?")).c_str());
+    {
+        // 页面 Cookie 名（**只读名**，不含值）+ localStorage 键名（截断）—— 用于后续补 cookie_names
+        const nlohmann::json cookies =
+            root.contains("cookies") ? root["cookies"] : nlohmann::json::array();
+        std::string names;
+        for (const nlohmann::json& item : cookies) {
+            if (!item.is_string()) {
+                continue;
+            }
+            if (!names.empty()) {
+                names += ",";
+            }
+            names += item.get<std::string>();
+        }
+        std::printf("页面 Cookie 名（%zu）: %s\n", cookies.size(),
+                    names.empty() ? "(无 / HttpOnly 不可见)" : names.c_str());
+        const std::string keys = root.value("keys", std::string());
+        std::printf("localStorage 键: %s\n", keys.empty() ? "(空)" : keys.c_str());
+    }
     std::fflush(stdout); // 排障：确认已解析并回显页面信息
     const auto dump_list = [&](const char* title, const char* key, const char* field) {
         const nlohmann::json list = root.contains(key) ? root[key] : nlohmann::json::array();
