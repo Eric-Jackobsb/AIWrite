@@ -4,12 +4,14 @@
 > 依据：2026-09-26 全库 provider / 推理链路审计（见 §1，逐条附**文件:行号**证据）
 > 上游登记：本补丁是 [M_patchA.md](M_patchA.md) §4.1 **`PB-04` Provider 统一抽象**（`FEA-M4-04`）的**展开落地计划**；§12 决策 **D-06/D-07** 已确定「视觉模型走智谱、实现按 OpenAI 兼容规范」
 > 用户目标（原话）：**「现在的 provider 是否已经模块化？我想设置任何 AI 的 web 或者 API 都能很容易实现？」**
-> 用户补充指示（2026-09-26，**已确认，本文档已按此改写**）：**「使用配置表，而不是写进硬编码，并且允许用户自己配置。存储一个 json 用来管理配置表」**
-> 现状结论（一句话）：**OpenAI 兼容的 API 已经「能配出来」（零代码），但架构层未模块化；厂商元数据全部硬编码在 C++ 里，非兼容协议（Anthropic / Gemini / Azure）与「任意 AI 的网页版」都必须改源码。**
-> 核心改造方向：**把「厂商元数据」从 C++ 代码搬进一份 JSON 配置表** —— 程序只负责**加载 / 合并 / 校验 / 消费**，用户在自己的目录里加一份 JSON 即可接入新厂商（**不改代码、不重编译**）。
-> 状态：🟡 **待审核确认**（§6 为待确认决策清单；`D-11/D-12/D-15` 已按你的指示定稿）
+> 用户补充指示（2026-09-26，**已确认，本文档已按此改写**）：
+> ① **「使用配置表，而不是写进硬编码，并且允许用户自己配置。存储一个 json 用来管理配置表」**
+> ② **「不仅仅是 api 驱动，也要对 web 模式进行同样方式处理」** —— 网页版（DeepSeek 网页版 / 任意站点）**与 API 共用同一张 JSON 配置表、同一套合并与覆盖规则、同一套校验/管理/自检入口**，且**站点 URL、探测路径、登录页、窗口标题、选择器全部去硬编码**
+> 现状结论（一句话）：**OpenAI 兼容的 API 已经「能配出来」（零代码），但架构层未模块化；API 与网页版的厂商/站点元数据全部硬编码在 C++ 里，非兼容协议（Anthropic / Gemini / Azure）与「任意 AI 的网页版」都必须改源码。**
+> 核心改造方向：**把「API 厂商」与「网页版站点」两种元数据统一搬进一份 JSON 配置表** —— 程序只负责**加载 / 合并 / 校验 / 分派 / 消费**；用户在自己的目录里加一份 JSON，即可接入新 API **或**新站点（**不改代码、不重编译**）。
+> 状态：🟡 **待审核确认**（§6 为待确认决策清单；`D-11/D-12/D-15` 已按你的指示定稿，**web 与 API 同机制为硬性要求**）
 > 版本目标：v0.5.x（在已收口的 M5 核心切片之上补「推理后端可插拔」地基）
-> 预计工期（估）：**L1 ≈ 1.5–2 天 · L2 ≈ 2–3 天 · L3 ≈ 5–10 天**（全职估算，含自检与文档；L1 因引入 JSON 表与用户目录略增）
+> 预计工期（估）：**L1 ≈ 2–2.5 天 · L2 ≈ 2–3 天 · L3 ≈ 5–8 天**（全职估算，含自检与文档；L1 含**网页版去硬编码**，故高于纯 API 方案）
 
 ---
 
@@ -26,10 +28,11 @@
 
 | 原则 | 含义 |
 |---|---|
-| **配置表优先（Data over Code）** | 厂商元数据（地址 / 路径 / 认证 / 候选模型 / 能力 / 环境变量名 / 凭据引用名 / 网页版站点）**一律放 JSON**；C++ 里**不再出现**具体厂商的常量表 |
-| **用户可配置** | 用户在自己的目录（`~/.brain-ai/providers.json`、`~/.brain-ai/providers.d/*.json`）新增或覆盖条目即可接入新 AI，**不需要改代码、不需要重编译、不需要管理员权限** |
-| **单一数据源** | 随程序发布的 `assets/providers.json` 是**唯一权威配置表**；文档、UI 下拉、执行调用都从它派生（不重复维护） |
-| **失败不致命** | 表坏了 / 缺了 → 明确报错 + 用「上一份可用表 / 最小兜底」继续可用，绝不崩溃、绝不静默改变行为 |
+| **配置表优先（Data over Code）** | 厂商与站点元数据（地址 / 路径 / 认证 / 候选模型 / 能力 / 环境变量名 / 凭据引用名 / **网页版站点 URL、探测路径、选择器**）**一律放 JSON**；C++ 里**不再出现**具体厂商或站点的常量 |
+| **API 与网页版同机制（同表 · 同规则 · 同入口）** | `kind: "official"` 与 `kind: "web"` 是**同一张表的两种条目**：同一份加载/合并/校验代码、同一套用户覆盖目录、同一个 UI 管理区（打开/重载）、同一个自检命令（`--provider-selftest` 覆盖两类） |
+| **用户可配置** | 用户在自己的目录（`~/.brain-ai/providers.json`、`~/.brain-ai/providers.d/*.json`）新增或覆盖条目即可接入新 AI **或新网站**，**不需要改代码、不需要重编译、不需要管理员权限** |
+| **单一数据源** | 随程序发布的 `assets/providers.json` 是**唯一权威配置表**；文档、UI 下拉、执行调用、站点探测都从它派生（不重复维护） |
+| **失败不致命** | 表坏了 / 缺了 / 某条字段不合法 → 明确报错 + 用「上一份可用表 / 最小兜底」继续可用，绝不崩溃、绝不静默改变行为 |
 
 ### 0.2 编号规则（与 `M_patchA` 的 `PB-xx` 严格区分）
 
@@ -47,13 +50,15 @@
 **做（In scope）**
 
 - **`assets/providers.json` 配置表**（随程序发布，唯一权威数据文件）+ 加载 / 合并 / 校验 / 兜底
-- **用户自定义层**：`~/.brain-ai/providers.json`（字段覆盖）+ `~/.brain-ai/providers.d/*.json`（新增条目，便于分享单文件）
+- **两类条目同等对待**：`kind: "official"`（API）与 `kind: "web"`（网页版站点）走**同一套**机制
+- **用户自定义层**：`~/.brain-ai/providers.json`（字段覆盖）+ `~/.brain-ai/providers.d/*.json`（新增条目，便于分享单文件）——**API 与站点都适用**
 - UI 管理入口：**打开配置表 / 打开所在文件夹 / 重新加载配置表**（热重载）+ 条目来源标注（内置 / 用户覆盖）
-- 请求参数化（端点 / 认证 / env 名 / 超时**全部按表取值**）
-- 「测试连接」+ `--provider-selftest`（**含配置表校验**）
-- 推理后端**接口 + 工厂**（设计 §8.1；把现有两个实现收编）
+- **API 去硬编码**：端点 / 认证 / env 名 / 超时全部按表取值
+- **网页版去硬编码**：登录页 URL、登录窗口标题、站点 host、探测路径、PoW/会话端点、站点显示名全部按表取值（现有 DeepSeek 网页版行为不变）
+- 「测试连接」+ `--provider-selftest`（**含配置表校验；API 与 web 两条路径都覆盖**）
+- 推理后端**接口 + 工厂**（设计 §8.1；按表的 `protocol` / `web.adapter` 分派；把现有 API 与网页版两个实现收编）
 - 至少再落地 **1 家非 OpenAI 协议**的 Provider 类（Anthropic 或 Gemini，见 §6）
-- 网页版**站点表 + DOM 适配器**（可选层；站点配置同样走 JSON，见 §6）
+- **通用网页版适配器（DOM 驱动）**：站点表 + 选择器探测/诊断工具（`--web-adapter-selftest`）
 
 **不做（Out of scope，明确登记避免发散）**
 
@@ -61,10 +66,11 @@
 |---|---|
 | AutoProvider（自动选择后端）/ 多 Key 轮询 / 失败自动换厂商 | 设计 §8.2 明确「**无 AutoProvider**（T-07 已取消 auto）」 |
 | 模型市场 / 计费统计 / 用量报表 | 与「接入容易」无关，另立项 |
-| 把网页版做成「零维护」 | 站点改版与反爬必然发生，只能做到「可声明 + 可诊断 + 明确报错」 |
-| 图形化 provider 编辑器（点选生成 JSON） | 手改 JSON 已足够简单；图形化留给 M6-01 设置面板评估 |
-| 表里存 API Key | **安全红线**：表只存「环境变量名 + 凭据引用名」，明文 Key 一律走 `utils/credential`（DPAPI），日志脱敏 |
-| 引入新第三方依赖（HTTP/JSON 库） | 沿用 httplib / nlohmann / OpenSSL / WebView2（`M_patchA` §0.3 原则 5；**nlohmann 已在用，读 JSON 表零新增依赖**） |
+| 把网页版做成「零维护」 | 站点改版与反爬必然发生，只能做到「**用户改 JSON 自助修复** + 可诊断 + 明确报错」 |
+| 绕过站点验证 / 逆向反爬（验证码、风控） | 安全与合规红线；适配器只操作用户**已登录页面**的 DOM |
+| 图形化 provider / 站点编辑器（点选生成 JSON） | 手改 JSON 已足够简单；图形化留给 M6-01 设置面板评估 |
+| 表里存 API Key / Cookie / Token | **安全红线**：表只存「环境变量名 + 凭据引用名 + 取 token 的页面表达式」；明文密钥一律走 `utils/credential`（DPAPI），日志脱敏 |
+| 引入新第三方依赖（HTTP/JSON/浏览器自动化库） | 沿用 httplib / nlohmann / OpenSSL / WebView2（`M_patchA` §0.3 原则 5；**nlohmann 已在用，读 JSON 表零新增依赖**） |
 | 在线下载 / 远程同步配置表 | 先做本地文件；远程仓库属后期（未登记） |
 
 ### 0.4 执行原则（沿用 `M_patchA` §0.3，本补丁追加 3 条）
@@ -201,39 +207,40 @@ nodes/local_nodes.cpp ──if(mode=="web")──► ai::web_chat()      ← Dee
 **改造后**（目标：`assets/providers.json` + 用户覆盖层 → 配置表 → 工厂 → 具体 Provider）
 
 ```
-┌─ 配置表（JSON，唯一的厂商元数据来源）────────────────────────────┐
-│  ① <exe>/assets/providers.json          随程序发布（唯一权威）   │
-│  ② ~/.brain-ai/providers.d/*.json       用户新增条目（可分享）   │
-│  ③ ~/.brain-ai/providers.json           用户字段级覆盖           │
-│  ④ C++ 最小兜底（仅 ① 缺失时：custom-official + deepseek）      │
-└──────────────────────────┬─────────────────────────────────────┘
-                           ▼  ai::load_provider_specs()  ← 纯函数：加载/合并/校验
-                    std::vector<ProviderSpec>（内存表，含来源标注）
-                           ▼
-ProviderConfig 节点参数（provider=表 id / mode / api_base(可空→表默认) / model / api_key / ref）
-                           ▼  engine/provider_resolve.cpp → EffectiveProvider + const ProviderSpec*
-                           ▼
-nodes/local_nodes.cpp ──► ai::make_provider(id, mode, options)   ← 唯一分派点（工厂）
+┌─ 配置表（JSON，唯一的厂商元数据 + 站点元数据来源）────────────────┐
+│  ① <exe>/assets/providers.json      随程序发布：official + web 条目│
+│  ② ~/.brain-ai/providers.d/*.json   用户新增条目（API / 站点）     │
+│  ③ ~/.brain-ai/providers.json       用户字段级覆盖（API / 站点）   │
+│  ④ C++ 最小兜底（仅 ① 缺失时：custom-official + deepseek）        │
+└──────────────────────────┬───────────────────────────────────────┘
+                           ▼  ai::load_provider_specs()  ← 纯函数：加载/合并/校验（两类同一套）
+                std::vector<ProviderSpec>（kind=official / web + 来源标注）
+                           ├───────────────────────────────────┐
+        （official）▼                                        （web）▼
+  ProviderConfig 节点参数 → provider_resolve → 工厂        登录窗口 / 协议探测 / 网页版会话
+        │                                        │  login_url · window_title · 探测与 PoW 端点
+        ▼                                        ▼  全部取自表（不再写死 chat.deepseek.com）
+  nodes/local_nodes.cpp ──► ai::make_provider(spec, mode, options)  ← 唯一分派点（工厂）
                                 │
-                                ├─ OpenAICompatibleProvider   （DeepSeek / 智谱 / 硅基流动 / Ollama / OpenRouter / Azure / 任意用户条目）
-                                ├─ AnthropicProvider          （/v1/messages）
-                                ├─ GeminiProvider             （:generateContent）
-                                ├─ DeepSeekWebProvider        （现有 web_chat 收编；PoW + SSE）
-                                └─ WebDomAdapter              （L3：站点 JSON 驱动的通用 DOM 适配器）
+                                ├─ OpenAICompatibleProvider  （protocol=openai：DeepSeek/智谱/硅基/Ollama/OpenRouter/Azure/任意用户条目）
+                                ├─ AnthropicProvider         （protocol=anthropic）
+                                ├─ GeminiProvider            （protocol=gemini）
+                                ├─ DeepSeekWebProvider       （web.adapter=builtin:deepseek；现有 PoW + SSE 收编）
+                                └─ WebDomAdapter             （web.adapter=dom；选择器驱动的通用站点适配器）
 ```
 
-> 关键点：**新增一家厂商 = 新增一份 JSON**（不改 C++）；C++ 只在「出现**新协议**」时才需要新类。
+> 关键点：**新增一家厂商 = 新增一份 JSON**（不改 C++）；**换/修一个网页版站点 = 改一份 JSON**（内置适配器站点除 URL/路径外，只有出现**新协议形态**时才需要新类）。
 
 ### 2.2 三层能力模型（分层做，可独立交付）
 
-| 层 | 名称 | 解决什么 | 加一家新 AI 的成本 | 估时 | 风险 |
+| 层 | 名称 | 解决什么 | 加一家新 AI / 新站点的成本 | 估时 | 风险 |
 |---|---|---|---|---|---|
-| **L1** | **JSON 配置表 + 用户覆盖**（本补丁主体） | 厂商元数据全部数据化；端点 / 认证 / 默认地址 / 候选模型 / 能力 / env 名 / 凭据引用名 从「写死」变「查表」 | OpenAI 兼容：**写 10 行 JSON，零代码**；内置厂商：**下拉即用** | 1.5–2 天 | 低（纯增量 + 一份数据文件） |
-| **L2** | **接口 + 工厂**（设计 §8.1 / PB-04） | 协议差异（Anthropic / Gemini / 未来新协议）收敛到一个 Provider 类；节点不再 if/else | 非兼容 API：**新增 1 个类（~150 行），节点零改动** | 2–3 天 | 低–中（需回归 `--web-chat`） |
-| **L3** | **网页版站点表 + DOM 适配器** | 「任何 AI 的网页版」= 一份站点 JSON（同样用户可自定义） | 无 PoW 站点：**一份 JSON（~15 行）**；有 PoW：抄 `DeepSeekWebProvider` | 5–10 天 | 中–高（站点改版 / WebView2 现场手测） |
+| **L1** | **JSON 配置表（API 与网页版同表同机制）** | 两类条目的加载 / 合并 / 校验 / 用户覆盖 / 打包；**API 去硬编码**（端点·认证·env·超时）+ **网页版去硬编码**（登录页·窗口标题·站点 host·探测与 PoW 端点·显示名） | 内置条目：**下拉即用**；用户**写 JSON 即可接入新 OpenAI 兼容 API**；**改 JSON 即可换站点/改登录页/改探测路径**（DeepSeek 网页版） | 2–2.5 天 | 低–中（web 去硬编码需回归 `--web-chat` / `--web-session-selftest`） |
+| **L2** | **协议 / 适配器实现层（工厂统一分派）** | 按表 `protocol` / `web.adapter` 造对象；把现有 API 与网页版实现收编；新增 Anthropic / Gemini | 非兼容协议：**+1 个类（~150 行），节点零改动**；新形态网页版站：**+1 个适配器类** | 2–3 天 | 低–中（`--web-chat` 行为必须不变） |
+| **L3** | **通用 DOM 适配器（任意站点 → 纯 JSON）** | 选择器驱动的「填输入 → 触发发送 → 轮询答案」执行器 + 选择器探测/诊断工具（**表与覆盖机制已在 L1/L2 内**，L3 只补执行器与诊断） | **一份 JSON（~15 行）**接入无 PoW 站点；站点改版 → **用户自助改 JSON 修复** | 5–8 天 | 中–高（站点改版 / WebView2 现场手测） |
 
-> 三层**互相不依赖**：L1 可单独交付（立刻改善体验 + 用户可自定义）；L2 在 L1 之上把协议打开；L3 独立于 L1/L2（可最后做，或不做）。
-> **推荐**：L1 → L2 一次做完（约 4–5 天，风险可控、收益完整）；L3 单独立项、按需推进。
+> **三层互相不依赖但语义连续**：L1 交付后「API 与网页版都已由表驱动、都可用户自定义」；L2 把协议打开（含把 DeepSeek 网页版实现收编为按表工作）；L3 把「任意站点」降级为纯数据。
+> **推荐**：L1+L2 一次做完（约 4–5.5 天）——此时**API 与网页版两条路都已完成「表驱动 + 可扩展」**；L3 单独立项、按需推进。
 
 ### 2.3 不变量（Invariants，三层共同遵守）
 
@@ -245,8 +252,10 @@ nodes/local_nodes.cpp ──► ai::make_provider(id, mode, options)   ← 唯�
 | I4 | 新增的每一条数据/协议映射都有**离线断言** | `--exec-selftest`（api_probe）/ `--provider-selftest`（aiwrite） |
 | I5 | 任何「未实现的组合」都必须**明确报错 + 给操作步骤**，绝不静默失败 | 既有 `unwired_reason` / VLM web 报错风格延续 |
 | I6 | 不新增第三方依赖；不需要管理员权限；不写盘明文密钥 | 构建 + `--cred-selftest` |
-| I7 | **用户新增/覆盖条目无需改代码**：只写 JSON，功能即可用（新协议除外） | `AB2-09` 验收 |
+| I7 | **用户新增/覆盖条目无需改代码**：只写 JSON，功能即可用（新协议、新适配器形态除外） | `AB2-09` 验收 |
 | I8 | **表坏/缺失不致命**：报错 + 用上一份可用表或最小兜底继续运行 | `AB2-10` 验收 |
+| I9 | **网页版同样无硬编码**：`web/**`、`ai/deepseek_web_client.cpp` 中**不出现**站点 URL / 探测路径 / 窗口标题常量（全部来自表）；只改表即可改登录页与探测目标 | `AB2-11` + `grep` 审查 |
+| I10 | **两类条目同待遇**：web 条目与 official 条目一样支持「用户新增 / 字段级覆盖 / 重新加载 / 自检 / 来源标注」 | `AB2-12` + `--provider-selftest` |
 
 ---
 
@@ -297,6 +306,14 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
   5. 未知字段 → **警告不失败**（向前兼容：未来版本新增字段时旧程序不炸）
   6. 表里出现疑似密钥（`api_key` / `auth.token` 等键名，或值形如 `sk-…`）→ **警告 + 拒绝该字段**（安全红线，见 I3）
   7. 非法 JSON（语法错误）→ 保留**上一份可用表**（进程内）+ 报错；首次加载失败 → 走**最小兜底表**
+  8. **两类条目同等校验（official 与 web 共用同一套代码，仅字段子集不同）**：
+     - `kind=official`：`api_base`（可空=手填）、`protocol` ∈ 本版本已实现集合（`openai`/`anthropic`/`gemini`）
+     - `kind=web`：`web.login_url` 必填；再按 `web.adapter` 分支校验
+       - `builtin:*`（内置适配器，如 `builtin:deepseek`）：`web.endpoints.*` 缺失 → 用内置默认值 + **警告**（保持今天行为）
+       - `dom`（通用 DOM 适配器）：`input_selector` / `send` / `answer_selector` 必填，缺任一 → 该条跳过并报错
+  9. **`_` 前缀键 = 纯文档字段**（`_doc` / `_user_override` / `_example_web_dom` / `_secrets_policy` …）：加载器**忽略且不产生警告**（方便在表里内嵌示例与说明）
+  10. `web.adapter=dom` 的轮询常量必须有**上限**（`answer_poll_ms` 默认 500、`answer_max_polls` 默认 120；超出上限 → 警告并截断，避免用户写出「等一小时」的表）
+  11. `kind` 与 `mode` 一致性：official 条目只能配 `mode=official`、web 条目只能配 `mode=web`（不一致 → 警告并按 `kind` 纠正）
 - **最小兜底表（唯一允许的 C++ 内联数据，2 条）**：`custom-official`（空地址，必须手填）+ `deepseek`（今天的行为基线），仅当 ①② 都缺失时使用，并在 Console 明确提示「配置表缺失，已使用最小兜底」。
 - **验收**：`VB2-01`（合并优先级 / 必填缺失 / 类型错误 / 未知字段警告 / dup id 覆盖 / 密钥拒绝 / 坏 JSON / schema_version 不匹配 / 兜底触发）
 
@@ -315,28 +332,48 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
   3. **整体替换**：`providers.json` 里 `{"replace_all": true, "providers": […]}`（高级用法；会在 Console 明确提示「已忽略内置表」）
 - **覆盖白名单**：允许覆盖 `display/api_base/chat_path/auth_style/auth_header/extra_headers/env_names/key_ref_default/models/capabilities/limits/notes/docs_url/web/*`；**禁止**覆盖 `id`（作为键）与其类型；`kind/protocol` 允许覆盖但会警告（可能导致不可用）
 - **UI 呈现**：下拉里分组「内置 / 用户（N）」，条目后缀标注来源（如 `zhipu（用户覆盖）`、`my-ai（用户）`）；覆盖条目在参数面板显示「来源：user.d/10-zhipu.json」
-- **验收**：`VB2-03`（字段级覆盖 / providers.d 多文件顺序 / 新条目可见 / replace_all / 白名单拒绝 + 报错文案）
+- **对两类条目同样生效（web 同待遇）**：用户的新增/覆盖既能作用于 **API 条目**，也能作用于 **网页版站点条目** —— 例如：
+  - 改站点登录页 / 窗口标题：`{"id":"deepseek-web","web":{"login_url":"…","window_title":"…"}}`
+  - 改站点探测或 PoW 端点（站点换域名/换 API 版本时）：`{"id":"deepseek-web","web":{"endpoints":{"host":"…","completion_path":"…"}}}`
+  - 新增一个 DOM 站点（选择器）或修正失效选择器：见 §7 附录 B 示例
+  ⇒ **站点改版时用户自助修复，无需等程序更新**（这是「web 同机制」的核心收益）
+- **验收**：`VB2-03`（字段级覆盖 / providers.d 多文件顺序 / 新条目可见 / replace_all / 白名单拒绝 + 报错文案 / **web 条目覆盖生效**）
 
-#### PB2-04 请求参数化：端点 / 认证 / 超时全部按表取值
+#### PB2-04 API 请求参数化：端点 / 认证 / 超时全部按表取值
 
 - **目标**：消除硬编码点 #2 #3 #6。
 - **改动**：`ai/deepseek_official_provider.{h,cpp}` → 抽出 `ProviderOptions{api_base, chat_path, auth_style, auth_header, extra_headers, env_names, limits}`；`build_endpoint(base, path)`、`build_auth_headers(spec, key)`、`resolve_api_key(param_key, env_names)`（env 名**列表**按序尝试，默认仍含 `DEEPSEEK_API_KEY` 以兼容）。
 - **兼容**：旧签名保留为重载（默认值 = 今天 DeepSeek 行为）→ 不变量 I1 自动成立。
 - **验收**：`VB2-04`（端点拼接 5 例：默认 / 尾斜杠 / 路径前缀 / 带 query（Azure `?api-version=`）/ 空串回退；认证头 5 例：bearer / api-key / x-api-key+version / query 传参 / none；env 名列表按序命中）
 
-#### PB2-05 节点 / UI / 校验改「查表驱动」
+#### PB2-05 节点 / UI / 校验 + **网页版去硬编码**，全部改「查表驱动」
+
+> 本节是「**web 与 API 同机制**」在 **L1 阶段**的落地：**在不动网页版协议实现的前提下**，把站点相关的一切从 C++ 常量搬进表。
 
 - **节点注册**（`engine/node_registry.cpp`）：
-  - `provider` 参数：枚举值 **由配置表生成**（`provider_ids()`，按 `kind` 分组），默认项 = 表中第一项（内置顺序里 `deepseek` 置前以保持老工作流默认观感）
+  - `provider` 参数：枚举值 **由配置表生成**（`provider_ids()`，按 `kind` 分组），默认项 = 表中第一项（内置顺序 `deepseek` 置前以保持老工作流默认观感）
+  - `mode` 参数：可选项由**条目的 `kind`** 决定（official 条目 → 仅 `official`；web 条目 → 仅 `web`），不再无条件给 `{official, web}`
   - `api_base` 说明改为「**留空 = 用该提供商的默认地址**」；`model` 枚举 → 该条目的候选模型（首项为默认建议；`models` 为空则保持自由输入）
   - `api_key_ref` 默认值 → `key_ref_default`（换厂商不再串味）
-- **生效解析**（`engine/provider_resolve.cpp`）：`EffectiveProvider` 增 `spec_id` 与 `const ProviderSpec*`；空字段由表默认值补齐；「提供商」字段**真正参与解析**（不再是装饰性字段）
+- **生效解析**（`engine/provider_resolve.cpp`）：`EffectiveProvider` 增 `spec_id` / `kind` / `const ProviderSpec*`；空字段由表默认值补齐；「提供商」字段**真正参与解析**（不再是装饰性字段）；**web 条目自动把 `mode` 锁为 `web`**（避免表与节点参数冲突）
 - **参数面板**（`ui/property_panel.cpp`）：
   - 显示「生效：<display> / <mode> / <模型>」+ 能力徽标（`视觉 ✅/❌ · seed ✅/❌ · 系统角色 ✅/❌`）
   - 切换提供商 → 自动带出默认地址 / Key 引用名 / 候选模型（**先压快照**，可撤销）
-  - **配置表管理区**（本补丁新增）：显示表来源与条目数（如 `配置表：builtin + 2 个用户文件，共 11 条`）+ 四个按钮：**「打开配置表」**、**「打开所在文件夹」**、**「重新加载配置表」**、**「打开用户目录」**
-- **校验/提示**（`engine/validate.cpp`）：Key 校验的 env 名 / 引用名默认值改走表；「未实现组合」提示由 `caps` + 表字段生成
-- **验收**：`VB2-05`（表驱动下拉 / 默认值补齐 / 节点参数覆盖 / 连线优先 / 提示文案含表内 env 名）
+  - **网页版会话区随条目变化**：站点名、登录按钮、登录窗口标题、探测按钮说明**全部取自该条目的 `web.*`**（不再写死 DeepSeek）
+  - **配置表管理区**（本补丁新增）：显示表来源与条目数（如 `配置表：builtin + 2 个用户文件，共 12 条（其中网页版站点 2 个）`）+ 四个按钮：**「打开配置表」**、**「打开所在文件夹」**、**「重新加载配置表」**、**「打开用户目录」**
+- **网页版去硬编码（逐处替换清单）**：
+
+| 现状硬编码 | 位置 | 改为 |
+|---|---|---|
+| 登录 URL + 窗口标题 | `web/webview_host.h:22,62` | `web.login_url` / `web.window_title`（缺省回落到内置默认 + 警告） |
+| 参数面板登录入口 URL / 标题 | `ui/property_panel.cpp:184` | 同上（按生效条目） |
+| 页面内探测路径（`/api/v0/users/current`、`/api/v0/chat_session/fetch_page`、PoW challenge 路径） | `web/webview_host.cpp:150-163`（JS 模板） | `web.endpoints` + `web.probe_paths`（JS 模板参数化，**探测逻辑不变**） |
+| 站点 host / completion / challenge 路径 | `ai/deepseek_web_client.cpp:15-17` | `web.endpoints.*`（PoW 算法与 SSE 解析**保持内置**：属「协议形态」而非站点数据） |
+| 会话创建 / 拉取路径 | `ai/deepseek_web_client.cpp:122-152` | `web.endpoints.session_create_path` / `session_fetch_path` |
+
+- **行为不变量**：内置条目的字段值与今天的常量**逐字一致** ⇒ `--web-probe` / `--web-chat` / `--web-session-selftest` 输出与结果不变（不变量 I2）
+- **校验/提示**（`engine/validate.cpp`）：Key 校验的 env 名 / 引用名默认值改走表；**web 条目的「未登录 / 未探测」提示含站点显示名与登录页**；「未实现组合」提示由 `caps` + 表字段生成
+- **验收**：`VB2-05`（表驱动下拉与 mode 过滤 / 默认值补齐 / 节点参数覆盖 / 连线优先 / **改表里的 `web.login_url` 后探测与登录目标随之变化（零改码）** / 提示文案含表内 env 名与站点名）
 
 #### PB2-06 实例参数层（`config.toml` 多 provider + 旧配置迁移）
 
@@ -348,9 +385,10 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 
 - **CLI**：`aiwrite.exe --provider-selftest [--provider <id>] [--api-base <url>] [--model <名>] [--key-ref <ref>] [--image <路径>] [--timeout N]`
   - **开关复用**：`--api-base / --model / --key-ref / --image / --timeout` **已存在**（`--vlm-selftest`、`--web-probe`、`--login-selftest` 在用）；本项**只新增** `--provider` 与 `--provider-selftest`
-  - ① **表校验 + 离线断言**：加载/合并/校验全流程 + 端点 / 认证头 / 请求体（纯文本 + 多模态）+ 能力门控 → 输出 `[Provider 自检] 配置表：N 条（builtin + M 用户）；离线断言 K/K PASS`，并打印条目摘要（id / kind / protocol / 来源 / 地址 / 模型数）
-  - ② **联网**（有 Key 时）：发一条 `ping`（提示词「请只回复 pong」）→ 打印 `HTTP / 模型 / 耗时`
-  - 退出码：`0`=全通过 / `1`=失败（含表校验失败）/ `2`=无 Key（离线部分已通过）
+  - ① **表校验 + 离线断言（两类条目同一套）**：加载/合并/校验全流程 + API 端点 / 认证头 / 请求体（纯文本 + 多模态）+ 能力门控 → 输出 `[Provider 自检] 配置表：N 条（builtin + M 用户；其中网页版站点 W 个）；离线断言 K/K PASS`，并打印条目摘要（id / kind / protocol 或 web.adapter / 来源 / 地址或 login_url / 模型数）
+  - ② **API 联网**（有 Key 时）：发一条 `ping`（提示词「请只回复 pong」）→ 打印 `HTTP / 模型 / 耗时`
+  - ③ **网页版路径（`--provider <web 条目>`）**：检查「登录页可达 + 内存会话是否已有凭证 + 生效 endpoints/probe_paths 是否与表一致」→ 打印 `[Provider 自检] 网页版 <display>：登录态=有/无；endpoints=表内一致；probe 路径 N 条`；**不发送任何提示词**（避免误触发站点调用与风控）
+  - 退出码：`0`=全通过 / `1`=失败（含表校验失败）/ `2`=无 Key（API）或未登录（web）—— 离线部分均已通过
 - **可选加分项** `--provider-dump`：打印**生效表**（含来源与覆盖链），便于用户确认自己的 JSON 生效（低风险，建议做）
 - **UI**：参数面板「测试连接」按钮（异步、不阻塞界面；结果进 Console + 状态栏）
 - **验收**：`VB2-07`（无 Key 退出码 2 且离线断言全 PASS；坏表场景下报错文案可操作）
@@ -389,21 +427,55 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 #### PB2-12 节点接线改能力驱动 + 校验/提示同步
 
 - `nodes/local_nodes.cpp`：`if (mode != "web") {...} else {...}` → `make_provider(spec, mode, options)->generate(...)`
-- 删除硬编码 `if (mode == "web") throw 图片理解暂不支持网页版`，改为 **caps 检查**：
+- 删除硬编码 `if (mode == "web") throw 图片理解暂不支持网页版`，改为 **caps 检查（表驱动，web 与 API 同一判据）**：
   - 生效模型在表内且 `vision=false` → 明确报错：「<display> 的模型 <model> 不支持图片理解（表内视觉模型：<vision_model_default>）」
+  - 生效条目 `kind=web`（`caps.vision=false`）→ 明确报错：「<display>（网页版）不支持图片理解：请把「提供商配置」改为视觉 API 条目（如 zhipu / siliconflow）」
   - 生效模型**不在表内**（用户手填的自定义模型）→ 允许调用 + Console 提示「表内未声明该模型的视觉能力，若失败请改用 …」
 - `engine/provider_resolve.cpp` / `engine/validate.cpp`：缺 Key 文案按表生成（env 名列表 / ref 名 / 默认地址）
 - **验收**：`VB2-12`（视觉门控 3 例：表内非视觉模型 / 表内视觉模型 / 表外自定义；缺 Key 文案含表内 env 名）
 
 ---
 
-### L3 —— 网页版站点表 + DOM 适配器（**可选层**，同样 JSON 驱动）
+### L3 —— 通用网页版适配器（DOM 驱动）+ 用户自定义站点
 
 > 前置事实：`web/webview_host.cpp` 已支持**在页面内执行任意 JS**（PoW 求解与协议探测就是这么做的，见 `webview_host.cpp:150-163`），因此「DOM 驱动型适配器」**不需要新的技术栈**。
+> 范围说明：**站点表、用户覆盖、UI 管理、自检入口已在 L1/L2 内实现**；L3 只补「DOM 执行器」与「选择器探测/诊断」——即把「任意站点」真正降级为纯数据。
 
-#### PB2-13 站点表（`assets/providers.json` 内 `kind=web` 条目）+ `WebDomAdapter`
+#### PB2-13 站点条目（`assets/providers.json` 内 `kind=web`）两种形态：`builtin:*` 与 `dom`
 
-- 站点表**与 API 表同一份 JSON**（`kind: "web"` + `protocol: "dom"` 或 `"deepseek-web"`），字段：
+- **与 API 条目同一份 JSON、同一套加载/覆盖/校验**（这是「web 同机制」的数据基础）。`kind=web` 条目的 `web` 对象按 `adapter` 分两种形态：
+
+**形态一：内置适配器站点（`web.adapter: "builtin:deepseek"`）** —— 站点参数化，协议逻辑保持内置（L1 已交付）
+
+```json
+{
+  "id": "deepseek-web",
+  "display": "DeepSeek（网页版）",
+  "kind": "web",
+  "protocol": "deepseek-web",
+  "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": true },
+  "models": [ { "id": "default" }, { "id": "expert", "label": "专家模式" } ],
+  "web": {
+    "adapter": "builtin:deepseek",
+    "login_url": "https://chat.deepseek.com/",
+    "window_title": "AIwrite · DeepSeek 网页版登录（登录后关闭窗口）",
+    "endpoints": {
+      "host": "https://chat.deepseek.com",
+      "completion_path": "/api/v0/chat/completion",
+      "challenge_path": "/api/v0/chat/create_pow_challenge",
+      "session_create_path": "/api/v0/chat_session/create",
+      "session_fetch_path": "/api/v0/chat_session/fetch_page"
+    },
+    "probe_paths": ["/api/v0/users/current", "/api/v0/chat_session/fetch_page"],
+    "cookie_names": ["ds_session_id"],
+    "token_expr": "localStorage.getItem('userToken')"
+  },
+  "verified": true,
+  "notes": "内置适配器（有头登录 + PoW + SSE）。站点换域名/换 API 版本时，只需在用户表里覆盖 web.endpoints，无需改程序"
+}
+```
+
+**形态二：通用 DOM 站点（`web.adapter: "dom"`）** —— 纯选择器驱动（L3 交付）
 
 ```json
 {
@@ -413,7 +485,9 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
   "protocol": "dom",
   "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": true },
   "web": {
+    "adapter": "dom",
     "login_url": "https://kimi.moonshot.cn/",
+    "window_title": "AIwrite · Kimi 网页版登录",
     "input_selector": "[contenteditable='true']",
     "send": { "kind": "key", "value": "Enter" },
     "answer_selector": ".markdown-body",
@@ -434,11 +508,15 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
   3. 增量：用 `on_delta` 发增量（沿用 PB-03 的 `RunEvent::Delta`）
   4. 结束：`done_when` 命中或轮询用尽（**用尽时如实返回已取文本 + 明确警告**，不假装成功）
 
-#### PB2-14 用户自定义站点（复用 L1 的用户目录机制）
+#### PB2-14 用户自定义站点（**与 API 完全同一套机制**）
 
-- `~/.brain-ai/providers.d/kimi.json`（新增条目）或 `providers.json`（覆盖内置站点的选择器）
-- 站点改版 → **用户自己改 JSON 即可修复**（这是「用户可配置」在网页版上的落点），无需等程序更新
-- 安全/合规护栏（沿用既有策略）：**有头登录、用户手动操作、不代填密码、不自动刷新会话**；不注入脚本绕过验证
+- 用户可做（零代码）：
+  1. **新增站点**：`~/.brain-ai/providers.d/kimi.json`（DOM 站点，见 PB2-13 形态二）
+  2. **修站点（改版应急）**：`providers.json` 覆盖 `web.login_url` / `web.window_title` / `web.endpoints.*` / `web.probe_paths` / 选择器 —— **站点改版时用户自助修复，无需等程序更新**
+  3. **改站点模型/能力**：覆盖 `models`（如网页版模式名变化时）与 `capabilities`
+- 与 API 条目**共用**：同一份用户目录、同一套字段级 merge、同一套白名单校验、同一个「重新加载配置表」按钮、同一个 `--provider-selftest`
+- 安全/合规护栏（沿用既有策略）：**有头登录、用户手动操作、不代填密码、不自动刷新会话**；不注入脚本绕过验证（验证码/风控不碰）
+- **验收**：`VB2-12`（web 条目覆盖生效 / 新增 DOM 站点可见 / 非法选择器字段报错）
 
 #### PB2-15 站点改版诊断 + `--web-adapter-selftest`
 
@@ -459,9 +537,9 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 
 | 批次 | 内容 | 提交信息（约定） | 预估 |
 |---|---|---|---|
-| **B2-a** | `PB2-01` → `PB2-07`（L1：**JSON 配置表** + 加载/合并/校验 + 用户覆盖 + 打包 + 参数化 + 表驱动 UI + 测试连接） | `feat(ai): M_patchB L1 provider 配置表 JSON 化（内置表 + 用户覆盖 + 校验/热重载）+ 请求参数化 + --provider-selftest` | 1.5–2 天 |
-| **B2-b** | `PB2-08` → `PB2-12`（L2：接口 + 工厂 + Anthropic/Gemini + 能力驱动接线） | `feat(ai): M_patchB L2 InferenceProvider 接口与工厂（openai/anthropic/gemini/web 按表分派）+ 能力驱动接线` | 2–3 天 |
-| **B2-c** | `PB2-13` → `PB2-16`（L3：网页版站点表 + DOM 适配器 + 用户自定义站点 + 诊断 + 文档） | `feat(ai+web): M_patchB L3 网页版站点表与 DOM 适配器（JSON 驱动，用户可自定义）+ --web-adapter-selftest` | 5–10 天 |
+| **B2-a** | `PB2-01` → `PB2-07`（L1：**JSON 配置表（official + web 两类同表）** + 加载/合并/校验 + 用户覆盖 + 打包 + API 参数化 + **网页版去硬编码** + 表驱动 UI + 测试连接） | `feat(ai+web): M_patchB L1 provider 配置表 JSON 化（API 与网页版同表 + 用户覆盖 + 校验/热重载）+ 网页版站点参数化 + --provider-selftest` | 2–2.5 天 |
+| **B2-b** | `PB2-08` → `PB2-12`（L2：接口 + 工厂 + **DeepSeekWebProvider 收编** + Anthropic/Gemini + 能力驱动接线） | `feat(ai): M_patchB L2 InferenceProvider 接口与工厂（openai/anthropic/gemini/deepseek-web 按表分派）+ 能力驱动接线` | 2–3 天 |
+| **B2-c** | `PB2-13` → `PB2-16`（L3：**DOM 站点执行器** + 选择器探测/诊断 + 用户自定义站点闭环 + 文档） | `feat(ai+web): M_patchB L3 通用 DOM 站点适配器（选择器 JSON 驱动）+ 选择器探测/诊断 + --web-adapter-selftest` | 5–8 天 |
 | **B2-d** | 文档收尾（可并入各批） | `docs(patchB): …` | 0.5 天 |
 
 > `B2-a` 与 `B2-b` 可**完全离线自检**；`B2-c` 需现场手测（GUI + 真实站点），建议**单独排期**。
@@ -481,6 +559,8 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | AB2-08 | **请求体兼容**：既有 `--exec-selftest` 请求体断言**一行未改**仍 PASS | git diff + 自检 |
 | AB2-09 | **用户可配置闭环**：不改代码、不改程序目录，仅新增/修改用户 JSON → 新条目可用（含覆盖内置条目字段）；`--provider-selftest` 打印生效表与来源 | 手测 + 自检输出 |
 | AB2-10 | **表坏不致命**：语法错误 / schema 不匹配 / 必填缺失 → 明确报错 + 用上一份可用表或最小兜底继续运行，**不崩溃** | `--provider-selftest` 场景 + 手测 |
+| AB2-11 | **网页版无硬编码**：`web/**` 与 `ai/deepseek_web_client.cpp` 中**不存在**站点 URL / 探测路径 / 窗口标题常量（全部来自表）；**只改表（`login_url` / `endpoints` / `probe_paths`）即可改登录页与探测目标** | `grep` 审查 + 改表实测（改后探测目标随之变化） |
+| AB2-12 | **web 条目同待遇**：用户新增/覆盖站点条目后（含选择器修正），重启或「重新加载配置表」即生效；`--provider-selftest` 对 web 条目同样给出表校验与登录态结论 | 手测 + 自检输出 |
 
 ### 4.3 技术验证项（VB2-*）汇总
 
@@ -488,9 +568,9 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 |---|---|---|
 | VB2-01 | **配置表加载/合并/校验**：必填缺失 / 类型错误 / 未知字段警告 / dup id 覆盖 / 疑似密钥拒绝 / 坏 JSON / `schema_version` 不匹配 / 兜底触发 | `--provider-selftest`（+ api_probe 纯函数断言） |
 | VB2-02 | 查找顺序：exe/assets → 源码目录（开发态）→ 兜底；CMake 拷贝产物存在 | `--provider-selftest` + 构建 |
-| VB2-03 | 用户覆盖：字段级 merge / `providers.d` 多文件顺序 / 新条目可见 / `replace_all` / 白名单拒绝 | `--provider-selftest` |
+| VB2-03 | 用户覆盖：字段级 merge / `providers.d` 多文件顺序 / 新条目可见 / `replace_all` / 白名单拒绝 / **web 条目覆盖生效** | `--provider-selftest` |
 | VB2-04 | 端点拼接 5 例 + 认证头 5 例 + env 名列表按序命中 | `--exec-selftest`（纯函数） |
-| VB2-05 | 表驱动下拉 / 默认值补齐 / 节点参数覆盖 / 连线优先 | `--exec-selftest` + `--graph-selftest` |
+| VB2-05 | 表驱动下拉与 **`mode` 由 `kind` 过滤** / 默认值补齐 / 节点参数覆盖 / 连线优先 / **改表中 `web.login_url` 后探测目标随之变化** | `--exec-selftest` + `--graph-selftest` |
 | VB2-06 | `config.toml` 往返 / 旧单节迁移幂等 / 失败不覆盖原文件 | `--exec-selftest` |
 | VB2-07 | 测试连接：离线断言 + 无 Key 退出码 2 + 坏表报错文案 | `--provider-selftest` |
 | VB2-08 | 能力表来源正确（web `vision=false` 等） | `--exec-selftest` |
@@ -498,8 +578,9 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | VB2-10 | Anthropic：请求体 / 头 / 解析 / 错误映射 | `--exec-selftest` |
 | VB2-11 | Gemini：URL 转义 / `generationConfig` / 解析 / 认证风格 | `--exec-selftest` |
 | VB2-12 | 视觉门控 3 例 + 缺 Key 文案含表内 env 名 | `--exec-selftest` |
-| VB2-13 | 站点表 JSON（DOM 字段完整性 / 用户覆盖 / 缺字段报错） | `--provider-selftest` |
+| VB2-13 | 站点条目 JSON（两种形态字段完整性 / 用户覆盖 / 缺字段报错 / `_` 前缀键被忽略且不警告） | `--provider-selftest` |
 | VB2-14 | 站点选择器可达性（需 GUI + 网络） | `--web-adapter-selftest` |
+| VB2-15 | **网页版去硬编码回归**：`--web-chat` / `--web-probe` / `--web-session-selftest` 结果与改造前一致（内置条目字段值=原常量） | 三个既有自检命令 |
 
 ---
 
@@ -517,7 +598,9 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | R8 | 配置表改坏导致启动异常 | 用户无法使用程序 | **I8 + AB2-10**：坏表 → 报错 + 上一份可用表 / 最小兜底；`--provider-selftest` 是自助诊断入口 |
 | R9 | **表与代码能力脱节**（表里写了 `protocol: "xxx"` 但程序没有对应类） | 用户以为能用的条目实际不可用 | 工厂对未知 `protocol` 明确报错；`--provider-selftest` 逐条检查「表条目 → 是否有实现」并列出「本版本支持的 protocol 清单」 |
 | R10 | 表里出现明文密钥（用户图省事） | 安全泄漏 | 加载时**键名/值双重检测**（`api_key`、`"sk-"` 前缀等）→ 警告 + 拒绝该字段 + Console 给正确做法（填 key 引用名/环境变量） |
-| R11 | 抽象过度 / 维护成本上升 | 长期负担 | 单文件职责清晰、纯函数优先；**新增代码预估 ≤ 1600 行**（L1 约 500–650、L2 约 500–700、另加 JSON 数据） |
+| R11 | 抽象过度 / 维护成本上升 | 长期负担 | 单文件职责清晰、纯函数优先；**新增代码预估 ≤ 1800 行**（L1 约 600–750、L2 约 500–700、L3 另计、加 JSON 数据） |
+| R12 | **表里的 web 参数与内置适配器能力不同步**（用户改了 `endpoints` 里的某路径，但适配器并不使用它） | 用户以为改了就生效，实际无变化 | 校验期声明「adapter 支持的字段集」：用户写了**该 adapter 不支持**的字段 → 加载时**警告并忽略**；`--provider-selftest` 打印「本版本 `builtin:deepseek` 支持的字段清单」 |
+| R13 | **站点字段填错 → 长时间等待**（选择器一直不命中） | 用户以为卡死 | `answer_poll_ms` / `answer_max_polls` 有**硬上限 + 截断警告**；超时后**如实返回已取文本 + 明确报错**，并提示「跑 `--web-adapter-selftest` 检查选择器」 |
 
 ---
 
@@ -525,7 +608,7 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 
 | 编号 | 决策点 | 选项 | 状态 / 建议 |
 |---|---|---|---|
-| **D-08** | 本补丁做到哪一层？ | ① 只做 L1（配置表 + 用户自定义） ② L1+L2 ③ L1+L2+L3 | 建议 **②**：一次把「API 侧任意接入」打通；L3 单独立项 |
+| **D-08** | 本补丁做到哪一层？ | ① 只做 L1（**配置表 + 用户自定义 + API 与网页版双去硬编码**） ② L1+L2（再含工厂与各协议/适配器实现，含 `DeepSeekWebProvider` 收编） ③ L1+L2+L3（再含通用 DOM 站点） | 建议 **②**：此时「API 与网页版都已是表驱动 + 可扩展」；L3 单独立项 |
 | **D-09** | `InferenceProvider` 接口形态 | ① 完全照设计 §8.1（三个虚函数） ② 合并为 `generate(params)+on_delta+images+caps()` | 建议 **②**（与流式暂停现状一致；文档注明与 §8.1 的差异） |
 | **D-10** | 非兼容协议先做哪家 | ① Anthropic ② Gemini ③ 都做 | 建议 **① Anthropic**；Gemini 作为 `PB2-11` 可选 |
 | **D-11** | 配置载体 | ① 只用 `config.toml` ② 只用 JSON ③ 两者分工：**厂商元数据 → JSON 表；实例参数 → config.toml** | ✅ **已定（用户指示）**：选 **③** —— 配置表以 **JSON** 存储，**允许用户自己配置**（覆盖 + 新增） |
@@ -535,11 +618,12 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | **D-15** | 配置表存放位置与覆盖规则 | ① 只放 `~/.brain-ai/providers.json` ② 只放程序目录 ③ **三层：程序目录 `assets/providers.json`（权威）→ `~/.brain-ai/providers.d/*.json`（新增）→ `~/.brain-ai/providers.json`（覆盖）** | ✅ **已定（用户指示）**：选 **③**；另有「最小兜底表（2 条）」作为文件缺失时的降级 |
 | **D-16** | 是否支持热重载 | ① 重启程序才生效 ② 按钮「重新加载配置表」（手动） ③ 监听文件变化（自动） | 建议 **②**（实现简单、行为可预期；③ 需文件监听，收益低风险高） |
 | **D-17** | 是否提供 `--provider-dump`（打印生效表与来源） | ① 不提供 ② 提供 | 建议 **②**（用户自助排错的关键一步，成本≈20 行） |
+| **D-18** | 首批内置**网页版站点**范围 | ① 仅收编 `deepseek-web`（= 现状能力，零新增站点） ② 再内置 1 个 DOM 站点并**实测通过**（如 Kimi / 通义） ③ 不内置站点，只提供 `_example_web_dom` 模板 | 建议 **①**（先保机制与回归）；DOM 站点在 L3 用模板 + 用户自助添加 |
 
 ### 审核确认清单（勾选后我开工）
 
 - [ ] **§6 D-08**：确定范围（L1 / L1+L2 / 全量）
-- [ ] **§6 D-09 / D-10 / D-13 / D-14 / D-16 / D-17**：确认或修改（D-11 / D-12 / D-15 已按你的指示定稿）
+- [ ] **§6 D-09 / D-10 / D-13 / D-14 / D-16 / D-17 / D-18**：确认或修改（D-11 / D-12 / D-15 已按你的指示定稿；web 与 API 同机制为**硬性要求**）
 - [ ] **§4.1**：批次划分与提交信息约定
 - [ ] **§4.2 AB2-01…AB2-10**：验收标准是否够用
 - [ ] **§7 附录 B 的 JSON 字段规范**：是否要增减字段（尤其 `capabilities` / `limits` / `web.*`）
@@ -623,22 +707,33 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | `notes` | string | ❌ | `""` | 显示在参数面板/悬停的帮助文本（可写「如何申请 Key」「限制」等） |
 | `docs_url` | string | ❌ | `""` | 官方文档链接（悬停可点） |
 
-**`web` 子对象字段（`kind=web`）**
+**顶层与条目的通用说明**
 
-> ⚠️ 「必填」列**只对 `protocol: "dom"`（通用 DOM 适配器）成立**。
-> `protocol: "deepseek-web"` 走**内置适配器**（PoW + SSE，即现有 `web_chat`），表里只需要 `login_url`（+ 可选的 `cookie_names`/`token_expr` 供诊断），选择器字段会被忽略。
+- **`_` 前缀键 = 纯文档字段**（`_doc` / `_user_override` / `_example_web_dom` / `_secrets_policy` …）：加载器**忽略且不产生警告**（方便在表里内嵌示例与说明）
+- `kind=official` 与 `kind=web` **共用同一套加载 / 合并 / 覆盖 / 校验 / UI / 自检**代码，仅字段子集与专用子对象不同
 
-| 字段 | 类型 | 必填（dom） | 说明 |
-|---|---|---|---|
-| `login_url` | string | ✅ | 登录页（有头登录，用户手动操作） |
-| `input_selector` | string | ✅ | 输入框选择器 |
-| `send` | object | ✅ | `{"kind":"key","value":"Enter"}` 或 `{"kind":"click","selector":"…"}` |
-| `answer_selector` | string | ✅ | 答案容器选择器（读取 `innerText`） |
-| `done_when` | object | ❌ | 结束判定：`{"kind":"selector_gone","selector":"…"}` / `{"kind":"selector_present",…}` |
-| `cookie_names` | array | ❌ | 需要的 Cookie 名（不全取，最小必要） |
-| `token_expr` | string | ❌ | 在页面里求值的取 token 表达式（如 `localStorage.getItem('token')`） |
-| `answer_poll_ms` | int | ❌ | 轮询间隔（默认 500） |
-| `answer_max_polls` | int | ❌ | 最大轮询次数（默认 120） |
+**`web` 子对象字段（`kind=web`）** —— 按 `adapter` 分两种形态
+
+> ⚠️ `web.adapter` 取值：`builtin:<name>`（内置适配器，目前 `builtin:deepseek`）或 `dom`（通用 DOM 适配器）。
+> 写了**该 adapter 不支持**的字段 → 加载时**警告并忽略**（R12），`--provider-selftest` 会打印该 adapter 支持的字段清单。
+
+| 字段 | 类型 | builtin:deepseek | dom | 说明 |
+|---|---|---|---|---|
+| `adapter` | string | ✅ | ✅ | `builtin:deepseek` / `dom` |
+| `login_url` | string | ✅ | ✅ | 登录页（有头登录，用户手动操作） |
+| `window_title` | string | ❌ | ❌ | 登录窗口标题（缺省 = 内置默认模板） |
+| `endpoints` | object | ✅（缺省用内置默认+警告） | — | 站点端点：`host` / `completion_path` / `challenge_path` / `session_create_path` / `session_fetch_path` |
+| `probe_paths` | array | ❌ | — | 协议探测用路径清单（如 `["/api/v0/users/current"]`） |
+| `cookie_names` | array | ❌ | ❌ | 需要的 Cookie 名（**最小必要**，不全取） |
+| `token_expr` | string | ❌ | ❌ | 在页面里求值的取 token 表达式（如 `localStorage.getItem('userToken')`） |
+| `input_selector` | string | — | ✅ | 输入框选择器 |
+| `send` | object | — | ✅ | `{"kind":"key","value":"Enter"}` 或 `{"kind":"click","selector":"…"}` |
+| `answer_selector` | string | — | ✅ | 答案容器选择器（读取 `innerText`） |
+| `done_when` | object | — | ❌ | 结束判定：`{"kind":"selector_gone","selector":"…"}` / `{"kind":"selector_present",…}` |
+| `answer_poll_ms` | int | — | ❌ | 轮询间隔（默认 500，**有上限**） |
+| `answer_max_polls` | int | — | ❌ | 最大轮询次数（默认 120，**有上限**） |
+
+> `kind=web` 也可带 `models`（网页版模式名，如 `default` / `expert` / `deepseek-reasoner`）与 `capabilities`（网页版一般 `seed=false`、`system_role=false`）——**与 API 条目同字段**。
 
 **字段级合并规则**（用户层只写要改的字段）
 
@@ -701,13 +796,5 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | 日期 | 版本 | 说明 |
 |---|---|---|
 | 2026-09-26 | v1（草案） | 首版：现状审计（§1，逐条证据）+ 三层方案（§2）+ 任务分解 + 阶段与验收（§4）+ 风险（§5）+ 待确认决策（§6）+ 附录 A/B |
-| 2026-09-26 | **v2（当前）** | **按用户指示改写**：① 配置载体由「C++ 内置描述表」改为 **JSON 配置表**（`assets/providers.json`，随程序发布）+ **用户可自定义层**（`~/.brain-ai/providers.json`、`~/.brain-ai/providers.d/*.json`）；② 决策 `D-11`（JSON 表 + 实例参数分工）、`D-12`（完整内置集）、`D-15`（三层覆盖规则）**定稿**；③ 任务重编号为 `PB2-01…PB2-16`（L1 增加「加载/合并/校验」「打包与路径」「用户覆盖」「表驱动 UI + 管理入口」）；④ 新增验收 `AB2-09`（用户可配置闭环）、`AB2-10`（表坏不致命）与验证项 `VB2-01…VB2-14`；⑤ 新增风险 `R8…R11`（坏表 / 表与代码脱节 / 明文密钥 / 维护成本）；⑥ 新增不变量 `I7`（用户 JSON 即插即用）、`I8`（表坏不致命）；⑦ 新增附录 B（JSON 字段规范 + 合并示例 + 最小兜底表）与附录 C（加载顺序与生效规则）；⑧ **新增数据文件 `source/assets/providers.json`**（内置 10 条，随文档先落盘，`PB2-01/02` 让它真正被读取） |
-
-
-
-
-
-
-
-
-
+| 2026-09-26 | v2 | **按用户第一条指示改写**：① 配置载体由「C++ 内置描述表」改为 **JSON 配置表**（`assets/providers.json`，随程序发布）+ **用户可自定义层**（`~/.brain-ai/providers.json`、`~/.brain-ai/providers.d/*.json`）；② 决策 `D-11`（JSON 表 + 实例参数分工）、`D-12`（完整内置集）、`D-15`（三层覆盖规则）**定稿**；③ 任务重编号为 `PB2-01…PB2-16`（L1 增加「加载/合并/校验」「打包与路径」「用户覆盖」「表驱动 UI + 管理入口」）；④ 新增验收 `AB2-09`（用户可配置闭环）、`AB2-10`（表坏不致命）与验证项 `VB2-01…VB2-14`；⑤ 新增风险 `R8…R11`（坏表 / 表与代码脱节 / 明文密钥 / 维护成本）；⑥ 新增不变量 `I7`（用户 JSON 即插即用）、`I8`（表坏不致命）；⑦ 新增附录 B（JSON 字段规范 + 合并示例 + 最小兜底表）与附录 C（加载顺序与生效规则）；⑧ **新增数据文件 `source/assets/providers.json`**（内置 10 条，随文档先落盘，`PB2-01/02` 让它真正被读取） |
+| 2026-09-26 | **v3（当前）** | **按用户第二条指示改写（web 与 API 同机制）**：① 第一性原则新增「**API 与网页版同机制（同表 · 同规则 · 同入口）**」；② 范围把**网页版去硬编码**与**通用 DOM 适配器**列入在范围内（不再把 web 当可选层）；③ §2.1/§2.2 架构与三层模型改为「配置表承载 official + web 两类条目」；④ **`PB2-05` 扩写为「节点/UI/校验 + 网页版去硬编码」并给出逐处替换清单**（`webview_host` 登录 URL/窗口标题/探测路径、`property_panel` 登录入口、`deepseek_web_client` host 与端点、会话创建/拉取路径）；⑤ `PB2-01` 增两类条目校验规则（`web.adapter` 分支校验、`_` 前缀键忽略、轮询上限、`kind`↔`mode` 一致性）；⑥ `PB2-03`/`PB2-13`/`PB2-14` 明确「web 条目同待遇」，站点条目分 `builtin:*` 与 `dom` 两种形态；⑦ `PB2-07` 自检增**网页版路径**（只查登录态与端点一致性，不发内容）；⑧ 新增不变量 `I9`（网页版无硬编码）、`I10`（两类同待遇）、验收 `AB2-11`/`AB2-12`、验证 `VB2-15`、风险 `R12`/`R13`、决策 `D-18`；⑨ 附录 B 的 `web` 字段表改为「两种形态」并说明 `_` 前缀键语义；⑩ **`source/assets/providers.json` 的 `deepseek-web` 条目补齐** `adapter` / `window_title` / `endpoints` / `probe_paths` / `models`，并新增顶层 `_example_web_dom` 模板 |

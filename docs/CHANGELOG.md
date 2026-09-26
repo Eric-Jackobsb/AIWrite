@@ -11,7 +11,7 @@
 | [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6） |
 | [actionPlan/](actionPlan/) · [Archive/actionPlan/](Archive/actionPlan/) | 各里程碑 Action Plan（进行中 / 已完成归档） |
 | [actionPlan/M_patchA.md](actionPlan/M_patchA.md) | **地基补丁系列 A–D**（结果回流与可观测性 / 异步与流式 / 数据安全 / 交互打磨）行动计划 |
-| [actionPlan/M_patchB.md](actionPlan/M_patchB.md) | **Provider 可插拔化**（`PB-04` 展开计划）：**JSON 配置表**（`source/assets/providers.json` + 用户覆盖层）驱动 + L2 接口工厂 / L3 网页版站点表 + `PB2-*` 任务与验收 —— 🟡 草案（待审核） |
+| [actionPlan/M_patchB.md](actionPlan/M_patchB.md) | **Provider 可插拔化**（`PB-04` 展开计划）：**JSON 配置表**（`source/assets/providers.json` + 用户覆盖层）驱动，**API 与网页版同表同机制**（含网页版去硬编码清单）+ L2 协议/适配器工厂 + L3 通用 DOM 站点 + `PB2-*` 任务与验收 —— 🟡 草案（待审核） |
 | [DevPlan.todo](DevPlan.todo) | **开发计划看板**：TodoList 格式（根键 `todotree`），Debug / Feature / Test / Docs / Archive 五类 × M1–M6 分层，每条含一行描述与 `fileLink` 文档链接 |
 | [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) | M1 实测环境、验证结果与问题记录（已归档） |
 | [Archive/README.md](Archive/README.md) | 归档索引与归档规则 |
@@ -21,12 +21,15 @@
 
 ## [Unreleased] — M5 核心切片（M5-C）图片理解链路 + 图片显示 已落地
 
-**文档 + 数据（M_patchB 计划）：Provider 从「写死在 C++」改为「JSON 配置表 + 用户可覆盖」**
+**文档 + 数据（M_patchB 计划）：Provider 从「写死在 C++」改为「JSON 配置表 + 用户可覆盖」，且 **API 与网页版同表同机制****
 
-- 新增 `docs/actionPlan/M_patchB.md`（**v2**）：现状审计（7 个硬编码点 / `provider` 字段零分派 / 全库无任何厂商元数据文件）+ 三层方案（**L1 JSON 配置表** · L2 接口+工厂 · L3 网页版站点表）+ `PB2-01…PB2-16` 任务 + `AB2-01…AB2-10` 验收 + `VB2-01…VB2-14` 验证项 + 决策 `D-08…D-17` + 附录 B（**JSON 字段规范**）与附录 C（**加载顺序与生效规则**）；`D-11/D-12/D-15` 已按用户指示定稿（厂商元数据 → JSON 表；实例参数 → `config.toml`；三层覆盖）
+- 新增 `docs/actionPlan/M_patchB.md`（**v3**）：现状审计（7 个硬编码点 / `provider` 字段零分派 / 全库无任何厂商元数据文件）+ 三层方案（**L1 JSON 配置表（official + web 两类同表）** · L2 协议/适配器工厂 · L3 通用 DOM 站点适配器）+ `PB2-01…PB2-16` 任务 + `AB2-01…AB2-12` 验收 + `VB2-01…VB2-15` 验证项 + 决策 `D-08…D-18` + 附录 B（**JSON 字段规范，含 web 两种形态**）与附录 C（**加载顺序与生效规则**）
+- **web 与 API 同机制（v3 新增，硬性要求）**：`kind: "official"` 与 `kind: "web"` 共用同一张表、同一套合并/覆盖/校验、同一个 UI 管理区与同一个自检命令；**网页版去硬编码清单**（`PB2-05`）——`web/webview_host.h:22,62`（登录 URL/窗口标题）、`ui/property_panel.cpp:184`（登录入口）、`web/webview_host.cpp:150-163`（探测 JS 路径）、`ai/deepseek_web_client.cpp:15-17,122-152`（host / completion / challenge / 会话创建·拉取路径）全部改由表的 `web.login_url` / `web.window_title` / `web.endpoints` / `web.probe_paths` 驱动，**站点换域名或改版时用户改 JSON 即可**（PoW 与 SSE 解析仍属内置实现）
+- 已定稿决策：`D-11`（厂商/站点元数据 → JSON 表；实例参数 → `config.toml`）· `D-12`（完整内置集）· `D-15`（三层覆盖规则）· **web 与 API 同机制**
 - **新增配置表数据文件 `source/assets/providers.json`**：内置 10 条（`deepseek` / `deepseek-web` / `zhipu` / `siliconflow` / `ollama` / `openrouter` / `openai` / `anthropic` / `gemini` / `custom-official`），逐条带 `capabilities` / `models` / `limits` / `notes` / `docs_url`，`verified` 如实标注是否本机实测（当前 `deepseek` / `deepseek-web` / `zhipu` 为 true）；**不含任何明文密钥**（只有环境变量名与凭据引用名）
-- 用户自定义（零代码）：`~/.brain-ai/providers.json`（字段级覆盖内置条目）+ `~/.brain-ai/providers.d/*.json`（新增条目，单文件可分享）
-- **状态**：计划草案待审核；**尚未接线** —— 加载器 `ai/provider_spec.*`、打包拷贝、表驱动 UI 与 `--provider-selftest` 属 `B2-a`，接口/工厂/Anthropic/Gemini 属 `B2-b`（见文档 §4.1）
+- **`deepseek-web` 条目已按 v3 规范补齐**：`web.adapter = builtin:deepseek` + `window_title` + `endpoints{host,completion_path,challenge_path,session_create_path,session_fetch_path}` + `probe_paths` + `models`（default/expert/deepseek-reasoner）；另加顶层 **`_example_web_dom`**（DOM 站点模板，`_` 前缀键为纯文档字段，加载器忽略不警告）与 `_keys_note`
+- 用户自定义（零代码，**API 与站点都适用**）：`~/.brain-ai/providers.json`（字段级覆盖）+ `~/.brain-ai/providers.d/*.json`（新增条目，单文件可分享）
+- **状态**：计划草案待审核；**尚未接线** —— 加载器 `ai/provider_spec.*`、打包拷贝、表驱动 UI（含网页版会话区/配置表管理区）与 `--provider-selftest` 属 `B2-a`；接口/工厂/`DeepSeekWebProvider` 收编/Anthropic/Gemini 属 `B2-b`；通用 DOM 适配器与 `--web-adapter-selftest` 属 `B2-c`（见文档 §4.1）
 - 索引互链：`CHANGELOG` 索引、`docs/README.md`（进度行 + 文档地图）、`M_patchA` §4.1 `PB-04` 行、`milestone_plan.md`（补丁系列两处）；文档断链自检 **94 / 0**
 
 **特性（M5-C）：读图生成 + 看得见图片 —— 代码落地（4 提交）**

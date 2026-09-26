@@ -8,6 +8,30 @@
   },
   "_secrets_policy": "本文件只存放环境变量名与凭据引用名，禁止存放明文 API Key；Key 由 utils/credential（Windows DPAPI）管理，日志与归档一律脱敏",
   "_verified_note": "verified=true 表示已在本机实测可用；verified=false 表示条目为公开资料整理的候选值，使用前请核对地址与模型名（界面会标注「未验证」）",
+  "_keys_note": "以 _ 开头的键是纯文档字段（加载器忽略且不警告）；条目里的 provider 参数优先级最高",
+  "_example_web_dom": {
+    "_note": "【示例模板·不参与加载】复制整段到 ~/.brain-ai/providers.d/kimi.json 并把 _note 去掉即可新增一个网页版站点（web.adapter=dom）；选择器请按站点实际 DOM 调整，然后用 aiwrite.exe --web-adapter-selftest --site kimi 检查",
+    "id": "kimi",
+    "display": "Kimi（月之暗面）· 网页版",
+    "kind": "web",
+    "protocol": "dom",
+    "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": true },
+    "web": {
+      "adapter": "dom",
+      "login_url": "https://kimi.moonshot.cn/",
+      "window_title": "AIwrite · Kimi 网页版登录",
+      "input_selector": "[contenteditable='true']",
+      "send": { "kind": "key", "value": "Enter" },
+      "answer_selector": ".markdown-body",
+      "done_when": { "kind": "selector_gone", "selector": "button[aria-label*='停止']" },
+      "cookie_names": ["kimi-auth"],
+      "token_expr": "localStorage.getItem('token')",
+      "answer_poll_ms": 500,
+      "answer_max_polls": 120
+    },
+    "verified": false,
+    "notes": "示例模板：选择器需按站点实际 DOM 调整（免手写 C++）"
+  },
   "providers": [
     {
       "id": "deepseek",
@@ -36,13 +60,28 @@
       "kind": "web",
       "protocol": "deepseek-web",
       "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": true },
+      "models": [
+        { "id": "default", "label": "default（默认）" },
+        { "id": "expert", "label": "expert（专家模式）" },
+        { "id": "deepseek-reasoner", "label": "deepseek-reasoner（深度思考）" }
+      ],
       "web": {
+        "adapter": "builtin:deepseek",
         "login_url": "https://chat.deepseek.com/",
+        "window_title": "AIwrite · DeepSeek 网页版登录（登录后关闭窗口）",
+        "endpoints": {
+          "host": "https://chat.deepseek.com",
+          "completion_path": "/api/v0/chat/completion",
+          "challenge_path": "/api/v0/chat/create_pow_challenge",
+          "session_create_path": "/api/v0/chat_session/create",
+          "session_fetch_path": "/api/v0/chat_session/fetch_page"
+        },
+        "probe_paths": ["/api/v0/users/current", "/api/v0/chat_session/fetch_page"],
         "cookie_names": ["ds_session_id"],
         "token_expr": "localStorage.getItem('userToken')"
       },
       "verified": true,
-      "notes": "内置适配器（有头登录 + PoW + SSE，已实测生成）。免费但有速率限制；无需 API Key",
+      "notes": "内置适配器（有头登录 + PoW + SSE，已实测生成）。免费但有速率限制，无需 API Key。站点换域名/换 API 版本时：在 ~/.brain-ai/providers.json 覆盖 web.endpoints 即可，无需改程序",
       "docs_url": ""
     },
     {
