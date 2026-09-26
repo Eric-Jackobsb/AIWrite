@@ -92,6 +92,20 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 
 审计方式：全库检索占位标记、`Config` 字段消费点、UI 入口接线情况、执行器/持久化/错误路径的调用链。
 
+### 1.0 处理状态总览（2026-09-26）
+
+> ⚠️ 下表为 2026-09-23 审计快照；处理状态见本节。
+
+| 类别 | 状态 | 说明 |
+|---|---|---|
+| 1.1 A 类 结果回流（4项） | ✅ **全部修复** | PA-01 运行信息、PA-02 输出面板、PA-03 节点摘要/参数面板、PA-04 逐节点耗时、PA-05 Console 复制导出、PA-06 错误条 |
+| 1.2 B 类 执行层（5项） | 🟡 部分 | 同步阻塞 ✅（PB-01 三步）；真取消 ⬜（PB-02 延后）；流式回调 ✅ 最小化 / 🚫 数据源暂停；节点超时/重试 ⬜（同批：代理与网络策略 FEA-M4-13）；运行快照 autosave ⬜（PC-01） |
+| 1.3 C 类 配置层（8项） | 🟡 部分 | 访问器 ✅（PA-07）；console_height / running_animation / show_output_window / window_* / output.* 已接线；grid_size 为库限制（归口 PD-03）；general.* / timeout.* / error.* / advanced.* / deepseek.* 仍待接（PD-03） |
+| 1.4 D 类 会话与凭据（4项） | 🟡 部分 | api_key_ref ✅（PB-06 DPAPI 文件库）；Key 三级优先级 ✅；会话失效引导 ⬜（PB-07）；代理/自签证书 ⬜（FEA-M4-13） |
+| 1.5 E 类 交互（5项） | 🟡 部分 | 复制/粘贴 ✅（F1）；窗口几何 ✅（F3）；参数面板重置/批量/搜索 ✅（F2）；重跑「新 seed」✅（FEA-M4-17）/通用重跑 ⬜（FEA-M4-11）；快捷键 **决定不做**（设计 §6.7，纯鼠标） |
+| 1.6 F 类 数据与文件（5项） | 🟡 部分 | 输出归档 + TTL ✅（PC-05/PC-06）；autosave / 恢复 / 最近列表校验 / version 与 config_version 迁移 ⬜（PC-01~PC-04） |
+| 1.7 G 类 占位与远期 | ⬜ 未做 | VLM / ImagePreview 显示 / Output 窗口历史 / i18n / M6-02 引导（PM-01）/ M6-08 打包 / 一键构建脚本（PM-03） |
+
 ### 1.1 A 类 —— 结果回流与可观测性（最痛）
 
 | 缺口 | 证据 | 影响 |
@@ -165,13 +179,13 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 
 ## §2 补丁系列总览（按顺序执行）
 
-| 补丁 | 名称 | 覆盖缺口 | 依赖 | 工作量（全职） | 提交时验证 |
+| 补丁 | 名称 | 覆盖缺口 | 依赖 | 工作量（全职） | **状态（2026-09-26）** | 提交时验证 |
 |---|---|---|---|---|---|
-| **A**（本文件详述） | 结果回流与可观测性 + 配置访问器地基 | A、C（地基） | — | ≈1.2 天 | VA-01…VA-08 |
-| **B** | 执行异步化 + 流式 + Provider 统一（含官方 Provider、凭据管理器、会话失效、网络策略） | B、D | A | 1.5–2 天 | VB-01…VB-09 |
-| **C** | 数据安全（autosave/恢复、最近列表、版本迁移、输出归档最小集） | F | A | ≈1 天 | VC-01…VC-06 |
-| **D** | 交互打磨与配置接线（快捷键、复制粘贴重做、设置面板、窗口几何、重跑、i18n 决策） | E、C（全量） | B、C | ≈1.5 天 | VD-01…VD-08 |
-| 并行 | 小项（M6-02 WebView2 检测、文档索引治理、构建脚本、诊断信息） | G | — | 0.5–1 天 | VM-01…VM-04 |
+| **A**（本文件详述） | 结果回流与可观测性 + 配置访问器地基 | A、C（地基） | — | ≈1.2 天 | ✅ **全部完成**（A1 + A2） | VA-01…VA-08 |
+| **B** | 执行异步化 + 流式 + Provider 统一（含官方 Provider、凭据管理器、会话失效、网络策略） | B、D | A | 1.5–2 天 | 🟡 **主体完成**：PB-01 ✅ · PB-03 ✅（最小化，数据源 🚫） · PB-05 ✅ · PB-06 ✅ · PB-08 ✅（UI 侧）；剩余 PB-02 · PB-07 · PB-09 · 代理与自签 | VB-01…VB-09 |
+| **C** | 数据安全（autosave/恢复、最近列表、版本迁移、输出归档最小集） | F | A | ≈1 天 | 🟡 **部分**：PC-05 ✅ · PC-06 ✅（提前落地）；PC-01~PC-04 ⬜ | VC-01…VC-06 |
+| **D** | 交互打磨与配置接线（快捷键、复制粘贴重做、设置面板、窗口几何、重跑、i18n 决策） | E、C（全量） | B、C | ≈1.5 天 | 🟡 **部分**：PD-02 ✅ · PD-04 ✅ · PD-05 ✅ · PD-06② ✅；PD-01 **决定不做** · PD-03 · PD-07 · PD-08 ⬜ | VD-01…VD-08 |
+| 并行 | 小项（M6-02 WebView2 检测、文档索引治理、构建脚本、诊断信息） | G | — | 0.5–1 天 | 🟡 **部分**：PM-02 ✅（索引与规则）；PM-01 · PM-03 · PM-04 ⬜ | VM-01…VM-04 |
 
 **顺序理由**：A 建立"结果数据通道 + 界面呈现 + 配置访问器"，是 B 的流式呈现与 C 的归档、D 的设置面板共同的底座；B 提升执行体验上限；C 保障数据不丢；D 做手感与配置闭环。
 
@@ -319,29 +333,29 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 
 | 编号 | 任务 | 要点 | 产出 |
 |---|---|---|---|
-| PB-01 | 执行线程化 | `Executor` 在独立线程按节拍推进 `tick`；主线程只消费线程安全事件队列（状态/日志/增量/结束）；退出时 join 并保证 `Graph` 状态回写主线程 | `engine/executor.{h,cpp}`、`ui/editor_state.{h,cpp}` |
-| PB-02 | 真取消 | `cancel()` 置位 + 唤醒；HTTP 层支持中断（客户端取消 / 读超时）；节点协作检查点（`ctx.is_cancelled()` 在重试与流式块之间检查） | `ai/*`、`engine/executor.cpp` |
-| PB-03 | 流式回调接口 | `ExecutionContext` 增 `on_delta(node_id, text)`；`NodeRunInfo.delta_bytes` 生效；UI 侧按"段"增量追加（复用 PA-02/03 渲染） | `engine/executor.h`、`ui/output_panel.cpp` |
-| PB-04 | Provider 统一抽象（设计 §8.1） | `ai/inference_provider.h`（`GenerateParams` / `ProviderResult` / `InferenceProvider{name,supports_vision,generate,generate_stream}`）+ `ai/provider_factory.{h,cpp}`；**把现有 `web_chat()` 收编为 `DeepSeekWebProvider`**（保持 `--web-chat` 行为不变） | `ai/inference_provider.h`、`ai/provider_factory.{h,cpp}`、`ai/deepseek_web_client.*` |
-| PB-05 | 官方 Provider（原 M4-05 / M4-10） | `ai/deepseek_official_provider.{h,cpp}`：`POST {api_base}/chat/completions`；**参数透传** `system_prompt/temperature/max_tokens/top_p`；`stream=true` 时解析官方 SSE 增量；错误分类（401/402/429/超时/DNS/5xx）；重试读 `config.error.*`、超时读 `config.timeout.*`；纯函数 `build_request_body/build_endpoint` 供离线自检 | `ai/deepseek_official_provider.{h,cpp}`、`ai/sse_reader.{h,cpp}` |
-| PB-06 | 凭据与网络策略（原 M4-07） | **加密文件库**：`utils/credential.{h,cpp}` 用 **DPAPI（当前用户）+ 自描述二进制容器**存放于 `~/.brain-ai/credentials/`（ACL 收紧 / 无回显 / 审计 / TTL 清理 / 损坏隔离，详见 `ai_writer_nodes.md` **附录 B**）；Key 优先级：节点参数 → 环境变量 → 凭据库（`api_key_ref`）；`--cred-list/-erase/-purge` CLI；代理（`HTTPS_PROXY/HTTP_PROXY`）与自签证书开关（默认严格）。**文档先行已完成，代码按附录 B 实现** | `utils/credential.{h,cpp}`、`ai/provider_factory.cpp`、`utils/config.*` |
-| PB-07 | 会话失效引导（§8.5） | 识别网页版 `40002/401` 与官方 `401`；状态栏/错误条出现「会话已失效，点此重新登录」；按钮直达登录窗口（WebView2） | `ai/deepseek_web_client.cpp`、`ui/editor_state.*`、`ui/error_bar` |
-| PB-08 | 流式呈现 | 输出面板与节点摘要逐字增长；运行中显示"生成中…（N 字）"；结束后落定并结合 PA-01 耗时 | `ui/output_panel.cpp`、`ui/node_canvas.cpp` |
-| PB-09 | 自检扩展 | `api_probe --selftest` 增 **V-11 无 Key 请求构造**、**V-12 取消/超时语义**；`--run-selftest --official`（有 Key 时真实生成）；`--run-selftest --web` 保持 5/5 | `tools/api_probe.cpp` |
+| PB-01 ✅ | 执行线程化 | `Executor` 在独立线程按节拍推进 `tick`；主线程只消费线程安全事件队列（状态/日志/增量/结束）；退出时 join 并保证 `Graph` 状态回写主线程 | `engine/executor.{h,cpp}`、`ui/editor_state.{h,cpp}` |
+| PB-02 ⬜ | 真取消 | `cancel()` 置位 + 唤醒；HTTP 层支持中断（客户端取消 / 读超时）；节点协作检查点（`ctx.is_cancelled()` 在重试与流式块之间检查） | `ai/*`、`engine/executor.cpp` |
+| PB-03 ✅ | 流式回调接口 | `ExecutionContext` 增 `on_delta(node_id, text)`；`NodeRunInfo.delta_bytes` 生效；UI 侧按"段"增量追加（复用 PA-02/03 渲染） | `engine/executor.h`、`ui/output_panel.cpp` |
+| PB-04 ⬜ | Provider 统一抽象（设计 §8.1） | `ai/inference_provider.h`（`GenerateParams` / `ProviderResult` / `InferenceProvider{name,supports_vision,generate,generate_stream}`）+ `ai/provider_factory.{h,cpp}`；**把现有 `web_chat()` 收编为 `DeepSeekWebProvider`**（保持 `--web-chat` 行为不变） | `ai/inference_provider.h`、`ai/provider_factory.{h,cpp}`、`ai/deepseek_web_client.*` |
+| PB-05 ✅ | 官方 Provider（原 M4-05 / M4-10） | `ai/deepseek_official_provider.{h,cpp}`：`POST {api_base}/chat/completions`；**参数透传** `system_prompt/temperature/max_tokens/top_p`；`stream=true` 时解析官方 SSE 增量；错误分类（401/402/429/超时/DNS/5xx）；重试读 `config.error.*`、超时读 `config.timeout.*`；纯函数 `build_request_body/build_endpoint` 供离线自检 | `ai/deepseek_official_provider.{h,cpp}`、`ai/sse_reader.{h,cpp}` |
+| PB-06 ✅ | 凭据与网络策略（原 M4-07） | **加密文件库**：`utils/credential.{h,cpp}` 用 **DPAPI（当前用户）+ 自描述二进制容器**存放于 `~/.brain-ai/credentials/`（ACL 收紧 / 无回显 / 审计 / TTL 清理 / 损坏隔离，详见 `ai_writer_nodes.md` **附录 B**）；Key 优先级：节点参数 → 环境变量 → 凭据库（`api_key_ref`）；`--cred-list/-erase/-purge` CLI；代理（`HTTPS_PROXY/HTTP_PROXY`）与自签证书开关（默认严格）。**文档先行已完成，代码按附录 B 实现** | `utils/credential.{h,cpp}`、`ai/provider_factory.cpp`、`utils/config.*` |
+| PB-07 ⬜ | 会话失效引导（§8.5） | 识别网页版 `40002/401` 与官方 `401`；状态栏/错误条出现「会话已失效，点此重新登录」；按钮直达登录窗口（WebView2） | `ai/deepseek_web_client.cpp`、`ui/editor_state.*`、`ui/error_bar` |
+| PB-08 ✅ | 流式呈现 | 输出面板与节点摘要逐字增长；运行中显示"生成中…（N 字）"；结束后落定并结合 PA-01 耗时 | `ui/output_panel.cpp`、`ui/node_canvas.cpp` |
+| PB-09 ⬜ | 自检扩展 | `api_probe --selftest` 增 **V-11 无 Key 请求构造**、**V-12 取消/超时语义**；`--run-selftest --official`（有 Key 时真实生成）；`--run-selftest --web` 保持 5/5 | `tools/api_probe.cpp` |
 
 ### 4.2 技术验证清单
 
 | 编号 | 验证项 | 通过标准 |
 |---|---|---|
-| VB-01 | UI 不卡 | 生成期间窗口可拖动/可交互，帧率稳定（诊断日志无长帧） |
-| VB-02 | 取消生效 | 运行中点「■ 停止」在 1 秒内进入 Cancelled；HTTP 请求被中断（日志有取消记录） |
-| VB-03 | 流式正确 | 增量拼接结果 == 非流式结果（同一提示词对比）；`delta_bytes` 与正文长度一致 |
-| VB-04 | 参数透传 | 自检断言 body 内含 `system/temperature/max_tokens/top_p` 期望值（离线） |
-| VB-05 | 凭据 | 三优先级正确（参数 > 环境变量 > 凭据管理器）；写入/读取/删除均成功；日志无明文 |
-| VB-06 | 会话失效 | 伪造失效 Token → 出现「重新登录」入口且按钮可打开登录窗口 |
-| VB-07 | 线程安全 | 运行中编辑图/切工作流 → 安全终止不崩溃；无数据竞争告警（自检多次运行） |
-| VB-08 | 无回归 | §0.4 基线全绿（`--run-selftest --web` 仍 5/5） |
-| VB-09 | 异常不崩 | 断网/超时/坏 JSON 均转为节点 error + 可读提示 |
+| VB-01 ✅ | UI 不卡 | 生成期间窗口可拖动/可交互，帧率稳定（诊断日志无长帧） |
+| VB-02 ⬜ | 取消生效 | 运行中点「■ 停止」在 1 秒内进入 Cancelled；HTTP 请求被中断（日志有取消记录） |
+| VB-03 🚫 | 流式正确 | 增量拼接结果 == 非流式结果（同一提示词对比）；`delta_bytes` 与正文长度一致 |
+| VB-04 ✅ | 参数透传 | 自检断言 body 内含 `system/temperature/max_tokens/top_p` 期望值（离线） |
+| VB-05 ✅ | 凭据 | 三优先级正确（参数 > 环境变量 > 凭据管理器）；写入/读取/删除均成功；日志无明文 |
+| VB-06 ⬜ | 会话失效 | 伪造失效 Token → 出现「重新登录」入口且按钮可打开登录窗口 |
+| VB-07 ✅ | 线程安全 | 运行中编辑图/切工作流 → 安全终止不崩溃；无数据竞争告警（自检多次运行） |
+| VB-08 ✅ | 无回归 | §0.4 基线全绿（`--run-selftest --web` 仍 5/5） |
+| VB-09 🟡 | 异常不崩 | 断网/超时/坏 JSON 均转为节点 error + 可读提示 |
 
 ### 4.3 风险与对策
 
@@ -367,12 +381,14 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 
 ### 5.1 任务清单
 
+> **状态（2026-09-26）**：PC-05 / PC-06 ✅ **已提前落地**（2026-09-24）；PC-01 / PC-02 / PC-03 / PC-04 ⬜ **未做**。
+
 | 编号 | 任务 | 要点 | 产出 |
 |---|---|---|---|
-| PC-01 | autosave | 工作流变更后节流（≥3 秒且空闲）写 `~/.brain-ai/snapshots/autosave.json`；**原子写**（临时文件 + rename）；保留最近 N 份（`autosave_1..N`） | `ui/editor_state.{h,cpp}`、`utils/paths`（复用 `snapshots_dir()`） |
-| PC-02 | 恢复流程 | 启动时若存在 autosave 且比用户最近打开的工作流新 → 弹出一次询问「恢复未保存的更改？」（可禁用该提示）；恢复后不覆盖原文件，另存需用户确认 | `ui/app.cpp`、`ui/editor_state.*` |
-| PC-03 | 最近列表治理 | 打开前校验存在性；失效条目在菜单中灰显并标注"（文件不存在）"；提供「清理失效条目」 | `engine/recent_files.{h,cpp}`、`ui/app.cpp` |
-| PC-04 | 版本迁移框架 | `workflow_io` 的 `version` 与 `config_version` 建立迁移表（当前只 warn）；未知高版本拒绝并给出提示；新增迁移自检 | `engine/workflow_io.cpp`、`utils/config.cpp` |
+| PC-01 ⬜ | autosave | 工作流变更后节流（≥3 秒且空闲）写 `~/.brain-ai/snapshots/autosave.json`；**原子写**（临时文件 + rename）；保留最近 N 份（`autosave_1..N`） | `ui/editor_state.{h,cpp}`、`utils/paths`（复用 `snapshots_dir()`） |
+| PC-02 ⬜ | 恢复流程 | 启动时若存在 autosave 且比用户最近打开的工作流新 → 弹出一次询问「恢复未保存的更改？」（可禁用该提示）；恢复后不覆盖原文件，另存需用户确认 | `ui/app.cpp`、`ui/editor_state.*` |
+| PC-03 ⬜ | 最近列表治理 | 打开前校验存在性；失效条目在菜单中灰显并标注"（文件不存在）"；提供「清理失效条目」 | `engine/recent_files.{h,cpp}`、`ui/app.cpp` |
+| PC-04 ⬜ | 版本迁移框架 | `workflow_io` 的 `version` 与 `config_version` 建立迁移表（当前只 warn）；未知高版本拒绝并给出提示；新增迁移自检 | `engine/workflow_io.cpp`、`utils/config.cpp` |
 | PC-05 | 输出归档最小集 ✅（2026-09-24 提前落地） | 运行完成写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`：每节点一个 `.txt`（含元信息头：节点/类型/状态/耗时/错误/统计）+ `run.json`（统计 + 逐节点明细）；同秒多次运行加序号，本次归档永不删除 | `utils/output_archive.{h,cpp}`（新）、`ui/editor_state.cpp`（运行结束钩子）、`ui/output_panel.cpp`（显示归档路径） |
 | PC-06 | 归档 TTL 与上限 ✅（2026-09-24 提前落地；`auto_open_on_complete` 留 M5） | 接线 `config.output.{archive_dir, ttl_days, keep_history, max_history}`：`keep_history=false` 只留最近 1 份；`true` 保留 `max_history` 份；`ttl_days>0` 清理超期目录（只清理符合命名规则的目录，先统计后删除并写日志） | `utils/output_archive.cpp`、`utils/config.*`（注释更新） |
 
@@ -409,18 +425,20 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 
 ### 6.1 任务清单
 
+> **状态（2026-09-26）**：PD-02 ✅（F1）· PD-04 ✅（F3）· PD-05 ✅（F2）· PD-06② ✅（M_rerun 新 seed）；PD-01 **决定不做**（设计 §6.7 纯鼠标）· PD-03 / PD-07 / PD-08 ⬜ **未做**（PD-03 归口 **M6-01 设置面板**）。
+
 | 编号 | 任务 | 要点 | 产出 |
 |---|---|---|---|
-| PD-01 | 快捷键表（设计 §6.7） | `Ctrl+Z/Y` 撤销重做、`Ctrl+S/O/N` 保存/打开/新建、`Ctrl+C/V/X` 复制粘贴剪切（依赖 PD-02）、`Del` 删除选中、`F5` 运行、`Shift+F5` 停止、`Ctrl+L` 清 Console、`Ctrl+0` 重置视图；统一在 `app.cpp` 的 `handle_shortcuts()` 分发，避免与 ImGui/ne 冲突 | `ui/app.cpp`、`ui/toolbar.cpp` |
-| PD-02 | 复制/粘贴重做 | 修根因：粘贴后先写入 `Graph` 位置、再在画布 `sync_positions()` 阶段统一落位；`NavigateToContent` 延后到下一帧；对坐标做有限性夹紧（沿用现有防护） | `ui/editor_state.{h,cpp}`、`ui/node_canvas.cpp` |
-| PD-03 | 设置面板（M6-06） | 新增 `ui/settings_panel.{h,cpp}`：分区编辑 `general/ui/output/timeout/error/advanced`；含校验（范围/路径存在性）+ 落盘 + 「需重启生效」标注；`deepseek` 段说明"节点参数为准" | `ui/settings_panel.{h,cpp}`、`ui/app.cpp` |
-| PD-04 | 窗口几何持久化 | `config.ui` 增 `window_width/height/pos_x/pos_y/maximized`；启动恢复 + 越屏矫正（多显示器拔插后回到主屏） | `utils/config.*`、`ui/app.cpp` |
-| PD-05 | 参数面板增强 | 每节点「重置为默认」；按类型批量应用参数；参数搜索过滤 | `ui/property_panel.cpp` |
-| PD-06 | 重跑能力 | ① **通用重跑**（「重跑该节点」「重跑该节点及下游」，依赖 `runInfos` 与拓扑；重跑前清除受影响节点结果与状态）→ 仍归口 `FEA-M4-11`；
+| PD-01 ⛔ | 快捷键表（设计 §6.7） | `Ctrl+Z/Y` 撤销重做、`Ctrl+S/O/N` 保存/打开/新建、`Ctrl+C/V/X` 复制粘贴剪切（依赖 PD-02）、`Del` 删除选中、`F5` 运行、`Shift+F5` 停止、`Ctrl+L` 清 Console、`Ctrl+0` 重置视图；统一在 `app.cpp` 的 `handle_shortcuts()` 分发，避免与 ImGui/ne 冲突 | `ui/app.cpp`、`ui/toolbar.cpp` |
+| PD-02 ✅ | 复制/粘贴重做 | 修根因：粘贴后先写入 `Graph` 位置、再在画布 `sync_positions()` 阶段统一落位；`NavigateToContent` 延后到下一帧；对坐标做有限性夹紧（沿用现有防护） | `ui/editor_state.{h,cpp}`、`ui/node_canvas.cpp` |
+| PD-03 ⬜ | 设置面板（M6-06） | 新增 `ui/settings_panel.{h,cpp}`：分区编辑 `general/ui/output/timeout/error/advanced`；含校验（范围/路径存在性）+ 落盘 + 「需重启生效」标注；`deepseek` 段说明"节点参数为准" | `ui/settings_panel.{h,cpp}`、`ui/app.cpp` |
+| PD-04 ✅ | 窗口几何持久化 | `config.ui` 增 `window_width/height/pos_x/pos_y/maximized`；启动恢复 + 越屏矫正（多显示器拔插后回到主屏） | `utils/config.*`、`ui/app.cpp` |
+| PD-05 ✅ | 参数面板增强 | 每节点「重置为默认」；按类型批量应用参数；参数搜索过滤 | `ui/property_panel.cpp` |
+| PD-06 🟡 | 重跑能力 | ① **通用重跑**（「重跑该节点」「重跑该节点及下游」，依赖 `runInfos` 与拓扑；重跑前清除受影响节点结果与状态）→ 仍归口 `FEA-M4-11`；
 ② **「重新生成（新 seed）」**（LLMGenerate）：写入新 seed 后重新运行，效果等同「再次运行但用不同 seed」，**不改图结构与其它参数** → 归口 `FEA-M4-17`，详见 [`M_rerun.md`](../Archive/actionPlan/M_rerun.md) | 
 `ui/property_panel.cpp`、`ui/editor_state.*`、`ui/node_canvas.cpp`、`ui/toolbar.cpp`、`engine/node_registry.cpp`、`ai/deepseek_official_provider.*` |
-| PD-07 | 输出面板进阶 | 历史运行列表（内存 + 最近 N 次）、节点内搜索、复制为 Markdown/JSON | `ui/output_panel.cpp` |
-| PD-08 | i18n 决策 | 二选一：① 最小 i18n（字符串表 + `general.language` 切换，重启生效）；② 从 `config.toml` 暂时移除 `general.language/startup` 并记入 M6（本补丁默认 ②，除非另行指定） | `utils/config.*`、文档 |
+| PD-07 ⬜ | 输出面板进阶 | 历史运行列表（内存 + 最近 N 次）、节点内搜索、复制为 Markdown/JSON | `ui/output_panel.cpp` |
+| PD-08 ⬜ | i18n 决策 | 二选一：① 最小 i18n（字符串表 + `general.language` 切换，重启生效）；② 从 `config.toml` 暂时移除 `general.language/startup` 并记入 M6（本补丁默认 ②，除非另行指定） | `utils/config.*`、文档 |
 
 ### 6.2 技术验证清单
 
@@ -454,14 +472,16 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 
 | 编号 | 任务 | 要点 | 验证 | 产出 |
 |---|---|---|---|---|
-| PM-01 | WebView2 Runtime 检测与引导（清零 M1 唯一遗留，落地 M6-02） | 启动自检 WebView2 Runtime 版本；缺失时给出**官方 Evergreen Bootstrapper** 链接与说明；不阻塞主界面（仅网页版相关功能提示） | VM-01：模拟缺失（改 profile 路径/环境变量）→ 出现引导且可正常使用非网页版功能 | `web/webview_host.*`、`ui/app.cpp`、文档 |
-| PM-02 | 文档索引与状态治理 | `docs/CHANGELOG.md` 索引含本文件；`milestone_plan.md` 增「补丁系列」行并修正 M2/M3/M4 过期状态；建立"每次提交同步状态行"的规则 | VM-02：文档互链可达、状态与代码一致 | `docs/CHANGELOG.md`、`docs/actionPlan/milestone_plan.md` |
-| PM-03 | 构建脚本一键化 | `scripts/build.ps1`：配置（若需要）→ 构建 → 跑全部自检 → 输出摘要（失败给文件名+行号） | VM-03：干净环境一条命令完成并可读摘要 | `scripts/build.ps1`、`source/README.md` |
-| PM-04 | 诊断信息完善（可选） | 关于/诊断区一键复制：版本、依赖版本、数据目录、日志路径、GPU、DPI 缩放 | VM-04：复制内容可用于问题反馈 | `ui/app.cpp` |
+| PM-01 ⬜ | WebView2 Runtime 检测与引导（清零 M1 唯一遗留，落地 M6-02） | 启动自检 WebView2 Runtime 版本；缺失时给出**官方 Evergreen Bootstrapper** 链接与说明；不阻塞主界面（仅网页版相关功能提示） | VM-01：模拟缺失（改 profile 路径/环境变量）→ 出现引导且可正常使用非网页版功能 | `web/webview_host.*`、`ui/app.cpp`、文档 |
+| PM-02 🟡 | 文档索引与状态治理 | `docs/CHANGELOG.md` 索引含本文件；`milestone_plan.md` 增「补丁系列」行并修正 M2/M3/M4 过期状态；建立"每次提交同步状态行"的规则 | VM-02：文档互链可达、状态与代码一致 | `docs/CHANGELOG.md`、`docs/actionPlan/milestone_plan.md` |
+| PM-03 ⬜ | 构建脚本一键化 | `scripts/build.ps1`：配置（若需要）→ 构建 → 跑全部自检 → 输出摘要（失败给文件名+行号） | VM-03：干净环境一条命令完成并可读摘要 | `scripts/build.ps1`、`source/README.md` |
+| PM-04 ⬜ | 诊断信息完善（可选） | 关于/诊断区一键复制：版本、依赖版本、数据目录、日志路径、GPU、DPI 缩放 | VM-04：复制内容可用于问题反馈 | `ui/app.cpp` |
 
 ---
 
 ## §8 横向追溯矩阵（缺口 → 任务 → 验证 → 验收）
+
+> 下表为**缺口→任务的映射**（不含状态）；**实施状态**以文首「实施进度」表与 §1.0 为准。
 
 | 缺口（证据） | 任务 | 验证 | 验收 |
 |---|---|---|---|
@@ -471,21 +491,21 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 | 无错误呈现（`app.cpp` 无 Toast） | PA-06 | VA-04 | AA-04 |
 | 无进程级配置访问器（`app.cpp` L328） | PA-07 | VA-06 | AA-05 |
 | 未接配置字段（`grid_size` 等） | PA-08（部分）+ PD-03（全量） | VA-06 / VD-03 | AA-05 / AD-04 |
-| 同步阻塞 UI（`executor.h` L9-10） | PB-01 | VB-01 | AB-01 |
-| `cancel()` 不中断当前节点 | PB-02 | VB-02 | AB-01 |
-| 无流式回调（`ExecutionContext` L62-75） | PB-03 / PB-08 | VB-03 | AB-02 |
-| official 未接线（M4-05 / M4-10） | PB-04 / PB-05 | VB-04 | AB-03 |
-| `api_key_ref` 无实现（M4-07） | PB-06 | VB-05 | AB-04 |
-| 会话失效无引导（§8.5） | PB-07 | VB-06 | AB-05 |
+| 同步阻塞 UI（`executor.h` L9-10） | PB-01 ✅ | VB-01 ✅ | AB-01 |
+| `cancel()` 不中断当前节点 | PB-02 ⬜ | VB-02 ⬜ | AB-01 |
+| 无流式回调（`ExecutionContext` L62-75） | PB-03 / PB-08 | VB-03 🚫 | AB-02 |
+| official 未接线（M4-05 / M4-10） | PB-04 / PB-05 | VB-04 ✅ | AB-03 |
+| `api_key_ref` 无实现（M4-07） | PB-06 ✅ | VB-05 ✅ | AB-04 |
+| 会话失效无引导（§8.5） | PB-07 ⬜ | VB-06 ⬜ | AB-05 |
 | 无 autosave（`snapshots_dir` 空置） | PC-01 / PC-02 | VC-01 / VC-02 | AC-01 |
 | 最近列表不校验、version 不迁移 | PC-03 / PC-04 | VC-03 | AC-02 |
 | 输出不归档、无 TTL | PC-05 / PC-06 | VC-04 / VC-05 | AC-03 |
-| 无快捷键（`ed::EnableShortcuts(false)`） | PD-01 | VD-01 | AD-01 |
-| 复制/粘贴暂停（三处禁用） | PD-02 | VD-02 | AD-02 |
-| 窗口几何不持久化 | PD-04 | VD-04 | AD-03 |
+| 无快捷键（`ed::EnableShortcuts(false)`） | PD-01 ⛔ | VD-01 | AD-01 |
+| 复制/粘贴暂停（三处禁用） | PD-02 ✅ | VD-02 | AD-02 |
+| 窗口几何不持久化 | PD-04 ✅ | VD-04 | AD-03 |
 | 设置面板缺（M6-06）、参数面板无重置 | PD-03 / PD-05 | VD-03 | AD-04 |
-| 无重跑能力 | PD-06 | VD-05 | AD-05 |
-| M6-02 WebView2 遗留 | PM-01 | VM-01 | AM-01 |
+| 无重跑能力 | PD-06 🟡 | VD-05 | AD-05 |
+| M6-02 WebView2 遗留 | PM-01 ⬜ | VM-01 | AM-01 |
 
 ### 8.1 各补丁验收标准
 
@@ -538,7 +558,7 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 | M4-13 workflow.log | PA-04 完成"节点耗时明细"；归档路径由 PC-05 | M4 仅剩缓存命中（随 M5 缓存） |
 | M5-02 VLM / ImagePreview / Output 窗口 | 不变（M5） | PA-02 的输出面板是 Output 窗口的雏形，M5 只做图片/多模态与历史增强 |
 | M5 §11 输出归档 | PC-05/PC-06 打底 | M5 负责历史/预览/自动打开 |
-| M6-02 引导 / M6-06 设置面板 / M6-08 打包 | PM-01 / PD-03 / 仍留 M6 | — |
+| M6-02 引导 / **M6-01 设置面板** / M6-08 打包 | PM-01 / PD-03 / 仍留 M6 | 设置面板在 M6.md 中编号为 **M6-01**（M6-06 是「工作流校验完善」，原表述有误） |
 
 ---
 
@@ -559,11 +579,14 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 |---|---|---|
 | `api_probe.exe --selftest` | V-01…V-10 + 新增 V-11（无 Key 请求构造）/ V-12（取消与超时） | 七组 PASS → 九组 PASS |
 | `api_probe.exe --graph-selftest` | 图模型/注册表/撤销/序列化/批量参数 | 111/0 → 随补丁增长 |
-| `api_probe.exe --exec-selftest` | 拓扑 + 校验 + 执行器 | 56/0 → 随补丁增长 |
+| `api_probe.exe --exec-selftest` | 拓扑 + 校验 + 执行器 | **72/0**（2026-09-26）→ 随补丁增长 |
 | `aiwrite.exe --run-selftest` | 示例工作流（official 占位） | PASS（3/5 预期） |
 | `aiwrite.exe --run-selftest --web` | 示例工作流真实网页版生成 | PASS（5/5） |
 | `aiwrite.exe --run-selftest --official` | 官方 API 真实生成（需 Key，PB-09 新增） | 待 PB |
 | `aiwrite.exe --web-probe` / `--web-chat "<提示词>"` | 网页版协议探测 / 端到端生成 | PASS |
+| `aiwrite.exe --cred-selftest` | 凭据库（加密可逆 / 无明文落盘 / CRC 篡改 / TTL 清理） | **8/8 PASS** |
+| `aiwrite.exe --export-selftest` | 导出为文档（文件名 / 正文同源 / 原子写 / 同名改名） | **7/7 PASS** |
+| `aiwrite.exe --web-session-selftest` | 网页版会话自动引导（窗口已开 → 补探测） | PASS |
 
 ### 11.3 文件-职责索引（本系列新增/改动）
 
@@ -572,7 +595,7 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 | `engine/executor.{h,cpp}` | `NodeRunInfo` / `runInfos()` / 逐节点耗时 / 线程化 / 流式回调 | A、B |
 | `ui/output_panel.{h,cpp}`（新） | 输出面板（复制/导出/历史/搜索） | A、B、D |
 | `ui/error_bar`（新，或并入 app.cpp） | 错误条与定位 | A、B |
-| `ui/settings_panel.{h,cpp}`（新） | 设置面板（M6-06） | D |
+| `ui/settings_panel.{h,cpp}`（新） | 设置面板（**M6-01**） | D |
 | `ui/console_panel.cpp` | 复制/导出/自动滚动 | A |
 | `utils/config.{h,cpp}` | 进程级配置访问器、迁移、窗口几何字段 | A、C、D |
 | `ai/inference_provider.h`（新） | Provider 抽象（§8.1） | B |
@@ -589,12 +612,16 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 | 日期 | 版本 | 变更 |
 |---|---|---|
 | 2026-09-23 | v1 | 首次建立：基于全库底层逻辑审计，确定补丁系列 A→D + 并行项，并详述 Patch A |
+| 2026-09-24 | v2 | Patch A（A1 + A2）全部完成（PA-01…PA-09 ✅ / VA-01…VA-08 达成）；叠加 F1 复制粘贴接回、F2 参数面板增强、F3 窗口几何、P1-a/b/c |
+| 2026-09-26 | v3 | **状态校正**：PB-01 三步 ✅ / PB-03 最小化 ✅ / PB-05 ✅ / PB-06 ✅ / PB-08 UI 侧 ✅；剩余项收敛；新增 §1.0 状态总览与 §2 / §4.1 / §4.2 / §5.1 / §6.1 / §7 状态标记；**M6 设置面板编号校正为 M6-01** |
 
 ### 11.5 待决问题（见 §12 决策点）
 
 ---
 
 ## §12 决策点（开工前请确认）
+
+> **决议状态（2026-09-26）**：D-01 ① 已实施 · D-02 ① 已实施（PB-01 线程化落地）· D-03 ① 已实施（A 接三个 + 其余归 PD-03）· D-04 待 PD-08 决策 · D-05 ② 已按 A1 / A2 两次提交。
 
 | 编号 | 议题 | 选项 | 当前默认 |
 |---|---|---|---|
