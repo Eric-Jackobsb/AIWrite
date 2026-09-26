@@ -28,6 +28,11 @@ const std::filesystem::path& webview2_profile();  // ~/.brain-ai/webview2
 const std::filesystem::path& exe_dir();
 std::filesystem::path assets_dir();               // <exe_dir>/assets
 
+// ---- Provider 配置表（M_patchB L1 / PB2-02）----
+std::filesystem::path providers_asset_file();     // <exe_dir>/assets/providers.json
+std::filesystem::path user_providers_dir();       // ~/.brain-ai/providers.d（用户新增条目）
+std::filesystem::path user_providers_file();      // ~/.brain-ai/providers.json（字段级覆盖）
+
 // 创建全部数据目录；返回失败个数（0 = 全部就绪）
 int ensure_data_dirs();
 

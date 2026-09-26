@@ -170,6 +170,21 @@ function(aiwrite_sync_vcpkg_bin target)
 endfunction()
 
 # -----------------------------------------------------------------------------
+# aiwrite_copy_assets：把随程序发布的配置表（assets/providers.json 等）拷到输出目录
+#   M_patchB L1 / PB2-02：配置表的第 ① 层来源 = <exe>/assets/providers.json
+# -----------------------------------------------------------------------------
+function(aiwrite_copy_assets target)
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:${target}>/assets"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/assets/providers.json"
+                "$<TARGET_FILE_DIR:${target}>/assets/providers.json"
+        COMMENT "copy_assets: providers.json -> $<TARGET_FILE_DIR:${target}>/assets"
+        VERBATIM)
+endfunction()
+
+# -----------------------------------------------------------------------------
 # aiwrite_core：公共基础设施（路径 / 日志 / 配置 / 加密）
 # 后续 M2 起把 engine / nodes / ai 也并入本库
 # -----------------------------------------------------------------------------
@@ -194,6 +209,7 @@ src/engine/provider_resolve.cpp
     src/ai/web_pow.cpp
     src/ai/deepseek_web_client.cpp
     src/ai/deepseek_official_provider.cpp
+    src/ai/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）
     src/nodes/local_nodes.cpp
     src/nodes/register_executors.cpp
     src/web/session_store.cpp
@@ -265,6 +281,7 @@ if(MSVC)
 endif()
 aiwrite_copy_runtime_dlls(aiwrite)
 aiwrite_sync_vcpkg_bin(aiwrite)
+aiwrite_copy_assets(aiwrite)   # M_patchB L1 / PB2-02：providers.json → <exe>/assets
 
 # -----------------------------------------------------------------------------
 # api_probe：M1 技术验证命令行工具（V-04 HTTP / V-05 SHA3 / V-06 DeepSeek API）
@@ -281,6 +298,7 @@ endif()
 target_compile_definitions(api_probe PRIVATE AIWRITE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 aiwrite_copy_runtime_dlls(api_probe)
 aiwrite_sync_vcpkg_bin(api_probe)
+aiwrite_copy_assets(api_probe) # 自检也要读表（与 aiwrite 同一份资产）
 
 # -----------------------------------------------------------------------------
 # webview2_login：M1 技术验证命令行工具（V-03 WebView2 登录 + Cookie 提取）

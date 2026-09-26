@@ -21,6 +21,23 @@
 
 ## [Unreleased] — M5 核心切片（M5-C）图片理解链路 + 图片显示 已落地
 
+**特性（M_patchB L1 第一批）：Provider 配置表真的被程序读取了 —— 加载 / 合并 / 校验 / 用户覆盖 / 自检**
+
+- 新增 `ai/provider_spec.{h,cpp}`（PB2-01）：JSON 配置表加载器（纯函数 `merge_provider_specs` + 读盘 `load_provider_specs`）
+  - **四层来源（低 → 高）**：`<exe>/assets/providers.json` → `$AIWRITE_SOURCE_DIR/assets/providers.json`（开发态兜底）→ `~/.brain-ai/providers.d/*.json`（文件名升序）→ `~/.brain-ai/providers.json`（字段级覆盖，支持 `replace_all`）；四层都缺失 → **最小兜底表**（custom-official + deepseek）
+  - **校验（official 与 web 同一套）**：`schema_version` / 必填（id·display·kind·protocol）/ 类型不符 → 跳过该条 / 未知字段 → 警告 / **`_` 前缀键 → 忽略且不警告** / **明文密钥键名与值双重检测 → 警告 + 拒绝该字段** / 坏 JSON 只废该层 / **`web.adapter` 分支校验**（`builtin:*` 缺 `endpoints` → 沿用内置默认 + 警告；`dom` 缺选择器 → 报错并丢弃）/ `kind=web` 缺 `login_url` → 报错 / 「表里有、程序还没实现」→ 警告（R9）
+  - 每条记录 `origin`（`builtin` / `source` / `user.d/<文件名>` / `user` / `fallback`）；提供线程安全快照 `provider_specs_snapshot()`（工作线程用）
+- `utils/paths.{h,cpp}`（PB2-02）：新增 `providers_asset_file()` / `user_providers_dir()` / `user_providers_file()`；`ensure_data_dirs()` 顺带创建 `~/.brain-ai/providers.d`
+- `CMakeLists.txt`（PB2-02）：新增 `aiwrite_copy_assets(<target>)`，把 `assets/providers.json` 拷到 `$<TARGET_FILE_DIR>/assets/`（`aiwrite` 与 `api_probe` 均生效）；实测产物 `build/bin/assets/providers.json`
+- 新增 CLI（PB2-07 **离线部分**）：`--provider-selftest [--provider <id>] [--api-base <地址>] [--model <名>] [--key-ref <引用名>]`、`--provider-dump`
+  - 表校验 + 离线断言 → `[配置表自检] 50 项通过 / 0 项失败`；`--provider <id>`：API 条目**按表解析**「生效地址 / 生效模型 / 引用名」→ 按 `env_names`（按序）→ 凭据库取 Key → 有 Key 发一条 ping（`请只回复：pong`）；**web 条目只检查登录态与端点一致性，不发送任何内容**；退出码 0=通过 / 1=失败 / 2=缺 Key（API）或未登录（web）
+  - 实测：`--provider-selftest` → 50/0 PASS（exit 0）；`--provider-selftest --provider zhipu` → 自动带出 `https://open.bigmodel.cn/api/paas/v4` + `glm-4-flash` + `brain-ai/zhipu`（exit 2：无 Key）；`--provider-dump` → 打印 10 条（official 9 / web 1）+ 来源 + 已实现协议清单
+  - `--vlm-selftest` 行为不变（默认值改在分发处补齐，仍是智谱 `glm-4v-flash` / `brain-ai/zhipu`；实测离线 PASS / exit 2）
+- 断言：`api_probe --exec-selftest` **120 → 170 通过 / 0 失败**（新增配置表 50 项：合并优先级 / 字段级覆盖 / 新增条目 / 必填缺失 / 类型错误 / 未知字段 / 明文密钥 / 坏 JSON / schema_version / 兜底 / replace_all / web 两形态 / 未实现协议警告 / 解析辅助 / 视觉门控）
+- `source/assets/providers.json`：补 `endpoints.users_path`（消除「缺 users_path」警告）
+- **基线（全绿，2026-09-26 实测）**：`--graph-selftest` **111/0** · `--exec-selftest` **170/0** · `--selftest` 七组 PASS · `--run-selftest` PASS（离线 3/5）· `--run-selftest --web` **5/5 / 0 失败 / 0 跳过（9.01s）** · `--cred-selftest` PASS · `--export-selftest` PASS · `--web-session-selftest` PASS（userToken 64 位）· `--web-probe` PASS（`/api/v0/users/current` 200）· `--web-chat` PASS（HTTP 200 / PoW 1 次）· 构建 **0 error / 0 warning**
+- **本批未做（下一批 L1 续）**：`PB2-04` 请求参数化（端点 / 认证 / 超时全部按表取值）、`PB2-05` 节点 / UI / 校验表驱动 + **网页版去硬编码**（`webview_host` 登录 URL·窗口标题·探测路径；`deepseek_web_client` host 与端点；`property_panel` 登录入口）、`PB2-06` `config.toml` 多 provider —— **表已在跑，但尚未接管执行链路**（节点仍走现有实现，故本轮行为零变化、基线不变）
+
 **文档 + 数据（M_patchB 计划）：Provider 从「写死在 C++」改为「JSON 配置表 + 用户可覆盖」，且 **API 与网页版同表同机制****
 
 - 新增 `docs/actionPlan/M_patchB.md`（**v3**）：现状审计（7 个硬编码点 / `provider` 字段零分派 / 全库无任何厂商元数据文件）+ 三层方案（**L1 JSON 配置表（official + web 两类同表）** · L2 协议/适配器工厂 · L3 通用 DOM 站点适配器）+ `PB2-01…PB2-16` 任务 + `AB2-01…AB2-12` 验收 + `VB2-01…VB2-15` 验证项 + 决策 `D-08…D-18` + 附录 B（**JSON 字段规范，含 web 两种形态**）与附录 C（**加载顺序与生效规则**）

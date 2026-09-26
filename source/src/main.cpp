@@ -6,6 +6,7 @@
 #include "ui/editor_state.h"
 #include "ui/output_panel.h"
 #include "ai/deepseek_official_provider.h"
+#include "ai/provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）
 #include "engine/node_registry.h"
 #include "ai/deepseek_web_client.h"
 #include "utils/config.h"
@@ -14,6 +15,7 @@
 #include "utils/log.h"
 #include "utils/paths.h"
 #include "web/webview_host.h"
+#include "web/session_store.h"   // M_patchB：--provider-selftest 的网页版登录态检查
 
 #include <cstdio>
 #include <cstdlib>
@@ -55,6 +57,13 @@ void print_usage()
     std::printf("                   图片理解（M5-02）自检：编码图片 → 构造多模态请求体（离线断言）\n");
     std::printf("                   → 有 Key 时真实调用并打印生成文本\n");
     std::printf("                   退出码 0=通过 / 1=失败 / 2=缺少 API Key（离线部分已通过）\n");
+    std::printf("  --provider-selftest [--provider <id>] [--api-base <地址>] [--model <模型名>]\n");
+    std::printf("                      [--key-ref <凭据引用名>]\n");
+    std::printf("                   Provider 配置表（M_patchB L1）自检：表校验 + 离线断言\n");
+    std::printf("                   --provider <id> 时：API 条目 → 有 Key 就发一条 ping；\n");
+    std::printf("                   网页版条目 → 只检查登录态与端点一致性（不发送内容）\n");
+    std::printf("                   退出码 0=通过 / 1=失败 / 2=缺 Key 或未登录（离线部分已通过）\n");
+    std::printf("  --provider-dump  打印生效的 Provider 配置表（含来源与覆盖链）\n");
     std::printf("  --help           显示本帮助\n");
 }
 
@@ -831,6 +840,175 @@ int vlm_selftest(const std::string& image_path, const std::string& api_base,
     return 0;
 }
 
+// --provider-selftest / --provider-dump：Provider 配置表（M_patchB L1 / PB2-01、PB2-07 离线部分）
+//   ① 表校验 + 离线断言（official 与 web 两类条目**同一套**）
+//   ② --provider <id>：API 条目 → 有 Key 时发一条 ping；网页版条目 → 只检查登录态与端点
+//   退出码：0=通过 / 1=失败 / 2=缺 Key（API）或未登录（web）—— 离线部分均已通过
+
+std::string join_names(const std::vector<std::string>& items)
+{
+    std::string text;
+    for (const std::string& item : items) {
+        if (!text.empty()) {
+            text += "、";
+        }
+        text += item;
+    }
+    return text.empty() ? std::string("（无）") : text;
+}
+
+void print_spec_list(const aiwrite::ai::ProviderSpecs& specs)
+{
+    for (const aiwrite::ai::ProviderSpec& spec : specs.items) {
+        std::string detail;
+        if (spec.kind == "web") {
+            detail = "adapter=" + spec.web.adapter + " login=" + spec.web.login_url;
+        }
+        else {
+            detail = "protocol=" + spec.protocol +
+                     " base=" + (spec.api_base.empty() ? std::string("（手填）") : spec.api_base);
+        }
+        std::printf("   %-18s kind=%-8s %s\n", spec.id.c_str(), spec.kind.c_str(),
+                    detail.c_str());
+        std::printf("   %-18s 来源=%-18s 模型 %zu 个%s\n", "", spec.origin.c_str(),
+                    spec.models.size(), spec.verified ? "  [已实测]" : "  [未验证]");
+    }
+}
+
+int provider_dump()
+{
+    const aiwrite::ai::ProviderSpecs specs = aiwrite::ai::provider_specs();
+    std::printf("[配置表] %s；条目 %zu 条（official %zu / web %zu）\n",
+                specs.report.summary().c_str(), specs.items.size(),
+                specs.count_kind("official"), specs.count_kind("web"));
+    print_spec_list(specs);
+    std::printf("[配置表] 已实现协议：%s\n",
+                join_names(aiwrite::ai::implemented_protocols()).c_str());
+    std::printf("[配置表] 已实现网页版适配器：%s\n",
+                join_names(aiwrite::ai::implemented_web_adapters()).c_str());
+    std::printf("[配置表] 用户目录：%s（新增条目）\n",
+                aiwrite::paths::user_providers_dir().string().c_str());
+    std::printf("[配置表] 用户覆盖：%s\n", aiwrite::paths::user_providers_file().string().c_str());
+    for (const std::string& warning : specs.report.warnings) {
+        std::printf("[配置表][警告] %s\n", warning.c_str());
+    }
+    for (const std::string& error : specs.report.errors) {
+        std::printf("[配置表][错误] %s\n", error.c_str());
+    }
+    return 0;
+}
+
+int provider_selftest(const std::string& provider_id, const std::string& api_base,
+                      const std::string& model, const std::string& key_ref)
+{
+    const aiwrite::ai::ProviderSpecs specs = aiwrite::ai::provider_specs();
+    std::printf("[Provider 自检] 表：%s；条目 %zu 条（official %zu / web %zu）\n",
+                specs.report.summary().c_str(), specs.items.size(),
+                specs.count_kind("official"), specs.count_kind("web"));
+    print_spec_list(specs);
+
+    int       offline_passed = 0;
+    const int offline_failed = aiwrite::ai::provider_spec_selftest(&offline_passed);
+    if (provider_id.empty()) {
+        std::printf("[Provider 自检] 未指定 --provider：仅完成离线部分（表校验 + 断言）\n");
+        return offline_failed == 0 ? 0 : 1;
+    }
+
+    const aiwrite::ai::ProviderSpec* spec = specs.find(provider_id);
+    if (spec == nullptr) {
+        std::printf("[Provider 自检] FAIL：表里没有 id=%s（用 --provider-dump 查看全部）\n",
+                    provider_id.c_str());
+        return 1;
+    }
+
+    // ---- 网页版条目：只检查登录态与端点一致性（不发送内容，避免误触发站点）----
+    if (spec->kind == "web") {
+        const std::string token =
+            aiwrite::web::SessionStore::instance().snapshot().user_token;
+        const bool logged_in = !token.empty();
+        std::printf("[Provider 自检] 网页版 %s：适配器=%s\n", spec->display.c_str(),
+                    spec->web.adapter.c_str());
+        std::printf("[Provider 自检] 登录页：%s\n", spec->web.login_url.c_str());
+        std::printf("[Provider 自检] 端点：host=%s completion=%s challenge=%s\n",
+                    spec->web.endpoints.host.c_str(),
+                    spec->web.endpoints.completion_path.c_str(),
+                    spec->web.endpoints.challenge_path.c_str());
+        std::printf("[Provider 自检] 探测路径：%s\n", join_names(spec->web.probe_paths).c_str());
+        std::printf("[Provider 自检] 登录态=%s（内存凭证，程序退出即销毁）\n",
+                    logged_in ? "有" : "无");
+        if (!logged_in) {
+            std::printf("  提示：先在界面「提供商配置 → 打开登录窗口」登录一次，或跑 "
+                        "--web-session-selftest\n");
+            return 2;
+        }
+        return offline_failed == 0 ? 0 : 1;
+    }
+
+    // ---- API 条目：协议实现检查 → Key 解析（env 列表 → 凭据库）→ 一条 ping ----
+    if (spec->protocol != "openai") {
+        std::printf("[Provider 自检] %s 的 protocol=%s 本版本尚未实现（已实现：%s）"
+                    "：跳过联网测试\n",
+                    spec->display.c_str(), spec->protocol.c_str(),
+                    join_names(aiwrite::ai::implemented_protocols()).c_str());
+        return offline_failed == 0 ? 0 : 1;
+    }
+    const std::string effective_base = aiwrite::ai::resolve_api_base(*spec, api_base);
+    const std::string effective_model =
+        aiwrite::ai::resolve_model(*spec, model, std::string(), false);
+    const std::string effective_ref = aiwrite::ai::resolve_key_ref(*spec, key_ref);
+    std::printf("[Provider 自检] 生效地址=%s；生效模型=%s；引用名=%s\n", effective_base.c_str(),
+                effective_model.c_str(), effective_ref.c_str());
+    if (effective_base.empty()) {
+        std::printf("[Provider 自检] FAIL：该条目未填 api_base，请用 --api-base 指定\n");
+        return 1;
+    }
+
+    std::string key;
+    std::string key_source;
+    for (const std::string& env_name : spec->env_names) {
+        const char* value = std::getenv(env_name.c_str());
+        if (value != nullptr && *value != '\0') {
+            key        = value;
+            key_source = "环境变量 " + env_name;
+            break;
+        }
+    }
+    if (key.empty()) {
+        std::string       load_error;
+        const std::string stored = aiwrite::utils::load_credential(effective_ref, &load_error);
+        if (!stored.empty()) {
+            key        = stored;
+            key_source = "凭据库 " + effective_ref;
+        }
+    }
+    if (key.empty()) {
+        std::printf("[Provider 自检] 未找到 API Key（环境变量 %s / 凭据库 %s）\n",
+                    join_names(spec->env_names).c_str(), effective_ref.c_str());
+        std::printf("  提示：在界面「提供商配置 → API Key」填写一次即自动入库\n");
+        return 2;
+    }
+    std::printf("[Provider 自检] 凭据来源=%s，发一条 ping（消耗极小额度）…\n", key_source.c_str());
+
+    aiwrite::ai::OfficialChatRequest request;
+    request.api_base    = effective_base;
+    request.model       = effective_model;
+    request.prompt      = "请只回复：pong";
+    request.max_tokens  = 16;
+    request.temperature = 0.0;
+    request.top_p       = 1.0;
+    request.api_key     = key;
+    const aiwrite::ai::OfficialChatResult ping = aiwrite::ai::official_chat(request);
+    std::printf("[Provider 自检] HTTP %d，耗时 %.0f ms\n", ping.http_status, ping.elapsed_ms);
+    if (!ping.ok || ping.text.empty()) {
+        std::printf("[Provider 自检] FAIL：%s\n",
+                    ping.error.empty() ? "未取到文本" : ping.error.c_str());
+        return 1;
+    }
+    std::printf("[Provider 自检] 返回：%s\n", ping.text.substr(0, 120).c_str());
+    std::printf("[Provider 自检] PASS\n");
+    return offline_failed == 0 ? 0 : 1;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -844,9 +1022,12 @@ int main(int argc, char** argv)
     std::string web_chat_prompt;
     bool        vlm_selftest_flag = false;                              // M5-02 图片理解自检
     std::string vlm_image;                                              // --image
-    std::string vlm_api_base = "https://open.bigmodel.cn/api/paas/v4";   // 智谱（D-07）
-    std::string vlm_model    = "glm-4v-flash";
-    std::string vlm_key_ref  = "brain-ai/zhipu";
+    std::string vlm_api_base;                                           // 空 = 用表/内置默认（D-07 智谱）
+    std::string vlm_model;                                              // 空 = 用表/内置默认
+    std::string vlm_key_ref;                                            // 空 = 用表/内置默认
+    bool        provider_selftest_flag = false;                         // M_patchB L1 配置表自检
+    bool        provider_dump_flag     = false;                         // 打印生效配置表
+    std::string provider_id;                                            // --provider <id>
     int  selftest_timeout = 30;
 
     for (int i = 1; i < argc; ++i) {
@@ -914,6 +1095,19 @@ int main(int argc, char** argv)
         }
         else if (arg == "--vlm-selftest") {
             vlm_selftest_flag = true;
+        }
+        else if (arg == "--provider-selftest") {
+            provider_selftest_flag = true;
+        }
+        else if (arg == "--provider-dump") {
+            provider_dump_flag = true;
+        }
+        else if (arg == "--provider") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --provider 缺少取值\n");
+                return 2;
+            }
+            provider_id = argv[++i];
         }
         else if (arg == "--image") {
             if (i + 1 >= argc) {
@@ -1019,10 +1213,31 @@ int main(int argc, char** argv)
             std::fprintf(stderr, "请用 --image <路径> 指定要理解的图片\n");
             return 2;
         }
-        const int vlm_code = vlm_selftest(image, vlm_api_base, vlm_model, vlm_key_ref);
+        const std::string effective_api_base =
+            vlm_api_base.empty() ? std::string("https://open.bigmodel.cn/api/paas/v4")
+                                 : vlm_api_base;
+        const std::string effective_model =
+            vlm_model.empty() ? std::string("glm-4v-flash") : vlm_model;
+        const std::string effective_key_ref =
+            vlm_key_ref.empty() ? std::string("brain-ai/zhipu") : vlm_key_ref;
+        const int vlm_code = vlm_selftest(image, effective_api_base, effective_model,
+                                          effective_key_ref);
         aiwrite::log::info("AIwrite 图片理解自检退出，返回码 " + std::to_string(vlm_code));
         aiwrite::log::shutdown();
         return vlm_code;
+    }
+
+    // Provider 配置表（M_patchB L1）：打印生效表 / 表校验 + 离线断言（+ 可选联网 ping）
+    if (provider_dump_flag) {
+        const int dump_code = provider_dump();
+        aiwrite::log::shutdown();
+        return dump_code;
+    }
+    if (provider_selftest_flag) {
+        const int code = provider_selftest(provider_id, vlm_api_base, vlm_model, vlm_key_ref);
+        aiwrite::log::info("AIwrite Provider 自检退出，返回码 " + std::to_string(code));
+        aiwrite::log::shutdown();
+        return code;
     }
 
     // 执行自检（不需要 GUI）：验证 EditorState 的运行接线

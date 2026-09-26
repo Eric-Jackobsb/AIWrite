@@ -119,6 +119,21 @@ std::filesystem::path assets_dir()
     return exe_dir() / "assets";
 }
 
+std::filesystem::path providers_asset_file()
+{
+    return assets_dir() / "providers.json"; // 随程序发布的内置配置表（PB2-02）
+}
+
+std::filesystem::path user_providers_dir()
+{
+    return data_root() / "providers.d"; // 用户新增条目（probe 表 / API 表通用）
+}
+
+std::filesystem::path user_providers_file()
+{
+    return data_root() / "providers.json"; // 用户字段级覆盖
+}
+
 std::filesystem::path expand(const std::string& value)
 {
     if (value.empty()) {
@@ -136,8 +151,9 @@ std::filesystem::path expand(const std::string& value)
 int ensure_data_dirs()
 {
     int failures = 0;
-    const std::filesystem::path dirs[] = {
-        data_root(), outputs_dir(), workflows_dir(), snapshots_dir(), logs_dir()};
+    const std::filesystem::path dirs[] = {data_root(),         outputs_dir(),     workflows_dir(),
+                                          snapshots_dir(),     logs_dir(),
+                                          user_providers_dir()}; // 配置表用户目录（PB2-02）
 
     for (const auto& dir : dirs) {
         std::error_code ec;

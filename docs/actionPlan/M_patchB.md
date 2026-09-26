@@ -798,3 +798,39 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | 2026-09-26 | v1（草案） | 首版：现状审计（§1，逐条证据）+ 三层方案（§2）+ 任务分解 + 阶段与验收（§4）+ 风险（§5）+ 待确认决策（§6）+ 附录 A/B |
 | 2026-09-26 | v2 | **按用户第一条指示改写**：① 配置载体由「C++ 内置描述表」改为 **JSON 配置表**（`assets/providers.json`，随程序发布）+ **用户可自定义层**（`~/.brain-ai/providers.json`、`~/.brain-ai/providers.d/*.json`）；② 决策 `D-11`（JSON 表 + 实例参数分工）、`D-12`（完整内置集）、`D-15`（三层覆盖规则）**定稿**；③ 任务重编号为 `PB2-01…PB2-16`（L1 增加「加载/合并/校验」「打包与路径」「用户覆盖」「表驱动 UI + 管理入口」）；④ 新增验收 `AB2-09`（用户可配置闭环）、`AB2-10`（表坏不致命）与验证项 `VB2-01…VB2-14`；⑤ 新增风险 `R8…R11`（坏表 / 表与代码脱节 / 明文密钥 / 维护成本）；⑥ 新增不变量 `I7`（用户 JSON 即插即用）、`I8`（表坏不致命）；⑦ 新增附录 B（JSON 字段规范 + 合并示例 + 最小兜底表）与附录 C（加载顺序与生效规则）；⑧ **新增数据文件 `source/assets/providers.json`**（内置 10 条，随文档先落盘，`PB2-01/02` 让它真正被读取） |
 | 2026-09-26 | **v3（当前）** | **按用户第二条指示改写（web 与 API 同机制）**：① 第一性原则新增「**API 与网页版同机制（同表 · 同规则 · 同入口）**」；② 范围把**网页版去硬编码**与**通用 DOM 适配器**列入在范围内（不再把 web 当可选层）；③ §2.1/§2.2 架构与三层模型改为「配置表承载 official + web 两类条目」；④ **`PB2-05` 扩写为「节点/UI/校验 + 网页版去硬编码」并给出逐处替换清单**（`webview_host` 登录 URL/窗口标题/探测路径、`property_panel` 登录入口、`deepseek_web_client` host 与端点、会话创建/拉取路径）；⑤ `PB2-01` 增两类条目校验规则（`web.adapter` 分支校验、`_` 前缀键忽略、轮询上限、`kind`↔`mode` 一致性）；⑥ `PB2-03`/`PB2-13`/`PB2-14` 明确「web 条目同待遇」，站点条目分 `builtin:*` 与 `dom` 两种形态；⑦ `PB2-07` 自检增**网页版路径**（只查登录态与端点一致性，不发内容）；⑧ 新增不变量 `I9`（网页版无硬编码）、`I10`（两类同待遇）、验收 `AB2-11`/`AB2-12`、验证 `VB2-15`、风险 `R12`/`R13`、决策 `D-18`；⑨ 附录 B 的 `web` 字段表改为「两种形态」并说明 `_` 前缀键语义；⑩ **`source/assets/providers.json` 的 `deepseek-web` 条目补齐** `adapter` / `window_title` / `endpoints` / `probe_paths` / `models`，并新增顶层 `_example_web_dom` 模板 |
+
+---
+
+## §9 实施进度（B2-a 第一批 · 2026-09-26）
+
+> 提交：`1b15474` 之后的 L1 第一批（详见 `docs/CHANGELOG.md` 同名条目）
+
+| 任务 | 状态 | 说明 |
+|---|---|---|
+| `PB2-01` 配置表加载 / 合并 / 校验 | ✅ 完成 | `ai/provider_spec.{h,cpp}`：四层来源 + 字段级覆盖 + `replace_all` + 最小兜底；校验含「类型不符跳过该条 / 未知字段警告 / `_` 前缀忽略 / **明文密钥拒绝** / `web.adapter` 分支 / 未实现协议警告」；`provider_specs_snapshot()` 线程安全 |
+| `PB2-02` 落点与打包 | ✅ 完成 | `paths::providers_asset_file/user_providers_dir/user_providers_file`；`CMakeLists` 新增 `aiwrite_copy_assets()` → `build/bin/assets/providers.json` 实测存在 |
+| `PB2-03` 用户自定义与覆盖 | ✅ 完成 | `~/.brain-ai/providers.d/*.json`（文件名升序）+ `~/.brain-ai/providers.json`（字段级覆盖，可 `replace_all`）；origin 标注来源；**official 与 web 同一套** |
+| `PB2-04` API 请求参数化 | ⬜ 未开始 | 端点 / 认证 / env / 超时仍走现有实现（`/chat/completions` + Bearer + 15s/180s） |
+| `PB2-05` 节点 / UI 表驱动 + **网页版去硬编码** | ⬜ 未开始 | 节点枚举、`api_base` 默认值、生效展示、配置表管理区、`webview_host` / `deepseek_web_client` 端点参数化 —— **全部待做** |
+| `PB2-06` `config.toml` 多 provider | ⬜ 未开始 | 仍为单节 `[providers.deepseek]` |
+| `PB2-07` 测试连接 + `--provider-selftest` | 🟡 **离线部分完成** | 表校验 50 项断言全 PASS；`--provider <id>` 已能按表解析地址/模型/引用名并取 Key 发 ping；**web 路径只查登录态与端点（不发送内容）**；「界面测试连接按钮」未做 |
+
+### 实测基线（全绿）
+
+| 命令 | 结果 |
+|---|---|
+| `api_probe --graph-selftest` | **111 / 0** |
+| `api_probe --exec-selftest` | **170 / 0**（120 → +50 配置表断言） |
+| `api_probe --selftest` | 七组全 PASS |
+| `aiwrite --provider-selftest` | **50 / 0 PASS**（exit 0） |
+| `aiwrite --provider-selftest --provider zhipu` | 自动带出智谱地址 + `glm-4-flash` + `brain-ai/zhipu`；exit **2**（无 Key，离线部分已过） |
+| `aiwrite --provider-dump` | 10 条（official 9 / web 1）+ 来源 + 覆盖链 |
+| `aiwrite --run-selftest` | PASS（离线 3/5，预期） |
+| `aiwrite --run-selftest --web` | **5 / 5**，0 失败 0 跳过（9.01s，真实网页版） |
+| `--cred-selftest` / `--export-selftest` | PASS / PASS |
+| `--web-session-selftest` / `--web-probe` / `--web-chat` | PASS / PASS / PASS |
+| `--vlm-selftest` | 离线 PASS，exit 2（实测默认值仍为智谱 `glm-4v-flash`） |
+| 构建 | 0 error / 0 warning |
+
+> **行为不变性**：本批只新增「表的加载与自检」，**未接管执行链路**（节点仍走 `ai::official_chat` / `ai::web_chat`），因此 `--run-selftest --web` / `--web-chat` / `--vlm-selftest` 行为与改造前完全一致（不变量 I1/I2 保持）。
+> **下一批（B2-a 续）**：`PB2-04` → `PB2-05`（含网页版去硬编码清单）→ `PB2-06`；随后 `B2-b`（`PB2-08…PB2-12` 工厂与协议收编）。

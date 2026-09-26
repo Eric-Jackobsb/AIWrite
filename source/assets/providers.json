@@ -74,7 +74,8 @@
           "completion_path": "/api/v0/chat/completion",
           "challenge_path": "/api/v0/chat/create_pow_challenge",
           "session_create_path": "/api/v0/chat_session/create",
-          "session_fetch_path": "/api/v0/chat_session/fetch_page"
+          "session_fetch_path": "/api/v0/chat_session/fetch_page",
+          "users_path": "/api/v0/users/current"
         },
         "probe_paths": ["/api/v0/users/current", "/api/v0/chat_session/fetch_page"],
         "cookie_names": ["ds_session_id"],

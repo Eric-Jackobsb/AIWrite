@@ -37,6 +37,7 @@
 #include "web/session_store.h"
 #include "web/webview_host.h" // plan_session_boot / interactive_login_request（纯逻辑断言用）
 #include "ai/deepseek_official_provider.h" // M5-02：多模态请求体断言
+#include "ai/provider_spec.h"              // M_patchB L1：Provider 配置表断言
 
 #include <fstream>
 #include <sstream>
@@ -2122,6 +2123,15 @@ int execution_selftest()
 #endif
 
         std::filesystem::remove_all(vlm_root, ec);
+    }
+
+    // ---- M_patchB L1 / PB2-01：Provider 配置表（API 与网页版同一套纯函数断言）----
+    {
+        std::printf("   -- Provider 配置表（M_patchB L1 / PB2-01）--\n");
+        int       spec_passed = 0;
+        const int spec_failed = aiwrite::ai::provider_spec_selftest(&spec_passed);
+        check.passed += spec_passed;
+        check.failed += spec_failed;
     }
 
     std::printf("=== 执行器自检结果: %d 通过 / %d 失败 ===\n", check.passed, check.failed);
