@@ -1,13 +1,15 @@
-# M_patchB：Provider 可插拔化 —— 让「任何 AI 的 API / 网页版」都能低成本接入
+# M_patchB：Provider 可插拔化 —— 配置表（JSON）驱动 + 用户可自定义
 
 > 类型：跨里程碑「地基补丁」第二期（**不占用 M1–M6 编号**，与 `M1.md … M6.md`、[M_patchA.md](M_patchA.md) 平级互链）
 > 依据：2026-09-26 全库 provider / 推理链路审计（见 §1，逐条附**文件:行号**证据）
 > 上游登记：本补丁是 [M_patchA.md](M_patchA.md) §4.1 **`PB-04` Provider 统一抽象**（`FEA-M4-04`）的**展开落地计划**；§12 决策 **D-06/D-07** 已确定「视觉模型走智谱、实现按 OpenAI 兼容规范」
 > 用户目标（原话）：**「现在的 provider 是否已经模块化？我想设置任何 AI 的 web 或者 API 都能很容易实现？」**
-> 现状结论（一句话）：**OpenAI 兼容的 API 已经「能配出来」（零代码），但架构层未模块化；非兼容协议（Anthropic / Gemini / Azure）与「任意 AI 的网页版」都必须改 C++ 源码。**
-> 状态：🟡 **待审核确认** —— 本文档是行动计划草案，**用户确认范围后再开工**（§6 为待确认决策清单）
+> 用户补充指示（2026-09-26，**已确认，本文档已按此改写**）：**「使用配置表，而不是写进硬编码，并且允许用户自己配置。存储一个 json 用来管理配置表」**
+> 现状结论（一句话）：**OpenAI 兼容的 API 已经「能配出来」（零代码），但架构层未模块化；厂商元数据全部硬编码在 C++ 里，非兼容协议（Anthropic / Gemini / Azure）与「任意 AI 的网页版」都必须改源码。**
+> 核心改造方向：**把「厂商元数据」从 C++ 代码搬进一份 JSON 配置表** —— 程序只负责**加载 / 合并 / 校验 / 消费**，用户在自己的目录里加一份 JSON 即可接入新厂商（**不改代码、不重编译**）。
+> 状态：🟡 **待审核确认**（§6 为待确认决策清单；`D-11/D-12/D-15` 已按你的指示定稿）
 > 版本目标：v0.5.x（在已收口的 M5 核心切片之上补「推理后端可插拔」地基）
-> 预计工期（估）：**L1 ≈ 1–1.5 天 · L2 ≈ 2–3 天 · L3 ≈ 5–10 天**（全职估算，含自检与文档）
+> 预计工期（估）：**L1 ≈ 1.5–2 天 · L2 ≈ 2–3 天 · L3 ≈ 5–10 天**（全职估算，含自检与文档；L1 因引入 JSON 表与用户目录略增）
 
 ---
 
@@ -18,7 +20,16 @@
 现在「换一家 AI」只有两条路：① 改界面上的 `API 地址` + `模型（自定义）`（仅当对方兼容 OpenAI）；② 改源码。
 本项目要长期演进（M6 之后还有更多节点与场景），若不把推理后端抽象出来，**每接一家厂商都会污染节点执行逻辑**，并且「网页版」永远是单点实现。
 
-**本文档的目的**：把「接入一个新的 AI」从**改代码**降级为**改数据（配置 / 描述表）**，并把必须写代码的部分收敛到**一个明确的扩展点**（新增一个 Provider 类或一个站点适配器）。
+**本文档的目的**：把「接入一个新的 AI」从**改代码**降级为**改一份 JSON**，并把必须写代码的部分收敛到**一个明确的扩展点**（新增一个 Provider 类或一个站点适配器）。
+
+**本补丁的第一性原则（用户指示）**
+
+| 原则 | 含义 |
+|---|---|
+| **配置表优先（Data over Code）** | 厂商元数据（地址 / 路径 / 认证 / 候选模型 / 能力 / 环境变量名 / 凭据引用名 / 网页版站点）**一律放 JSON**；C++ 里**不再出现**具体厂商的常量表 |
+| **用户可配置** | 用户在自己的目录（`~/.brain-ai/providers.json`、`~/.brain-ai/providers.d/*.json`）新增或覆盖条目即可接入新 AI，**不需要改代码、不需要重编译、不需要管理员权限** |
+| **单一数据源** | 随程序发布的 `assets/providers.json` 是**唯一权威配置表**；文档、UI 下拉、执行调用都从它派生（不重复维护） |
+| **失败不致命** | 表坏了 / 缺了 → 明确报错 + 用「上一份可用表 / 最小兜底」继续可用，绝不崩溃、绝不静默改变行为 |
 
 ### 0.2 编号规则（与 `M_patchA` 的 `PB-xx` 严格区分）
 
@@ -27,7 +38,7 @@
 | `PB2-` | 本补丁任务（Patch B 第二期） | `PB2-03` |
 | `VB2-` | 技术验证 / 离线断言项 | `VB2-01` |
 | `AB2-` | 验收标准 | `AB2-02` |
-| `D-xx` | 决策记录（与 `M_patchA` §12 的编号**连续**） | `D-08` |
+| `D-xx` | 决策记录（与 `M_patchA` §12 的编号**连续**） | `D-15` |
 
 > ⚠️ `M_patchA` 里的 `PB-01…PB-09` 是**第一期**（线程化 / 流式 / 凭据 / 官方 Provider），本文档**不重开**那些编号；`PB-04` 只在 §1.4 作为「上游登记项」被引用。
 
@@ -35,11 +46,14 @@
 
 **做（In scope）**
 
-- 推理后端的**描述表 + 接口 + 工厂**（数据驱动接入）
-- `ProviderConfig` 节点 / 参数面板 / 配置文件的**多 provider 化**
-- 「测试连接」入口与离线断言（`--provider-selftest`）
-- 至少再落地 **1 家非 OpenAI 协议**的 Provider 类（Anthropic 或 Gemini，二选一或都做，见 §6）
-- 网页版**站点描述 + 通用 DOM 适配器**（可选层，见 §6 决策）
+- **`assets/providers.json` 配置表**（随程序发布，唯一权威数据文件）+ 加载 / 合并 / 校验 / 兜底
+- **用户自定义层**：`~/.brain-ai/providers.json`（字段覆盖）+ `~/.brain-ai/providers.d/*.json`（新增条目，便于分享单文件）
+- UI 管理入口：**打开配置表 / 打开所在文件夹 / 重新加载配置表**（热重载）+ 条目来源标注（内置 / 用户覆盖）
+- 请求参数化（端点 / 认证 / env 名 / 超时**全部按表取值**）
+- 「测试连接」+ `--provider-selftest`（**含配置表校验**）
+- 推理后端**接口 + 工厂**（设计 §8.1；把现有两个实现收编）
+- 至少再落地 **1 家非 OpenAI 协议**的 Provider 类（Anthropic 或 Gemini，见 §6）
+- 网页版**站点表 + DOM 适配器**（可选层；站点配置同样走 JSON，见 §6）
 
 **不做（Out of scope，明确登记避免发散）**
 
@@ -48,18 +62,21 @@
 | AutoProvider（自动选择后端）/ 多 Key 轮询 / 失败自动换厂商 | 设计 §8.2 明确「**无 AutoProvider**（T-07 已取消 auto）」 |
 | 模型市场 / 计费统计 / 用量报表 | 与「接入容易」无关，另立项 |
 | 把网页版做成「零维护」 | 站点改版与反爬必然发生，只能做到「可声明 + 可诊断 + 明确报错」 |
-| 图形化 provider 编辑器（点选生成 JSON） | 先保证手写 JSON 足够简单；图形化留给 M6-01 设置面板评估 |
-| 引入新第三方依赖（HTTP/JSON 库） | 沿用 httplib / nlohmann / OpenSSL / WebView2（`M_patchA` §0.3 原则 5） |
+| 图形化 provider 编辑器（点选生成 JSON） | 手改 JSON 已足够简单；图形化留给 M6-01 设置面板评估 |
+| 表里存 API Key | **安全红线**：表只存「环境变量名 + 凭据引用名」，明文 Key 一律走 `utils/credential`（DPAPI），日志脱敏 |
+| 引入新第三方依赖（HTTP/JSON 库） | 沿用 httplib / nlohmann / OpenSSL / WebView2（`M_patchA` §0.3 原则 5；**nlohmann 已在用，读 JSON 表零新增依赖**） |
+| 在线下载 / 远程同步配置表 | 先做本地文件；远程仓库属后期（未登记） |
 
-### 0.4 执行原则（沿用 `M_patchA` §0.3，本补丁追加 2 条）
+### 0.4 执行原则（沿用 `M_patchA` §0.3，本补丁追加 3 条）
 
 1. **运行态值 vs 文档值**：执行结果永不进 `Graph` / 撤销快照 / 工作流 JSON。
 2. **只读暴露**：UI 只读执行产物；写入走 `EditorState` 快照事务。
 3. **脱敏**：API Key / Cookie / userToken 只驻留内存，日志与归档一律脱敏。
 4. **一次提交一个补丁**：独立可验证、可回滚；提交信息附实测数据。
 5. **不引入新依赖**。
-6. **（新）请求体逐字节兼容**：改造后**文本请求体必须与改造前完全一致**（字段集合一致、`stream=false` 不变），以保证既有 `--exec-selftest` 的请求体断言**不改一行仍然通过**。
-7. **（新）离线可断言优先**：所有「数据驱动」的部分（描述表 / 端点拼接 / 认证头 / 能力门控 / 响应解析）都写成纯函数，能在**无网络、无 Key** 的情况下断言。
+6. **（新）请求体逐字节兼容**：改造后**文本请求体必须与改造前完全一致**（字段集合一致、`stream=false` 不变），保证既有 `--exec-selftest` 请求体断言**不改一行仍然通过**。
+7. **（新）离线可断言优先**：加载 / 合并 / 校验 / 端点拼接 / 认证头 / 能力门控 / 响应解析**全部是纯函数**，无网络、无 Key 即可断言。
+8. **（新）表是数据，不是代码**：C++ 源码中**不允许**出现具体厂商的地址/模型/认证常量（唯一例外：§7 附录 B 的**最小兜底表**，仅 2 条，用于「配置表文件丢失」的降级）。
 
 ### 0.5 回归基线（每个提交必须重跑并贴结果）
 
@@ -75,13 +92,13 @@
 | `aiwrite.exe --web-probe` / `--web-chat "<提示词>"` | PASS（**本补丁不得改变其行为**） |
 | `aiwrite.exe --web-session-selftest` | PASS |
 | 构建 | 0 error / 0 warning |
-| **新增（本补丁）** | `aiwrite.exe --provider-selftest`（见 §3 `PB2-05`） |
+| **新增（本补丁）** | `aiwrite.exe --provider-selftest`（见 §3 `PB2-07`） |
 
 ---
 
 ## §1 现状体检（审计，2026-09-26）
 
-审计方式：全库检索 provider / 端点 / 认证 / 环境变量 / 站点常量，逐条追踪调用链（节点 → ai → web）。
+审计方式：全库检索 provider / 端点 / 认证 / 环境变量 / 站点常量，逐条追踪调用链（节点 → ai → web），并检查是否存在任何厂商元数据文件。
 
 ### 1.1 推理链路的实际结构（改造前）
 
@@ -102,7 +119,7 @@ ai/web_pow.cpp                      （DeepSeek 专有挑战求解）
 web/webview_host.cpp                （DeepSeek 网页版登录 + 页面内协议探测）
 ```
 
-**关键事实**：`ai/` 目录里**只有两个具体实现**，没有接口、没有工厂、没有注册表；分派逻辑写在**节点实现**里（`local_nodes.cpp`）。
+**关键事实**：`ai/` 目录里**只有两个具体实现**，没有接口、没有工厂、没有注册表；分派逻辑写在**节点实现**里（`local_nodes.cpp`）；**厂商元数据 100% 硬编码在 .cpp/.h 中**。
 
 ### 1.2 七个硬编码点（"不模块化"的根因）
 
@@ -113,7 +130,7 @@ web/webview_host.cpp                （DeepSeek 网页版登录 + 页面内协�
 | 3 | **认证头**固定 `Authorization: Bearer` | `ai/deepseek_official_provider.cpp:239-241` | 接不了 Azure（`api-key:`）、Anthropic（`x-api-key` + `anthropic-version`） |
 | 4 | **响应解析**固定 `choices[0].message.content` | `ai/deepseek_official_provider.cpp:260-276` | Anthropic（`content[0].text`）/ Gemini（`candidates[0].content.parts[0].text`）解析不出文本 |
 | 5 | **多模态格式**固定 OpenAI `image_url` + data URL | `ai/deepseek_official_provider.cpp:188-195` | Anthropic（`source.base64`）/ Gemini（`inline_data`）需另一套映射 |
-| 6 | **环境变量名**固定 `DEEPSEEK_API_KEY`（全库 **15 处**：**4 处 `getenv` 取值 + 11 处文案/注释**，含用户提示与自检输出） | 取值：`deepseek_official_provider.cpp:209`、`engine/provider_resolve.cpp:97`、`engine/validate.cpp:144`、`utils/credential.cpp:364`；文案：`main.cpp:813`、`deepseek_official_provider.cpp:33`、`provider_resolve.cpp:86,122,124`、`validate.cpp:148`、`local_nodes.cpp:57,310,453` 等 | 换厂商时 env 兜底失效；提示文案也误导（会让用户以为只能配 DeepSeek） |
+| 6 | **环境变量名**固定 `DEEPSEEK_API_KEY`（全库 **15 处**：**4 处 `getenv` 取值 + 11 处文案/注释**） | 取值：`deepseek_official_provider.cpp:209`、`engine/provider_resolve.cpp:97`、`engine/validate.cpp:144`、`utils/credential.cpp:364`；文案：`main.cpp:813`、`deepseek_official_provider.cpp:33`、`provider_resolve.cpp:86,122,124`、`validate.cpp:148`、`local_nodes.cpp:57,310,453` 等 | 换厂商时 env 兜底失效；提示文案也误导 |
 | 7 | **网页版站点**全写死（host / 路径 / Cookie / PoW） | `ai/deepseek_web_client.cpp:15-17`、`ai/web_pow.h:7-13`、`web/webview_host.h:22,62`、`web/webview_host.cpp:150-163`、`ui/property_panel.cpp:184` | 换一个网站 = 重写一整套逆向客户端 |
 
 ### 1.3 `provider` 字段的真相：**装饰性字段**
@@ -126,23 +143,29 @@ web/webview_host.cpp                （DeepSeek 网页版登录 + 页面内协�
 
 > 即：**「提供商」下拉今天选什么都不会影响调用结果**；换厂商靠手填 `API 地址` + `模型（自定义）`。
 
-### 1.4 配置层与上游登记
+### 1.4 配置载体现状（本补丁的直接靶心）：**没有任何厂商元数据文件**
 
 | 项 | 现状 | 证据 |
 |---|---|---|
-| `config.toml` | 只有 `[providers.deepseek]` **单节**；`Config::Provider` 是普通结构体字段 `Config::deepseek`（**不是 map**） | `utils/config.h:66-80`、`utils/config.cpp:180-189`、`:217-219` |
+| 厂商元数据文件 | **不存在**（全库无 `providers.json` / 无 provider 相关 `*.json`）；厂商地址、模型名、认证方式、环境变量名**全部在 .cpp/.h 里** | 见 §1.2 七项；`source/assets/` 目前只有 `fonts/`、`icons/`、`images/`（`assets/images/sample.png` 为 M5 新增） |
+| `config.toml` | 只有 `[providers.deepseek]` **单节**（存的是「实例参数」，不是「厂商元数据」）；`Config::Provider` 是普通结构体字段 `Config::deepseek`（**不是 map**） | `utils/config.h:66-80`、`utils/config.cpp:180-189`、`:217-219` |
 | 官方说明 | 自陈「`providers.deepseek.*` **仅作默认值来源**，实际以 ProviderConfig 节点参数为准」 | `utils/config.h:96-105`（`unwired_config_fields`） |
 | Key 引用名默认值 | 写死 `brain-ai/deepseek`（换厂商会串味 / 可能复用错条目） | `engine/node_registry.cpp:315` |
 | 超时 / 重试 | 代码写死 15s / 180s；`config.timeout.*`、`config.error.*` **零消费** | `ai/deepseek_official_provider.cpp:236-238`、`utils/config.h:48-58`、审计项 `FEA-M4-13` |
+| 资源目录约定（可复用） | `paths::assets_dir()` = `<exe_dir>/assets` **已存在**（当前未被 provider 使用） | `utils/paths.h:29` |
 | 上游登记项 | `PB-04` Provider 统一抽象（`FEA-M4-04`）：`ai/inference_provider.h` + `ai/provider_factory.{h,cpp}` + **把 `web_chat()` 收编为 `DeepSeekWebProvider`**（保持 `--web-chat` 行为不变） | `M_patchA.md` §4.1（PB-04 行）、§2 剩余汇总行 |
 | 设计文档 | §8.1 已给出 `InferenceProvider{generate, generateStream, generateWithImage, name, supportsVision}`；§8.2 后端类型；§8.3 后端选择（official / web） | `ai_writer_nodes.md:550-582`、`:136-153` |
+
+> **结论**：今天既没有「配置表」，也谈不上「用户可配置」—— 用户能改的只有单个工作流节点上的 4 个字段（`mode/api_base/model_custom/api_key`）。
+> 本补丁把**厂商元数据**抽到 JSON 表（可被用户覆盖/扩充），把**实例参数**留在 `config.toml` 与工作流节点里，两层职责分清。
 
 ### 1.5 三类「换个 AI」的真实成本（今天 vs 目标）
 
 | 场景 | 今天 | 目标（本补丁后） |
 |---|---|---|
-| OpenAI 兼容 API（智谱 / 硅基流动 / Ollama / OpenRouter / vLLM） | **零代码**，但要在界面手抄 URL 与模型名；无候选提示、无连通性测试；接错只在运行时才知道 | 下拉选厂商 → 默认地址 / 模型 / Key 引用名**自动带出** → 点「测试连接」即时验证 |
-| 非兼容 API（Anthropic / Gemini / Azure OpenAI） | **必须改源码**（端点 + 认证 + body + 响应 4 处硬编码） | 新增一个 Provider 类（约 120–180 行，纯新增，**不改节点**）或在描述表切换 |
+| OpenAI 兼容 API（智谱 / 硅基流动 / Ollama / OpenRouter / vLLM） | **零代码**，但要在界面手抄 URL 与模型名；无候选提示、无连通性测试；接错只在运行时才知道 | **配置表里已内置**，下拉选厂商 → 默认地址 / 模型 / Key 引用名**自动带出** → 点「测试连接」即时验证 |
+| 表里没有的新厂商（仍兼容 OpenAI） | 手抄配置 | **用户自己写 10 行 JSON**（`~/.brain-ai/providers.d/my-ai.json`）→ 重启/重载后出现在下拉里，**零代码、零重编译** |
+| 非兼容 API（Anthropic / Gemini / Azure OpenAI） | **必须改源码**（端点 + 认证 + body + 响应 4 处硬编码） | 配置表声明 `protocol`；协议差异收敛到一个 Provider 类（约 120–180 行纯新增，**不改节点**） |
 | 任意 AI 的**网页版**（Kimi / 通义 / 豆包 / ChatGPT …） | **必须新写一套逆向客户端**（登录 + 协议 + PoW/SSE + UI 入口，数百行） | 无 PoW 站点：**一份站点 JSON**（选择器 + 登录 URL）；有 PoW/反爬的站点：以 `DeepSeekWebProvider` 为模板抄一个类 |
 
 ### 1.6 现状评级（可扩展性）
@@ -152,10 +175,11 @@ web/webview_host.cpp                （DeepSeek 网页版登录 + 页面内协�
 | 加一家 **OpenAI 兼容 API** | 🟢 可配 | 无需编译，但体验差（手抄 + 无测试） |
 | 加一家 **非兼容 API** | 🔴 需改代码 | 4 处硬编码协议假设 |
 | 加一个 **网页版站点** | 🔴 需重写 | 单点实现，无适配器概念 |
+| **厂商元数据** 可配置性 | 🔴 **无** | 没有配置文件，全在 C++ 里 |
 | **UI / 校验 / 提示** 随厂商扩展 | 🔴 硬编码 | 「提供商」枚举、env 名、错误文案均写死 DeepSeek |
 | **配置 / 密钥** 随厂商扩展 | 🔴 单节 | `[providers.deepseek]` 固定；ref 默认写死 |
 
-> **结论**：今天的状态是「**OpenAI 兼容 + 手抄配置**」能用；离「设置任何 AI 的 web 或 API 都很容易」还有三层距离 —— 这正是 §2/§3 要补的。
+> **结论**：今天的状态是「**OpenAI 兼容 + 手抄配置**」能用；离「设置任何 AI 的 web 或 API 都很容易」还差三层 —— 这正是 §2/§3 要补的。
 
 ---
 
@@ -166,6 +190,7 @@ web/webview_host.cpp                （DeepSeek 网页版登录 + 页面内协�
 **改造前**（今天）
 
 ```
+厂商元数据：写死在 C++ 里（地址/模型/认证/env 名）
 ProviderConfig 节点参数（provider 枚举无用 / mode / api_base / model_custom / api_key / ref）
         │  provider 句柄（JSON）
         ▼
@@ -173,35 +198,42 @@ nodes/local_nodes.cpp ──if(mode=="web")──► ai::web_chat()      ← Dee
                      └──else─────────────► ai::official_chat() ← OpenAI 兼容，写死
 ```
 
-**改造后**（目标）
+**改造后**（目标：`assets/providers.json` + 用户覆盖层 → 配置表 → 工厂 → 具体 Provider）
 
 ```
-ProviderConfig 节点参数（provider=spec id / mode / api_base(可空→用默认) / model_custom / api_key / ref）
-        │  provider 句柄（JSON：含 spec id + 生效地址 + 生效模型）
-        ▼
-engine/provider_resolve.cpp ──► EffectiveProvider + const ProviderSpec*（选择表 + 默认值 + 能力）
-        ▼
+┌─ 配置表（JSON，唯一的厂商元数据来源）────────────────────────────┐
+│  ① <exe>/assets/providers.json          随程序发布（唯一权威）   │
+│  ② ~/.brain-ai/providers.d/*.json       用户新增条目（可分享）   │
+│  ③ ~/.brain-ai/providers.json           用户字段级覆盖           │
+│  ④ C++ 最小兜底（仅 ① 缺失时：custom-official + deepseek）      │
+└──────────────────────────┬─────────────────────────────────────┘
+                           ▼  ai::load_provider_specs()  ← 纯函数：加载/合并/校验
+                    std::vector<ProviderSpec>（内存表，含来源标注）
+                           ▼
+ProviderConfig 节点参数（provider=表 id / mode / api_base(可空→表默认) / model / api_key / ref）
+                           ▼  engine/provider_resolve.cpp → EffectiveProvider + const ProviderSpec*
+                           ▼
 nodes/local_nodes.cpp ──► ai::make_provider(id, mode, options)   ← 唯一分派点（工厂）
                                 │
-                                ├─ OpenAICompatibleProvider   （DeepSeek 官方 / 智谱 / 硅基流动 / Ollama / OpenRouter / Azure）
+                                ├─ OpenAICompatibleProvider   （DeepSeek / 智谱 / 硅基流动 / Ollama / OpenRouter / Azure / 任意用户条目）
                                 ├─ AnthropicProvider          （/v1/messages）
                                 ├─ GeminiProvider             （:generateContent）
                                 ├─ DeepSeekWebProvider        （现有 web_chat 收编；PoW + SSE）
-                                └─ WebDomProvider             （L3：站点 JSON 驱动的通用 DOM 适配器）
-                                        ▲
-                    ai/web/site_spec + ~/.brain-ai/web_providers/*.json
+                                └─ WebDomAdapter              （L3：站点 JSON 驱动的通用 DOM 适配器）
 ```
+
+> 关键点：**新增一家厂商 = 新增一份 JSON**（不改 C++）；C++ 只在「出现**新协议**」时才需要新类。
 
 ### 2.2 三层能力模型（分层做，可独立交付）
 
 | 层 | 名称 | 解决什么 | 加一家新 AI 的成本 | 估时 | 风险 |
 |---|---|---|---|---|---|
-| **L1** | **provider 描述表**（数据驱动） | 端点 / 认证 / 默认地址 / 候选模型 / Key 引用名 / env 名 从「写死」变「查表」 | OpenAI 兼容：**加 8 行数据，零逻辑代码** | 1–1.5 天 | 低（纯增量） |
+| **L1** | **JSON 配置表 + 用户覆盖**（本补丁主体） | 厂商元数据全部数据化；端点 / 认证 / 默认地址 / 候选模型 / 能力 / env 名 / 凭据引用名 从「写死」变「查表」 | OpenAI 兼容：**写 10 行 JSON，零代码**；内置厂商：**下拉即用** | 1.5–2 天 | 低（纯增量 + 一份数据文件） |
 | **L2** | **接口 + 工厂**（设计 §8.1 / PB-04） | 协议差异（Anthropic / Gemini / 未来新协议）收敛到一个 Provider 类；节点不再 if/else | 非兼容 API：**新增 1 个类（~150 行），节点零改动** | 2–3 天 | 低–中（需回归 `--web-chat`） |
-| **L3** | **网页版适配器**（站点描述 + DOM 驱动） | 「任何 AI 的网页版」= 一份站点 JSON；有 PoW 的站点仍写类 | 无 PoW 站点：**一份 JSON（~15 行）**；有 PoW：抄 `DeepSeekWebProvider` | 5–10 天 | 中–高（站点改版 / WebView2 现场手测） |
+| **L3** | **网页版站点表 + DOM 适配器** | 「任何 AI 的网页版」= 一份站点 JSON（同样用户可自定义） | 无 PoW 站点：**一份 JSON（~15 行）**；有 PoW：抄 `DeepSeekWebProvider` | 5–10 天 | 中–高（站点改版 / WebView2 现场手测） |
 
-> 三层**互相不依赖**：L1 可单独交付（立刻改善「OpenAI 兼容」体验）；L2 在 L1 之上把协议打开；L3 独立于 L1/L2（可最后做，或不做）。
-> **推荐**：L1 → L2 一次做完（约 3–4.5 天，风险可控、收益完整）；L3 单独立项、按需推进。
+> 三层**互相不依赖**：L1 可单独交付（立刻改善体验 + 用户可自定义）；L2 在 L1 之上把协议打开；L3 独立于 L1/L2（可最后做，或不做）。
+> **推荐**：L1 → L2 一次做完（约 4–5 天，风险可控、收益完整）；L3 单独立项、按需推进。
 
 ### 2.3 不变量（Invariants，三层共同遵守）
 
@@ -209,143 +241,215 @@ nodes/local_nodes.cpp ──► ai::make_provider(id, mode, options)   ← 唯�
 |---|---|---|
 | I1 | 改造后**文本请求体与改造前逐字节一致** | 复用现有 `--exec-selftest` 请求体断言（**不改一行**必须仍 PASS） |
 | I2 | `--web-chat` / `--web-probe` / `--web-session-selftest` 行为不变 | 三个自检命令 |
-| I3 | Key 三级优先级与「填一次自动入库」「日志脱敏」不变 | `--cred-selftest` 8/8 + 既有断言 |
+| I3 | Key 三级优先级与「填一次自动入库」「日志脱敏」不变；**配置表内不含明文密钥** | `--cred-selftest` 8/8 + 表校验断言 |
 | I4 | 新增的每一条数据/协议映射都有**离线断言** | `--exec-selftest`（api_probe）/ `--provider-selftest`（aiwrite） |
-| I5 | 任何「未实现的组合」都必须**明确报错 + 给操作步骤**，绝不静默失败 | 既有的 `unwired_reason` / VLM web 报错风格延续 |
+| I5 | 任何「未实现的组合」都必须**明确报错 + 给操作步骤**，绝不静默失败 | 既有 `unwired_reason` / VLM web 报错风格延续 |
 | I6 | 不新增第三方依赖；不需要管理员权限；不写盘明文密钥 | 构建 + `--cred-selftest` |
+| I7 | **用户新增/覆盖条目无需改代码**：只写 JSON，功能即可用（新协议除外） | `AB2-09` 验收 |
+| I8 | **表坏/缺失不致命**：报错 + 用上一份可用表或最小兜底继续运行 | `AB2-10` 验收 |
 
 ---
 
 ## §3 任务分解
 
-### L1 —— provider 描述表（数据驱动）
+### L1 —— JSON 配置表（数据驱动 + 用户可自定义）
 
-#### PB2-01 新增 `ai/provider_spec.{h,cpp}`（描述表 + 查询 + 默认值解析）
+#### PB2-01 新增 `ai/provider_spec.{h,cpp}`：配置表加载 / 合并 / 校验（**纯函数**）
 
-- **目标**：把「厂商元数据」集中到一张表，支持内置 + 用户覆盖。
-- **内容**：
-  - 内置条目（建议首版 8 条）：`deepseek`（official+web）、`zhipu`（智谱 GLM，含视觉）、`siliconflow`、`ollama`（本地，无 Key）、`openrouter`、`openai`、`custom-official`（自由填）、`deepseek-web`（kind=web）
-  - 查询：`provider_specs()` / `find_provider_spec(id)` / `provider_ids(kind)`
-  - 默认值解析：`resolve_api_base(spec, params)`（节点参数非空优先，否则 spec 默认）、`resolve_key_ref(spec, params)`、`resolve_env_name(spec)`
-- **验收**：`VB2-01`（离线断言：内置条目数量/必填字段/查找命中与未命中/默认值优先级/`provider_ids` 过滤）
+- **目标**：把「厂商元数据」从代码搬进 JSON，并提供可离线断言的加载器。
+- **数据文件（本补丁已先落盘）**：`source/assets/providers.json`（见 §7 附录 B 的完整规范与示例；发布时随程序拷贝到 `<exe>/assets/providers.json`）。
+- **接口（草案）**：
 
-#### PB2-02 请求参数化：端点 / 认证 / 超时按 spec 取值
+```cpp
+namespace aiwrite::ai {
+struct ProviderSpec { /* 见附录 B 字段表 */ std::string origin; };  // origin = "builtin" | "user.d/<file>" | "user" | "fallback"
+enum class SpecLoadStatus { Ok, MissingBuiltin, BadJson, Partial };
+struct SpecLoadReport {
+    SpecLoadStatus         status = SpecLoadStatus::Ok;
+    std::vector<std::string> errors;      // 可操作错误（含文件路径与原因）
+    std::vector<std::string> warnings;    // 未知字段 / 覆盖条目 / 未验证条目
+    std::vector<std::filesystem::path> files;   // 实际加载顺序（诊断用）
+    std::string            origin_of(const std::string& id) const;
+};
+// 纯函数：给定「文件列表 + 各自内容」→ 合并后的表 + 报告（不碰文件系统 → 可离线断言）
+std::vector<ProviderSpec> merge_provider_specs(
+    const std::vector<std::pair<std::string, std::string>>& layered_json,  // 低 → 高优先级
+    SpecLoadReport* report);
+// 便捷：真实读盘（按 §7 附录 C 的查找顺序）后调用 merge_provider_specs
+std::vector<ProviderSpec> load_provider_specs(SpecLoadReport* report);
+const ProviderSpec*       find_provider_spec(const ProviderSpecs&, const std::string& id);
+std::vector<std::string>  provider_ids(const ProviderSpecs&, const std::string& kind /*空=全部*/);
+
+struct ProviderSpecs {                       // 进程内缓存（与 config 一致：显式 reload）
+    std::vector<ProviderSpec> items;
+    SpecLoadReport            report;
+};
+const ProviderSpecs& provider_specs();       // 首次访问自动 load
+void                 reload_provider_specs(); // UI「重新加载配置表」/ --provider-selftest 用
+}
+```
+
+- **校验规则（必须逐条实现 + 断言）**：
+  1. `schema_version` 必须存在且等于支持版本（当前 `1`）；不支持 → **整体拒绝**并报错（避免误读新格式）
+  2. 必填字段：`id` / `display` / `kind` / `protocol`（`models` 可空，表示「自由填写」）
+  3. `id` 唯一：后者覆盖前者（记录来源链，如 `zhipu: user.d/10-zhipu.json 覆盖 builtin`）
+  4. 字段类型不符 → 该条**跳过**并报错（其余条目照常可用）
+  5. 未知字段 → **警告不失败**（向前兼容：未来版本新增字段时旧程序不炸）
+  6. 表里出现疑似密钥（`api_key` / `auth.token` 等键名，或值形如 `sk-…`）→ **警告 + 拒绝该字段**（安全红线，见 I3）
+  7. 非法 JSON（语法错误）→ 保留**上一份可用表**（进程内）+ 报错；首次加载失败 → 走**最小兜底表**
+- **最小兜底表（唯一允许的 C++ 内联数据，2 条）**：`custom-official`（空地址，必须手填）+ `deepseek`（今天的行为基线），仅当 ①② 都缺失时使用，并在 Console 明确提示「配置表缺失，已使用最小兜底」。
+- **验收**：`VB2-01`（合并优先级 / 必填缺失 / 类型错误 / 未知字段警告 / dup id 覆盖 / 密钥拒绝 / 坏 JSON / schema_version 不匹配 / 兜底触发）
+
+#### PB2-02 配置表落点与打包（"随程序发布"这条路打通）
+
+- **路径**：`paths` 新增 `providers_asset_file()`（= `assets_dir()/providers.json`）、`user_providers_dir()`（`~/.brain-ai/providers/`）、`user_providers_file()`（`~/.brain-ai/providers.json`）、`user_provider_entries_dir()`（`~/.brain-ai/providers.d/`）；`ensure_data_dirs()` 顺带创建用户目录。
+- **打包**：`CMakeLists.txt` 新增 `aiwrite_copy_assets(<target>)`（仿现有 `aiwrite_copy_runtime_dlls`，`cmake/copy_assets.cmake`），把 `assets/providers.json` 拷到 `$<TARGET_FILE_DIR>/assets/`；对 `aiwrite` 与 `api_probe` 都生效（自检也要读表）。
+- **开发态兜底**：`<exe>/assets/providers.json` 不存在时，尝试 `AIWRITE_SOURCE_DIR/assets/providers.json`（该宏已用于自检，见 `CMakeLists.txt:281`），再退到最小兜底。
+- **验收**：`VB2-02`（查找顺序：exe/assets → 源码目录（开发态）→ 兜底；拷贝任务在构建后确实产出文件）
+
+#### PB2-03 用户自定义层与覆盖规则
+
+- **用户可做的事**（三种，全部零代码）：
+  1. **新增条目**：`~/.brain-ai/providers.d/<任意名>.json`（文件名升序生效）—— 单文件即可分享给他人
+  2. **覆盖内置条目**：`~/.brain-ai/providers.json` 里给同 `id` 条目只写要改的字段（**字段级 merge**，未写字段沿用下层）
+  3. **整体替换**：`providers.json` 里 `{"replace_all": true, "providers": […]}`（高级用法；会在 Console 明确提示「已忽略内置表」）
+- **覆盖白名单**：允许覆盖 `display/api_base/chat_path/auth_style/auth_header/extra_headers/env_names/key_ref_default/models/capabilities/limits/notes/docs_url/web/*`；**禁止**覆盖 `id`（作为键）与其类型；`kind/protocol` 允许覆盖但会警告（可能导致不可用）
+- **UI 呈现**：下拉里分组「内置 / 用户（N）」，条目后缀标注来源（如 `zhipu（用户覆盖）`、`my-ai（用户）`）；覆盖条目在参数面板显示「来源：user.d/10-zhipu.json」
+- **验收**：`VB2-03`（字段级覆盖 / providers.d 多文件顺序 / 新条目可见 / replace_all / 白名单拒绝 + 报错文案）
+
+#### PB2-04 请求参数化：端点 / 认证 / 超时全部按表取值
 
 - **目标**：消除硬编码点 #2 #3 #6。
-- **改动**：`ai/deepseek_official_provider.{h,cpp}` 增加 `ProviderOptions{api_base, chat_path, auth_style, env_name, extra_headers, timeout_connect_s, timeout_read_s}`；`build_endpoint(base, path)`；`build_auth_headers(auth_style, key)`；`resolve_api_key(param_key, env_name)`（env 名参数化，默认仍 `DEEPSEEK_API_KEY`）。
-- **兼容**：旧签名保留为重载（默认值 = 今天的 DeepSeek 行为）→ I1 自动成立。
-- **验收**：`VB2-02`（端点拼接 5 例：默认 / 带尾斜杠 / 带路径前缀 / Azure 风格 query / 空串回退；认证头 4 例：bearer / api-key / x-api-key+version / none；env 名参数化）
+- **改动**：`ai/deepseek_official_provider.{h,cpp}` → 抽出 `ProviderOptions{api_base, chat_path, auth_style, auth_header, extra_headers, env_names, limits}`；`build_endpoint(base, path)`、`build_auth_headers(spec, key)`、`resolve_api_key(param_key, env_names)`（env 名**列表**按序尝试，默认仍含 `DEEPSEEK_API_KEY` 以兼容）。
+- **兼容**：旧签名保留为重载（默认值 = 今天 DeepSeek 行为）→ 不变量 I1 自动成立。
+- **验收**：`VB2-04`（端点拼接 5 例：默认 / 尾斜杠 / 路径前缀 / 带 query（Azure `?api-version=`）/ 空串回退；认证头 5 例：bearer / api-key / x-api-key+version / query 传参 / none；env 名列表按序命中）
 
-#### PB2-03 节点与 UI 改 spec 驱动
+#### PB2-05 节点 / UI / 校验改「查表驱动」
 
-- **目标**：消除硬编码点 #1 #7 的「UI 侧」与 §1.3 的「装饰性 provider 字段」。
-- **改动**：
-  - `engine/node_registry.cpp`：`provider` 枚举 → 由 `provider_specs()` 生成；`api_base` 说明改为「留空 = 用该提供商的默认地址」；`model` 枚举 → spec 的候选模型（首项为默认）；`api_key_ref` 默认 → `spec.key_ref_default`
-  - `engine/provider_resolve.cpp`：`EffectiveProvider` 增 `spec_id`（并让 `provider` 字段真正参与解析：`mode` 与 capability 由 spec 决定），`resolve_effective_provider` 用 spec 默认值补齐空字段
-  - `ui/property_panel.cpp`：显示「生效：<spec 显示名> / <mode> / <模型>」+ 「该提供商：视觉 ✅/❌ · 原生 seed ✅/❌」能力徽标；切换 provider 时**自动带出**默认地址与 Key 引用名（**先压快照**，可撤销）
-- **验收**：`VB2-03`（解析断言：spec 默认值补齐 / 节点参数覆盖 / 连线优先；UI 侧断言放在既有 `--graph-selftest`）
+- **节点注册**（`engine/node_registry.cpp`）：
+  - `provider` 参数：枚举值 **由配置表生成**（`provider_ids()`，按 `kind` 分组），默认项 = 表中第一项（内置顺序里 `deepseek` 置前以保持老工作流默认观感）
+  - `api_base` 说明改为「**留空 = 用该提供商的默认地址**」；`model` 枚举 → 该条目的候选模型（首项为默认建议；`models` 为空则保持自由输入）
+  - `api_key_ref` 默认值 → `key_ref_default`（换厂商不再串味）
+- **生效解析**（`engine/provider_resolve.cpp`）：`EffectiveProvider` 增 `spec_id` 与 `const ProviderSpec*`；空字段由表默认值补齐；「提供商」字段**真正参与解析**（不再是装饰性字段）
+- **参数面板**（`ui/property_panel.cpp`）：
+  - 显示「生效：<display> / <mode> / <模型>」+ 能力徽标（`视觉 ✅/❌ · seed ✅/❌ · 系统角色 ✅/❌`）
+  - 切换提供商 → 自动带出默认地址 / Key 引用名 / 候选模型（**先压快照**，可撤销）
+  - **配置表管理区**（本补丁新增）：显示表来源与条目数（如 `配置表：builtin + 2 个用户文件，共 11 条`）+ 四个按钮：**「打开配置表」**、**「打开所在文件夹」**、**「重新加载配置表」**、**「打开用户目录」**
+- **校验/提示**（`engine/validate.cpp`）：Key 校验的 env 名 / 引用名默认值改走表；「未实现组合」提示由 `caps` + 表字段生成
+- **验收**：`VB2-05`（表驱动下拉 / 默认值补齐 / 节点参数覆盖 / 连线优先 / 提示文案含表内 env 名）
 
-#### PB2-04 配置层多 provider
+#### PB2-06 实例参数层（`config.toml` 多 provider + 旧配置迁移）
 
-- **目标**：`config.toml` 由单节变多节 + 支持用户自定义 provider 文件。
-- **改动**：`utils/config.h/cpp`：`Config::Provider` 保留（兼容旧文件），新增 `std::map<std::string, Provider> providers`；读写 `[providers.<id>]`；加载时**旧单节自动迁移**为新 map（`deepseek` 节原样搬家）；新增用户目录 `~/.brain-ai/providers/*.json`（可覆盖内置条目字段，只允许覆盖白名单字段）。
-- **验收**：`VB2-04`（往返读写 / 旧配置迁移 / 用户覆盖生效 / 非法 JSON 报错不崩）
+- **定位**：`config.toml` 只存**实例参数**（默认用哪个 provider、地址覆盖、默认模型、ref 名），厂商元数据仍以表为准。
+- **改动**：`Config::Provider` 保留（兼容旧文件）；新增 `std::map<std::string, Provider> providers`；读写 `[providers.<id>]`；加载时**旧单节自动迁移**（`deepseek` 节原样搬家）；写盘前备份 `config.toml.bak`。
+- **验收**：`VB2-06`（往返读写 / 旧配置迁移幂等 / 迁移失败不覆盖原文件）
 
-#### PB2-05 「测试连接」+ `--provider-selftest`
+#### PB2-07 「测试连接」+ `--provider-selftest`（含**配置表校验**）
 
-- **目标**：配置对不对，**一键可知**，不用跑整个工作流。
-- **改动**：
-  - CLI：`aiwrite.exe --provider-selftest [--provider <id>] [--api-base <url>] [--model <名>] [--key-ref <ref>] [--image <路径>] [--timeout N]`
-    - **开关复用**：`--api-base / --model / --key-ref / --image / --timeout` **已存在**（`--vlm-selftest`、`--web-probe`、`--login-selftest` 在用），本项**只新增** `--provider` 与 `--provider-selftest` 两个开关，沿用现有解析风格（`src/main.cpp` 裸 `std::string` 比较）
-    - ① 离线：spec 查找 / 端点 / 认证头 / 请求体（纯文本 + 多模态）断言 → 输出 `[Provider 自检] 离线断言 N/N PASS`
-    - ② 联网（有 Key 时）：发一条 `ping`（提示词「请只回复 pong」）→ 打印 `HTTP / 模型 / 耗时`；退出码 0=全通过 / 1=失败 / 2=无 Key（仅离线部分通过）
-  - UI：`ProviderConfig` 参数面板加「测试连接」按钮（异步、不阻塞界面；结果进 Console + 状态栏）
-- **验收**：`VB2-05`（无 Key 环境下退出码 2 且离线断言全 PASS —— 与 `--vlm-selftest` 同风格）
+- **CLI**：`aiwrite.exe --provider-selftest [--provider <id>] [--api-base <url>] [--model <名>] [--key-ref <ref>] [--image <路径>] [--timeout N]`
+  - **开关复用**：`--api-base / --model / --key-ref / --image / --timeout` **已存在**（`--vlm-selftest`、`--web-probe`、`--login-selftest` 在用）；本项**只新增** `--provider` 与 `--provider-selftest`
+  - ① **表校验 + 离线断言**：加载/合并/校验全流程 + 端点 / 认证头 / 请求体（纯文本 + 多模态）+ 能力门控 → 输出 `[Provider 自检] 配置表：N 条（builtin + M 用户）；离线断言 K/K PASS`，并打印条目摘要（id / kind / protocol / 来源 / 地址 / 模型数）
+  - ② **联网**（有 Key 时）：发一条 `ping`（提示词「请只回复 pong」）→ 打印 `HTTP / 模型 / 耗时`
+  - 退出码：`0`=全通过 / `1`=失败（含表校验失败）/ `2`=无 Key（离线部分已通过）
+- **可选加分项** `--provider-dump`：打印**生效表**（含来源与覆盖链），便于用户确认自己的 JSON 生效（低风险，建议做）
+- **UI**：参数面板「测试连接」按钮（异步、不阻塞界面；结果进 Console + 状态栏）
+- **验收**：`VB2-07`（无 Key 退出码 2 且离线断言全 PASS；坏表场景下报错文案可操作）
 
 ### L2 —— 接口 + 工厂（落地设计 §8.1 / PB-04）
 
-#### PB2-06 新增 `ai/inference_provider.h`（接口 + 值类型）
+#### PB2-08 新增 `ai/inference_provider.h`（接口 + 值类型）
 
 - **设计对齐**：命名与职责取自 `ai_writer_nodes.md` §8.1（`name` / `supportsVision` / `generate` / `generate_stream` / `generateWithImage`），并按现状（多图、seed、快照线程）做**最小必要扩展**：
-  - `struct ProviderCaps { bool vision; bool stream; bool seed; bool system_role; }`（能力表 —— 取代节点里的 `if (mode == "web") throw`）
+  - `struct ProviderCaps { bool vision; bool stream; bool seed; bool system_role; }`（来自表的 `capabilities` —— 取代节点里的 `if (mode == "web") throw`）
   - `struct GenerateParams`（system_prompt / prompt / images / temperature / max_tokens / top_p / seed / on_delta）
   - `struct GenerateResult`（ok / http_status / text / error / raw_head / elapsed_ms）
   - `class InferenceProvider { name(); caps(); generate(params, options); }`
-  - **`generateStream`/`generateWithImage` 的取舍**：现状是「`on_delta` 回调 + `images` 字段」（PB-03 已暂停数据源）；本文档**不新开两个虚函数**，而是保留 `on_delta` 与 `images`，避免与 `M_patchA` 的流式计划冲突（记 `D-09`，见 §6）
-- **验收**：编译期 + `VB2-06`（能力表：web 后端 `vision=false`；official `vision=true`；节点报错文案由能力表生成而非硬编码）
+  - **取舍**：不新开 `generateStream`/`generateWithImage` 两个虚函数，保留 `on_delta` + `images`（与 PB-03「流式暂停」的现状一致，避免虚函数空转）—— 记 `D-09`，§6 待确认
+- **验收**：编译期 + `VB2-08`（能力表来源正确：web 条目 `vision=false`；official 条目按表；节点报错文案由能力表生成而非硬编码）
 
-#### PB2-07 新增 `ai/provider_factory.{h,cpp}` + 现有实现收编
+#### PB2-09 新增 `ai/provider_factory.{h,cpp}` + 现有实现收编
 
-- `make_provider(const std::string& spec_id, const std::string& mode, const ProviderOptions&) -> std::unique_ptr<InferenceProvider>`
-- `OpenAICompatibleProvider`：由现有 `ai::official_chat()` 逻辑搬迁（**行为不变**，含 error 分类、`stream=false`、超时默认值）
-- `DeepSeekWebProvider`：由现有 `ai::web_chat()` 逻辑搬迁（**行为不变**，含 `on_delta`、PoW、SSE 解析）
-- `main.cpp` 的 `--vlm-selftest` 继续走纯函数路径（不依赖工厂），保证离线自检不引入新耦合
-- **验收**：`VB2-07`（工厂返回类型正确 / 未知 id 报可操作错误 / 旧 `official_chat()`/`web_chat()` 重载仍可用）；`--web-chat`、`--vlm-selftest`、`--exec-selftest` 全绿
+- `make_provider(const ProviderSpec&, const std::string& mode, const ProviderOptions&) -> std::unique_ptr<InferenceProvider>`
+  - 分派依据 = 表里的 `protocol` + `kind`（**不是** C++ 里的 `if (mode == "web")`）
+- `OpenAICompatibleProvider`：搬迁现有 `ai::official_chat()` 逻辑（**行为不变**：错误分类、`stream=false`、超时默认值）
+- `DeepSeekWebProvider`：搬迁现有 `ai::web_chat()` 逻辑（**行为不变**：`on_delta`、PoW、SSE）
+- 未知 `protocol` → 返回空 + 可操作错误（「配置表里的 protocol=xyz 尚未实现，请改用 openai/anthropic/gemini/dom，或更新程序」）
+- **验收**：`VB2-09`（工厂按 protocol 正确分派 / 未知 protocol 报错 / 旧 `official_chat()`/`web_chat()` 重载仍可用）；`--web-chat`、`--vlm-selftest`、`--exec-selftest` 全绿
 
-#### PB2-08 `AnthropicProvider`（Messages API）
+#### PB2-10 `AnthropicProvider`（Messages API）
 
-- 端点 `{api_base}/v1/messages`；认证 `x-api-key` + `anthropic-version: 2023-06-01`；`max_tokens` 必填；`system` 为**顶层字段**而非消息角色；多模态 `content[] = [{type:"text"},{type:"image", source:{type:"base64", media_type, data}}]`；响应取 `content[0].text`；`stop_reason`/`error.type` 映射到既有错误分类风格
-- **验收**：`VB2-08`（离线：请求体结构 / 认证头 / 响应解析 / 错误映射；联网可选）
+- 端点 `{api_base}{chat_path}`（默认 `/v1/messages`）；认证 `x-api-key`；`extra_headers` 带 `anthropic-version: 2023-06-01`；`max_tokens` 必填；`system` 为**顶层字段**而非消息角色；多模态 `content[] = [{type:"text"},{type:"image", source:{type:"base64", media_type, data}}]`；响应取 `content[0].text`
+- **验收**：`VB2-10`（请求体结构 / 认证头 / 响应解析 / 错误映射）
 
-#### PB2-09 `GeminiProvider`（generateContent）
+#### PB2-11 `GeminiProvider`（generateContent）
 
-- 端点 `{api_base}/v1beta/models/{model}:generateContent?key=...`（或 `x-goog-api-key` 头，二选一并记录）；`contents[].parts[]`；`inline_data{mime_type,data}`；参数走 `generationConfig{temperature,topP,maxOutputTokens}`；响应取 `candidates[0].content.parts[0].text`
-- **验收**：`VB2-09`（同上；含「model 名进 URL」的转义断言）
+- 端点 `{api_base}/v1beta/models/{model}:generateContent`（Key 走 `extra_headers` 的 `x-goog-api-key` 或 `auth_style=query`，二选一并在表里声明）；`contents[].parts[]`；`inline_data{mime_type,data}`；参数走 `generationConfig{temperature,topP,maxOutputTokens}`；响应取 `candidates[0].content.parts[0].text`
+- **验收**：`VB2-11`（model 名进 URL 的转义 / `generationConfig` 结构 / 解析 / 认证两种风格）
 
-#### PB2-10 节点接线改能力驱动 + 校验/提示同步
+#### PB2-12 节点接线改能力驱动 + 校验/提示同步
 
-- `nodes/local_nodes.cpp`：`if (mode != "web") {...} else {...}` → `make_provider(...)->generate(...)`；删除硬编码 `if (mode == "web") throw 图片理解暂不支持网页版`，改为 **caps 检查**：`if (!caps.vision) throw "<spec 显示名>（<mode>）不支持图片理解：请改用 <建议的视觉提供商>"`
-- `engine/provider_resolve.cpp`：`unwired_reason` 的「缺 Key」文案改为**按 spec 生成**（env 名 / 引用名 / 默认地址都来自 spec）
-- `engine/validate.cpp`：Key 校验的 env 名与引用名默认值改走 spec（消除第 6 项硬编码）
-- **验收**：`VB2-10`（缺 Key 文案含正确 env 名 / VLM+web 文案改为能力驱动 / 既有 16 项 VLM 断言意图不丢）
+- `nodes/local_nodes.cpp`：`if (mode != "web") {...} else {...}` → `make_provider(spec, mode, options)->generate(...)`
+- 删除硬编码 `if (mode == "web") throw 图片理解暂不支持网页版`，改为 **caps 检查**：
+  - 生效模型在表内且 `vision=false` → 明确报错：「<display> 的模型 <model> 不支持图片理解（表内视觉模型：<vision_model_default>）」
+  - 生效模型**不在表内**（用户手填的自定义模型）→ 允许调用 + Console 提示「表内未声明该模型的视觉能力，若失败请改用 …」
+- `engine/provider_resolve.cpp` / `engine/validate.cpp`：缺 Key 文案按表生成（env 名列表 / ref 名 / 默认地址）
+- **验收**：`VB2-12`（视觉门控 3 例：表内非视觉模型 / 表内视觉模型 / 表外自定义；缺 Key 文案含表内 env 名）
 
-### L3 —— 网页版适配器（站点描述 + DOM 驱动；**可选层**）
+---
 
-> 前置事实：`web/webview_host.cpp` 已经支持**在页面内执行任意 JS**（PoW 求解与协议探测就是这么做的，见 `webview_host.cpp:150-163`），因此「DOM 驱动型适配器」**不需要新的技术栈**。
+### L3 —— 网页版站点表 + DOM 适配器（**可选层**，同样 JSON 驱动）
 
-#### PB2-11 站点描述 `ai/web_adapter.{h,cpp}` + `assets/web_sites/*.json`
+> 前置事实：`web/webview_host.cpp` 已支持**在页面内执行任意 JS**（PoW 求解与协议探测就是这么做的，见 `webview_host.cpp:150-163`），因此「DOM 驱动型适配器」**不需要新的技术栈**。
 
-- 数据结构（`site spec`，JSON；字段与含义逐条文档化）：
+#### PB2-13 站点表（`assets/providers.json` 内 `kind=web` 条目）+ `WebDomAdapter`
+
+- 站点表**与 API 表同一份 JSON**（`kind: "web"` + `protocol: "dom"` 或 `"deepseek-web"`），字段：
 
 ```json
 {
   "id": "kimi",
-  "display": "Kimi（月之暗面）",
-  "login_url": "https://kimi.moonshot.cn/",
-  "mode": "dom",
-  "input_selector": "[contenteditable='true']",
-  "send": { "kind": "key", "value": "Enter" },
-  "answer_selector": ".markdown-body",
-  "done_hint": { "kind": "button_state", "selector": "button[aria-label*='停止']" },
-  "cookie_names": ["kimi-auth"],
-  "token_expr": "localStorage.getItem('token')",
-  "notes": "无 PoW；登录态来自 cookie"
+  "display": "Kimi（月之暗面）· 网页版",
+  "kind": "web",
+  "protocol": "dom",
+  "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": true },
+  "web": {
+    "login_url": "https://kimi.moonshot.cn/",
+    "input_selector": "[contenteditable='true']",
+    "send": { "kind": "key", "value": "Enter" },
+    "answer_selector": ".markdown-body",
+    "done_when": { "kind": "selector_gone", "selector": "button[aria-label*='停止']" },
+    "cookie_names": ["kimi-auth"],
+    "token_expr": "localStorage.getItem('token')",
+    "answer_poll_ms": 500,
+    "answer_max_polls": 120
+  },
+  "verified": false,
+  "notes": "示例模板：选择器需按站点实际 DOM 调整（免手写 C++）"
 }
 ```
 
-- 实现：`WebDomAdapter`（实现 `InferenceProvider` 接口，`caps.vision=false`）
-  1. 用 `LoginWindow`（已有）打开 `login_url`，用户在页面里登录 → 提取 `cookie_names` / `token_expr`
-  2. 打开（或复用）会话页 → 注入 JS：写入 prompt → 触发 `send` → 轮询 `answer_selector` 的 `innerText`
-  3. **增量策略**：轮询 N 次（默认 10 次 × 500 ms，全常量集中）→ 用 `on_delta` 发增量（沿用 PB-03 的 `RunEvent::Delta`）
-  4. 结束判定：`done_hint` 命中或轮询次数用尽（**用尽时如实返回已取到的文本 + 明确警告**，不假装成功）
-- **风险与护栏**：选择器失效 → 错误文案给出「选择器未命中，站点可能已改版；请更新 `<site>.json>`」，并把 **DOM 片段（脱敏、限长）**写入诊断日志（`utils/diagnostics.*` 已有落点）
+- `WebDomAdapter`（实现 `InferenceProvider`，`caps.vision=false`）：
+  1. `LoginWindow`（已有）打开 `login_url`，用户手动登录 → 提取 `cookie_names` / 求值 `token_expr`
+  2. 注入 JS：写入 prompt → 触发 `send` → 按 `answer_poll_ms` 轮询 `answer_selector` 的 `innerText`
+  3. 增量：用 `on_delta` 发增量（沿用 PB-03 的 `RunEvent::Delta`）
+  4. 结束：`done_when` 命中或轮询用尽（**用尽时如实返回已取文本 + 明确警告**，不假装成功）
 
-#### PB2-12 用户自定义 provider 目录
+#### PB2-14 用户自定义站点（复用 L1 的用户目录机制）
 
-- `~/.brain-ai/providers/<id>.json`（API 类覆盖：地址/路径/认证/模型候选）
-- `~/.brain-ai/web_providers/<id>.json`（网页版站点：整份站点描述）
-- 合并规则：**内置 → 用户覆盖**（字段级覆盖，只允许白名单字段）；冲突与非法 JSON 在 Console 给可操作错误，**不影响内置条目可用**
-- UI：`ProviderConfig` 的「提供商」下拉分组显示「内置 / 用户自定义（N）」；用户目录不存在时给一行提示（文件路径可复制）
+- `~/.brain-ai/providers.d/kimi.json`（新增条目）或 `providers.json`（覆盖内置站点的选择器）
+- 站点改版 → **用户自己改 JSON 即可修复**（这是「用户可配置」在网页版上的落点），无需等程序更新
+- 安全/合规护栏（沿用既有策略）：**有头登录、用户手动操作、不代填密码、不自动刷新会话**；不注入脚本绕过验证
 
-#### PB2-13 站点改版诊断 + `--web-adapter-selftest`
+#### PB2-15 站点改版诊断 + `--web-adapter-selftest`
 
-- 新增 `aiwrite.exe --web-adapter-selftest [--site <id>] [--timeout N]`：离屏登录窗口 → 打开站点 → 逐条检查「输入框选择器 / 发送方式 / 答案选择器」是否存在（**只做选择器可达性检查 + 打印命中元素摘要，不发送内容**）
-- 退出码 0=全部可达 / 1=有选择器未命中 / 2=窗口或站点超时
-- 用途：站点改版后**先跑这个**定位问题，而不是跑整个工作流
+- `aiwrite.exe --web-adapter-selftest [--site <id>] [--timeout N]`：离屏打开站点 → 逐条检查「输入框 / 发送方式 / 答案选择器 / 登录态」是否可达（**只检查、不发送内容**）
+- 退出码 0=全部可达 / 1=有未命中 / 2=窗口或站点超时；未命中时打印**选择器 + 命中的候选元素摘要**（便于用户改 JSON）
+- 失败路径：错误文案给出「选择器未命中，站点可能已改版；请更新 `~/.brain-ai/providers.d/<id>.json`」，并把 DOM 片段（脱敏、限长）写诊断日志（`utils/diagnostics.*` 已有落点）
 
-#### PB2-14 文档与索引同步
+#### PB2-16 文档与索引同步
 
-- `CHANGELOG`（新条目 + 索引）、`节点编辑器使用说明.md`（新增「接入一个新 AI：3 步」小节 + 测试连接用法）、`M_patchA.md` §4.1 `PB-04` 行状态改为 ✅ 并指向本文档、`DevPlan.todo`（新增/翻转对应条目）、`milestone_plan.md`（补丁系列行补 M_patchB）
+- `CHANGELOG`（新条目 + 索引）、`docs/节点编辑器使用说明.md`（新增「接入一个新 AI：3 步（写 JSON → 重载 → 测试连接）」）、`docs/README.md`、`actionPlan/M_patchA.md` §4.1 `PB-04` 状态 → ✅ 并指向本文档、`milestone_plan.md`、`DevPlan.todo`（登记/翻转条目）
+- **`source/README.md`**：新增「配置文件位置」小节（`assets/providers.json` / `~/.brain-ai/providers.json` / `providers.d/`）
 
 ---
 
@@ -355,42 +459,47 @@ nodes/local_nodes.cpp ──► ai::make_provider(id, mode, options)   ← 唯�
 
 | 批次 | 内容 | 提交信息（约定） | 预估 |
 |---|---|---|---|
-| **B2-a** | `PB2-01` → `PB2-05`（L1：描述表 + 参数化 + UI/配置 + 测试连接） | `feat(ai): M_patchB L1 provider 描述表（端点/认证/默认值数据驱动）+ 多 provider 配置 + --provider-selftest` | 1–1.5 天 |
-| **B2-b** | `PB2-06` → `PB2-10`（L2：接口 + 工厂 + Anthropic/Gemini + 能力驱动接线） | `feat(ai): M_patchB L2 InferenceProvider 接口与工厂（OpenAI 兼容/Anthropic/Gemini/网页版收编）+ 能力驱动接线` | 2–3 天 |
-| **B2-c** | `PB2-11` → `PB2-14`（L3：网页版适配器 + 用户目录 + 诊断 + 文档） | `feat(ai+web): M_patchB L3 网页版站点适配器（JSON 驱动 DOM 接入）+ --web-adapter-selftest` | 5–10 天 |
+| **B2-a** | `PB2-01` → `PB2-07`（L1：**JSON 配置表** + 加载/合并/校验 + 用户覆盖 + 打包 + 参数化 + 表驱动 UI + 测试连接） | `feat(ai): M_patchB L1 provider 配置表 JSON 化（内置表 + 用户覆盖 + 校验/热重载）+ 请求参数化 + --provider-selftest` | 1.5–2 天 |
+| **B2-b** | `PB2-08` → `PB2-12`（L2：接口 + 工厂 + Anthropic/Gemini + 能力驱动接线） | `feat(ai): M_patchB L2 InferenceProvider 接口与工厂（openai/anthropic/gemini/web 按表分派）+ 能力驱动接线` | 2–3 天 |
+| **B2-c** | `PB2-13` → `PB2-16`（L3：网页版站点表 + DOM 适配器 + 用户自定义站点 + 诊断 + 文档） | `feat(ai+web): M_patchB L3 网页版站点表与 DOM 适配器（JSON 驱动，用户可自定义）+ --web-adapter-selftest` | 5–10 天 |
 | **B2-d** | 文档收尾（可并入各批） | `docs(patchB): …` | 0.5 天 |
 
-> `B2-c` 需现场手测（GUI + 真实站点），建议**单独排期**；`B2-a`/`B2-b` 可完全离线自检。
+> `B2-a` 与 `B2-b` 可**完全离线自检**；`B2-c` 需现场手测（GUI + 真实站点），建议**单独排期**。
+> 配置表数据文件（`source/assets/providers.json`）**已经先于代码落盘**（见 §8 变更记录 v2），`B2-a` 要做的是「让它真的被读取」。
 
 ### 4.2 验收标准（AB2-*）
 
 | 编号 | 标准 | 判定方式 |
 |---|---|---|
-| AB2-01 | **加一家新的 OpenAI 兼容服务**：只改 `ai/provider_spec.cpp` 里 ≤10 行数据，**不改任何逻辑代码**，界面下拉即可见、默认地址/模型/引用名自动带出 | 代码 diff + 手工确认 |
-| AB2-02 | 「提供商」下拉**真正生效**（选 `zhipu` → 请求发往 `open.bigmodel.cn`，无需手填地址） | 离线请求体/端点断言 + 一次真实调用 |
-| AB2-03 | 加一家非兼容 API：**只新增 1 个 Provider 类**，`nodes/**` 零改动 | 代码 diff |
-| AB2-04 | 网页版新站接入 = **一份 JSON**（无 PoW 站点），选择器失效有明确报错与诊断日志 | `--web-adapter-selftest` + 手测 |
-| AB2-05 | **不回退**：§0.5 全部基线保持（111/0、120/0（+新增）、七组 PASS、3-of-5、8/8、7/7、0 error 0 warning） | 逐条重跑并贴结果 |
-| AB2-06 | **密钥零泄漏**：新代码不落盘明文、日志脱敏、`--cred-selftest` 8/8 不变 | 自检 + 代码审查 |
-| AB2-07 | **请求体兼容**：既有 `--exec-selftest` 请求体断言**一行未改**仍 PASS | git diff + 自检 |
-| AB2-08 | 每批提交前：`--provider-selftest` 离线断言全 PASS（无 Key → 退出码 2） | 自检输出 |
+| AB2-01 | **厂商元数据零硬编码**：C++ 源码中除最小兜底表（2 条）外，**不存在**具体厂商地址/模型/认证常量 | `grep` 审查 + 代码 diff |
+| AB2-02 | 加一家新的 OpenAI 兼容服务：用户**只写 JSON**（`~/.brain-ai/providers.d/xxx.json`），完成后界面下拉出现该条目、默认地址/模型/ref 自动带出 | 手测 + `--provider-selftest` |
+| AB2-03 | 「提供商」下拉**真正生效**（选 `zhipu` → 请求发往 `open.bigmodel.cn`，无需手填地址） | 离线端点断言 + 一次真实调用 |
+| AB2-04 | 加一家非兼容 API：**只新增 1 个 Provider 类**（配置表里 `protocol: "anthropic"`），`nodes/**` 零改动 | 代码 diff |
+| AB2-05 | 网页版新站接入 = **一份 JSON**（无 PoW 站点），选择器失效有明确报错与诊断日志 | `--web-adapter-selftest` + 手测 |
+| AB2-06 | **不回退**：§0.5 全部基线保持（111/0、120/0（+新增）、七组 PASS、3-of-5、8/8、7/7、0 error 0 warning） | 逐条重跑并贴结果 |
+| AB2-07 | **密钥零泄漏**：表内不含明文 Key（含疑似值检测）；`--cred-selftest` 8/8 不变 | 自检 + 代码审查 |
+| AB2-08 | **请求体兼容**：既有 `--exec-selftest` 请求体断言**一行未改**仍 PASS | git diff + 自检 |
+| AB2-09 | **用户可配置闭环**：不改代码、不改程序目录，仅新增/修改用户 JSON → 新条目可用（含覆盖内置条目字段）；`--provider-selftest` 打印生效表与来源 | 手测 + 自检输出 |
+| AB2-10 | **表坏不致命**：语法错误 / schema 不匹配 / 必填缺失 → 明确报错 + 用上一份可用表或最小兜底继续运行，**不崩溃** | `--provider-selftest` 场景 + 手测 |
 
 ### 4.3 技术验证项（VB2-*）汇总
 
 | 编号 | 内容 | 落在哪个自检 |
 |---|---|---|
-| VB2-01 | 描述表：条目完整性 / 查找 / 默认值优先级 / kind 过滤 | `--provider-selftest` |
-| VB2-02 | 端点拼接 5 例 + 认证头 4 例 + env 名参数化 | `--exec-selftest`（api_probe，纯函数） |
-| VB2-03 | spec 默认值补齐 / 节点参数覆盖 / 连线优先 | `--exec-selftest` + `--graph-selftest` |
-| VB2-04 | 配置往返 / 旧单节迁移 / 用户覆盖 / 非法 JSON | `--exec-selftest` |
-| VB2-05 | 测试连接（离线断言 + 无 Key 退出码 2） | `--provider-selftest` |
-| VB2-06 | 能力表：`vision` 门控产生正确错误 | `--exec-selftest` |
-| VB2-07 | 工厂：返回类型 / 未知 id 报错 / 旧函数重载仍在 | `--exec-selftest` |
-| VB2-08 | Anthropic：请求体 / 头 / 解析 / 错误映射 | `--exec-selftest` |
-| VB2-09 | Gemini：URL 转义 / `generationConfig` / 解析 | `--exec-selftest` |
-| VB2-10 | 缺 Key 文案含 spec 的 env 名；VLM 文案能力驱动 | `--exec-selftest` |
-| VB2-11 | 站点 JSON：解析 / 缺字段报错 / 用户覆盖合并 | `--provider-selftest` |
-| VB2-12 | 站点选择器可达性（需 GUI/网络） | `--web-adapter-selftest` |
+| VB2-01 | **配置表加载/合并/校验**：必填缺失 / 类型错误 / 未知字段警告 / dup id 覆盖 / 疑似密钥拒绝 / 坏 JSON / `schema_version` 不匹配 / 兜底触发 | `--provider-selftest`（+ api_probe 纯函数断言） |
+| VB2-02 | 查找顺序：exe/assets → 源码目录（开发态）→ 兜底；CMake 拷贝产物存在 | `--provider-selftest` + 构建 |
+| VB2-03 | 用户覆盖：字段级 merge / `providers.d` 多文件顺序 / 新条目可见 / `replace_all` / 白名单拒绝 | `--provider-selftest` |
+| VB2-04 | 端点拼接 5 例 + 认证头 5 例 + env 名列表按序命中 | `--exec-selftest`（纯函数） |
+| VB2-05 | 表驱动下拉 / 默认值补齐 / 节点参数覆盖 / 连线优先 | `--exec-selftest` + `--graph-selftest` |
+| VB2-06 | `config.toml` 往返 / 旧单节迁移幂等 / 失败不覆盖原文件 | `--exec-selftest` |
+| VB2-07 | 测试连接：离线断言 + 无 Key 退出码 2 + 坏表报错文案 | `--provider-selftest` |
+| VB2-08 | 能力表来源正确（web `vision=false` 等） | `--exec-selftest` |
+| VB2-09 | 工厂按 `protocol` 分派 / 未知 protocol 报错 / 旧函数重载仍在 | `--exec-selftest` |
+| VB2-10 | Anthropic：请求体 / 头 / 解析 / 错误映射 | `--exec-selftest` |
+| VB2-11 | Gemini：URL 转义 / `generationConfig` / 解析 / 认证风格 | `--exec-selftest` |
+| VB2-12 | 视觉门控 3 例 + 缺 Key 文案含表内 env 名 | `--exec-selftest` |
+| VB2-13 | 站点表 JSON（DOM 字段完整性 / 用户覆盖 / 缺字段报错） | `--provider-selftest` |
+| VB2-14 | 站点选择器可达性（需 GUI + 网络） | `--web-adapter-selftest` |
 
 ---
 
@@ -398,36 +507,43 @@ nodes/local_nodes.cpp ──► ai::make_provider(id, mode, options)   ← 唯�
 
 | # | 风险 | 影响 | 对策 |
 |---|---|---|---|
-| R1 | 改造打断现有请求体（回归） | 既有 `--exec-selftest` 120 项失败；线上行为变化 | 不变量 **I1**：旧签名保留为重载 + 默认值 = 今日 DeepSeek 行为；既有断言**一行不改**必须仍 PASS（AB2-07） |
+| R1 | 改造打断现有请求体（回归） | 既有 `--exec-selftest` 120 项失败；线上行为变化 | 不变量 **I1**：旧签名保留为重载 + 默认值 = 今日 DeepSeek 行为；既有断言**一行不改**必须仍 PASS（AB2-08） |
 | R2 | 工厂/接口改动波及网页版 | `--web-chat` 等自检失败、用户网页版不可用 | `web_chat` 只做**搬迁不做修改**（先加 wrapper 再切调用方，分两步提交）；不变量 **I2** |
-| R3 | 「提供商」下拉生效后，老工作流语义变化 | 老 `.json` 工作流里 `provider="deepseek"` 语义从「无用」变「决定地址」 | **迁移规则**：`provider` 为空或未知 → 回退 `custom-official` + 用工作流里显式 `api_base`（老工作流行为**完全不变**）；E-01/E-02 等示例做回归加载断言 |
-| R4 | 多 provider 配置迁移写坏用户 `config.toml` | 用户配置丢失 | 写盘前**备份 `config.toml.bak`**；迁移只在内存完成，落盘失败不覆盖原文件；`VB2-04` 断言迁移幂等 |
-| R5 | 站点适配器让程序显得「时好时坏」 | 用户困惑 | 站点 JSON 标注「可能失效」；失败给**可操作**文案 + `--web-adapter-selftest` 一键诊断（PB2-13）；不用适配器时完全不影响既有网页版路径 |
-| R6 | 站点反爬 / 合规风险 | 账号与法律风险 | 沿用既有策略：**有头登录、用户手动操作、不代填密码、不自动刷新会话**；适配器只做「用户已登录页面的 DOM 操作」，不注入脚本绕过验证 |
+| R3 | 「提供商」下拉生效后，老工作流语义变化 | 老 `.json` 工作流里 `provider="deepseek"` 语义从「无用」变「决定地址」 | **迁移规则**：`provider` 为空/未知 → 回退 `custom-official` + 用工作流里显式 `api_base`（老工作流行为**完全不变**）；E-01/E-02 等示例做回归加载断言 |
+| R4 | 多 provider 配置迁移写坏用户 `config.toml` | 用户配置丢失 | 写盘前备份 `config.toml.bak`；迁移只在内存完成，落盘失败不覆盖原文件；`VB2-06` 断言迁移幂等 |
+| R5 | 站点适配器让程序显得「时好时坏」 | 用户困惑 | 站点条目在表里标 `verified`/`notes`；失败给**可操作**文案 + `--web-adapter-selftest` 一键诊断（PB2-15）；不用适配器时完全不影响既有网页版路径 |
+| R6 | 站点反爬 / 合规风险 | 账号与法律风险 | 沿用既有策略：**有头登录、用户手动操作、不代填密码、不自动刷新会话**；不注入脚本绕过验证 |
 | R7 | 范围失控 | 拖住主线 | §0.3 非范围清单硬约束；L3 默认**不做**，需用户显式批准（§6） |
-| R8 | 抽象过度 / 维护成本 | 长期负担 | 单文件职责清晰、纯函数优先；**新增代码预估 ≤ 1500 行**（L1+L2 约 700–900 行，L3 另计） |
+| R8 | 配置表改坏导致启动异常 | 用户无法使用程序 | **I8 + AB2-10**：坏表 → 报错 + 上一份可用表 / 最小兜底；`--provider-selftest` 是自助诊断入口 |
+| R9 | **表与代码能力脱节**（表里写了 `protocol: "xxx"` 但程序没有对应类） | 用户以为能用的条目实际不可用 | 工厂对未知 `protocol` 明确报错；`--provider-selftest` 逐条检查「表条目 → 是否有实现」并列出「本版本支持的 protocol 清单」 |
+| R10 | 表里出现明文密钥（用户图省事） | 安全泄漏 | 加载时**键名/值双重检测**（`api_key`、`"sk-"` 前缀等）→ 警告 + 拒绝该字段 + Console 给正确做法（填 key 引用名/环境变量） |
+| R11 | 抽象过度 / 维护成本上升 | 长期负担 | 单文件职责清晰、纯函数优先；**新增代码预估 ≤ 1600 行**（L1 约 500–650、L2 约 500–700、另加 JSON 数据） |
 
 ---
 
 ## §6 待确认决策（请审核时逐条拍板）
 
-| 编号 | 决策点 | 选项 | 我的建议 |
+| 编号 | 决策点 | 选项 | 状态 / 建议 |
 |---|---|---|---|
-| **D-08** | 本补丁做到哪一层？ | ① 只做 L1 ② L1+L2 ③ L1+L2+L3 | **②（L1+L2）**：一次把「API 侧任意接入」打通；L3 单独立项 |
-| **D-09** | `InferenceProvider` 接口形态 | ① 完全照设计 §8.1（`generate`/`generateStream`/`generateWithImage` 三虚函数） ② 按现状合并为 `generate(params)` + `on_delta` + `images` + `caps()` | **②**：与 PB-03 暂停流式的现状一致，避免虚函数空转；文档注明与 §8.1 的差异原因 |
-| **D-10** | 非兼容协议先做哪家 | ① Anthropic ② Gemini ③ 都做 | **① Anthropic**（协议稳定、需求多）；Gemini 作为 `PB2-09` 可选 |
-| **D-11** | 配置载体 | ① 只用 `config.toml [providers.*]` ② 只用 `~/.brain-ai/providers/*.json` ③ 两者都支持 | **③**（toml 便于手改、json 便于覆盖/分享） |
-| **D-12** | 内置条目首版范围 | 最小集（deepseek/zhipu/ollama/custom）或完整集（+siliconflow/openrouter/openai/anthropic/gemini） | **完整集**（成本≈0，收益是可发现性） |
-| **D-13** | 「测试连接」是否发真实请求 | ① 只做离线断言 ② 发一条最小请求（消耗极小额度） | **②**（提示词极短 + 明确标注会消耗额度） |
-| **D-14** | 文档命名与编号 | 本文档叫 `M_patchB.md`，与 `M_patchA` 的 `PB-xx` 并存 | 保留 `M_patchB.md` + `PB2-` 前缀区分（§0.2）；若你更想叫 `M_provider.md`，我改文件名与索引 |
+| **D-08** | 本补丁做到哪一层？ | ① 只做 L1（配置表 + 用户自定义） ② L1+L2 ③ L1+L2+L3 | 建议 **②**：一次把「API 侧任意接入」打通；L3 单独立项 |
+| **D-09** | `InferenceProvider` 接口形态 | ① 完全照设计 §8.1（三个虚函数） ② 合并为 `generate(params)+on_delta+images+caps()` | 建议 **②**（与流式暂停现状一致；文档注明与 §8.1 的差异） |
+| **D-10** | 非兼容协议先做哪家 | ① Anthropic ② Gemini ③ 都做 | 建议 **① Anthropic**；Gemini 作为 `PB2-11` 可选 |
+| **D-11** | 配置载体 | ① 只用 `config.toml` ② 只用 JSON ③ 两者分工：**厂商元数据 → JSON 表；实例参数 → config.toml** | ✅ **已定（用户指示）**：选 **③** —— 配置表以 **JSON** 存储，**允许用户自己配置**（覆盖 + 新增） |
+| **D-12** | 内置条目范围 | 最小集（deepseek/zhipu/ollama/custom）或完整集（+siliconflow/openrouter/openai/anthropic/gemini，共 10 条） | ✅ **已定（用户指示）**：**完整集** —— 条目现在只是**数据**，增删成本≈0 |
+| **D-13** | 「测试连接」是否发真实请求 | ① 只做离线断言 ② 发一条最小请求（消耗极小额度） | 建议 **②**（提示词极短 + 明确标注会消耗额度） |
+| **D-14** | 文档命名与编号 | 保留 `M_patchB.md` + `PB2-` 前缀；或改名 `M_provider.md` | 建议**保留**（与 `M_patchA` 系列对齐） |
+| **D-15** | 配置表存放位置与覆盖规则 | ① 只放 `~/.brain-ai/providers.json` ② 只放程序目录 ③ **三层：程序目录 `assets/providers.json`（权威）→ `~/.brain-ai/providers.d/*.json`（新增）→ `~/.brain-ai/providers.json`（覆盖）** | ✅ **已定（用户指示）**：选 **③**；另有「最小兜底表（2 条）」作为文件缺失时的降级 |
+| **D-16** | 是否支持热重载 | ① 重启程序才生效 ② 按钮「重新加载配置表」（手动） ③ 监听文件变化（自动） | 建议 **②**（实现简单、行为可预期；③ 需文件监听，收益低风险高） |
+| **D-17** | 是否提供 `--provider-dump`（打印生效表与来源） | ① 不提供 ② 提供 | 建议 **②**（用户自助排错的关键一步，成本≈20 行） |
 
 ### 审核确认清单（勾选后我开工）
 
 - [ ] **§6 D-08**：确定范围（L1 / L1+L2 / 全量）
-- [ ] **§6 D-09…D-14**：确认或修改
+- [ ] **§6 D-09 / D-10 / D-13 / D-14 / D-16 / D-17**：确认或修改（D-11 / D-12 / D-15 已按你的指示定稿）
 - [ ] **§4.1**：批次划分与提交信息约定
-- [ ] **§4.2 AB2-01…AB2-08**：验收标准是否够用
-- [ ] **§3 任务清单**：是否增删（例如是否把 `config.timeout/error` 接线纳入本补丁 —— 默认**不纳入**，归 `FEA-M4-13`）
+- [ ] **§4.2 AB2-01…AB2-10**：验收标准是否够用
+- [ ] **§7 附录 B 的 JSON 字段规范**：是否要增减字段（尤其 `capabilities` / `limits` / `web.*`）
+- [ ] **§3 任务清单**：是否增删（如 `config.timeout/error` 接线默认**不纳入**，归 `FEA-M4-13`）
 
 ---
 
@@ -443,6 +559,7 @@ nodes/local_nodes.cpp ──► ai::make_provider(id, mode, options)   ← 唯�
 | 认证头 | `ai/deepseek_official_provider.cpp:239-241` | `Authorization: Bearer` + `Accept` |
 | 响应解析 | `ai/deepseek_official_provider.cpp:260-276` | `choices[0].message.content` |
 | 错误分类 | `ai/deepseek_official_provider.cpp:26-46` | `classify_http_error()`：400/401/402/429/5xx → 可操作文案（401 文案里亦写死 env 名） |
+| 超时写死 | `ai/deepseek_official_provider.cpp:236-238` | 连接 15s / 读 180s（未读 `config.timeout.*`） |
 | 网页版端点常量 | `ai/deepseek_web_client.cpp:15-17` | host / completion / challenge 三常量 |
 | 网页版请求头 | `ai/deepseek_web_client.cpp:18-30` | Bearer + Origin/Referer/UA/`x-client-platform` |
 | PoW 流程 | `ai/web_pow.h:7-13`、`ai/web_pow.cpp` | 挑战 → SHA3 求解 → `x-ds-pow-response` |
@@ -456,85 +573,126 @@ nodes/local_nodes.cpp ──► ai::make_provider(id, mode, options)   ← 唯�
 | 运行前校验 | `engine/validate.cpp:110-175` | Key / env 检查 + 「未接线分支」警告 |
 | 配置单节 | `utils/config.h:66-80`、`utils/config.cpp:180-189,217-219` | `[providers.deepseek]` 单节 |
 | 凭据 env 兜底 | `utils/credential.cpp:364` | `DEEPSEEK_API_KEY`（第 4 处代码硬编码） |
+| 资源目录工具（可复用） | `utils/paths.h:29` | `assets_dir()` = `<exe_dir>/assets`（当前未被 provider 使用） |
+| 现有 assets 内容 | `source/assets/` | 仅 `fonts/`、`icons/`、`images/sample.png`（**无任何 provider 元数据文件**） |
+| 打包脚本先例（可仿写） | `CMakeLists.txt:139-167`、`cmake/copy_runtime_dlls.cmake` | `aiwrite_copy_runtime_dlls()` 的 POST_BUILD 拷贝模式 |
+| 开发态宏（可复用） | `CMakeLists.txt:281` | `AIWRITE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"` |
 | 上期决策背景 | `docs/actionPlan/M_patchA.md` §4.1 / §12 | `PB-04` 登记项；**D-06/D-07**（优先 M5 / 视觉走智谱） |
 | 设计依据 | `docs/ai_writer_nodes.md:550-582` | §8.1 抽象层 / §8.2 后端类型 / §8.3 后端选择 |
-| 现有实测样例（视觉） | `source/workflows/examples/E-02_图片转小说.json`、`--vlm-selftest` | M5 已打通的「OpenAI 兼容 + 智谱 `glm-4v-flash`」路径（本补丁把它从「手抄」变成「下拉」） |
+| 现有实测样例（视觉） | `source/workflows/examples/E-02_图片转小说.json`、`--vlm-selftest` | M5 已打通「OpenAI 兼容 + 智谱 `glm-4v-flash`」路径（本补丁把它从「手抄」变成「下拉」） |
 
-### 附录 B · 接口与数据草案（供审核）
+### 附录 B · 配置表 JSON 规范（`assets/providers.json`）
 
-```cpp
-// ---- ai/provider_spec.h ----
-namespace aiwrite::ai {
-struct ProviderSpec {
-    std::string id;                       // "zhipu"
-    std::string display;                  // "智谱 GLM"
-    std::string kind;                     // "official" | "web"
-    std::string protocol;                 // "openai" | "anthropic" | "gemini" | "dom"
-    std::string api_base;                 // 默认地址（空 = 必须手填）
-    std::string chat_path;                // "/chat/completions" / "/v1/messages" / 站内路径
-    std::string auth_style;               // "bearer" | "api-key" | "x-api-key" | "none"
-    std::vector<std::pair<std::string, std::string>> extra_headers;   // 如 anthropic-version
-    std::string env_name;                 // "ZHIPU_API_KEY"（可空）
-    std::string key_ref_default;          // "brain-ai/zhipu"
-    std::vector<std::string> models;      // 候选模型（首项 = 默认建议值）
-    bool        vision      = false;
-    bool        native_seed = false;
-    bool        system_role = true;
-    std::string docs_url;
-};
-const std::vector<ProviderSpec>& provider_specs();                // 内置 + 用户覆盖后的结果
-const ProviderSpec*              find_provider_spec(const std::string& id);
-std::vector<std::string>         provider_ids(const std::string& kind /*空 = 全部*/);
-} // namespace aiwrite::ai
+**顶层结构**
 
-// ---- ai/inference_provider.h（D-09 建议形态）----
-namespace aiwrite::ai {
-struct ProviderCaps { bool vision = false; bool stream = false; bool seed = false; bool system_role = true; };
-struct GenerateParams {
-    std::string system_prompt, prompt;
-    std::vector<std::string> images;                    // 本地路径（按序）
-    double temperature = 0.7; int max_tokens = 2048; double top_p = 1.0; int seed = 0;
-    std::function<void(const std::string&)> on_delta;   // 空 = 不需要增量
-};
-struct GenerateResult {
-    bool ok = false; int http_status = 0;
-    std::string text, error, raw_head;                  // raw_head = 诊断用前 N 字节（脱敏）
-    double elapsed_ms = 0.0;
-};
-class InferenceProvider {
-public:
-    virtual ~InferenceProvider() = default;
-    virtual std::string  name() const = 0;
-    virtual ProviderCaps caps() const = 0;
-    virtual GenerateResult generate(const GenerateParams& params, const ProviderOptions& options) = 0;
-};
-} // namespace aiwrite::ai
-
-// ---- ai/provider_factory.h ----
-namespace aiwrite::ai {
-std::unique_ptr<InferenceProvider> make_provider(const std::string& spec_id,
-                                                 const std::string& mode,   // official | web
-                                                 const ProviderOptions& options,
-                                                 std::string* error);       // 未知组合 → error 含操作步骤
-} // namespace aiwrite::ai
+```json
+{
+  "schema_version": 1,
+  "replace_all": false,
+  "providers": [ { /* ProviderSpec */ } ]
+}
 ```
 
-**内置条目草案（10 条）**
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `schema_version` | int | ✅ | 规范版本；当前 **1**。不支持 → 整体拒绝并报错（避免误读新格式） |
+| `replace_all` | bool | ❌ | **仅用户文件可用**：`true` = 忽略下层所有条目（高级用法，Console 明确提示） |
+| `providers` | array | ✅ | 条目数组（可为空数组，表示「本层不贡献条目」） |
 
-| id | 显示名 | kind | protocol | api_base | 默认模型 | 视觉 | 备注 |
-|---|---|---|---|---|---|---|---|
-| `deepseek` | DeepSeek（官方 API） | official | openai | `https://api.deepseek.com` | `deepseek-chat` | ❌ | 无视觉模型（现状已提示） |
-| `deepseek-web` | DeepSeek（网页版） | web | dom+pow | — | `default` | ❌ | 现有 PoW+SSE 路径收编 |
-| `zhipu` | 智谱 GLM | official | openai | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` | ✅ | 视觉：`glm-4v-flash`（M5 实测后端） |
-| `siliconflow` | 硅基流动 | official | openai | `https://api.siliconflow.cn/v1` | `Qwen/Qwen2.5-7B-Instruct` | ✅ | 视觉：`Qwen/Qwen2.5-VL-72B-Instruct` |
-| `ollama` | 本地 Ollama | official | openai | `http://localhost:11434/v1` | `qwen2.5:7b` | ✅ | `auth_style = none` |
-| `openrouter` | OpenRouter | official | openai | `https://openrouter.ai/api/v1` | `openai/gpt-4o-mini` | ✅ | — |
-| `openai` | OpenAI | official | openai | `https://api.openai.com/v1` | `gpt-4o-mini` | ✅ | — |
-| `anthropic` | Anthropic Claude | official | anthropic | `https://api.anthropic.com` | `claude-sonnet-4-5` | ✅ | `PB2-08` |
-| `gemini` | Google Gemini | official | gemini | `https://generativelanguage.googleapis.com` | `gemini-2.0-flash` | ✅ | `PB2-09`（可选） |
-| `custom-official` | 自定义（OpenAI 兼容） | official | openai | 空（必须手填） | 空 | ✅ | **老工作流迁移落点**（R3） |
+**条目字段（`ProviderSpec`）**
 
-> 表内模型名 / 地址以**实测可用**为准；若某条目在本机不可用，实现时降级为「仅作候选提示、可自由覆盖」，并在文档里如实标注（**不声称未验证的可用性**）。
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+|---|---|---|---|---|
+| `id` | string | ✅ | — | 唯一键（`provider` 参数取值）；**不可被用户覆盖**（作为合并键） |
+| `display` | string | ✅ | — | 下拉显示名（可中文） |
+| `kind` | string | ✅ | — | `official`（HTTP API）/ `web`（网页版）→ 决定 `mode` 可选项 |
+| `protocol` | string | ✅ | — | `openai` / `anthropic` / `gemini` / `dom` / `deepseek-web`（与工厂分派一致） |
+| `api_base` | string | 条件 | `""` | official 必填（用户层可省略 = 沿用下层值）；web 不用 |
+| `chat_path` | string | ❌ | 按 `protocol` | `openai → /chat/completions`；`anthropic → /v1/messages`；可含 query（Azure `?api-version=`） |
+| `auth_style` | string | ❌ | 按 `protocol` | `bearer` / `api-key` / `x-api-key` / `query` / `none` |
+| `auth_header` | string | ❌ | 按 `auth_style` | 自定义头名（如 Azure 的 `api-key`） |
+| `extra_headers` | object | ❌ | `{}` | 逐条附加（如 `anthropic-version`、`HTTP-Referer`） |
+| `env_names` | array | ❌ | `[]` | 环境变量名**按序尝试**（如 `["ZHIPU_API_KEY","GLM_API_KEY"]`） |
+| `key_ref_default` | string | ❌ | `brain-ai/<id>` | 凭据库默认引用名（换厂商不串味） |
+| `models` | array | ❌ | `[]` | 候选模型：`[{"id":"glm-4-flash","label":"…","vision":false}]`；空数组 = 模型自由填写 |
+| `vision_model_default` | string | ❌ | `""` | 视觉节点的建议模型（用于报错文案与自动带出） |
+| `capabilities` | object | ❌ | 按 protocol | `{"vision":bool,"seed":bool,"system_role":bool,"stream":bool}` |
+| `limits` | object | ❌ | 全局默认 | `{"image_max_bytes":8388608,"connect_timeout_s":15,"read_timeout_s":180}` |
+| `web` | object | 条件 | — | `kind=web` 必填：站点字段（见下） |
+| `verified` | bool | ❌ | `false` | **是否在本机实测可用**（UI 用它提示「未验证」；诚实标注，不吹可用性） |
+| `notes` | string | ❌ | `""` | 显示在参数面板/悬停的帮助文本（可写「如何申请 Key」「限制」等） |
+| `docs_url` | string | ❌ | `""` | 官方文档链接（悬停可点） |
+
+**`web` 子对象字段（`kind=web`）**
+
+> ⚠️ 「必填」列**只对 `protocol: "dom"`（通用 DOM 适配器）成立**。
+> `protocol: "deepseek-web"` 走**内置适配器**（PoW + SSE，即现有 `web_chat`），表里只需要 `login_url`（+ 可选的 `cookie_names`/`token_expr` 供诊断），选择器字段会被忽略。
+
+| 字段 | 类型 | 必填（dom） | 说明 |
+|---|---|---|---|
+| `login_url` | string | ✅ | 登录页（有头登录，用户手动操作） |
+| `input_selector` | string | ✅ | 输入框选择器 |
+| `send` | object | ✅ | `{"kind":"key","value":"Enter"}` 或 `{"kind":"click","selector":"…"}` |
+| `answer_selector` | string | ✅ | 答案容器选择器（读取 `innerText`） |
+| `done_when` | object | ❌ | 结束判定：`{"kind":"selector_gone","selector":"…"}` / `{"kind":"selector_present",…}` |
+| `cookie_names` | array | ❌ | 需要的 Cookie 名（不全取，最小必要） |
+| `token_expr` | string | ❌ | 在页面里求值的取 token 表达式（如 `localStorage.getItem('token')`） |
+| `answer_poll_ms` | int | ❌ | 轮询间隔（默认 500） |
+| `answer_max_polls` | int | ❌ | 最大轮询次数（默认 120） |
+
+**字段级合并规则**（用户层只写要改的字段）
+
+```jsonc
+// ① 新增一家 OpenAI 兼容服务（~/.brain-ai/providers.d/10-my-ai.json）
+{
+  "schema_version": 1,
+  "providers": [{
+    "id": "my-ai", "display": "我的自建服务", "kind": "official", "protocol": "openai",
+    "api_base": "http://192.168.1.10:8000/v1",
+    "env_names": ["MY_AI_KEY"], "key_ref_default": "brain-ai/my-ai",
+    "models": [{"id": "my-llm-7b", "label": "my-llm-7b（本地）"}]
+  }]
+}
+
+// ② 覆盖内置条目（~/.brain-ai/providers.json）—— 只写要改的字段
+{
+  "schema_version": 1,
+  "providers": [{
+    "id": "zhipu",
+    "api_base": "https://open.bigmodel.cn/api/paas/v4",
+    "models": [{"id": "glm-4v-flash", "label": "glm-4v-flash（视觉·实测）", "vision": true}],
+    "notes": "我自己的备注"
+  }]
+}
+```
+
+**最小兜底表（C++ 内联，仅 2 条，文件全缺时使用）**
+
+| id | display | kind | protocol | api_base | 说明 |
+|---|---|---|---|---|---|
+| `custom-official` | 自定义（OpenAI 兼容） | official | openai | 空（必须手填） | 保证「表丢了也能像今天一样手填」 |
+| `deepseek` | DeepSeek（官方 API） | official | openai | `https://api.deepseek.com` | 保持今天的行为基线，避免默认值突变 |
+
+> 完整内置表（10 条：`deepseek` / `deepseek-web` / `zhipu` / `siliconflow` / `ollama` / `openrouter` / `openai` / `anthropic` / `gemini` / `custom-official`）
+> 已经落到 **`source/assets/providers.json`**（本补丁随文档一起提供，字段与上表一致；条目带 `verified`/`notes` 如实标注实测状态）。
+> 模型名 / 地址以**实测可用**为准；未实测条目会被 UI 标为「未验证」，实现阶段逐个校准后改 `verified: true`。
+
+### 附录 C · 加载顺序与生效规则（唯一权威定义）
+
+| 顺序 | 来源 | 角色 | 缺失时 |
+|---|---|---|---|
+| ① | `<exe>/assets/providers.json` | **随程序发布的内置表（权威默认）** | 尝试 ②；② 也缺 → 用最小兜底表并 Console 警告 |
+| ② | `$AIWRITE_SOURCE_DIR/assets/providers.json` | **开发态兜底**（源码树直跑 / 自检） | 同上 |
+| ③ | `~/.brain-ai/providers.d/*.json` | 用户**新增/覆盖**条目（文件名升序，可分享单文件） | 跳过（不报错） |
+| ④ | `~/.brain-ai/providers.json` | 用户**字段级覆盖**（最高优先；支持 `replace_all`） | 跳过（不报错） |
+| ⑤ | 工作流节点参数（`provider/mode/api_base/model_custom/api_key/api_key_ref`） | **运行时实例参数（最终生效值）** | 表默认值补齐 |
+
+**生效规则**
+1. `provider` 为空或表里找不到该 id → 回退 `custom-official` + 使用节点自带 `api_base`（**老工作流行为不变**，记 R3）
+2. `api_base` 为空 → 用表里该条目的 `api_base`；仍为空 → 报「未填写 API 地址」
+3. `model`/`model_custom`：`model_custom` 非空优先（沿用 M5-02 规则）；为空则用表内 `models[0]`
+4. Key：节点参数 → `env_names` 列表（按序）→ `api_key_ref`（凭据库）→ 都无则报可操作错误（文案含表内 env 名与 ref 名）
+5. 视觉：`caps.vision==false` → 明确报错；模型不在表内 → 允许 + 提示（见 PB2-12）
 
 ---
 
@@ -542,7 +700,10 @@ std::unique_ptr<InferenceProvider> make_provider(const std::string& spec_id,
 
 | 日期 | 版本 | 说明 |
 |---|---|---|
-| 2026-09-26 | v1（草案） | 首版：现状审计（§1，逐条证据）+ 三层方案（§2）+ 任务分解 `PB2-01…PB2-14`（§3）+ 阶段与验收（§4）+ 风险（§5）+ 待确认决策 `D-08…D-14`（§6）+ 附录 A/B。**状态：待用户审核确认** |
+| 2026-09-26 | v1（草案） | 首版：现状审计（§1，逐条证据）+ 三层方案（§2）+ 任务分解 + 阶段与验收（§4）+ 风险（§5）+ 待确认决策（§6）+ 附录 A/B |
+| 2026-09-26 | **v2（当前）** | **按用户指示改写**：① 配置载体由「C++ 内置描述表」改为 **JSON 配置表**（`assets/providers.json`，随程序发布）+ **用户可自定义层**（`~/.brain-ai/providers.json`、`~/.brain-ai/providers.d/*.json`）；② 决策 `D-11`（JSON 表 + 实例参数分工）、`D-12`（完整内置集）、`D-15`（三层覆盖规则）**定稿**；③ 任务重编号为 `PB2-01…PB2-16`（L1 增加「加载/合并/校验」「打包与路径」「用户覆盖」「表驱动 UI + 管理入口」）；④ 新增验收 `AB2-09`（用户可配置闭环）、`AB2-10`（表坏不致命）与验证项 `VB2-01…VB2-14`；⑤ 新增风险 `R8…R11`（坏表 / 表与代码脱节 / 明文密钥 / 维护成本）；⑥ 新增不变量 `I7`（用户 JSON 即插即用）、`I8`（表坏不致命）；⑦ 新增附录 B（JSON 字段规范 + 合并示例 + 最小兜底表）与附录 C（加载顺序与生效规则）；⑧ **新增数据文件 `source/assets/providers.json`**（内置 10 条，随文档先落盘，`PB2-01/02` 让它真正被读取） |
+
+
 
 
 

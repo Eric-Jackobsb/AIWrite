@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "_doc": "字段规范与加载顺序：docs/actionPlan/M_patchB.md 附录 B / 附录 C",
+  "_user_override": {
+    "override_file": "~/.brain-ai/providers.json",
+    "extra_dir": "~/.brain-ai/providers.d/*.json",
+    "rule": "内置(本文件) -> providers.d（文件名升序）-> providers.json（字段级覆盖）-> 工作流节点参数（最高）"
+  },
+  "_secrets_policy": "本文件只存放环境变量名与凭据引用名，禁止存放明文 API Key；Key 由 utils/credential（Windows DPAPI）管理，日志与归档一律脱敏",
+  "_verified_note": "verified=true 表示已在本机实测可用；verified=false 表示条目为公开资料整理的候选值，使用前请核对地址与模型名（界面会标注「未验证」）",
+  "providers": [
+    {
+      "id": "deepseek",
+      "display": "DeepSeek（官方 API）",
+      "kind": "official",
+      "protocol": "openai",
+      "api_base": "https://api.deepseek.com",
+      "chat_path": "/chat/completions",
+      "auth_style": "bearer",
+      "env_names": ["DEEPSEEK_API_KEY"],
+      "key_ref_default": "brain-ai/deepseek",
+      "capabilities": { "vision": false, "seed": true, "system_role": true, "stream": false },
+      "models": [
+        { "id": "deepseek-chat", "label": "deepseek-chat（通用）" },
+        { "id": "deepseek-reasoner", "label": "deepseek-reasoner（推理）" }
+      ],
+      "vision_model_default": "",
+      "limits": { "image_max_bytes": 8388608, "connect_timeout_s": 15, "read_timeout_s": 180 },
+      "verified": true,
+      "notes": "已实测真实生成（PB-05）。官方 API 无视觉模型：图片理解请选择 zhipu 等视觉服务",
+      "docs_url": "https://api-docs.deepseek.com"
+    },
+    {
+      "id": "deepseek-web",
+      "display": "DeepSeek（网页版）",
+      "kind": "web",
+      "protocol": "deepseek-web",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": true },
+      "web": {
+        "login_url": "https://chat.deepseek.com/",
+        "cookie_names": ["ds_session_id"],
+        "token_expr": "localStorage.getItem('userToken')"
+      },
+      "verified": true,
+      "notes": "内置适配器（有头登录 + PoW + SSE，已实测生成）。免费但有速率限制；无需 API Key",
+      "docs_url": ""
+    },
+    {
+      "id": "zhipu",
+      "display": "智谱 GLM（含视觉）",
+      "kind": "official",
+      "protocol": "openai",
+      "api_base": "https://open.bigmodel.cn/api/paas/v4",
+      "chat_path": "/chat/completions",
+      "auth_style": "bearer",
+      "env_names": ["ZHIPU_API_KEY", "GLM_API_KEY"],
+      "key_ref_default": "brain-ai/zhipu",
+      "capabilities": { "vision": true, "seed": true, "system_role": true, "stream": false },
+      "models": [
+        { "id": "glm-4-flash", "label": "glm-4-flash（文本·快）" },
+        { "id": "glm-4v-flash", "label": "glm-4v-flash（视觉）", "vision": true }
+      ],
+      "vision_model_default": "glm-4v-flash",
+      "limits": { "image_max_bytes": 8388608, "connect_timeout_s": 15, "read_timeout_s": 180 },
+      "verified": true,
+      "notes": "M5 图片理解实测后端（E-02 示例 + --vlm-selftest）。登录 bigmodel.cn 申请 Key；模型名若报不存在，请在表或界面上改为账号可用的模型",
+      "docs_url": "https://open.bigmodel.cn/dev/api"
+    },
+    {
+      "id": "siliconflow",
+      "display": "硅基流动 SiliconFlow",
+      "kind": "official",
+      "protocol": "openai",
+      "api_base": "https://api.siliconflow.cn/v1",
+      "chat_path": "/chat/completions",
+      "auth_style": "bearer",
+      "env_names": ["SILICONFLOW_API_KEY"],
+      "key_ref_default": "brain-ai/siliconflow",
+      "capabilities": { "vision": true, "seed": true, "system_role": true, "stream": false },
+      "models": [
+        { "id": "Qwen/Qwen2.5-7B-Instruct", "label": "Qwen2.5-7B-Instruct（文本）" },
+        { "id": "Qwen/Qwen2.5-VL-72B-Instruct", "label": "Qwen2.5-VL-72B（视觉）", "vision": true }
+      ],
+      "vision_model_default": "Qwen/Qwen2.5-VL-72B-Instruct",
+      "limits": { "image_max_bytes": 8388608, "connect_timeout_s": 15, "read_timeout_s": 180 },
+      "verified": false,
+      "notes": "未在本机实测：地址与模型名取自其 OpenAI 兼容文档，使用前请核对；模型广场的免费额度可用于试跑",
+      "docs_url": "https://docs.siliconflow.cn"
+    },
+    {
+      "id": "ollama",
+      "display": "本地 Ollama",
+      "kind": "official",
+      "protocol": "openai",
+      "api_base": "http://localhost:11434/v1",
+      "chat_path": "/chat/completions",
+      "auth_style": "none",
+      "env_names": [],
+      "key_ref_default": "",
+      "capabilities": { "vision": true, "seed": true, "system_role": true, "stream": false },
+      "models": [
+        { "id": "qwen2.5:7b", "label": "qwen2.5:7b（本地文本）" },
+        { "id": "llava:latest", "label": "llava（本地视觉）", "vision": true }
+      ],
+      "vision_model_default": "llava:latest",
+      "limits": { "image_max_bytes": 8388608, "connect_timeout_s": 10, "read_timeout_s": 300 },
+      "verified": false,
+      "notes": "本地推理，无需 Key 与联网（auth_style=none）。需先安装 Ollama 并 `ollama pull <模型>`；模型名以 `ollama list` 输出为准",
+      "docs_url": "https://github.com/ollama/ollama/blob/main/docs/openai.md"
+    },
+    {
+      "id": "openrouter",
+      "display": "OpenRouter（聚合）",
+      "kind": "official",
+      "protocol": "openai",
+      "api_base": "https://openrouter.ai/api/v1",
+      "chat_path": "/chat/completions",
+      "auth_style": "bearer",
+      "extra_headers": { "HTTP-Referer": "https://github.com/", "X-Title": "AIwrite" },
+      "env_names": ["OPENROUTER_API_KEY"],
+      "key_ref_default": "brain-ai/openrouter",
+      "capabilities": { "vision": true, "seed": true, "system_role": true, "stream": false },
+      "models": [
+        { "id": "openai/gpt-4o-mini", "label": "openai/gpt-4o-mini（文本+视觉）", "vision": true },
+        { "id": "anthropic/claude-3.5-sonnet", "label": "anthropic/claude-3.5-sonnet（文本+视觉）", "vision": true }
+      ],
+      "vision_model_default": "openai/gpt-4o-mini",
+      "limits": { "image_max_bytes": 8388608, "connect_timeout_s": 15, "read_timeout_s": 180 },
+      "verified": false,
+      "notes": "未实测：一个 Key 可访问多家中转模型，模型名形如 `厂商/模型`；额度按上游计费",
+      "docs_url": "https://openrouter.ai/docs"
+    },
+    {
+      "id": "openai",
+      "display": "OpenAI（官方）",
+      "kind": "official",
+      "protocol": "openai",
+      "api_base": "https://api.openai.com/v1",
+      "chat_path": "/chat/completions",
+      "auth_style": "bearer",
+      "env_names": ["OPENAI_API_KEY"],
+      "key_ref_default": "brain-ai/openai",
+      "capabilities": { "vision": true, "seed": true, "system_role": true, "stream": false },
+      "models": [
+        { "id": "gpt-4o-mini", "label": "gpt-4o-mini（文本+视觉）", "vision": true },
+        { "id": "gpt-4o", "label": "gpt-4o（文本+视觉）", "vision": true }
+      ],
+      "vision_model_default": "gpt-4o-mini",
+      "limits": { "image_max_bytes": 8388608, "connect_timeout_s": 15, "read_timeout_s": 180 },
+      "verified": false,
+      "notes": "未实测：需要可直连的网络环境；中国大陆地区通常需自行准备代理（代理策略归 FEA-M4-13）",
+      "docs_url": "https://platform.openai.com/docs/api-reference/chat"
+    },
+    {
+      "id": "anthropic",
+      "display": "Anthropic Claude（Messages API）",
+      "kind": "official",
+      "protocol": "anthropic",
+      "api_base": "https://api.anthropic.com",
+      "chat_path": "/v1/messages",
+      "auth_style": "x-api-key",
+      "auth_header": "x-api-key",
+      "extra_headers": { "anthropic-version": "2023-06-01" },
+      "env_names": ["ANTHROPIC_API_KEY"],
+      "key_ref_default": "brain-ai/anthropic",
+      "capabilities": { "vision": true, "seed": false, "system_role": true, "stream": false },
+      "models": [
+        { "id": "claude-3-5-sonnet-latest", "label": "claude-3-5-sonnet（文本+视觉）", "vision": true },
+        { "id": "claude-3-5-haiku-latest", "label": "claude-3-5-haiku（快/省）", "vision": true }
+      ],
+      "vision_model_default": "claude-3-5-sonnet-latest",
+      "limits": { "image_max_bytes": 8388608, "connect_timeout_s": 15, "read_timeout_s": 180 },
+      "verified": false,
+      "notes": "⚠️ 非 OpenAI 协议（body/响应/多模态格式完全不同）：需程序内的 AnthropicProvider 实现（PB2-10），在实现前选择本条目会在运行时明确报错",
+      "docs_url": "https://docs.anthropic.com/en/api/messages"
+    },
+    {
+      "id": "gemini",
+      "display": "Google Gemini（generateContent）",
+      "kind": "official",
+      "protocol": "gemini",
+      "api_base": "https://generativelanguage.googleapis.com",
+      "chat_path": "/v1beta/models/{model}:generateContent",
+      "auth_style": "query",
+      "auth_header": "key",
+      "env_names": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+      "key_ref_default": "brain-ai/gemini",
+      "capabilities": { "vision": true, "seed": true, "system_role": true, "stream": false },
+      "models": [
+        { "id": "gemini-2.0-flash", "label": "gemini-2.0-flash（文本+视觉）", "vision": true },
+        { "id": "gemini-2.0-flash-lite", "label": "gemini-2.0-flash-lite（快/省）", "vision": true }
+      ],
+      "vision_model_default": "gemini-2.0-flash",
+      "limits": { "image_max_bytes": 8388608, "connect_timeout_s": 15, "read_timeout_s": 180 },
+      "verified": false,
+      "notes": "⚠️ 非 OpenAI 协议：模型名进 URL（{model} 占位），参数走 generationConfig；需 GeminiProvider 实现（PB2-11）",
+      "docs_url": "https://ai.google.dev/api/generate-content"
+    },
+    {
+      "id": "custom-official",
+      "display": "自定义（OpenAI 兼容）",
+      "kind": "official",
+      "protocol": "openai",
+      "api_base": "",
+      "chat_path": "/chat/completions",
+      "auth_style": "bearer",
+      "env_names": [],
+      "key_ref_default": "brain-ai/custom",
+      "capabilities": { "vision": true, "seed": true, "system_role": true, "stream": false },
+      "models": [],
+      "vision_model_default": "",
+      "limits": { "image_max_bytes": 8388608, "connect_timeout_s": 15, "read_timeout_s": 180 },
+      "verified": false,
+      "notes": "通用兜底：任何 OpenAI 兼容服务（自建 vLLM / LM Studio / 中转站）。请在「API 地址」手填完整前缀（含 /v1），模型名自由填写；也可复制本条目到 ~/.brain-ai/providers.d/ 做成专属条目",
+      "docs_url": ""
+    }
+  ]
+}

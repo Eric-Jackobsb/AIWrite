@@ -11,7 +11,7 @@
 | [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6） |
 | [actionPlan/](actionPlan/) · [Archive/actionPlan/](Archive/actionPlan/) | 各里程碑 Action Plan（进行中 / 已完成归档） |
 | [actionPlan/M_patchA.md](actionPlan/M_patchA.md) | **地基补丁系列 A–D**（结果回流与可观测性 / 异步与流式 / 数据安全 / 交互打磨）行动计划 |
-| [actionPlan/M_patchB.md](actionPlan/M_patchB.md) | **Provider 可插拔化**（`PB-04` 展开计划）：现状审计 + L1 描述表 / L2 接口工厂 / L3 网页版适配器三层方案 + `PB2-*` 任务与验收 —— 🟡 草案（待审核） |
+| [actionPlan/M_patchB.md](actionPlan/M_patchB.md) | **Provider 可插拔化**（`PB-04` 展开计划）：**JSON 配置表**（`source/assets/providers.json` + 用户覆盖层）驱动 + L2 接口工厂 / L3 网页版站点表 + `PB2-*` 任务与验收 —— 🟡 草案（待审核） |
 | [DevPlan.todo](DevPlan.todo) | **开发计划看板**：TodoList 格式（根键 `todotree`），Debug / Feature / Test / Docs / Archive 五类 × M1–M6 分层，每条含一行描述与 `fileLink` 文档链接 |
 | [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) | M1 实测环境、验证结果与问题记录（已归档） |
 | [Archive/README.md](Archive/README.md) | 归档索引与归档规则 |
@@ -20,6 +20,14 @@
 ---
 
 ## [Unreleased] — M5 核心切片（M5-C）图片理解链路 + 图片显示 已落地
+
+**文档 + 数据（M_patchB 计划）：Provider 从「写死在 C++」改为「JSON 配置表 + 用户可覆盖」**
+
+- 新增 `docs/actionPlan/M_patchB.md`（**v2**）：现状审计（7 个硬编码点 / `provider` 字段零分派 / 全库无任何厂商元数据文件）+ 三层方案（**L1 JSON 配置表** · L2 接口+工厂 · L3 网页版站点表）+ `PB2-01…PB2-16` 任务 + `AB2-01…AB2-10` 验收 + `VB2-01…VB2-14` 验证项 + 决策 `D-08…D-17` + 附录 B（**JSON 字段规范**）与附录 C（**加载顺序与生效规则**）；`D-11/D-12/D-15` 已按用户指示定稿（厂商元数据 → JSON 表；实例参数 → `config.toml`；三层覆盖）
+- **新增配置表数据文件 `source/assets/providers.json`**：内置 10 条（`deepseek` / `deepseek-web` / `zhipu` / `siliconflow` / `ollama` / `openrouter` / `openai` / `anthropic` / `gemini` / `custom-official`），逐条带 `capabilities` / `models` / `limits` / `notes` / `docs_url`，`verified` 如实标注是否本机实测（当前 `deepseek` / `deepseek-web` / `zhipu` 为 true）；**不含任何明文密钥**（只有环境变量名与凭据引用名）
+- 用户自定义（零代码）：`~/.brain-ai/providers.json`（字段级覆盖内置条目）+ `~/.brain-ai/providers.d/*.json`（新增条目，单文件可分享）
+- **状态**：计划草案待审核；**尚未接线** —— 加载器 `ai/provider_spec.*`、打包拷贝、表驱动 UI 与 `--provider-selftest` 属 `B2-a`，接口/工厂/Anthropic/Gemini 属 `B2-b`（见文档 §4.1）
+- 索引互链：`CHANGELOG` 索引、`docs/README.md`（进度行 + 文档地图）、`M_patchA` §4.1 `PB-04` 行、`milestone_plan.md`（补丁系列两处）；文档断链自检 **94 / 0**
 
 **特性（M5-C）：读图生成 + 看得见图片 —— 代码落地（4 提交）**
 
