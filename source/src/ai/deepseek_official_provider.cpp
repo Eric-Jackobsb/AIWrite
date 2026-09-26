@@ -23,6 +23,17 @@ std::string trim_right_slashes(std::string base)
     return base;
 }
 
+// 把 API Key 作为查询参数拼到路径上（auth_style=query，如 Gemini 的 ?key=...）
+std::string apply_query_key(std::string path, const std::string& name, const std::string& key)
+{
+    if (name.empty() || key.empty()) {
+        return path;
+    }
+    path += (path.find('?') == std::string::npos) ? '?' : '&';
+    path += name + "=" + key;
+    return path;
+}
+
 // 错误分类（PB-05：给出可操作提示，而非裸状态码）
 std::string classify_http_error(int status, const std::string& body)
 {
@@ -195,19 +206,89 @@ nlohmann::json build_request_body(const OfficialChatRequest& request,
     return body;
 }
 
-std::string build_endpoint(const std::string& api_base)
+std::string resolve_chat_path(const std::string& chat_path, const std::string& model)
 {
-    const std::string base = trim_right_slashes(api_base.empty() ? "https://api.deepseek.com" : api_base);
-    return base + "/chat/completions";
+    std::string path = chat_path.empty() ? std::string("/chat/completions") : chat_path;
+    if (!model.empty()) {
+        const std::string placeholder = "{model}";
+        for (std::size_t pos = path.find(placeholder); pos != std::string::npos;
+             pos = path.find(placeholder, pos + model.size())) {
+            path.replace(pos, placeholder.size(), model);
+        }
+    }
+    return path;
 }
 
-std::string resolve_api_key(const std::string& param_key)
+std::string build_endpoint(const std::string& api_base, const std::string& chat_path)
+{
+    const std::string base =
+        trim_right_slashes(api_base.empty() ? "https://api.deepseek.com" : api_base);
+    return base + resolve_chat_path(chat_path, std::string());
+}
+
+std::string build_endpoint(const std::string& api_base)
+{
+    return build_endpoint(api_base, "/chat/completions"); // 与改造前逐字一致
+}
+
+std::string resolve_api_key(const std::string& param_key,
+                            const std::vector<std::string>& env_names)
 {
     if (!param_key.empty()) {
         return param_key;
     }
-    const char* env_key = std::getenv("DEEPSEEK_API_KEY");
-    return (env_key != nullptr && *env_key != '\0') ? std::string(env_key) : std::string();
+    if (env_names.empty()) {
+        const char* env_key = std::getenv("DEEPSEEK_API_KEY");
+        return (env_key != nullptr && *env_key != '\0') ? std::string(env_key) : std::string();
+    }
+    for (const std::string& name : env_names) {
+        if (name.empty()) {
+            continue;
+        }
+        const char* value = std::getenv(name.c_str());
+        if (value != nullptr && *value != '\0') {
+            return value;
+        }
+    }
+    return {};
+}
+
+std::string resolve_api_key(const std::string& param_key)
+{
+    return resolve_api_key(param_key, std::vector<std::string>());
+}
+
+std::vector<std::pair<std::string, std::string>> build_auth_headers(const ProviderOptions& options,
+                                                                    const std::string& api_key)
+{
+    std::vector<std::pair<std::string, std::string>> headers;
+    const std::string style = options.auth_style.empty() ? std::string("bearer")
+                                                        : options.auth_style;
+    if (style == "none" || style == "query") {
+        return headers; // query 走 URL 拼接（见 official_chat）
+    }
+    std::string name = options.auth_header;
+    if (name.empty()) {
+        name = (style == "api-key") ? "api-key"
+                                    : (style == "x-api-key") ? "x-api-key" : "Authorization";
+    }
+    headers.emplace_back(name, (style == "bearer") ? ("Bearer " + api_key) : api_key);
+    return headers;
+}
+
+ProviderOptions provider_options_from(const ProviderSpec& spec)
+{
+    ProviderOptions options;
+    options.api_base         = spec.api_base;
+    options.chat_path        = spec.chat_path.empty() ? std::string("/chat/completions")
+                                                      : spec.chat_path;
+    options.auth_style       = spec.auth_style.empty() ? std::string("bearer") : spec.auth_style;
+    options.auth_header      = spec.auth_header;
+    options.extra_headers    = spec.extra_headers;
+    options.env_names        = spec.env_names;
+    options.connect_timeout_s = spec.limits.connect_timeout_s;
+    options.read_timeout_s    = spec.limits.read_timeout_s;
+    return options;
 }
 
 OfficialChatResult official_chat(const OfficialChatRequest& request)
@@ -229,15 +310,29 @@ OfficialChatResult official_chat(const OfficialChatRequest& request)
         image_data_urls.push_back(std::move(data_url));
     }
 
-    const std::string  endpoint = build_endpoint(request.api_base);
-    const std::string  base     = endpoint.substr(0, endpoint.size() - std::string("/chat/completions").size());
-    const std::string  path     = "/chat/completions";
+    // M_patchB L1 / PB2-04：端点 / 认证 / 超时按 options（空 = 用 request.api_base；默认 = 改造前行为）
+    const ProviderOptions& options = request.options;
+    const std::string      raw_base = options.api_base.empty() ? request.api_base : options.api_base;
+    const std::string      base =
+        trim_right_slashes(raw_base.empty() ? "https://api.deepseek.com" : raw_base);
+    std::string path = resolve_chat_path(options.chat_path, request.model);
+    if (options.auth_style == "query" && !request.api_key.empty()) {
+        path = apply_query_key(
+            path, options.auth_header.empty() ? std::string("key") : options.auth_header,
+            request.api_key);
+    }
 
     httplib::Client client(base);
-    client.set_connection_timeout(15, 0);
-    client.set_read_timeout(180, 0);
+    client.set_connection_timeout(options.connect_timeout_s, 0);
+    client.set_read_timeout(options.read_timeout_s, 0);
     httplib::Headers headers;
-    headers.emplace("Authorization", "Bearer " + request.api_key);
+    for (const std::pair<std::string, std::string>& header :
+         build_auth_headers(options, request.api_key)) {
+        headers.emplace(header.first, header.second);
+    }
+    for (const std::pair<std::string, std::string>& header : options.extra_headers) {
+        headers.emplace(header.first, header.second);
+    }
     headers.emplace("Accept", "application/json");
 
     const auto started = std::chrono::steady_clock::now();

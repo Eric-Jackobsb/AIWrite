@@ -1,5 +1,8 @@
 #include "nodes/nodes.h"
 
+#include "ai/provider_spec.h"          // M_patchB L1：配置表（生效提供商 / 站点端点）
+#include "engine/provider_resolve.h"   // M_patchB L1：EffectiveProvider
+
 #include "ai/deepseek_official_provider.h"
 #include "utils/credential.h"
 #include "ai/deepseek_web_client.h"
@@ -54,8 +57,9 @@ std::string unescape(const std::string& text)
 }
 
 // ---- 推理节点公共：官方 / 兼容 API 的 Key 解析（PB-06 三级优先级 + 首次自动入库）----
-//  1) 节点参数 api_key → 2) 环境变量 DEEPSEEK_API_KEY（由 ai::resolve_api_key 处理）
+//  1) 节点参数 api_key → 2) 环境变量（**表内 env 名按序**；空列表 = DEEPSEEK_API_KEY）
 //  3) provider 输入来源「提供商配置」节点的 api_key / api_key_ref（凭据库）
+//  * M_patchB L1：env 名与引用名默认值来自配置表（effective），换厂商不再串味
 //  * tag：Console 前缀（"[文本生成]" / "[图片理解]"），保证既有日志文案不变
 //  * 返回空 key = 未配置（由调用方给出可操作错误）
 struct OfficialKeyResolution {
@@ -64,14 +68,25 @@ struct OfficialKeyResolution {
     std::string ref;
 };
 
-OfficialKeyResolution resolve_official_key(const json& params, const json& inputs,
+OfficialKeyResolution resolve_official_key(const json& params, const json& /*inputs*/,
                                            const engine::ExecutionContext& ctx,
-                                           const std::string& tag)
+                                           const std::string& tag,
+                                           const engine::EffectiveProvider& effective)
 {
     OfficialKeyResolution resolution;
-    resolution.key = ai::resolve_api_key(params.value("api_key", std::string()));
-    if (!resolution.key.empty()) {
+    const std::vector<std::string> env_names =
+        effective.spec != nullptr ? effective.spec->env_names : std::vector<std::string>();
+
+    const std::string param_key = params.value("api_key", std::string());
+    if (!param_key.empty()) {
+        resolution.key    = param_key;
         resolution.source = "node";
+    }
+    else {
+        resolution.key = ai::resolve_api_key(std::string(), env_names);
+        if (!resolution.key.empty()) {
+            resolution.source = "env";
+        }
     }
     if (!resolution.key.empty() || ctx.graph == nullptr || ctx.current_node_id.empty()) {
         return resolution;
@@ -84,16 +99,20 @@ OfficialKeyResolution resolve_official_key(const json& params, const json& input
     if (source_node == nullptr) {
         return resolution;
     }
-    std::string param_key;
+    std::string param_key_from_config;
     if (const engine::Param* key_param = source_node->findParam("api_key")) {
-        param_key = key_param->text();
+        param_key_from_config = key_param->text();
     }
     if (const engine::Param* ref_param = source_node->findParam("api_key_ref")) {
         resolution.ref = ref_param->text();
     }
-    const utils::ResolvedSecret resolved = utils::resolve_secret(param_key, resolution.ref);
-    resolution.key                       = resolved.key;
-    resolution.source                    = resolved.source;
+    if (resolution.ref.empty()) {
+        resolution.ref = effective.key_ref; // 表内默认引用名（如 brain-ai/zhipu）
+    }
+    const utils::ResolvedSecret resolved =
+        utils::resolve_secret(param_key_from_config, resolution.ref);
+    resolution.key    = resolved.key;
+    resolution.source = resolved.source;
     if (resolved.key.empty()) {
         return resolution;
     }
@@ -108,8 +127,37 @@ OfficialKeyResolution resolve_official_key(const json& params, const json& input
             ctx.console(tag + " 凭据库保存失败：" + save_error);
         }
     }
-    (void)inputs;
     return resolution;
+}
+
+// 生效提供商（M_patchB L1 / PB2-05）：由「当前节点 + provider 输入连线」解析，含配置表默认值
+engine::EffectiveProvider effective_provider_of(const engine::ExecutionContext& ctx)
+{
+    if (ctx.graph == nullptr || ctx.current_node_id.empty()) {
+        return {};
+    }
+    const engine::Node* node = ctx.graph->findNode(ctx.current_node_id);
+    if (node == nullptr) {
+        return {};
+    }
+    return engine::resolve_effective_provider(*ctx.graph, *node);
+}
+
+// Console 一行：让用户看清「到底用了哪家、走哪条路、地址是什么」
+void console_provider_line(const engine::ExecutionContext& ctx, const std::string& tag,
+                           const engine::EffectiveProvider& effective, const std::string& mode)
+{
+    std::string text = tag + " 提供商=" + effective.display + "（来源 " +
+                       (effective.spec_origin.empty() ? std::string("未在表内")
+                                                      : effective.spec_origin) +
+                       "）/ 模式=" + mode;
+    if (!effective.api_base.empty()) {
+        text += " / 地址=" + effective.api_base;
+    }
+    if (!effective.model.empty()) {
+        text += " / 模型=" + effective.model;
+    }
+    ctx.console(text);
 }
 
 } // namespace
@@ -218,23 +266,48 @@ json execute_text_merge(const json& inputs, const json& params, engine::Executio
 json execute_provider_config(const json& /*inputs*/, const json& params,
                              engine::ExecutionContext& ctx)
 {
-    json provider;
-    provider["provider"]    = params.value("provider", std::string("deepseek"));
-    provider["mode"]        = params.value("mode", std::string("official"));
-    provider["api_base"]    = params.value("api_base", std::string("https://api.deepseek.com"));
-    // M5-02：模型名 —— model_custom 非空时覆盖枚举（与 engine::resolve_effective_provider 同规则）
+    // M_patchB L1（PB2-05）：句柄里输出**按配置表解析后的生效值**（地址 / 模型 / 引用名 / kind）
+    const std::string provider_id =
+        params.value("provider", std::string("deepseek"));
     const std::string model_custom = params.value("model_custom", std::string());
-    const std::string model        = model_custom.empty()
-                                         ? params.value("model", std::string("deepseek-chat"))
-                                         : model_custom;
+
+    std::shared_ptr<const ai::ProviderSpecs> specs = ai::provider_specs_snapshot();
+    const ai::ProviderSpec*                  spec  = nullptr;
+    if (specs) {
+        spec = specs->find(provider_id);
+    }
+
+    json provider;
+    provider["provider"]    = provider_id;
+    provider["mode"]        = params.value("mode", std::string("official"));
+    provider["api_base"]    = spec != nullptr
+                                  ? ai::resolve_api_base(*spec, params.value("api_base", std::string()))
+                                  : params.value("api_base", std::string("https://api.deepseek.com"));
+    const std::string model =
+        spec != nullptr
+            ? ai::resolve_model(*spec, params.value("model", std::string()), model_custom, false)
+            : (model_custom.empty() ? params.value("model", std::string("deepseek-chat"))
+                                    : model_custom);
     provider["model"]        = model;        // 生效模型名（推理节点据此调用）
     provider["model_custom"] = model_custom; // 原样透出（供界面 / 诊断）
+    provider["kind"]         = spec != nullptr ? spec->kind : std::string("official");
+    provider["display"]      = spec != nullptr ? spec->display : provider_id;
+    provider["spec_origin"]  = spec != nullptr ? spec->origin : std::string();
+    provider["key_ref"]      = spec != nullptr
+                                   ? ai::resolve_key_ref(*spec, params.value("api_key_ref", std::string()))
+                                   : params.value("api_key_ref", std::string());
     provider["has_api_key"]  = !params.value("api_key", std::string()).empty();
+    if (spec != nullptr && spec->kind == "web") {
+        provider["mode"]        = "web"; // 网页版条目：模式强制一致
+        provider["site_login"]  = spec->web.login_url;
+        provider["site_adapter"] = spec->web.adapter;
+    }
 
     ctx.console("[提供商配置] " + provider["provider"].get<std::string>() + " / " +
                 provider["mode"].get<std::string>() + " / " + model +
                 (model_custom.empty() ? "" : "（自定义模型名）") + "（API Key " +
-                (provider["has_api_key"].get<bool>() ? "已配置" : "未配置") + "）");
+                (provider["has_api_key"].get<bool>() ? "已配置" : "未配置") +
+                (spec != nullptr ? "；来源 " + spec->origin : "；不在配置表内") + "）");
     return provider;
 }
 
@@ -269,11 +342,17 @@ json execute_image_preview(const json& inputs, const json& /*params*/,
 //  * 输出：单输出端口 → 直接返回生成文本
 json execute_llm_generate(const json& inputs, const json& params, engine::ExecutionContext& ctx)
 {
+    // ---- M_patchB L1（PB2-05）：生效提供商来自配置表（默认地址 / 生效模型 / 凭据引用名）----
+    const engine::EffectiveProvider effective = effective_provider_of(ctx);
     std::string mode  = params.value("mode", std::string("official"));
     std::string model = params.value("model", std::string("deepseek-chat"));
     if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
         mode  = it->value("mode", mode);
         model = it->value("model", model);
+    }
+    if (effective.resolved) {
+        mode  = effective.mode;  // 表优先（web 条目自动锁 web；老工作流参数行为不变）
+        model = effective.model; // 表解析后的生效模型名（model_custom 优先，其次节点值，最后表内首选）
     }
 
     const std::string prompt_raw = inputs.contains("prompt") ? text_of(inputs["prompt"]) : "";
@@ -289,26 +368,34 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     }
 
     if (mode != "web") {
-        // PB-05：官方 API（OpenAI 兼容 /chat/completions）—— 落地“API 使用”
+        // PB-05 + M_patchB L1：官方 / 兼容 API —— 端点·认证·超时·env 名按**配置表**取值
         ai::OfficialChatRequest official;
-        official.api_base      = params.value("api_base", std::string("https://api.deepseek.com"));
-        official.model         = model;
-        official.system_prompt = system_prompt;
-        official.prompt        = prompt_raw;
-        official.temperature   = params.value("temperature", 0.7);
-        official.max_tokens    = params.value("max_tokens", 2048);
-        official.top_p         = params.value("top_p", 1.0);
-        official.seed          = params.value("seed", 0); // M_rerun：新 seed 重跑
-        if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
-            official.api_base = it->value("api_base", official.api_base);
+        if (effective.spec != nullptr) {
+            official.options         = ai::provider_options_from(*effective.spec);
+            official.image_max_bytes = effective.spec->limits.image_max_bytes;
         }
-        // PB-06：Key 三级优先级 —— 节点参数 → 环境变量 → provider 来源节点的凭据库引用
-        // （Key 不在 provider 句柄里，设计 §8.4；解析与首存日志统一在 resolve_official_key）
-        official.api_key = resolve_official_key(params, inputs, ctx, "[文本生成]").key;
+        official.api_base         = effective.api_base; // 工作流参数优先 → 表默认 → 引擎默认
+        official.options.api_base = effective.api_base;
+        official.model            = model;
+        official.system_prompt    = system_prompt;
+        official.prompt           = prompt_raw;
+        official.temperature      = params.value("temperature", 0.7);
+        official.max_tokens       = params.value("max_tokens", 2048);
+        official.top_p            = params.value("top_p", 1.0);
+        official.seed             = params.value("seed", 0); // M_rerun：新 seed 重跑
+        // PB-06：Key 三级优先级 —— 节点参数 → 环境变量（表内 env 名按序）→ provider 来源节点凭据库
+        official.api_key = resolve_official_key(params, inputs, ctx, "[文本生成]", effective).key;
         if (official.api_key.empty()) {
+            const std::string env_text =
+                effective.spec != nullptr && !effective.spec->env_names.empty()
+                    ? effective.spec->env_names.front()
+                    : std::string("DEEPSEEK_API_KEY");
             throw engine::NodeError("文本生成（官方 API）缺少 API Key：请在「提供商配置」填写 API Key，"
-                                    "或设置环境变量 DEEPSEEK_API_KEY（凭据管理器见 PB-06）");
+                                    "或设置环境变量 " + env_text + "（凭据引用名：" +
+                                    (effective.key_ref.empty() ? std::string("未设置") : effective.key_ref) +
+                                    "）");
         }
+        console_provider_line(ctx, "[文本生成]", effective, "official");
         ctx.console("[文本生成] 官方 API 请求：" + official.model + "，提示词 " +
                     std::to_string(official.prompt.size()) + " 字节" +
                     (system_prompt.empty() ? "" : "（含系统提示词）"));
@@ -338,6 +425,20 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     request.prompt           = prompt;
     request.model_type       = (model == "expert") ? "expert" : "default";
     request.thinking_enabled = (model == "deepseek-reasoner");
+    // M_patchB L1（PB2-05）：站点端点来自配置表条目（未选网页版条目时用内置默认 DeepSeek）
+    if (effective.spec != nullptr && !effective.spec->web.endpoints.host.empty()) {
+        request.endpoints = effective.spec->web.endpoints;
+    }
+    console_provider_line(ctx, "[文本生成]", effective, "web");
+    if (effective.resolved && !effective.is_web()) {
+        ctx.console("[文本生成] 提示：当前「提供商」不是网页版条目，站点参数用内置默认"
+                    "（DeepSeek 网页版）；如需按表配置站点，请在「提供商配置 → 提供商」选择 "
+                    "deepseek-web");
+    }
+    else if (effective.is_web() && effective.spec != nullptr) {
+        ctx.console("[文本生成] 站点：" + effective.spec->web.login_url + "（适配器 " +
+                    effective.spec->web.adapter + "）");
+    }
     // PB-03-min：把执行器的增量回调接到网页版 SSE（边收边吐 → UI 逐字呈现）
     if (ctx.on_delta) {
         request.on_delta = ctx.on_delta;
@@ -379,11 +480,19 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
 //  * 网页版没有图片入口 → 明确报错并指向 official
 json execute_vlm_generate(const json& inputs, const json& params, engine::ExecutionContext& ctx)
 {
-    std::string mode  = "official";
-    std::string model = std::string();
+    // ---- M_patchB L1（PB2-05）：生效提供商来自配置表（能力表决定「支不支持视觉」）----
+    const engine::EffectiveProvider effective = effective_provider_of(ctx);
+    std::string mode         = "official";
+    std::string model        = std::string();
+    std::string model_custom = std::string();
     if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
-        mode  = it->value("mode", mode);
-        model = it->value("model", model);
+        mode         = it->value("mode", mode);
+        model        = it->value("model", model);
+        model_custom = it->value("model_custom", model_custom);
+    }
+    if (effective.resolved) {
+        mode  = effective.mode;
+        model = effective.model;
     }
 
     const std::string prompt = inputs.contains("prompt") ? text_of(inputs["prompt"]) : std::string();
@@ -414,8 +523,27 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
     }
 
     if (mode == "web") {
-        throw engine::NodeError("图片理解暂不支持网页版：请把「提供商配置」的模式改为 official，"
-                                "并在「模型（自定义）」填写第三方/本地视觉模型名（如 glm-4v-flash）");
+        // M_patchB L1：文案按**表内显示名**生成（保留「暂不支持网页版」以便既有断言与用户习惯）
+        throw engine::NodeError(
+            "图片理解暂不支持网页版（" + effective.display +
+            "）：请把「提供商配置」改为视觉 API 条目（如 zhipu / siliconflow），"
+            "或在「模型（自定义）」填写视觉模型名（如 glm-4v-flash）");
+    }
+    // 能力门控（表驱动）：表内声明 vision=false 的模型直接拒绝；表外模型放行（交给后端报错）
+    if (effective.spec != nullptr) {
+        bool declared = false;
+        if (!ai::spec_model_supports_vision(*effective.spec, model, &declared)) {
+            const std::string suggested = !effective.spec->vision_model_default.empty()
+                                              ? effective.spec->vision_model_default
+                                              : std::string("（见 --provider-dump）");
+            throw engine::NodeError("图片理解：" + effective.display + " 的模型 " + model +
+                                    " 不支持视觉（表内视觉模型：" + suggested +
+                                    "；可在「模型（自定义）」填写）");
+        }
+        if (!declared && !model.empty()) {
+            ctx.console("[图片理解] 提示：配置表未声明模型 " + model +
+                        " 的视觉能力，已按允许调用处理（若失败请改用表内视觉模型）");
+        }
     }
     if (model.empty()) {
         throw engine::NodeError("图片理解：未解析到模型名（请连接「提供商配置」节点，"
@@ -436,22 +564,32 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
     const std::string system_prompt = params.value("system_prompt", std::string());
 
     ai::OfficialChatRequest official;
-    official.api_base      = params.value("api_base", std::string("https://api.deepseek.com"));
-    official.model         = model;
-    official.system_prompt = system_prompt;
-    official.prompt        = prompt;
-    official.images        = images;
-    official.temperature   = params.value("temperature", 0.7);
-    official.max_tokens    = params.value("max_tokens", 2048);
-    official.top_p         = params.value("top_p", 1.0);
-    if (const auto it = inputs.find("provider"); it != inputs.end() && it->is_object()) {
-        official.api_base = it->value("api_base", official.api_base);
+    if (effective.spec != nullptr) {
+        official.options         = ai::provider_options_from(*effective.spec);
+        official.image_max_bytes = effective.spec->limits.image_max_bytes;
     }
-    official.api_key = resolve_official_key(params, inputs, ctx, "[图片理解]").key;
+    official.api_base         = effective.api_base; // 工作流参数优先 → 表默认 → 引擎默认
+    official.options.api_base = effective.api_base;
+    official.model            = model;
+    official.system_prompt    = system_prompt;
+    official.prompt           = prompt;
+    official.images           = images;
+    official.temperature      = params.value("temperature", 0.7);
+    official.max_tokens       = params.value("max_tokens", 2048);
+    official.top_p            = params.value("top_p", 1.0);
+    official.api_key = resolve_official_key(params, inputs, ctx, "[图片理解]", effective).key;
     if (official.api_key.empty()) {
-        throw engine::NodeError("图片理解（官方/兼容 API）缺少 API Key：请在「提供商配置」填写 API Key"
-                                "（会自动入库），或设置环境变量 DEEPSEEK_API_KEY");
+        const std::string env_text =
+            effective.spec != nullptr && !effective.spec->env_names.empty()
+                ? effective.spec->env_names.front()
+                : std::string("DEEPSEEK_API_KEY");
+        throw engine::NodeError("图片理解（官方/兼容 API）缺少 API Key：请在「提供商配置」填写"
+                                " API Key（会自动入库），或设置环境变量 " + env_text +
+                                "，或使用凭据库 " +
+                                (effective.key_ref.empty() ? std::string("（未设置引用名）")
+                                                           : effective.key_ref));
     }
+    console_provider_line(ctx, "[图片理解]", effective, "official");
 
     ctx.console("[图片理解] 请求：" + official.model + "，图片 " + std::to_string(images.size()) +
                 " 张，提示词 " + std::to_string(prompt.size()) + " 字节" +

@@ -15,6 +15,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace aiwrite::web {
 
@@ -27,7 +28,15 @@ struct LoginRequest {
     bool        auto_close_after_cookies = false; // true：取到 Cookie 且稳定 3 秒后自动关闭（自检用）
     bool        probe_after_load    = false;      // 页面加载完成后自动执行协议探测（M4-06/M4-08）
     bool        auto_close_after_probe = false;   // 探测完成即关闭窗口（命令行自检用）
+    // ---- M_patchB L1（PB2-05）：站点参数来自配置表（默认 = 改造前写死的 DeepSeek 常量）----
+    std::vector<std::string> probe_paths;         // 协议探测路径（空 = 默认两条）
+    std::string              challenge_path;      // PoW 挑战路径（空 = 默认）
+    std::string              completion_path;     // 生成路径（空 = 默认）
 };
+
+// 渲染「协议探测 kickoff 脚本」：把站点路径从 LoginRequest 注入 JS 模板
+//  * 不传任何站点参数时，渲染结果与改造前的常量脚本**逐字一致**
+std::string probe_kickoff_script(const LoginRequest& request);
 
 // ---------------------------------------------------------------------------
 // 会话自动引导决策（**纯逻辑，便于离线断言**；由 ensure_session 使用）

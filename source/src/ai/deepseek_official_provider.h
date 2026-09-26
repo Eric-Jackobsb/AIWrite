@@ -17,11 +17,30 @@
 
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include "ai/provider_spec.h"   // M_patchB L1 / PB2-04：按表取端点·认证·env·超时
+
 namespace aiwrite::ai {
+
+// 请求参数化（M_patchB L1 / PB2-04）：端点 / 认证 / env 名 / 超时**全部来自配置表**
+//  * 默认值 = 改造前的内置行为（DeepSeek 官方 API），因此「不传 options」时行为逐字不变
+struct ProviderOptions {
+    std::string api_base;                     // 空 = 用 OfficialChatRequest.api_base
+    std::string chat_path = "/chat/completions";
+    std::string auth_style = "bearer";        // bearer | api-key | x-api-key | query | none
+    std::string auth_header;                  // 空 = 按 auth_style 默认
+    std::vector<std::pair<std::string, std::string>> extra_headers;
+    std::vector<std::string> env_names;       // 空 = {"DEEPSEEK_API_KEY"}
+    int connect_timeout_s = 15;
+    int read_timeout_s    = 180;
+};
+
+// 由配置表条目生成请求参数（纯函数；节点 / 自检共用）
+ProviderOptions provider_options_from(const ProviderSpec& spec);
 
 struct OfficialChatRequest {
     std::string api_base = "https://api.deepseek.com";
@@ -37,6 +56,8 @@ struct OfficialChatRequest {
     int         max_tokens  = 2048;
     double      top_p       = 1.0;
     int         seed        = 0; // M_rerun：>0 时随请求发送（0 = 不指定）
+    // M_patchB L1：请求参数（端点 / 认证 / env / 超时）；默认值 = 改造前行为
+    ProviderOptions options;
 };
 
 struct OfficialChatResult {
@@ -50,7 +71,17 @@ struct OfficialChatResult {
 
 // ---- 纯函数（离线断言用）----
 std::string    build_endpoint(const std::string& api_base);
+// M_patchB L1 / PB2-04：可指定请求路径（如 /v1/messages、含 {model} 占位）
+std::string    build_endpoint(const std::string& api_base, const std::string& chat_path);
 std::string    resolve_api_key(const std::string& param_key);
+// M_patchB L1 / PB2-04：环境变量名按序尝试（空列表 = 仅 DEEPSEEK_API_KEY）
+std::string    resolve_api_key(const std::string& param_key,
+                               const std::vector<std::string>& env_names);
+// M_patchB L1 / PB2-04：按认证风格生成认证头（bearer/api-key/x-api-key/none）
+std::vector<std::pair<std::string, std::string>> build_auth_headers(const ProviderOptions& options,
+                                                                    const std::string& api_key);
+// M_patchB L1 / PB2-04：把 {model} 占位替换为实际模型名
+std::string    resolve_chat_path(const std::string& chat_path, const std::string& model);
 
 // M5-02：扩展名 → MIME（png/jpg/jpeg/bmp/webp/gif；未知回退 image/png）
 std::string    image_mime_from_path(const std::string& path);

@@ -21,6 +21,23 @@
 
 ## [Unreleased] — M5 核心切片（M5-C）图片理解链路 + 图片显示 已落地
 
+**特性（M_patchB L1 第二批）：请求参数化 + 节点/UI/执行链路真正按表走 + 网页版站点参数化**
+
+- **PB2-04 请求参数化**（`ai/deepseek_official_provider.{h,cpp}`）：新增 `ProviderOptions{api_base, chat_path, auth_style, auth_header, extra_headers, env_names, connect/read_timeout_s}` 与纯函数 `build_endpoint(base, path)` / `build_auth_headers(options, key)` / `resolve_api_key(param, env_names)` / `resolve_chat_path(path, model)`（`{model}` 占位，Gemini 风格）/ `provider_options_from(spec)`；`official_chat` 的端点·认证·超时**全部按 options**（默认值 = 改造前行为，旧签名保留重载）
+- **PB2-05 表驱动（节点/解析/执行/UI）**
+  - `engine/provider_resolve.{h,cpp}`：`EffectiveProvider` 增 `specs/spec/kind/display/api_base/key_ref/key_required/spec_origin`（快照保活，reload 后不悬垂）；空字段用表默认补齐；**web 条目自动锁 `mode=web`**；`unwired_reason` 全部按表生成（表里没有该 id / 网页版不支持视觉 / 缺 Key 文案含**表内 env 名与引用名**；`auth_style=none` 不再要求 Key）
+  - `engine/node_registry.cpp`：**「提供商」下拉来自配置表**（official 在前、web 在后）+ 默认项取表内首项；`api_base` / `api_key_ref` 默认改为空（= 用表默认，换厂商自动带出正确的 ref）
+  - `nodes/local_nodes.cpp`：`execute_llm_generate` / `execute_vlm_generate` 用生效条目构造请求（选项 / 地址 / 模型 / 限额 / env 名）；新增 Console 行「提供商=… / 模式=… / 地址=… / 模型=…（来源 builtin|user）」；`execute_provider_config` 的句柄输出**表解析后的生效值**（含 `kind`/`display`/`key_ref`/`site_login`）；VLM 的视觉门控改为**能力表**判据（表内 `vision=false` → 明确报错并给出建议模型；表外模型放行 + 提示），文案保留「暂不支持网页版」以免破坏既有断言/习惯
+  - `nodes/local_nodes.cpp`：`resolve_official_key` 的 env 名与引用名默认值改为**按表**（节点参数 → 表内 env 列表按序 → 凭据库 ref）
+- **PB2-05 网页版去硬编码**（`web/webview_host.{h,cpp}`、`ai/deepseek_web_client.{h,cpp}`）
+  - `LoginRequest` 增 `probe_paths` / `challenge_path` / `completion_path`；新增纯函数 **`probe_kickoff_script()`**（把站点路径注入探测 JS 模板；**不传参数时渲染结果与改造前逐字一致**），探测脚本改为按 `g_request` 渲染
+  - `WebChatRequest` 增 `endpoints`（默认 = 改造前写死的 DeepSeek 常量）；`web_chat` 的 host / completion / challenge / 会话创建·拉取路径**全部取自已传入的端点**；`base_headers` 的 Origin/Referer 也按站点 host 生成
+- 断言：`api_probe --exec-selftest` **170 → 190 通过 / 0 失败**（新增：端点 5 例 / 认证 5 例 / env 3 例 / 协议默认值 4 例 / **探测脚本渲染 3 例**——含「无站点参数 = 内置默认」与「自定义站点后不残留内置路径」）
+- **实测（改表即改行为，零代码）**：临时写入 `~/.brain-ai/providers.json` 覆盖 `deepseek-web.web.probe_paths=["/api/v0/users/current"]` → `--provider-selftest --provider deepseek-web` 立即显示「来源=user」「探测路径：/api/v0/users/current」（表为 2 层）；验证后已删除临时文件
+- **基线（本批实测）**：`--graph-selftest` **111/0** · `--exec-selftest` **190/0** · `--selftest` 七组 PASS · `--run-selftest` PASS（离线 3/5）· `--cred-selftest` PASS · `--export-selftest` PASS · `--vlm-selftest` 离线 PASS（exit 2，默认值不变）· `--provider-selftest` **50/0**（exit 0）· `--provider-selftest --provider deepseek-web` exit 2（未登录，端点取自表）· 构建 **0 error / 0 warning**
+- ⚠️ **未能复跑的基线（环境问题，非代码）**：`--login-selftest` / `--web-probe` / `--web-chat` / `--run-selftest --web` 在本机被**残留 WebView2 进程锁住用户数据目录**（`~/.brain-ai/webview2`；8 个 `msedgewebview2.exe` 无法终止）后，新进程在 WebView2 初始化/退出阶段挂起或 `0xC0000005`；同批次 `webview2_login.exe --selftest` **PASS（Cookie 5 条）**，且崩溃前的日志显示网页版流程本身正常（Cookie 5 条 / userToken 64 位 / `/api/v0/users/current` 200）。**待办**：关闭其它 AIwrite 实例或重启后重跑这四条基线并回填结果
+- **本批未做**：`PB2-06`（`config.toml` 多 provider 节 + 旧配置迁移）、`B2-b`（`PB2-08…PB2-12` 工厂 / Anthropic / Gemini / `DeepSeekWebProvider` 收编）
+
 **特性（M_patchB L1 第一批）：Provider 配置表真的被程序读取了 —— 加载 / 合并 / 校验 / 用户覆盖 / 自检**
 
 - 新增 `ai/provider_spec.{h,cpp}`（PB2-01）：JSON 配置表加载器（纯函数 `merge_provider_specs` + 读盘 `load_provider_specs`）

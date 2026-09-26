@@ -1,5 +1,7 @@
 #include "engine/node_registry.h"
 
+#include "ai/provider_spec.h" // M_patchB L1：提供商列表 / 默认值来自配置表
+
 #include <algorithm>
 #include <utility>
 
@@ -292,28 +294,43 @@ void registerAllNodes()
 
     // --- N-05 Provider Config（配置）---------------------------------------
     {
+        // M_patchB L1（PB2-05）：提供商列表来自**配置表**（official 在前、web 在后，顺序稳定）
+        const ai::ProviderSpecs& specs        = ai::provider_specs();
+        std::vector<std::string>  official_ids = specs.ids("official");
+        std::vector<std::string>  web_ids      = specs.ids("web");
+        std::vector<std::string>  provider_ids;
+        provider_ids.insert(provider_ids.end(), official_ids.begin(), official_ids.end());
+        provider_ids.insert(provider_ids.end(), web_ids.begin(), web_ids.end());
+        if (provider_ids.empty()) {
+            provider_ids.push_back("deepseek"); // 极小概率（表不可用时 engine 侧兜底）
+        }
+        const std::string default_provider = provider_ids.front();
+
         Definition definition;
         definition.type         = "ProviderConfig";
         definition.display_name = "提供商配置";
         definition.title        = "提供商配置";
         definition.category     = NodeCategory::Config;
-        definition.description  = "输出 provider 句柄，校验配置完整性";
+        definition.description  = "输出 provider 句柄（配置表驱动），校验配置完整性";
         definition.outputs      = {output_port("provider", "提供商", PortType::Provider)};
         definition.params       = {
-            enum_param("provider", "提供商", {"deepseek"}, "deepseek"),
+            enum_param("provider", "提供商", provider_ids, default_provider,
+                       "来自配置表 assets/providers.json；自定义条目放 ~/.brain-ai/providers.d/"),
             enum_param("mode", "模式", {"official", "web"}, "official",
-                       "official = 官方 API Key；web = 网页版登录（M4 实现）"),
-            text_param("api_base", "API 地址", "https://api.deepseek.com", ParamType::String),
-            enum_param("model", "模型", {"deepseek-chat", "deepseek-reasoner"}, "deepseek-chat"),
+                       "official = API Key；web = 网页版（选中网页版条目时自动锁定为 web）"),
+            text_param("api_base", "API 地址", std::string(), ParamType::String, false, false,
+                       "留空 = 用该提供商的默认地址（见配置表）；自定义条目请填完整前缀（含 /v1）"),
+            enum_param("model", "模型", {"deepseek-chat", "deepseek-reasoner"}, "deepseek-chat",
+                       "内置提示枚举；生效模型由配置表解析（「模型（自定义）」优先）"),
             // M5-02：模型名解锁 —— 留空用上方枚举；填第三方/本地模型名则覆盖
             // （DeepSeek 官方 API 无视觉模型，图片理解需指向兼容 VLM，如智谱 glm-4v-flash）
             text_param("model_custom", "模型（自定义）", std::string(), ParamType::String, false, false,
-                       "留空 = 用上方「模型」；填写则覆盖（例：glm-4v-flash / Qwen/Qwen2.5-VL-72B-Instruct）"),
+                       "留空 = 按配置表（该提供商的候选模型）；填写则覆盖（例：glm-4v-flash / Qwen/Qwen2.5-VL-72B-Instruct）"),
             text_param("api_key", "API Key", std::string(), ParamType::String,
                        /*required*/ false, /*secret*/ true,
-                       "仅保存在内存中；M4-07 起改用 Windows Credential Manager"),
-            text_param("api_key_ref", "Key 引用名", "brain-ai/deepseek", ParamType::String,
-                       false, false, "凭据管理器中的条目名（M4-07）"),
+                       "仅保存在内存中；填写后自动入库（凭据管理器，PB-06）"),
+            text_param("api_key_ref", "Key 引用名", std::string(), ParamType::String,
+                       false, false, "留空 = 按提供商自动生成（如 brain-ai/zhipu）；填了则优先"),
         };
         // mode=web 时隐藏 official 专属参数（API 地址 / 模型 / 自定义模型 / Key / 引用名）
         // 可见性判定见 engine::param_visible()：参数面板、画布预览与运行前校验共用同一份规则

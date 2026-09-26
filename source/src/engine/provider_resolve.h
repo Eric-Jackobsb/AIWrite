@@ -15,8 +15,10 @@
 //  纯模型层：不依赖 ImGui，可被界面与自检共用。
 // ============================================================================
 
+#include <memory>
 #include <string>
 
+#include "ai/provider_spec.h"   // M_patchB L1：生效条目（表驱动）
 #include "engine/graph.h"
 
 namespace aiwrite::engine {
@@ -31,6 +33,20 @@ struct EffectiveProvider {
     // M5-02：`model` 恒为**生效模型名**（`model_custom` 非空时覆盖枚举 model）
     std::string model        = "deepseek-chat";
     std::string model_custom;                 // 自定义模型名（空 = 未覆盖，用枚举/默认值）
+
+    // ---- M_patchB L1（PB2-05）：配置表驱动的生效值 ----
+    // specs 持有快照，保证 spec 指针在「重新加载配置表」后仍有效（不悬垂）
+    std::shared_ptr<const ai::ProviderSpecs> specs;
+    const ai::ProviderSpec* spec  = nullptr;   // 生效条目（未命中 = nullptr）
+    std::string             kind;              // official | web（未命中 = 空）
+    std::string             display;           // 显示名（未命中 = provider id）
+    std::string             api_base;          // 生效地址（节点参数优先；空 → 表默认）
+    std::string             key_ref;           // 生效凭据引用名（节点参数优先；空 → 表默认）
+    bool                    key_required = true; // auth_style=none 时无需 Key
+    std::string             spec_origin;       // 条目来源（builtin / user / …）
+
+    bool        is_web() const { return kind == "web"; }
+    std::string model_hint() const;            // 表内候选模型（用于界面提示）
 };
 
 // 是否使用 provider 句柄的推理节点（LLMGenerate / VLMGenerate）

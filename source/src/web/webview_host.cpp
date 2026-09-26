@@ -175,6 +175,16 @@ constexpr const char* kProbeKickoffScript = R"JS(
 })();
 )JS";
 
+// ---- M_patchB L1（PB2-05）：把站点路径注入探测脚本（不传参数 = 改造前常量，逐字一致）----
+void replace_all_token(std::string* text, const std::string& from, const std::string& to)
+{
+    for (std::size_t pos = text->find(from); pos != std::string::npos;
+         pos = text->find(from, pos + to.size())) {
+        text->replace(pos, from.size(), to);
+    }
+}
+
+
 constexpr const char* kProbePollScript = R"JS(
 (function () {
   const p = window.__aiwriteProbe;
@@ -426,7 +436,7 @@ void start_protocol_probe()
     }
 
     log::info("[网页版探测] 注入探测脚本（localStorage/userToken + create_pow_challenge）");
-    const std::wstring script = to_wide(kProbeKickoffScript);
+    const std::wstring script = to_wide(probe_kickoff_script(g_request));
     const HRESULT      hr     = g_webview->ExecuteScript(
         script.c_str(),
         Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
@@ -888,6 +898,33 @@ int run_login_window(const LoginRequest& request)
 }
 
 } // namespace
+
+// ---- M_patchB L1（PB2-05）：站点参数化 —— 渲染探测脚本（外部可见，供离线断言）----
+//  * 不传站点参数时，渲染结果与改造前的常量脚本逐字一致（行为不变）
+std::string probe_kickoff_script(const LoginRequest& request)
+{
+    std::string       script(kProbeKickoffScript);
+    const std::string challenge =
+        request.challenge_path.empty() ? std::string("/api/v0/chat/create_pow_challenge")
+                                       : request.challenge_path;
+    const std::string completion = request.completion_path.empty()
+                                       ? std::string("/api/v0/chat/completion")
+                                       : request.completion_path;
+    replace_all_token(&script, "'/api/v0/chat/create_pow_challenge'", "'" + challenge + "'");
+    replace_all_token(&script, "'/api/v0/chat/completion'", "'" + completion + "'");
+    if (!request.probe_paths.empty()) {
+        std::string list;
+        for (const std::string& path : request.probe_paths) {
+            if (!list.empty()) {
+                list += ", ";
+            }
+            list += "'" + path + "'";
+        }
+        replace_all_token(&script, "['/api/v0/users/current', '/api/v0/chat_session/fetch_page']",
+                          "[" + list + "]");
+    }
+    return script;
+}
 
 // -------------------------------------------------------- LoginWindow -------
 LoginWindow::~LoginWindow()

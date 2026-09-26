@@ -2125,7 +2125,92 @@ int execution_selftest()
         std::filesystem::remove_all(vlm_root, ec);
     }
 
-    // ---- M_patchB L1 / PB2-01：Provider 配置表（API 与网页版同一套纯函数断言）----
+    // ---- M_patchB L1 / PB2-04：请求参数化（端点 / 认证 / env / 超时，纯函数）----
+    {
+        using aiwrite::ai::ProviderOptions;
+        std::printf("   -- 请求参数化（M_patchB L1 / PB2-04）--\n");
+        // 端点拼接
+        expect_eq(check, aiwrite::ai::build_endpoint("https://api.deepseek.com"),
+                  "https://api.deepseek.com/chat/completions", "PB2-04 端点：默认地址");
+        expect_eq(check, aiwrite::ai::build_endpoint("https://a.example.com/v1/"),
+                  "https://a.example.com/v1/chat/completions", "PB2-04 端点：尾斜杠 + 路径前缀");
+        expect_eq(check, aiwrite::ai::build_endpoint("https://b.example.com", "/v1/messages"),
+                  "https://b.example.com/v1/messages", "PB2-04 端点：自定义路径（Anthropic）");
+        expect_eq(check, aiwrite::ai::build_endpoint("", ""),
+                  "https://api.deepseek.com/chat/completions", "PB2-04 端点：空串回退默认");
+        expect_eq(check,
+                  aiwrite::ai::resolve_chat_path("/v1beta/models/{model}:generateContent",
+                                                 "gemini-2.0-flash"),
+                  "/v1beta/models/gemini-2.0-flash:generateContent",
+                  "PB2-04 端点：{model} 占位替换（Gemini 风格）");
+        // 认证头
+        ProviderOptions bearer;
+        const auto auth_bearer = aiwrite::ai::build_auth_headers(bearer, "sk-test");
+        expect(check, auth_bearer.size() == 1 && auth_bearer[0].first == "Authorization" &&
+                          auth_bearer[0].second == "Bearer sk-test",
+               "PB2-04 认证：bearer → Authorization: Bearer …");
+        ProviderOptions api_key;
+        api_key.auth_style  = "api-key";
+        api_key.auth_header = "api-key";
+        const auto auth_azure = aiwrite::ai::build_auth_headers(api_key, "k1");
+        expect(check, auth_azure.size() == 1 && auth_azure[0].first == "api-key" &&
+                          auth_azure[0].second == "k1",
+               "PB2-04 认证：api-key → api-key: <key>（Azure 风格）");
+        ProviderOptions anthropic;
+        anthropic.auth_style  = "x-api-key";
+        anthropic.auth_header = "x-api-key";
+        const auto auth_claude = aiwrite::ai::build_auth_headers(anthropic, "k2");
+        expect(check, auth_claude.size() == 1 && auth_claude[0].first == "x-api-key",
+               "PB2-04 认证：x-api-key（Anthropic 风格）");
+        ProviderOptions none;
+        none.auth_style = "none";
+        expect(check, aiwrite::ai::build_auth_headers(none, "k3").empty(),
+               "PB2-04 认证：none → 不带头（本地 Ollama）");
+        ProviderOptions query;
+        query.auth_style = "query";
+        expect(check, aiwrite::ai::build_auth_headers(query, "k4").empty(),
+               "PB2-04 认证：query → 不走头，走 URL 拼接");
+        // env 名按序（表内 env_names）
+        expect_eq(check, aiwrite::ai::resolve_api_key("param-key", {"A_KEY", "B_KEY"}), "param-key",
+                  "PB2-04 env：节点参数优先");
+        expect_eq(check, aiwrite::ai::resolve_api_key(std::string(), {"AIWRITE_ABSENT_KEY"}), "",
+                  "PB2-04 env：未命中的 env 名 → 空（无兜底）");
+        expect_eq(check, aiwrite::ai::resolve_api_key(std::string(), {}), "",
+                  "PB2-04 env：空列表 = 仅 DEEPSEEK_API_KEY（未设置 → 空）");
+        // 协议默认值（来自配置表默认补全规则）
+        expect_eq(check, aiwrite::ai::default_chat_path("openai"), "/chat/completions",
+                  "PB2-04 默认值：openai → /chat/completions");
+        expect_eq(check, aiwrite::ai::default_chat_path("anthropic"), "/v1/messages",
+                  "PB2-04 默认值：anthropic → /v1/messages");
+        expect_eq(check, aiwrite::ai::default_auth_style("anthropic"), "x-api-key",
+                  "PB2-04 默认值：anthropic → x-api-key");
+        expect_eq(check, aiwrite::ai::default_auth_header("api-key"), "api-key",
+                  "PB2-04 默认值：auth_style=api-key → 头名 api-key");
+    }
+
+    // ---- M_patchB L1 / PB2-05：网页版站点参数化（探测脚本渲染；纯离线，不需要 WebView2）----
+    {
+        std::printf("   -- 网页版站点参数化（M_patchB L1 / PB2-05）--\n");
+        aiwrite::web::LoginRequest default_request;
+        const std::string default_script = aiwrite::web::probe_kickoff_script(default_request);
+        expect(check, default_script.find("'/api/v0/chat/create_pow_challenge'") != std::string::npos &&
+                         default_script.find("'/api/v0/chat/completion'") != std::string::npos &&
+                         default_script.find("'/api/v0/users/current'") != std::string::npos,
+               "PB2-05 探测脚本：无站点参数 = 内置 DeepSeek 默认（行为不变）");
+
+        aiwrite::web::LoginRequest custom;
+        custom.challenge_path  = "/api/v9/pow";
+        custom.completion_path = "/api/v9/chat";
+        custom.probe_paths     = {"/api/v9/me"};
+        const std::string custom_script = aiwrite::web::probe_kickoff_script(custom);
+        expect(check, custom_script.find("'/api/v9/pow'") != std::string::npos &&
+                         custom_script.find("'/api/v9/chat'") != std::string::npos &&
+                         custom_script.find("['/api/v9/me']") != std::string::npos,
+               "PB2-05 探测脚本：站点路径来自配置表（改表即改探测目标）");
+        expect(check, custom_script.find("'/api/v0/chat/completion'") == std::string::npos,
+               "PB2-05 探测脚本：自定义站点后不再残留内置路径");
+    }
+
     {
         std::printf("   -- Provider 配置表（M_patchB L1 / PB2-01）--\n");
         int       spec_passed = 0;

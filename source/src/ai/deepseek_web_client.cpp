@@ -16,14 +16,15 @@ constexpr const char* kHost           = "https://chat.deepseek.com";
 constexpr const char* kCompletionPath = "/api/v0/chat/completion";
 constexpr const char* kChallengePath  = "/api/v0/chat/create_pow_challenge";
 
-httplib::Headers base_headers(const web::Session& session)
+httplib::Headers base_headers(const web::Session& session, const std::string& host)
 {
+    const std::string origin = host.empty() ? std::string(kHost) : host;
     httplib::Headers headers;
     headers.emplace("Accept", "application/json, text/plain, */*");
     headers.emplace("Content-Type", "application/json");
     headers.emplace("Authorization", "Bearer " + session.user_token);
-    headers.emplace("Origin", kHost);
-    headers.emplace("Referer", std::string(kHost) + "/");
+    headers.emplace("Origin", origin);
+    headers.emplace("Referer", origin + "/");
     headers.emplace("User-Agent",
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/126.0.0.0 Safari/537.36");
@@ -119,11 +120,11 @@ const nlohmann::json* biz_data_of(const nlohmann::json& json)
     return &data["biz_data"];
 }
 
-// 建新会话：POST /api/v0/chat_session/create（字段名按实测响应探测；失败返回空）
-std::string create_chat_session(httplib::Client& client, const httplib::Headers& headers)
+// 建新会话：POST {session_create_path}（字段名按实测响应探测；失败返回空）
+std::string create_chat_session(httplib::Client& client, const httplib::Headers& headers,
+                                const std::string& path)
 {
-    const auto response =
-        client.Post("/api/v0/chat_session/create", headers, "{}", "application/json");
+    const auto response = client.Post(path, headers, "{}", "application/json");
     if (!response || response->status != 200) {
         return {};
     }
@@ -145,11 +146,12 @@ std::string create_chat_session(httplib::Client& client, const httplib::Headers&
     return {};
 }
 
-// 复用最近会话：GET /api/v0/chat_session/fetch_page（字段名取自实测响应）
+// 复用最近会话：GET {session_fetch_path}（字段名取自实测响应）
 bool reuse_recent_session(httplib::Client& client, const httplib::Headers& headers,
-                          std::string* session_id, long long* current_message_id, std::string* error)
+                          const std::string& path, std::string* session_id,
+                          long long* current_message_id, std::string* error)
 {
-    const auto response = client.Get("/api/v0/chat_session/fetch_page", headers);
+    const auto response = client.Get(path, headers);
     if (!response) {
         *error = "会话列表请求失败: " + httplib::to_string(response.error());
         return false;
@@ -183,15 +185,25 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
         return result;
     }
 
-    httplib::Client client(kHost);
+    // M_patchB L1（PB2-05）：站点端点全部来自 request.endpoints（默认 = 改造前写死的常量）
+    const ProviderWebEndpoints& endpoints = request.endpoints;
+
+    httplib::Client client(endpoints.host.empty() ? std::string(kHost) : endpoints.host);
     client.set_connection_timeout(15, 0);
     client.set_read_timeout(180, 0);
     client.enable_server_certificate_verification(true);
 
     // ---------------------------------------------------------- 1) 挑战 -----
-    const httplib::Headers headers = base_headers(session);
+    const httplib::Headers headers = base_headers(session, endpoints.host);
+    const std::string      challenge_path = endpoints.challenge_path.empty()
+                                                ? std::string(kChallengePath)
+                                                : endpoints.challenge_path;
+    const std::string      completion_path = endpoints.completion_path.empty()
+                                                 ? std::string(kCompletionPath)
+                                                 : endpoints.completion_path;
     const auto             challenge_resp =
-        client.Post(kChallengePath, headers, R"({"target_path":"/api/v0/chat/completion"})",
+        client.Post(challenge_path, headers,
+                    nlohmann::json{{"target_path", completion_path}}.dump(),
                     "application/json");
     if (!challenge_resp) {
         result.error = "挑战请求失败: " + httplib::to_string(challenge_resp.error());
@@ -242,14 +254,21 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
     std::string session_id  = request.chat_session_id;
     long long   parent_id   = request.parent_message_id;
     if (session_id.empty()) {
-        session_id = create_chat_session(client, headers);
+        session_id = create_chat_session(
+            client, headers,
+            endpoints.session_create_path.empty() ? std::string("/api/v0/chat_session/create")
+                                                  : endpoints.session_create_path);
         if (!session_id.empty()) {
             log::info("[网页版] 已新建会话（" + session_id + "）");
             parent_id = 0;
         }
         else {
             std::string session_error;
-            if (!reuse_recent_session(client, headers, &session_id, &parent_id, &session_error)) {
+            if (!reuse_recent_session(client, headers,
+                                  endpoints.session_fetch_path.empty()
+                                      ? std::string("/api/v0/chat_session/fetch_page")
+                                      : endpoints.session_fetch_path,
+                                  &session_id, &parent_id, &session_error)) {
                 result.error = "无法建立会话: " + session_error;
                 return result;
             }
@@ -269,7 +288,7 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
     body["search_enabled"]   = request.search_enabled;
 
     const auto response =
-        client.Post(kCompletionPath, call_headers, body.dump(), "application/json");
+        client.Post(completion_path, call_headers, body.dump(), "application/json");
     if (!response) {
         result.error = "调用失败: " + httplib::to_string(response.error());
         return result;

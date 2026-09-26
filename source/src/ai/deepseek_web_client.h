@@ -13,6 +13,7 @@
 #include <functional>
 #include <string>
 
+#include "ai/provider_spec.h"   // M_patchB L1（PB2-05）：站点端点来自配置表
 #include "web/session_store.h"
 
 namespace aiwrite::ai {
@@ -28,6 +29,9 @@ struct WebChatRequest {
     // 可选覆盖：为空时自动「新建会话（失败则复用最近会话）」
     std::string chat_session_id;
     long long   parent_message_id = 0;        // 0 = 使用会话的 current_message_id
+    // M_patchB L1（PB2-05）：站点端点 —— 默认值 = 改造前写死的 DeepSeek 常量（行为不变）
+    //  由 effective 配置表条目填入（`web.endpoints`），站点换域名/换 API 版本时改 JSON 即可
+    ProviderWebEndpoints endpoints;
 };
 
 struct WebChatResult {
