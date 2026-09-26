@@ -552,7 +552,7 @@
                 "todo": {
                   "id": 42,
                   "content": "FEA-M5-01 VLMGenerate 接线（M5-02）：图片输入 + prompt → 视觉模型生成文字",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M5.md"
                 }
@@ -563,7 +563,7 @@
                 "todo": {
                   "id": 43,
                   "content": "FEA-M5-02 ImagePreview 真实预览与 Output 窗口（历史、图片、完成后自动打开） ｜ §11.2 Output 归档",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M5.md"
                 }

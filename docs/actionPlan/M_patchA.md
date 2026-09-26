@@ -77,7 +77,8 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 |---|---|
 | `api_probe.exe --selftest` | 七组全 PASS（+ PB-01 两步 / P1-c 参数驱动 / M_rerun / M_textio 断言；V-11/V-12 随 PB-09） |
 | `api_probe.exe --graph-selftest` | 111 通过 / 0 失败（F2 后；随补丁增长） |
-| `api_probe.exe --exec-selftest` | **72 通过 / 0 失败**（随补丁增长） |
+| `api_probe.exe --exec-selftest` | **120 通过 / 0 失败**（M5-02 后；含多模态请求体 / VLM 接线 / 快照图片 / E-02 示例断言） |
+| `aiwrite.exe --vlm-selftest [--image <路径>]` | 离线请求体断言 PASS；有 Key 时真实读图 PASS（无 Key 退出码 2 —— 离线部分已通过） |
 | `aiwrite.exe --run-selftest` | PASS（离线无 Key：official 节点报「缺少 API Key」，**3/5 为预期**） |
 | `aiwrite.exe --run-selftest --web` | **5/5，失败 0，跳过 0**（真实网页版生成） |
 | `aiwrite.exe --web-probe` / `--web-chat "<提示词>"` | PASS |
@@ -104,7 +105,7 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | 1.4 D 类 会话与凭据（4项） | 🟡 部分 | api_key_ref ✅（PB-06 DPAPI 文件库）；Key 三级优先级 ✅；会话失效引导 ⬜（PB-07）；代理/自签证书 ⬜（FEA-M4-13） |
 | 1.5 E 类 交互（5项） | 🟡 部分 | 复制/粘贴 ✅（F1）；窗口几何 ✅（F3）；参数面板重置/批量/搜索 ✅（F2）；重跑「新 seed」✅（FEA-M4-17）/通用重跑 ⬜（FEA-M4-11）；快捷键 **决定不做**（设计 §6.7，纯鼠标） |
 | 1.6 F 类 数据与文件（5项） | 🟡 部分 | 输出归档 + TTL ✅（PC-05/PC-06）；autosave / 恢复 / 最近列表校验 / version 与 config_version 迁移 ⬜（PC-01~PC-04） |
-| 1.7 G 类 占位与远期 | ⬜ 未做 | VLM / ImagePreview 显示 / Output 窗口历史 / i18n / M6-02 引导（PM-01）/ M6-08 打包 / 一键构建脚本（PM-03） |
+| 1.7 G 类 占位与远期 | 🟡 部分 | **VLM / 图片理解 ✅ 已接线**（official / OpenAI 兼容，智谱实测入口 `--vlm-selftest`）；**ImagePreview 显示 ✅**（纹理缓存 + 输出面板缩略图）；剩余：Output 窗口历史 / i18n / M6-02 引导（PM-01）/ M6-08 打包 / 一键构建脚本（PM-03） |
 
 ### 1.1 A 类 —— 结果回流与可观测性（最痛）
 
@@ -613,7 +614,7 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 |---|---|---|
 | 2026-09-23 | v1 | 首次建立：基于全库底层逻辑审计，确定补丁系列 A→D + 并行项，并详述 Patch A |
 | 2026-09-24 | v2 | Patch A（A1 + A2）全部完成（PA-01…PA-09 ✅ / VA-01…VA-08 达成）；叠加 F1 复制粘贴接回、F2 参数面板增强、F3 窗口几何、P1-a/b/c |
-| 2026-09-26 | v3 | **状态校正**：PB-01 三步 ✅ / PB-03 最小化 ✅ / PB-05 ✅ / PB-06 ✅ / PB-08 UI 侧 ✅；剩余项收敛；新增 §1.0 状态总览与 §2 / §4.1 / §4.2 / §5.1 / §6.1 / §7 状态标记；**M6 设置面板编号校正为 M6-01** |
+| 2026-09-26 | v4 | **M5 核心切片（M5-C）落地**：多模态请求体（`image_url` data URL）+ `VLMGenerate` 接线 + `model_custom` 模型名解锁 + 纹理缓存与图片显示 + 示例 E-02 与 `--vlm-selftest`；基线 `--exec-selftest` 72 → **120**；决策 **D-06/D-07**（优先 M5、视觉模型走智谱）；PB-07 标记为**延后（非核心）** |
 
 ### 11.5 待决问题（见 §12 决策点）
 

@@ -18,7 +18,32 @@
 
 ---
 
-## [Unreleased] — M2 节点系统（P1 数据层 + P2 画布交互）已落地
+## [Unreleased] — M5 核心切片（M5-C）图片理解链路 + 图片显示 已落地
+
+**特性（M5-C）：读图生成 + 看得见图片 —— 代码落地（4 提交）**
+
+> 决策：`actionPlan/M_patchA.md` §12 **D-06**（优先 M5 核心，Patch B 剩余项 PB-02/04/07/09 延后）· **D-07**（视觉模型走**智谱**，实现按 **OpenAI 兼容**规范）
+> 基线：`--graph-selftest` 111/0 · `--exec-selftest` **72 → 120** · `--selftest` 七组全 PASS · `--run-selftest` 3/5（离线预期）· `--cred-selftest` 8/8 · `--export-selftest` 7/7 · 构建 0 error / 0 warning
+
+- **AI 层（`779857d`）**：`ai/deepseek_official_provider.{h,cpp}` 支持**多模态消息体** ——
+  `OfficialChatRequest.images`（本地路径，按序）非空时 `messages[].content` 变为数组
+  （`[{type:"text",…}, {type:"image_url", image_url:{url:"data:<mime>;base64,…"}}]`；智谱 GLM / 硅基流动 / 本地 Ollama 通用）；
+  新增纯函数 `image_mime_from_path` / `encode_image_data_url`（OpenSSL `EVP_EncodeBlock`，默认 8 MB 上限，超限报可操作错误）；
+  **无图路径逐字节保持旧请求体**（回归安全）；离线断言 **+20**（`--exec-selftest` 72 → 92）
+- **引擎层（`62139bf`）**：`VLMGenerate`（图片理解）接线 —— 图片（单张/多张）→ data URL → 生成文本，错误分类复用官方 API；
+  网页版给出「暂不支持」可操作错误；`ProviderConfig` 新增 **`model_custom`（模型（自定义））** 覆盖枚举模型名
+  （`engine::resolve_effective_provider` 与执行同规则，界面显示生效模型）；Key 解析抽为 `resolve_official_key`（复用 PB-06 三级优先级 + 首次自动入库）；断言 **+16**（→ 108）
+- **UI 层（`6359aa9`）**：新增 `ui/texture_cache.{h,cpp}`（stb_image + **GL 1.1**，缓存键 = 路径 + mtime + 大小，LRU 8 张，退出前 `release_textures()`）；
+  输出面板 / 参数面板渲染缩略图 + 「打开所在文件夹」（`ShellExecuteW`）；新增 `RunNodeView.images` 快照通道（ImageInput 输出 / ImagePreview 汇点虚拟端口）；
+  Image Input 参数面板显示「图片尺寸」；断言 **+8**（→ 116）
+- **示例与实测入口（`c5dddfe`）**：`source/workflows/examples/E-02_图片转小说.json`（5 节点 4 连线，智谱端点 + `glm-4v-flash` 预置）+
+  `source/assets/images/sample.png`（640×360）；新增 `aiwrite.exe --vlm-selftest [--image <路径>] [--api-base <url>] [--model <名>] [--key-ref <引用>]`
+  （① 离线请求体断言 ② 有 Key 时真实读图；退出码 0=通过 / 1=失败 / 2=缺少 Key）；断言 **+4**（→ 120）；
+  新增编译宏 `AIWRITE_SOURCE_DIR`，自检可稳定定位仓库内示例
+- **实测**：`--vlm-selftest` **离线部分 PASS**（示例图 → data URL 4826 字符，请求体 = text + image_url）；**联网读图待 API Key**
+  （`build\bin\aiwrite.exe --vlm-selftest`，或界面加载 E-02 后运行）
+- **未做（留后）**：M5-09 输出面板历史（=`PD-07`）、M5-10 图片复制/导出、归档按日期分文件夹、示例 E-03·E-05·E-06、网页版图片入口
+- **文档**：`M5.md` 实施状态刷新 + 进度节；`milestone_plan.md` 节奏表 M5 行；`M_patchA.md` §0.4 基线 + §11.4 v4 + §1.7；`DevPlan.todo` 的 `FEA-M5-01/02` 置 done
 
 **文档（actionPlan 全量状态同步）：M_patchA / M3 / M4 / M5 / M6 / milestone_plan 按实况更新**
 
