@@ -42,6 +42,7 @@
 > ✅ **2026-09-27 `PB2-27` 已落地（v13 · 代码批次）**：登录/会话层的「判据 + 文案」去 DeepSeek 化 —— 新增纯函数 `ai::web_session_state(spec, evidence)`（判据 = 条目 `cookie_names` 命中 **∪** 该 origin Cookie 非空，**不看** `userToken`，`D-27`/`I15`）+ `ai::probe_is_applicable()`（DOM 站点**协议探测不适用**，`I16`）+ `ai::web_shows_user_token()`（`D-28`①）；`web::ensure_session()` 对 DOM 站点改用**站点无关**就绪判据（**不再空等 15/25 s 的 `userToken`**）；面板/状态栏/字段警告/加载警告文案全部站点无关；`ui/**` 与 `web/**` 已无任何厂商专有 Cookie 名（删除 `kDefaultCookieName`）。实测：构建 **0 error / 0 warning**、`--exec-selftest` **219 → 227 / 0**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**（§9.8）。`PB2-28`（探测只读诊断分支 + CLI 判据）、`PB2-29`（逐站选择器）、`PB2-30` 待做
 > ✅ **2026-09-27 `PB2-28` 已落地（v14 · 代码批次，①②③）**：**协议探测「不适用」语义** —— 新增只读诊断脚本 `kProbeKickoffScriptReadOnly`（读 URL / 标题 / localStorage 键名与个数 / Cookie 名与个数 / 输入框与按钮候选数；**脚本内既无 `/api/v0/` 也无 `localStorage.getItem('userToken')`**，输出结构与内置脚本同名 → 解析逻辑零改动）；`probe_kickoff_script()` 按 `probe_applicable` 分支（默认 `true` → 内置站点与 CLI/无参路径**逐字不变**，守 `I2`）；CLI `--web-probe --provider <id>` 与面板按钮对不适用站点改打「协议探测：**不适用**」+ 只读诊断 + **站点无关**登录态结论（退出码 0=已登录 / 2=未登录 / 1=诊断失败）。实测：构建 **0/0**、`--exec-selftest` **227 → 232 / 0**（`VB2-25` 5 项全 PASS）、`--graph-selftest` **111/0**、`--provider-selftest` **50/0**（§9.9）。④ 会话失效识别（`40002`/`401`/`40003`）仍归 `PB2-25` 待做；`PB2-29`（逐站选择器）、`PB2-30` 待做
 > ✅ **2026-09-27 v15 收口（代码批次）**：① **`PB2-28`④ 会话失效识别落地**（`ai::web_session_failure_hint()` 纯函数 + `web_chat()` 命中 `401`/`40002` → 作废该站点内存会话并给重新登录指引；`40003` → 只提示）② **`PB2-30`① 落地**（`--run-selftest --web --provider <id>` 端到端断言，严格解析不回落）③ **新增只读工具 `--web-dom-dump`**（枚举页面候选 input / 发送 / 回答容器 + 建议选择器 → 让逐站填选择器不再依赖人肉 F12，`PB2-29` 的执行工具）④ **修复一处 CLI 崩溃**：`ExecuteScript` 返回值解包缺失 → `type_error.306` 未捕获 → `std::terminate`/`__fastfail`（0xC0000409，且 stdout 缓冲全丢）；已统一解包 + try/catch 兜底。实测：构建 **0/0**、`--exec-selftest` **232 → 237 / 0**（`VB2-27` 5 项全 PASS）、`--graph-selftest` 111/0、`--provider-selftest` 50/0、`--web-dom-dump --provider kimi-web` exit 0 并读出真实候选（输入框 = `div.chat-input-editor`）—— 但**发现**：未登录的 Kimi 也有 4 条**匿名 Cookie** → 仅按「Cookie 非空」判「已登录」会误报（见 §9.10「待拍板 `D-30`」）
+> ✅ **2026-09-27 v16（仅界面层）：提供商下拉「合并显示」** —— 下拉里不再出现 `-web` 重复项：`deepseek`/`zhipu`/`openai`/`anthropic`/`gemini` 各自与网页版条目**合并为一项**（切到「模式 = web」自动使用对应的 `xxx-web`），`kimi`/`tongyi`/`qwen`/`doubao`/`yuanbao`/`ernie`/`spark` 显示名去掉 `-web` 后缀；**业务代码与配置表零改动**（写进节点的仍是表内真实 id）。21 条表项 → **16 个下拉项**；实测构建 **0/0**、`--provider-selftest` **50/0**、`--exec-selftest` 237/0、`--graph-selftest` 111/0（§9.11）
 >
 
 > **⚠️ 2026-09-26 复核（v4 · 文档先行批次，当时只改文档、零代码变更）**：`PB2-05` 的「网页版去硬编码（逐处替换清单）」**第 1、2 行未落地**，且**「多站点（多份 Cookie）并存」尚不具备条件**。缺口已登记为新任务 **`PB2-17` / `PB2-18` / `PB2-19`**（§3，状态全部 ⬜ 未开工），并由新增不变量 **`I11`/`I12`**、验收 **`AB2-13`/`AB2-14`**、验证 **`VB2-16`/`VB2-17`**、决策 **`D-19`/`D-20`**、风险 **`R14`/`R15`** 约束（复核证据见 §9「B2-b 前置复核」）：
@@ -557,7 +558,7 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 - **改动**：`solve_pow_via_page(const LoginRequest&, …)`（由调用方传生效条目站点）；新增**按条目**的自检入口（如 `--web-probe --provider <id>`），既有 DeepSeek 自检**保持不变**。
 - **验收 / 验证**：`VB2-19` 末项 + 现有 web 自检全绿（守 `I2`）。
 
-#### PB2-24 （**后置 · 本轮不做**，`D-23` A）自建站点闭环：新建站点条目 UI + 重新加载 + 下拉即时刷新 + 配置表错误可见
+#### PB2-24 （**后置**，`D-23` A）自建站点闭环：新建站点条目 UI + 重新加载 + 下拉即时刷新 + 配置表错误可见 —— 🟡 **部分完成（v16 · 2026-09-27：提供商下拉「合并显示」已落地，见 §9.11）**
 
 - 现状证据：`reload_provider_specs()` **全工程零调用点**；`src/ui` 无任何「配置表 / 重新加载 / 测试连接」入口（`PB2-07` 界面按钮仍 ⬜）；`registerAllNodes()` 幂等（`node_registry.cpp:225-230`）→ 「提供商」枚举在首次注册时**一次性**生成，运行中 reload 也**不刷新下拉**；配置表错误 / 警告只在 `app.log`（界面不可见）。
 - 改动方向：①「新建网页版站点…」按钮（写入附录 D 模板 + 立即可用）② `reload_provider_specs()` 接线 + `provider` 参数改**动态枚举**（或提供重建接口）③ 面板 / Console 显示配置表**错误 / 警告**（含「已忽略该层 / 已跳过该条」）。
@@ -1189,7 +1190,8 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | 2026-09-26 | **v12** | **第四轮复核（文档先行 · 零代码变更）：登录层仍绑 DeepSeek** —— 用户实测「所有 AI 都无法登录，只能切回 DeepSeek」。复核：L3 只治**生成引擎**（`dom_chat()` 对「未取到内存凭证」仅给警告、`run_script_sync()` 不要求 `userToken`），未治 ①**登录态判据**（`has_token()` = `user_token` 非空 → 通用站点恒 false；面板恒显「userToken：未获取」；Cookie 名回落 `ds_session_id`；状态栏只看内存槽）②**探测脚本**对非 DeepSeek 站点注入 DeepSeek 端点（`probe_kickoff_script()` 空字段保持内置值 → 必然 404 → 假「探测错误」）③**11 条内置站点无选择器**（登录型条目）+ **无界面入口**（`PB2-24`）。**新增 L4 层**、任务 **`PB2-27`…`PB2-30`**（`PB2-24` 并入）、批次 **`B2-e`**、不变量 **`I15`/`I16`**、验收 **`AB2-20`…`AB2-22`**、验证 **`VB2-24`…`VB2-26`**、风险 **`R21`…`R23`**、待确认 **`D-27`/`D-28`/`D-29`**；新增 §9.7（L4 立项：用户诉求 / 逐层证据 / 与 L3 的边界 / 下一步） |
 | 2026-09-27 | **v13** | **`PB2-27` 落地（代码批次）：登录/会话层去 DeepSeek 化（判据 + 文案）** —— ① 新增纯函数 `ai::web_session_state(spec, evidence)`（判据 = 条目 `cookie_names` 命中 ∪ 该 origin Cookie 非空；**不看** `userToken`；`D-27` / `I15`）+ `ai::WebSessionEvidence`（`web::web_session_evidence(session)` 转换，ai 层不依赖 `web/**`）② `ai::probe_is_applicable()`（内置适配器适用 / `dom` 站点**不适用**；`I16`）③ `ai::web_shows_user_token()`（`D-28`①：仅配了 `token_expr` 才显示 `userToken` 行）④ `LoginRequest.probe_applicable`（默认 `true` → CLI/无参路径逐字不变，守 `I2`）⑤ **`web::ensure_session()` 站点无关就绪判据**（DOM 站点只看该 origin Cookie，**不再空等 `userToken` 15/25 s**）⑥ 面板状态（已登录/未登录/未确认 + 站点无关原因）/ 状态栏（按生效条目站点键）/ `web_site_field_warnings()`（「协议探测不适用」）/ 加载报告（「登录可用；协议探测：不适用（DOM 站点）」）文案去 DeepSeek 化；**删除 `kDefaultCookieName`** → `ui/**`、`web/**` 零 `ds_session_id`。实测：构建 **0 error / 0 warning**、`--exec-selftest` **219 → 227 / 0**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**、`grep ds_session_id`（`ui/**`+`web/**`）零命中；文档已回填（§3 `PB2-27` ✅ + §4.1 `B2-e` 进行中 + §8 + §9.8） |
 | 2026-09-27 | **v14** | **`PB2-28` 落地（代码批次，①②③）：协议探测「不适用」语义** —— ① 新增只读诊断脚本 `kProbeKickoffScriptReadOnly`（读 `location.href` / `document.title` / `localStorage` 键名与个数 / `document.cookie` 名与个数 / 输入框与按钮候选数；**脚本内既无 `/api/v0/` 也无 `localStorage.getItem('userToken')`**；输出字段与内置脚本同名 → `poll_protocol_probe()` 零改动）② `probe_kickoff_script()` 按 `probe_applicable` 分支（默认 `true` → 内置站点与 CLI/无参路径**逐字不变**，守 `I2`）③ CLI `--web-probe --provider <id>` + 面板按钮：不适用站点打印「**协议探测：不适用（DOM 站点）**→ 只读诊断」+ **站点无关**登录态结论（`ai::web_session_state`；退出码 0=已登录 / 2=未登录或未确认 / 1=诊断失败），按钮标题改「只读诊断（该站点不适用协议探测）」；④ 会话失效识别（`40002`/`401`/`40003`）**未做** → 仍归 `PB2-25`。实测：构建 **0 error / 0 warning**、`--exec-selftest` **227 → 232 / 0**（`VB2-25` 5 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**；文档已回填（§3 `PB2-28` 🟡 + §4.1 + §8 + §9.9） |
-| 2026-09-27 | **v15（当前）** | **收口批次：`PB2-28`④ + `PB2-30`① + 新工具 `--web-dom-dump` + 崩溃修复** —— ① `ai::web_session_failure_hint()` / `web_session_failure_needs_relogin()`（纯函数，容错匹配 `code=40002`/`40003` 与 HTTP `401`/`403`）：`web_chat()` 命中 `401`/`40002` → 报错文案追加「重新登录该站点」并**作废该站点内存会话**；`40003` → 只提示不作废 ② `--run-selftest --web --provider <id>`（表外 id / 非 web 条目 / 站点不可用 / 登录型条目 → 退出码 1/2，不回落）③ 新增 `--web-dom-dump --provider <id>`：只读枚举页面候选 input / 发送 / 回答容器并给**建议选择器**（`PB2-29` 执行工具）④ **崩溃修复**：`ExecuteScript` 返回「字符串」时被再包一层 JSON → `json::parse` 得 string → `value()` 抛 `type_error.306` → 未捕获 → `std::terminate`/`__fastfail`（0xC0000409，stdout 缓冲全丢）：已统一解包 + 整函数 try/catch（异常今后打印可读原因）⑤ 实测：构建 **0 error / 0 warning**、`--exec-selftest` **232 → 237 / 0**（`VB2-27` 5 项全 PASS）、`--graph-selftest` 111/0、`--provider-selftest` 50/0、`--web-dom-dump --provider kimi-web` exit 0（读出 `div.chat-input-editor` 等真实候选）⑥ **实测发现（`D-30` 待拍板）**：未登录的 Kimi 亦有 4 条匿名 Cookie → 仅按「该 origin Cookie 非空」会**误报已登录**；建议判据改为「`cookie_names` 命中优先，Cookie 非空降级为『未校验』」（§9.10） |
+| 2026-09-27 | **v16（当前）** | **提供商下拉「合并显示」（仅界面层）** —— 用户诉求：下拉里同一家 AI 出现两项（正常名字 + `-web` 后缀）。实现（全部在 `ui/property_panel.cpp`）：新增 `ProviderChoice` / `build_provider_choices()`（① 同名后缀规则 `xxx ↔ xxx-web` ② 品牌别名表 `openai↔chatgpt-web`、`anthropic↔claude-web`、`zhipu↔chatglm-web` ③ 无孪生的 web 条目独立成项但**显示名去 `-web`** ④ 官方条目原样 → **下拉里不再出现 `-web` 字样**）+ `provider` 参数改用合并列表渲染 + `sync_provider_id_with_mode()`（切换模式时把 `provider` 配对到该条目的官方版/网页版 **真实 id**）+ 合并结果变化时的诊断日志。**业务代码与配置表零改动**（写进节点的永远是表内真实 id → 生效解析 / 会话键控 / `--provider-*` / 工作流 JSON 全不变）。合并结果：21 条表项 → **16 个下拉项**（`deepseek`+`zhipu`+`openai`+`anthropic`+`gemini` 各带 web 孪生；`kimi`/`tongyi`/`qwen`/`doubao`/`yuanbao`/`ernie`/`spark` 为去后缀的 web 条目）。实测：构建 **0/0**、`--provider-selftest` **50/0**、`--exec-selftest` 237/0、`--graph-selftest` 111/0（§9.11） |
+| 2026-09-27 | **v15** | **收口批次：`PB2-28`④ + `PB2-30`① + 新工具 `--web-dom-dump` + 崩溃修复** —— ① `ai::web_session_failure_hint()` / `web_session_failure_needs_relogin()`（纯函数，容错匹配 `code=40002`/`40003` 与 HTTP `401`/`403`）：`web_chat()` 命中 `401`/`40002` → 报错文案追加「重新登录该站点」并**作废该站点内存会话**；`40003` → 只提示不作废 ② `--run-selftest --web --provider <id>`（表外 id / 非 web 条目 / 站点不可用 / 登录型条目 → 退出码 1/2，不回落）③ 新增 `--web-dom-dump --provider <id>`：只读枚举页面候选 input / 发送 / 回答容器并给**建议选择器**（`PB2-29` 执行工具）④ **崩溃修复**：`ExecuteScript` 返回「字符串」时被再包一层 JSON → `json::parse` 得 string → `value()` 抛 `type_error.306` → 未捕获 → `std::terminate`/`__fastfail`（0xC0000409，stdout 缓冲全丢）：已统一解包 + 整函数 try/catch（异常今后打印可读原因）⑤ 实测：构建 **0 error / 0 warning**、`--exec-selftest` **232 → 237 / 0**（`VB2-27` 5 项全 PASS）、`--graph-selftest` 111/0、`--provider-selftest` 50/0、`--web-dom-dump --provider kimi-web` exit 0（读出 `div.chat-input-editor` 等真实候选）⑥ **实测发现（`D-30` 待拍板）**：未登录的 Kimi 亦有 4 条匿名 Cookie → 仅按「该 origin Cookie 非空」会**误报已登录**；建议判据改为「`cookie_names` 命中优先，Cookie 非空降级为『未校验』」（§9.10） |
 
 ---
 
@@ -1581,6 +1583,34 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 - **第一步（我已实测，Kimi）**：输入框选择器、发送方式可确定（Kimi：`div.chat-input-editor` + `send=key/Enter`）。
 - **剩余必须由人在界面完成的动作**：① 在各站点**手动登录一次**；② 登录后**手动发一条消息**（让回答容器出现）→ 才能实测 `answer_selector` 与 `done_when`；③ 点「运行」确认生成闭环。
 - 未登录时无法测得 `answer_selector`（回答容器在无消息时不存在 / 隐藏）——**这就是「每个站点的 web 版本都可生成」的最后一道人工关卡**，程序侧不做代登录、不绕过验证（合规边界，`R19` 同族）。
+
+---
+
+### 第十一批（v16 · **仅界面层**）：提供商下拉「合并显示」—— 去掉 `-web` 重复项（2026-09-27）
+
+**1) 用户诉求**：下拉里同一家 AI 出现**两个**（一个正常名字 + 一个带 `-web` 后缀）。要求：**合并掉带 `-web` 的版本**，并让**不带后缀的那一项**在「模式 = web」时也能正常工作。约束：**只改 ImGui（`ui/**`）代码；其它业务代码（`ai/**` / `engine/**` / `nodes/**` / `web/**`）与配置表一律不动**。
+
+**2) 实现（全部集中在 `ui/property_panel.cpp`）**
+
+| 组件 | 作用 |
+|---|---|
+| `struct ProviderChoice { id, web_id, label }` + `build_provider_choices()` | 依据**当前配置表**构建下拉项：① 同名后缀规则 `xxx` ↔ `xxx-web`（`deepseek`、`gemini`）② 品牌别名表 `openai↔chatgpt-web`、`anthropic↔claude-web`、`zhipu↔chatglm-web` ③ 其余 web 条目（`kimi-web`、`tongyi-web` …）**独立成项但显示名去掉 `-web`** ④ 官方 API 条目原样；**任何情况下下拉里都不出现 `-web` 字样** |
+| `draw_param_widget()` 的 `ParamType::Enum` 分支 | `param.id == "provider"` 时改用合并列表渲染；选中后写入**当前模式对应的真实 id**（`web` → `web_id`，否则 `id`）；表外值仍**如实显示**（不静默替换） |
+| `sync_provider_id_with_mode(node)` | 切换「模式」时把 `provider` 配对到该条目的**官方版 / 网页版 id**（`deepseek` ⇄ `deepseek-web`、`openai` ⇄ `chatgpt-web` …），并写日志（可撤销） |
+| 诊断日志 | 合并结果**变化时**打印一次：`[提供商标] 下拉合并结果（界面层）：deepseek[deepseek/deepseek-web] …` |
+
+**关键性质**：合并只是「**一个显示项 ↔ 两个真实 id**」。写进节点的 id **永远是配置表里真实存在的 id** → 生效解析（`engine::resolve_*`）、`ai::strict_web_spec_for()`、网页版会话键控、`--provider-*` 自检、工作流 JSON、`--run-selftest --web --provider <id>` **全部无需改动**（这正是「只改界面」能成立的原因）。
+
+**3) 合并结果（按当前表模拟：21 条 → 16 个下拉项）**
+
+| 下拉显示 | 类别 | 选它 + 模式=web 时实际使用 |
+|---|---|---|
+| `deepseek` / `zhipu` / `openai` / `anthropic` / `gemini` | official | `deepseek-web` / `chatglm-web` / `chatgpt-web` / `claude-web` / `gemini-web` |
+| `kimi` / `tongyi` / `qwen` / `doubao` / `yuanbao` / `ernie` / `spark` | web 条目（无官方孪生） | 自身（显示名已去 `-web`；真实 id 仍是 `kimi-web` 等） |
+| `siliconflow` / `ollama` / `openrouter` / `custom-official` | official | 无网页版配对（模式=web 时按既有规则明确提示，不静默回落） |
+
+**4) 实测**：构建 **0 error / 0 warning**；`--provider-selftest` **50 项通过 / 0 失败**；`--exec-selftest` 237/0；`--graph-selftest` 111/0（业务代码未动 → 回归不变）。合并列表由**同一规则脚本**在真实表上模拟核对（上表）。⚠️ 下拉的**视觉效果**需在界面里点开确认一次（约 1 分钟）。
+
 
 
 

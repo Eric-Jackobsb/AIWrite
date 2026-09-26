@@ -79,6 +79,19 @@
   - `chatgpt-web` / `claude-web` / `gemini-web` 本机网络**可直连**；`chatglm-web` 首屏为 **WAF 挑战页**；`doubao-web`/`spark-web` 未登录不渲染输入框
   - 完整逐站表格见 [网页版协议实测记录 §7.9](网页版协议实测记录.md)
 
+**界面（仅 ImGui 层 · v16）：提供商下拉「合并显示」—— 去掉 `-web` 重复项**
+
+- **问题**：下拉里同一家 AI 出现两项（`deepseek` 与 `deepseek-web`、`gemini` 与 `gemini-web` …），`-web` 后缀像内部 id，容易选错。
+- **实现（全部在 `ui/property_panel.cpp`；`ai/**` / `engine/**` / `nodes/**` / `web/**` 与配置表零改动）**：
+  - `build_provider_choices()`：① 同名后缀规则 `xxx ↔ xxx-web` ② 品牌别名 `openai↔chatgpt-web`、`anthropic↔claude-web`、`zhipu↔chatglm-web`
+    ③ 无孪生的 web 条目独立成项但**显示名去掉 `-web`**（`kimi` / `tongyi` / `qwen` / `doubao` / `yuanbao` / `ernie` / `spark`）④ 官方条目原样
+    → **下拉里不再出现 `-web` 字样**
+  - 「提供商」参数改用合并列表渲染；选中后写入**当前模式对应的真实 id**（`web` → `xxx-web`，`official` → `xxx`）
+  - `sync_provider_id_with_mode()`：切换「模式」时把 `provider` 配对到该条目的官方版 / 网页版 id（`deepseek ⇄ deepseek-web`、`openai ⇄ chatgpt-web` …），写日志、可撤销
+  - 合并结果变化时打印一次诊断：`[提供商标] 下拉合并结果（界面层）：…`
+- **关键性质**：写进节点的 id 永远是**配置表里真实存在的 id** → 生效解析 / 网页版会话键控 / `--provider-*` 自检 / 工作流 JSON / `--run-selftest --web --provider <id>` 全部无需改动。
+- **结果**：21 条表项 → **16 个下拉项**；实测构建 **0 error / 0 warning**、`--provider-selftest` **50/0**、`--exec-selftest` 237/0、`--graph-selftest` 111/0。
+
 **特性（M_patchB L1 收口）：网页版站点身份按「生效条目」+ 多站点会话并存 + `config.toml` 多 provider**
 
 - **`PB2-05` 补完 = `PB2-17` 网页版登录入口去硬编码（不变量 I11）**
