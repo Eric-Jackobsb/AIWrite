@@ -4,11 +4,11 @@
 > 依据：2026-09-23 全库底层逻辑审计（见 §1）
 > 版本目标：v0.2.x（在已收口的 M2 之上补体验地基）
 > 预计工期：全系列 5–6 天（全职）/ 12–15 天（业余）；**Patch A 单批 ≈1.2 天**
-> 实施状态（2026-09-24 更新）：**Patch A（A1 + A2）全部完成 ✅**；**Patch B 进行中** —— **PB-01 执行线程化 ✅（三步完成）**、PB-03（最小化）**🚫 已暂停**、PB-08 **🚫 已暂停**（UI 侧已就位，待数据源）、PB-07 待做；**PB-02 真取消 / PB-05 官方 Provider / PB-06 凭据与网络策略 → 延后**。
+> 实施状态（2026-09-26 更新）：**Patch A 全部完成 ✅**；**Patch B 主体完成** —— **PB-01 执行线程化 ✅（三步）**、**PB-03 最小化 ✅（数据源暂停）**、**PB-05 官方 Provider ✅（人工验证通过）**、**PB-06 凭据库 ✅**、**PB-08 UI 侧 ✅（随数据源暂停）**；**剩余**：PB-02 真取消（延后）、PB-07 会话失效引导、流式数据源、代理与自签证书（FEA-M4-13）、PB-09 自检扩展；Patch C / D 未开工。
 > ⚠️ 流式（实时数据返回）计划按用户决议**暂停**，原因与后续选项见 [`../网页版协议实测记录.md`](../网页版协议实测记录.md) 附录 A。
 > Patch C / Patch D 未开工；任务状态以 [`../DevPlan.todo`](../DevPlan.todo) 为准。
 
-### 实施进度（2026-09-24）
+### 实施进度（2026-09-26 更新）
 
 | 阶段 | 任务 | 状态 | 实测 / 证据 |
 |---|---|---|---|
@@ -29,19 +29,22 @@
 | A2 | **PA-08 未接配置字段治理** | ✅ | 接线：`ui.console_height`（Console 初始高度）、`ui.running_animation`（运行中节点脉冲光环）；`unwired_config_fields()` 清单 + 启动日志「已接线 / 尚未生效」；`ui.grid_size` 如实登记（vendored imgui-node-editor 的 Style 无网格间距字段 → 归口 PD-03）；`api_probe --selftest` 新增 PA-08 断言（清单含 general.language/timeout./auto_open，且不含已接线的 console_height/running_animation/window_*） |
 | A2 | **PA-09 文档与索引同步** | ✅ | `CHANGELOG`（A2 条目 + 索引）、`M_patchA`（进度/§3.2/§3.3 状态）、`节点编辑器使用说明.md` §10.7（Console 增强 / 错误条 / 配置未接线清单）、`milestone_plan.md` 补「补丁系列」行；`M4.md` 归口说明已就位（M4-05→PB-04/05、M4-12→PA-05+PD-07、M4-13→PA-04） |
 | A2 | PA-05 / PA-06 / PA-08 / PA-09 收尾 | ✅ A2 收尾完成 | 见上四行（Patch A 全部完成） |
-| B | **PB-01 执行线程化（第一、二步：引擎核心 + 状态层）** | 🟡 部分 | 引擎：`RunEvent` 事件队列 + `startAsync/pumpEvents/requestStop/stopAsync` + **Graph 副本** + `nodeOutputText` 归一；状态层：`EditorState::start_run_async/pump_run_events/stop_run_async` + **`RunSnapshot`/`RunNodeView`**（含 text/delta_bytes）+ `finish_run_session`（**先 join → 快照落定 → 归档 → 错误条**）。断言：PB-01 线程化 OK + **第二步 OK（快照·Graph == 权威）**。**待第三步**：GUI 入口切异步 + UI 面板改读快照 + 退出·切图 join |
-| B | **PB-05 官方 Provider（落地「API 使用」）** | ✅ 代码完成 | `ai/deepseek_official_provider.{h,cpp}`（`/chat/completions` + 参数透传 + 错误分类 + 超时）；`mode=official` 真正调用；`unwired_reason` 改为「缺 API Key 才失败」。**待人工验证**：填 Key → official → 真实生成 |
-| B | PB-02 真取消 / PB-06 凭据与网络策略 | ⬜ **延后（用户决议）** | 影响：停止仍在节点边界生效（网页版最坏等 HTTP 读超时）；official 仍不可用；Key 仍只在内存/环境变量 |
-| B | PB-03 流式回调接口 | 🟡 **缩为「仅网页版增量回调」**（作为 PB-08 前置） | 官方 `on_delta` 随 PB-05 延后 |
-| B | PB-08 流式呈现 / PB-07 会话失效引导 | ⬜ 待做（PB-01 之后） | **PB-07 部分前置已完成（2026-09-26，FEA-M4-19）**：`ensure_session` 识别「窗口已开 → 补探测」（原来只会干等 25s 报「未取得网页版凭证」）+ 手动登录窗口自动探测 + 离线真值表断言 + 端到端 `--web-session-selftest`；**剩余**：识别 `40002/401` 与「点此重新登录」错误条引导 |
+| B | **PB-01 执行线程化（三步全部完成：引擎核心 + 状态层 + GUI 收口）** | ✅ | 引擎：`RunEvent` 事件队列 + `startAsync/pumpEvents/requestStop/stopAsync` + **Graph 副本** + `nodeOutputText` 归一；状态层：`EditorState::start_run_async/pump_run_events/stop_run_async` + **`RunSnapshot`/`RunNodeView`**（含 text/delta_bytes）+ `finish_run_session`（**先 join → 快照落定 → 归档 → 错误条**）。断言：PB-01 线程化 OK + **第二步 OK（快照·Graph == 权威）**。第三步（`f0b34fc`）：GUI 三处运行入口切异步 + 输出面板/节点摘要/参数面板改读快照 + 退出·切图前 join。**实跑断言**：`PB-01 线程化 OK`（状态事件 9 / 输出事件 5 / Console 11 / Finished 1 / Graph 未被工作线程写=是 / 快照一致=是 / 文本一致=是）+ `PB-01 第二步 OK（快照·Graph == 权威）` |
+| B | **PB-05 官方 Provider（落地「API 使用」）** | ✅ 已完成 | `ai/deepseek_official_provider.{h,cpp}`（`/chat/completions` + 参数透传 + 错误分类 + 超时）；`mode=official` 真正调用；`unwired_reason` 改为「缺 API Key 才失败」。**API Key 由「提供商配置」节点读取**（`c38b127` 修正「取错节点」缺陷）。人工验证：已实测真实生成可用 |
+| B | **PB-06 凭据与密钥存储** | ✅ 已完成 | 附录 B 设计 + `utils/credential.{h,cpp}`（**DPAPI 当前用户** + `BRNC` 容器 + CRC + ACL 收紧 + `SecureZeroMemory`）；**三级优先级**（节点参数 → 环境变量 → 凭据库）+ 填一次自动入库；CLI `--cred-list` / `--cred-erase` / `--cred-purge` + 启动 TTL 惰性清理；`--cred-selftest` **8/8 PASS**（含「落盘无明文」「CRC 篡改被拒」「TTL 只删过期」） |
+| B | PB-02 真取消（HTTP 可中断 + 节点协作检查点） | ⬜ **延后（用户决议）** | 影响：「■ 停止」仍在节点边界生效；网页版最坏等 HTTP 读超时 |
+| B | PB-06 剩余 · 代理与自签证书策略 + `[credentials]` 配置项 | ⬜ 待做 | 归口 DevPlan `FEA-M4-13`；当前使用代码默认值（`~/.brain-ai/credentials`、TTL 30 天、backend `dpapi`） |
+| B | PB-03 流式回调接口（最小化：仅网页版） | ✅ 已落地 / 🚫 数据源暂停 | `195fde0`：`WebChatRequest.on_delta` → `RunEvent::Delta` → 读模型逐段追加；官方 `on_delta` 随 PB-05 未接。**暂停原因**：httplib v0.15.3 **无 POST 响应体流式接收重载**（实证见 [`../网页版协议实测记录.md`](../网页版协议实测记录.md) 附录 A） |
+| B | PB-08 流式呈现 / PB-07 会话失效引导 | 🟡 / ⬜ | **PB-07 部分前置已完成（2026-09-26，FEA-M4-19）**：`ensure_session` 识别「窗口已开 → 补探测」（原来只会干等 25s 报「未取得网页版凭证」）+ 手动登录窗口自动探测 + 离线真值表断言 + 端到端 `--web-session-selftest`；**剩余**：识别 `40002/401` 与「点此重新登录」错误条引导 |
 | 后续 | **工作流变体保存**（用户后续设计） | ⬜ 延后 | 把面板保存为独立 workflow，并把当前 workflow 更新为变体；启动恢复上次工作流一并归入该项（本条**不做**，仅登记） |
-| A2 | 回归基线（PA-02 后） | ✅ | `--selftest` 七组 PASS；`--graph-selftest` 95/0；`--exec-selftest` 62/0；`--run-selftest` PASS（3/5 预期）；`--run-selftest --web` 5/5；构建 0 error / 0 warning |
+| A2 | 回归基线（PA-02 后，**历史快照**） | ✅ | 当时：七组 PASS；95/0；62/0；3-of-5；5-of-5；构建 0-0（**当前基线见 §0.4 与表格末行**） |
 | C | PC-05 输出归档（提前落地） | ✅ | 新增 `utils/output_archive.{h,cpp}`：运行结束写 `outputs/<yyyyMMdd-HHmmss>-<工作流名>/`（每节点 `.txt` 含元信息头 + `run.json`）；同秒多次运行自动加序号且**本次归档永不删除**；工作流名非法字符清洗；不可写路径返回错误不抛异常。`editor_state` 运行结束自动归档 + `last_archive_dir`；输出面板显示归档路径并可「复制归档路径」 |
 | C | PC-06 归档保留策略（部分） | ✅ | **接线 `config.output.{archive_dir, keep_history, max_history, ttl_days}`**：`keep_history=false` 只留 1 份、`true` 按 `max_history`；`ttl_days>0` 清理超期目录（只清理符合命名规则的目录，先统计后删除并写日志）。`auto_open_on_complete` 仍留 M5 |
 | C | PC-05/06 验证 | ✅ | `--exec-selftest` **72 通过 / 0 失败**（+10 项归档断言：run.json、节点 .txt、无输出不写 txt、名字清洗、元信息头、run.json 明细、保留份数、不可写路径、ttl 清理）；`--run-selftest --web` → **PC-05 归档 OK**（4 个节点文件 + run.json，含生成文档=是）；自检用临时目录，**不污染用户 outputs** |
-| B | PB-xx 待做 | ⬜ | 执行线程化 / 流式 / Provider 统一（含官方 API）/ 凭据管理器 / 会话失效引导 |
-> 当前基线（全绿）：`api_probe --selftest` 七组 PASS、`--graph-selftest` 111/0、`--exec-selftest` 72/0、
-> `aiwrite --run-selftest` PASS、`--run-selftest --web` **5/5 ≈10s**、`--web-probe` PASS、`--web-chat` PASS
+| B | **剩余待做（PB 汇总）** | ⬜ | PB-02 真取消 · **PB-07** 会话失效引导（`40002/401` → 「重新登录」） · PB-09 自检扩展（V-11/V-12） · 流式数据源（PB-03/08 暂停） · FEA-M4-13 代理与自签证书；**另两项待办**：离线「假增量」断言（把 VB-03 自动化）、`PB-04` Provider 统一抽象（`FEA-M4-04`） |
+> 当前基线（全绿，2026-09-26 实测）：`api_probe --selftest` 七组 PASS、`--graph-selftest` **111/0**、`--exec-selftest` **72/0**、
+> `aiwrite --run-selftest` PASS（含 PB-01 两步 / P1-c 参数驱动 / M_rerun / M_textio 断言）、`--cred-selftest` **8/8**、`--export-selftest` **7/7**、
+> `--run-selftest --web` **5/5**、`--web-probe` / `--web-chat` PASS、构建 0 error / 0 warning
 
 ---
 
@@ -72,12 +75,15 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 
 | 命令 | 期望 |
 |---|---|
-| `api_probe.exe --selftest` | 七组全 PASS（含新增 V-11/V-12） |
+| `api_probe.exe --selftest` | 七组全 PASS（+ PB-01 两步 / P1-c 参数驱动 / M_rerun / M_textio 断言；V-11/V-12 随 PB-09） |
 | `api_probe.exe --graph-selftest` | 111 通过 / 0 失败（F2 后；随补丁增长） |
-| `api_probe.exe --exec-selftest` | 56 通过 / 0 失败（随补丁增长） |
-| `aiwrite.exe --run-selftest` | PASS（离线：LLMGenerate 走 official 占位，3/5 为预期） |
+| `api_probe.exe --exec-selftest` | **72 通过 / 0 失败**（随补丁增长） |
+| `aiwrite.exe --run-selftest` | PASS（离线无 Key：official 节点报「缺少 API Key」，**3/5 为预期**） |
 | `aiwrite.exe --run-selftest --web` | **5/5，失败 0，跳过 0**（真实网页版生成） |
 | `aiwrite.exe --web-probe` / `--web-chat "<提示词>"` | PASS |
+| `aiwrite.exe --cred-selftest` | **8/8 PASS**（凭据库：加密可逆 / 落盘无明文 / CRC 篡改被拒 / TTL 只删过期 …） |
+| `aiwrite.exe --export-selftest` | **7/7 PASS**（导出：文件名渲染 / 正文同源 / 原子写 / 同名自动改名 …） |
+| `aiwrite.exe --web-session-selftest` | PASS（会话自动引导：窗口已开 → 补探测，离线真值表 + 端到端） |
 | 构建 | 0 error / 0 warning |
 
 ---
