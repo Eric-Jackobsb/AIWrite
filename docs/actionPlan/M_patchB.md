@@ -41,6 +41,7 @@
 >
 > ✅ **2026-09-27 `PB2-27` 已落地（v13 · 代码批次）**：登录/会话层的「判据 + 文案」去 DeepSeek 化 —— 新增纯函数 `ai::web_session_state(spec, evidence)`（判据 = 条目 `cookie_names` 命中 **∪** 该 origin Cookie 非空，**不看** `userToken`，`D-27`/`I15`）+ `ai::probe_is_applicable()`（DOM 站点**协议探测不适用**，`I16`）+ `ai::web_shows_user_token()`（`D-28`①）；`web::ensure_session()` 对 DOM 站点改用**站点无关**就绪判据（**不再空等 15/25 s 的 `userToken`**）；面板/状态栏/字段警告/加载警告文案全部站点无关；`ui/**` 与 `web/**` 已无任何厂商专有 Cookie 名（删除 `kDefaultCookieName`）。实测：构建 **0 error / 0 warning**、`--exec-selftest` **219 → 227 / 0**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**（§9.8）。`PB2-28`（探测只读诊断分支 + CLI 判据）、`PB2-29`（逐站选择器）、`PB2-30` 待做
 > ✅ **2026-09-27 `PB2-28` 已落地（v14 · 代码批次，①②③）**：**协议探测「不适用」语义** —— 新增只读诊断脚本 `kProbeKickoffScriptReadOnly`（读 URL / 标题 / localStorage 键名与个数 / Cookie 名与个数 / 输入框与按钮候选数；**脚本内既无 `/api/v0/` 也无 `localStorage.getItem('userToken')`**，输出结构与内置脚本同名 → 解析逻辑零改动）；`probe_kickoff_script()` 按 `probe_applicable` 分支（默认 `true` → 内置站点与 CLI/无参路径**逐字不变**，守 `I2`）；CLI `--web-probe --provider <id>` 与面板按钮对不适用站点改打「协议探测：**不适用**」+ 只读诊断 + **站点无关**登录态结论（退出码 0=已登录 / 2=未登录 / 1=诊断失败）。实测：构建 **0/0**、`--exec-selftest` **227 → 232 / 0**（`VB2-25` 5 项全 PASS）、`--graph-selftest` **111/0**、`--provider-selftest` **50/0**（§9.9）。④ 会话失效识别（`40002`/`401`/`40003`）仍归 `PB2-25` 待做；`PB2-29`（逐站选择器）、`PB2-30` 待做
+> ✅ **2026-09-27 v15 收口（代码批次）**：① **`PB2-28`④ 会话失效识别落地**（`ai::web_session_failure_hint()` 纯函数 + `web_chat()` 命中 `401`/`40002` → 作废该站点内存会话并给重新登录指引；`40003` → 只提示）② **`PB2-30`① 落地**（`--run-selftest --web --provider <id>` 端到端断言，严格解析不回落）③ **新增只读工具 `--web-dom-dump`**（枚举页面候选 input / 发送 / 回答容器 + 建议选择器 → 让逐站填选择器不再依赖人肉 F12，`PB2-29` 的执行工具）④ **修复一处 CLI 崩溃**：`ExecuteScript` 返回值解包缺失 → `type_error.306` 未捕获 → `std::terminate`/`__fastfail`（0xC0000409，且 stdout 缓冲全丢）；已统一解包 + try/catch 兜底。实测：构建 **0/0**、`--exec-selftest` **232 → 237 / 0**（`VB2-27` 5 项全 PASS）、`--graph-selftest` 111/0、`--provider-selftest` 50/0、`--web-dom-dump --provider kimi-web` exit 0 并读出真实候选（输入框 = `div.chat-input-editor`）—— 但**发现**：未登录的 Kimi 也有 4 条**匿名 Cookie** → 仅按「Cookie 非空」判「已登录」会误报（见 §9.10「待拍板 `D-30`」）
 >
 
 > **⚠️ 2026-09-26 复核（v4 · 文档先行批次，当时只改文档、零代码变更）**：`PB2-05` 的「网页版去硬编码（逐处替换清单）」**第 1、2 行未落地**，且**「多站点（多份 Cookie）并存」尚不具备条件**。缺口已登记为新任务 **`PB2-17` / `PB2-18` / `PB2-19`**（§3，状态全部 ⬜ 未开工），并由新增不变量 **`I11`/`I12`**、验收 **`AB2-13`/`AB2-14`**、验证 **`VB2-16`/`VB2-17`**、决策 **`D-19`/`D-20`**、风险 **`R14`/`R15`** 约束（复核证据见 §9「B2-b 前置复核」）：
@@ -744,23 +745,28 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 - **实测（2026-09-27 · 全绿）**：构建 **0 error / 0 warning**；`api_probe --exec-selftest` **219 → 227 / 0**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）；`--graph-selftest` **111 / 0**；`--provider-selftest` **50 / 0**；`grep ds_session_id` 在 `ui/**`、`web/**` **零命中**（详见 §9.8）。
 - **验收**：`AB2-20` / `VB2-24` / `VB2-26`（`AB2-20` 的**手测**部分仍需现场：手动登录任一站点点「运行」看 Console）。
 
-#### PB2-28 非 DeepSeek 站点「协议探测不适用」语义（脚本分支 + CLI 判据 + 会话失效识别）—— 🟡 **部分完成（v14 · 2026-09-27；①②③ 已落地，④ 仍待做）**
+#### PB2-28 非 DeepSeek 站点「协议探测不适用」语义（脚本分支 + CLI 判据 + 会话失效识别）—— ✅ **已完成（v15 · 2026-09-27；①②③ v14 落地，④ v15 落地）**
 
 - **现状证据**：`web/webview_host.cpp:1060-1086` —— `probe_paths` / `token_expr` 为空时**保持内置 DeepSeek 值**（`/api/v0/users/current`、`/api/v0/chat_session/fetch_page`、`localStorage.getItem('userToken')`）→ 在 Kimi / 通义等站点**必然 404** → 面板出现红字「探测错误」（`ui/property_panel.cpp:244-246`），用户读作「登录失败」。
 - **改动（①②③ 已按此落地）**：① 新增 `ai::probe_is_applicable(spec)`（`PB2-27` 已提供）+ **只读诊断脚本**分支 `kProbeKickoffScriptReadOnly`：探测改读 `location.href` / `document.title` / `localStorage` 键名与个数 / `document.cookie` 名与个数 / 输入框与按钮候选数，**不注入任何 DeepSeek 端点、不读取 `localStorage` 的值**（脚本内既无 `/api/v0/` 也无 `localStorage.getItem('userToken')`）；输出结构与内置脚本**同名** → `poll_protocol_probe()` 解析逻辑零改动；② `deepseek-web`（`builtin:deepseek`）与**无站点参数**路径**逐字不变**（`probe_applicable` 默认 `true` → 守 `I2`）；③ CLI + 面板：`--web-probe --provider <id>` / 面板按钮对不适用站点打印「**协议探测：不适用（DOM 站点）**→ 只读诊断」+ **站点无关**登录态结论（`ai::web_session_state`；退出码 0 = 已登录 / 2 = 未登录或未确认 / 1 = 诊断本身失败），**不再打印「未取得凭证」**；面板按钮标题改为「只读诊断（该站点不适用协议探测）」。
 - **仍待做**：④ 会话失效（`40002` / `401` / `40003`）识别与 `PB2-25` 合并（`D-29`）—— 需真实失效响应才能对齐（官网侧实测见 §9.4）。
 - **实测（2026-09-27 · 全绿）**：`api_probe --exec-selftest` **227 → 232 / 0**（`VB2-25` 5 项全 PASS）；`--graph-selftest` **111 / 0**；`--provider-selftest` **50 / 0**；构建 **0 error / 0 warning**。⚠️ CLI 文案与退出码需 **GUI 现场实测**（`--web-probe --provider kimi-web`）。
+- **④ 会话失效识别已落地（v15）**：新增 `ai::web_session_failure_hint()` / `web_session_failure_needs_relogin()`（**纯函数**，容错匹配 `code=40002` / `code= 40002` / `biz_code=40003` 与 HTTP `401` / `403`）；`web_chat()` 命中后：`401` / `40002` → 追加「请重新登录该站点」指引并**作废该站点的内存会话**（面板随即显示「未登录」，Cookie 仍留在 profile）；`40003` → 只给可操作提示（PoW / 频率 / 前端版本），**不**作废会话。实测 `VB2-27` **5 项全 PASS**，`--exec-selftest` 232 → **237 / 0**（§9.10）。
 - **验收**：`AB2-20`②③ / `VB2-25`。
 
 #### PB2-29 内置站点**选择器逐站实测与回填**（数据批次 · **逐站独立验收**）
 
 - **现状证据**：`source/assets/providers.json:258-434`（11 条只有 `login_url` / `window_title`）→ `ai::web_login_only()`（`ai/provider_spec.cpp:404-411`）→ 运行期明确报「登录型条目（缺生成字段）」（`nodes/local_nodes.cpp:429-435`）。工具已就绪（v11 实测：`--web-adapter-selftest --provider kimi-web` 已能读出页面 URL / 标题 / 命中数 / 建议）。
-- **单站标准流程**：① 界面「打开登录窗口」**手动登录**（不代填密码、不绕过验证）→ ② `aiwrite.exe --web-adapter-selftest --provider <id>` 读回 `URL` / `标题` / 各选择器命中数 / 建议 → ③ 按结果填 `input_selector` / `send` / `answer_selector`（+ 可选 `done_when` / `answer_poll_ms` / `answer_max_polls`）→ ④ 点「运行」跑一次端到端生成 → ⑤ 条目置 `verified: true` + `notes` 记实测日期与站点版本 → ⑥ 回填**附录 E** 的「可登录 / 可生成」两列。
+- **单站标准流程**：① 界面「打开登录窗口」**手动登录**（不代填密码、不绕过验证）→ ② `aiwrite.exe --web-dom-dump --provider <id>` 读出页面**候选元素 + 建议选择器**（v15 新增；只读）→ ③ 按结果填 `input_selector` / `send` / `answer_selector`（+ 可选 `done_when` / `answer_poll_ms` / `answer_max_polls`）→ ④ 点「运行」或 `--run-selftest --web --provider <id>` 跑一次端到端生成 → ⑤ 条目置 `verified: true` + `notes` 记实测日期与站点版本 → ⑥ 回填**附录 E** 的「可登录 / 可生成」两列。
 - **次序建议**：**Kimi 先行**（旧域 301 已修正、React + `contenteditable`），通过后逐站推进；ChatGPT / Claude / Gemini 需可访问网络环境（可选做）。
 - **原则**：**不实测不填值**（沿用 `PB2-26`）；站点改版 → 用户改 JSON 自助修复（`R21`）。选择器写进**内置表**（团队默认）或**用户表**（个人）皆可 —— 两者机制相同。
 - **验收**：`AB2-21` + 每站一行实测记录（`docs/网页版协议实测记录.md` §7.8 起逐站追加）。
 
-#### PB2-30 端到端自检 + 面板「测试选择器」（并归入 `PB2-24`）
+#### PB2-30 端到端自检 + 面板「测试选择器」（并归入 `PB2-24`）—— 🟡 **部分完成（v15：① 已落地；② 面板按钮与 `PB2-24` 待做）**
+
+- **① 已落地（v15）**：`--run-selftest --web --provider <id>` —— 任意网页版条目的端到端生成断言；严格解析（表外 id / 非 `kind=web` 条目 / 站点不可用 / **登录型条目** 都立即给出明确原因与退出码 `1`/`2`，**不**回落、不静默）。用法：
+  `aiwrite.exe --run-selftest --web --provider kimi-web`（退出 0 = 生成成功；1 = 生成失败或条目未就绪；2 = 条目 / 站点不可用）。
+- **② 待做**：面板「测试选择器」按钮（复用只读探测，把命中数与建议显示在界面）；`PB2-24`（新建站点条目 / 重新加载配置表 / 下拉即时刷新）—— 归 `B2-e` 末批。
 
 - **改动**：① `--run-selftest --web --provider <id>`：对**任意** `dom` 条目跑真实生成断言（exit 0 = 命中 / 1 = 选择器缺项 / 2 = 站点不可用），纳入回归基线；② 面板「**测试选择器**」按钮 → 复用 `ai::dom_adapter_selftest()`（只读），把命中数与建议**显示在界面**（不必再看 Console）；③ **归口**：`PB2-24`（自建站点 UI 闭环：从内置条目复制模板 → 写 `~/.brain-ai/providers.d/<id>.json`（带 `schema_version` 信封）→ 「重新加载配置表」→ 下拉即时刷新 → 配置表错误界面可见）**并入本批**（`D-29`）。
 - **验收**：`AB2-22`。
@@ -1177,7 +1183,8 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | 2026-09-26 | **v11（当前）** | **L3 落地（代码批次）：通用 DOM 站点适配器 + 选择器探测** —— ① 新增 `ai/dom_web_client.{h,cpp}`：`clamp_poll_params` / `dom_cfg_json`（转义安全）/ `dom_kickoff_script`（contenteditable `insertText` + input/textarea 原生 setter + `send{kind=key|click}`）/ `dom_poll_script`（`answer_selector` 末节点 innerText + `done_when`）/ `dom_probe_script` / `dom_chat`（**超时如实返回 + 警告**，R13）/ `dom_adapter_selftest`（PB2-15 诊断 + 可操作建议）② `webview_host` 增 `run_script_sync`（窗口内同步执行脚本；三级前置，**不要求内存 userToken**）+ `run_script_now`/`wait_page_ready` ③ `local_nodes` DOM 分支 + 登录型条目拦截 ④ `main.cpp` `--web-adapter-selftest` ⑤ `api_probe` `VB2-22` 5 项 ⑥ `implemented_protocols`/`implemented_web_adapters` 增 `dom`；实测 `--exec-selftest` **219/0**、`--graph-selftest` 111/0、`--selftest` 七组 PASS、`--provider-selftest` 50/0、`--provider-dump` 21 条（web 12，含 `dom`）、`--web-adapter-selftest --provider kimi-web` 端到端跑通（页面脚本真实执行）→ **发现 `kimi.moonshot.cn` 301 到 `www.kimi.com`**（条目已修正）；构建 0 error / 0 warning；文档已回填（§3 `PB2-13…16` 落地实测 / §4.1 `B2-c` / §4.2 `AB2-19` / §4.3 `VB2-22`·`VB2-23` / §9.6 / 使用说明 §9+§8 `1g` / 实测记录 §7.7 / README×2 / DevPlan） |
 | 2026-09-26 | **v12** | **第四轮复核（文档先行 · 零代码变更）：登录层仍绑 DeepSeek** —— 用户实测「所有 AI 都无法登录，只能切回 DeepSeek」。复核：L3 只治**生成引擎**（`dom_chat()` 对「未取到内存凭证」仅给警告、`run_script_sync()` 不要求 `userToken`），未治 ①**登录态判据**（`has_token()` = `user_token` 非空 → 通用站点恒 false；面板恒显「userToken：未获取」；Cookie 名回落 `ds_session_id`；状态栏只看内存槽）②**探测脚本**对非 DeepSeek 站点注入 DeepSeek 端点（`probe_kickoff_script()` 空字段保持内置值 → 必然 404 → 假「探测错误」）③**11 条内置站点无选择器**（登录型条目）+ **无界面入口**（`PB2-24`）。**新增 L4 层**、任务 **`PB2-27`…`PB2-30`**（`PB2-24` 并入）、批次 **`B2-e`**、不变量 **`I15`/`I16`**、验收 **`AB2-20`…`AB2-22`**、验证 **`VB2-24`…`VB2-26`**、风险 **`R21`…`R23`**、待确认 **`D-27`/`D-28`/`D-29`**；新增 §9.7（L4 立项：用户诉求 / 逐层证据 / 与 L3 的边界 / 下一步） |
 | 2026-09-27 | **v13** | **`PB2-27` 落地（代码批次）：登录/会话层去 DeepSeek 化（判据 + 文案）** —— ① 新增纯函数 `ai::web_session_state(spec, evidence)`（判据 = 条目 `cookie_names` 命中 ∪ 该 origin Cookie 非空；**不看** `userToken`；`D-27` / `I15`）+ `ai::WebSessionEvidence`（`web::web_session_evidence(session)` 转换，ai 层不依赖 `web/**`）② `ai::probe_is_applicable()`（内置适配器适用 / `dom` 站点**不适用**；`I16`）③ `ai::web_shows_user_token()`（`D-28`①：仅配了 `token_expr` 才显示 `userToken` 行）④ `LoginRequest.probe_applicable`（默认 `true` → CLI/无参路径逐字不变，守 `I2`）⑤ **`web::ensure_session()` 站点无关就绪判据**（DOM 站点只看该 origin Cookie，**不再空等 `userToken` 15/25 s**）⑥ 面板状态（已登录/未登录/未确认 + 站点无关原因）/ 状态栏（按生效条目站点键）/ `web_site_field_warnings()`（「协议探测不适用」）/ 加载报告（「登录可用；协议探测：不适用（DOM 站点）」）文案去 DeepSeek 化；**删除 `kDefaultCookieName`** → `ui/**`、`web/**` 零 `ds_session_id`。实测：构建 **0 error / 0 warning**、`--exec-selftest` **219 → 227 / 0**（`VB2-24` 5 项 + `VB2-26` 3 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**、`grep ds_session_id`（`ui/**`+`web/**`）零命中；文档已回填（§3 `PB2-27` ✅ + §4.1 `B2-e` 进行中 + §8 + §9.8） |
-| 2026-09-27 | **v14（当前）** | **`PB2-28` 落地（代码批次，①②③）：协议探测「不适用」语义** —— ① 新增只读诊断脚本 `kProbeKickoffScriptReadOnly`（读 `location.href` / `document.title` / `localStorage` 键名与个数 / `document.cookie` 名与个数 / 输入框与按钮候选数；**脚本内既无 `/api/v0/` 也无 `localStorage.getItem('userToken')`**；输出字段与内置脚本同名 → `poll_protocol_probe()` 零改动）② `probe_kickoff_script()` 按 `probe_applicable` 分支（默认 `true` → 内置站点与 CLI/无参路径**逐字不变**，守 `I2`）③ CLI `--web-probe --provider <id>` + 面板按钮：不适用站点打印「**协议探测：不适用（DOM 站点）**→ 只读诊断」+ **站点无关**登录态结论（`ai::web_session_state`；退出码 0=已登录 / 2=未登录或未确认 / 1=诊断失败），按钮标题改「只读诊断（该站点不适用协议探测）」；④ 会话失效识别（`40002`/`401`/`40003`）**未做** → 仍归 `PB2-25`。实测：构建 **0 error / 0 warning**、`--exec-selftest` **227 → 232 / 0**（`VB2-25` 5 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**；文档已回填（§3 `PB2-28` 🟡 + §4.1 + §8 + §9.9） |
+| 2026-09-27 | **v14** | **`PB2-28` 落地（代码批次，①②③）：协议探测「不适用」语义** —— ① 新增只读诊断脚本 `kProbeKickoffScriptReadOnly`（读 `location.href` / `document.title` / `localStorage` 键名与个数 / `document.cookie` 名与个数 / 输入框与按钮候选数；**脚本内既无 `/api/v0/` 也无 `localStorage.getItem('userToken')`**；输出字段与内置脚本同名 → `poll_protocol_probe()` 零改动）② `probe_kickoff_script()` 按 `probe_applicable` 分支（默认 `true` → 内置站点与 CLI/无参路径**逐字不变**，守 `I2`）③ CLI `--web-probe --provider <id>` + 面板按钮：不适用站点打印「**协议探测：不适用（DOM 站点）**→ 只读诊断」+ **站点无关**登录态结论（`ai::web_session_state`；退出码 0=已登录 / 2=未登录或未确认 / 1=诊断失败），按钮标题改「只读诊断（该站点不适用协议探测）」；④ 会话失效识别（`40002`/`401`/`40003`）**未做** → 仍归 `PB2-25`。实测：构建 **0 error / 0 warning**、`--exec-selftest` **227 → 232 / 0**（`VB2-25` 5 项全 PASS）、`--graph-selftest` **111 / 0**、`--provider-selftest` **50 / 0**；文档已回填（§3 `PB2-28` 🟡 + §4.1 + §8 + §9.9） |
+| 2026-09-27 | **v15（当前）** | **收口批次：`PB2-28`④ + `PB2-30`① + 新工具 `--web-dom-dump` + 崩溃修复** —— ① `ai::web_session_failure_hint()` / `web_session_failure_needs_relogin()`（纯函数，容错匹配 `code=40002`/`40003` 与 HTTP `401`/`403`）：`web_chat()` 命中 `401`/`40002` → 报错文案追加「重新登录该站点」并**作废该站点内存会话**；`40003` → 只提示不作废 ② `--run-selftest --web --provider <id>`（表外 id / 非 web 条目 / 站点不可用 / 登录型条目 → 退出码 1/2，不回落）③ 新增 `--web-dom-dump --provider <id>`：只读枚举页面候选 input / 发送 / 回答容器并给**建议选择器**（`PB2-29` 执行工具）④ **崩溃修复**：`ExecuteScript` 返回「字符串」时被再包一层 JSON → `json::parse` 得 string → `value()` 抛 `type_error.306` → 未捕获 → `std::terminate`/`__fastfail`（0xC0000409，stdout 缓冲全丢）：已统一解包 + 整函数 try/catch（异常今后打印可读原因）⑤ 实测：构建 **0 error / 0 warning**、`--exec-selftest` **232 → 237 / 0**（`VB2-27` 5 项全 PASS）、`--graph-selftest` 111/0、`--provider-selftest` 50/0、`--web-dom-dump --provider kimi-web` exit 0（读出 `div.chat-input-editor` 等真实候选）⑥ **实测发现（`D-30` 待拍板）**：未登录的 Kimi 亦有 4 条匿名 Cookie → 仅按「该 origin Cookie 非空」会**误报已登录**；建议判据改为「`cookie_names` 命中优先，Cookie 非空降级为『未校验』」（§9.10） |
 
 ---
 
@@ -1524,6 +1531,52 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | ⚠️ 需 GUI 现场实测 | `--web-probe --provider kimi-web` 应打印「协议探测：**不适用**…」+ 只读诊断 + 登录态结论（退出码 0/2）；面板按钮应显示「只读诊断（该站点不适用协议探测）」 |
 
 **4) 仍未做**：④ **会话失效识别**（`40002` / `401` / `40003`）—— 归 `PB2-25`，需真实失效响应对齐（§9.4 记录过官网侧 `40003` + `userToken` 形状变化）；`PB2-29`（11 站选择器逐站实测回填，Kimi 先行；每站需界面手动登录一次）；`PB2-30`（`--run-selftest --web --provider <id>` + 面板「测试选择器」+ `PB2-24` 自助闭环）。
+
+---
+
+### 第十批（v15 · 代码批次）：收口 —— `PB2-28`④ / `PB2-30`① / `--web-dom-dump` / 崩溃修复（2026-09-27）
+
+**1) 修复的 CLI 崩溃（0xC0000409）—— 根因与修法**
+
+- **现象**：`--web-dom-dump --provider kimi-web` 无任何输出且退出码 `0xC0000409`（`STATUS_STACK_BUFFER_OVERRUN`）；`& .\aiwrite.exe ... *>` 形式连 `--help`/`--provider-selftest` 也复现。
+- **根因（两个，互相独立）**：
+  ① **调用方式**：`aiwrite.exe` 是 **GUI（WIN32）子系统**程序，PowerShell 的 `*>`/管道重定向会与它内部的 `attach_parent_console()` + `freopen("CONOUT$", "w", stdout)` 冲突 → 进程被 `__fastfail` 终止。**正确调用**：`Start-Process -FilePath .\aiwrite.exe -ArgumentList ... -NoNewWindow -RedirectStandardOutput <file> -PassThru -Wait`。
+  ② **真实代码缺陷**：`ICoreWebView2::ExecuteScript` 对「脚本 `return` 一个**字符串**」的返回值会**再包一层 JSON 字符串** → `nlohmann::json::parse(raw)` 得到 `string` → 后续 `value("url", …)` 抛 `nlohmann::detail::type_error.306` → 未被捕获 → `std::terminate` → `__fastfail`（**stdout 缓冲随进程一起丢**，所以看起来「什么都没打印」）。既有代码（`webview_host.cpp` 的 `poll_protocol_probe`）本来就做了解包，我这里漏了。
+- **修法**：`ai::dom_selector_dump()` 内统一解包（`is_string()` → 再 `parse` 内层）+ 校验必须是**对象**（否则打印实际类型）+ 整个函数 `try/catch(const std::exception&)` / `catch(...)` 兜底并 `fflush(stdout)`；关键节点加 `fflush`，保证崩溃时**已产生的输出不丢**。今后同类异常一律打印可读原因，不再静默崩。
+
+**2) 新增能力**
+
+| 能力 | 说明 |
+|---|---|
+| `ai::web_session_failure_hint()` / `web_session_failure_needs_relogin()` | **纯函数**会话失效识别：`code=40002`（容错 `"code": 40002` / `"biz_code":40003` 等写法）/ `40003` / HTTP `401` / `403`；`web_chat()` 命中 `401`/`40002` → 报错文案追加「重新登录该站点」并**作废该站点内存会话**（面板随即显示「未登录」，Cookie 仍在 profile） |
+| `--run-selftest --web --provider <id>` | 任意网页版条目的**端到端生成断言**；严格解析（表外 id / 非 `kind=web` / 站点不可用 / 登录型条目 → 退出码 1/2，不回落、不静默） |
+| `--web-dom-dump --provider <id>`（**新工具**） | **只读**枚举当前页面候选：输入框（`input` / `textarea` / `contenteditable`）、发送候选、回答容器，逐个打印 `id` / `class` / `placeholder` / `aria-label` / `contenteditable` / 可见性 / 文本片段，并给出**建议选择器**（`#id` → `[placeholder]` → `[aria-label]` → `tag.class…`）。`PB2-29` 的逐站回填工具 |
+
+**3) 实测（全绿）**
+
+| 项 | 结果 |
+|---|---|
+| 构建 | **0 error / 0 warning** |
+| `api_probe --exec-selftest` | **237 通过 / 0 失败**（232 → +5：`VB2-27` ①②③④⑤ 全 PASS） |
+| `api_probe --graph-selftest` | **111 通过 / 0 失败** |
+| `aiwrite --provider-selftest` | **50 项通过 / 0 失败** |
+| `--web-dom-dump`（无 `--provider`） | exit **2** + 明确引导（参数路径验证） |
+| `--web-dom-dump --provider kimi-web` | exit **0**，读出真实页面：URL `https://www.kimi.com/`、标题 `Kimi AI with K3 …`；**输入框候选 = `div.chat-input-editor`（contenteditable=true，可见）**；回答容器候选 = `div.message-list`（当前隐藏，尚无消息）；发送候选多为侧栏按钮（该站点按 **Enter 发送**，故用 `send=key/Enter` 最稳） |
+
+**4) 实测发现 → 待拍板 `D-30`（登录态判据的**误报**）**
+
+- 现象：**未登录**的 Kimi 页面在 profile 里也有 **4 条 Cookie**（匿名 Cookie）→ 按 `D-27` 的「该 origin Cookie 非空 → 已登录」会显示 **「已登录」**，而页面右上角仍是 `Log in`。
+- 影响：面板/状态栏可能**假已登录**（`R22` 的镜像面）；但**不再空等**这一收益仍在（`ensure_session` 只看 Cookie 非空 → 立刻返回）。
+- **建议 `D-30`（三选一，默认 ①）**：① **`cookie_names` 命中优先**：命中 → `logged_in`；未命中但 Cookie 非空 → 新增状态「**未校验**（有 Cookie，但站点的登录 Cookie 未出现）」并如实显示；完全无 Cookie → `logged_out`；② 维持现并集（把「未校验」并入「已登录」）；③ 收紧为「必须有 `cookie_names` 命中才算已登录」（对未配 `cookie_names` 的站点恒「未确认」）。
+- 配套（无论选哪个）：**为每个站点补 `cookie_names`**（用 `--web-dom-dump` / 浏览器 F12 观测登录前后的 Cookie 名差集）→ 判据立即变准。
+
+**5) `PB2-29` 逐站回填的可行性与剩余阻塞**
+
+- 工具链已就绪（`--web-dom-dump` 枚举候选 → `--web-adapter-selftest` 复核命中 → `--run-selftest --web --provider <id>` 端到端）。
+- **第一步（我已实测，Kimi）**：输入框选择器、发送方式可确定（Kimi：`div.chat-input-editor` + `send=key/Enter`）。
+- **剩余必须由人在界面完成的动作**：① 在各站点**手动登录一次**；② 登录后**手动发一条消息**（让回答容器出现）→ 才能实测 `answer_selector` 与 `done_when`；③ 点「运行」确认生成闭环。
+- 未登录时无法测得 `answer_selector`（回答容器在无消息时不存在 / 隐藏）——**这就是「每个站点的 web 版本都可生成」的最后一道人工关卡**，程序侧不做代登录、不绕过验证（合规边界，`R19` 同族）。
+
 
 
 

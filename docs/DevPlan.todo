@@ -815,7 +815,7 @@
                 "children": [],
                 "todo": {
                   "id": 156,
-                  "content": "FEA-M_patchB-27…28 L4 登录/会话层去 DeepSeek 化：站点无关「已登录」判定（web_session_state() 纯函数）+ 面板/状态栏文案与渲染条件（userToken 行仅当配了 token_expr）+ 探测「不适用」语义（只读诊断分支，不注入 DeepSeek 端点）+ 会话失效识别 ｜ §3 PB2-27/PB2-28 · 不变量 I15/I16 · 验证 VB2-24…VB2-26 · 验收 AB2-20 ｜ 进度：PB2-27 ✅ 已落地（v13 · 2026-09-27；exec-selftest 219→227/0，VB2-24·VB2-26 全 PASS）；PB2-28 ①②③ ✅ 已落地（v14：只读诊断脚本 kProbeKickoffScriptReadOnly + probe_kickoff_script() 按 probe_applicable 分支 + CLI/面板判据；exec-selftest 227→232/0，VB2-25 全 PASS，CLI 文案待 GUI 手测）；剩余：PB2-28④ 会话失效识别（仍归 PB2-25）",
+                  "content": "FEA-M_patchB-27…28 L4 登录/会话层去 DeepSeek 化：站点无关「已登录」判定（web_session_state() 纯函数）+ 面板/状态栏文案与渲染条件（userToken 行仅当配了 token_expr）+ 探测「不适用」语义（只读诊断分支，不注入 DeepSeek 端点）+ 会话失效识别 ｜ §3 PB2-27/PB2-28 · 不变量 I15/I16 · 验证 VB2-24…VB2-27 · 验收 AB2-20 ｜ 进度：PB2-27 ✅ v13、PB2-28 ①②③ ✅ v14、PB2-28④ ✅ v15（web_session_failure_hint 纯函数 + 命中 401/40002 作废该站点会话）；exec-selftest 219→237/0（VB2-24·25·26·27 全 PASS）；另修 CLI 崩溃 0xC0000409（ExecuteScript 字符串返回值解包缺失）+ 新增 --web-dom-dump 选择器枚举工具；待拍板 D-30（cookie_names 优先，避免匿名 Cookie 误报已登录）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchB.md"

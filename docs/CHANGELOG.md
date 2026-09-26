@@ -58,6 +58,22 @@
   构建 **0 error / 0 warning**；⚠️ CLI 文案 / 退出码与面板按钮需 GUI 现场实测（`--web-probe --provider kimi-web`）
 - **仍未做**：会话失效识别（`40002`/`401`/`40003`，归 `PB2-25`）；`PB2-29`（选择器逐站实测）；`PB2-30`（端到端自检 + 面板「测试选择器」+ `PB2-24`）
 
+**修复 + 新增（M_patchB L4 / `B2-e` 第三批 · v15）：崩溃修复 + 会话失效识别 + `--web-dom-dump` 选择器枚举**
+
+- **修复 CLI 崩溃 `0xC0000409`（`STATUS_STACK_BUFFER_OVERRUN` / `__fastfail`）** —— 两个独立原因：
+  - **调用方式**：`aiwrite.exe` 是 GUI 子系统程序，PowerShell `*>`/管道重定向会与其 `attach_parent_console()`+`freopen("CONOUT$")` 冲突 → 用
+    `Start-Process … -PassThru -Wait -RedirectStandardOutput <file>`
+  - **真实缺陷**：`ExecuteScript` 对「脚本返回字符串」会**再包一层 JSON 字符串** → `json::parse` 得 `string` → `value()` 抛 `type_error.306` →
+    未捕获 → `std::terminate`/`__fastfail`（stdout 缓冲随之丢失，表现为「无输出 + 崩溃码」）→ **已统一解包 + 整函数 try/catch 兜底 + 关键节点 `fflush`**
+- **`PB2-28`④ 会话失效识别（并入 `PB2-25`）**：`ai::web_session_failure_hint()` / `web_session_failure_needs_relogin()`（纯函数；`code=40002`/`40003` 与 HTTP `401`/`403`，容错 `"code": 40002` / `"biz_code":40003` 写法）；
+  `web_chat()` 命中 `401`/`40002` → 文案追加「重新登录该站点」并**作废该站点内存会话**；`40003` → 仅提示
+- **`PB2-30`①**：`--run-selftest --web --provider <id>`（表外 id / 非 `kind=web` / 站点不可用 / 登录型条目 → 退出码 1/2，严格解析不回落）
+- **新增 `--web-dom-dump --provider <id>`（只读）**：枚举页面候选输入框 / 发送 / 回答容器（`id`/`class`/`placeholder`/`aria-label`/`contenteditable`/可见性/文本）
+  并给**建议选择器** —— 逐站填选择器不再依赖人肉 F12（`PB2-29` 执行工具）
+- **断言/回归**：`api_probe --exec-selftest` **232 → 237 通过 / 0 失败**（`VB2-27` 5 项全 PASS）；`--graph-selftest` 111/0；`--provider-selftest` 50/0；构建 **0 error / 0 warning**；
+  `--web-dom-dump --provider kimi-web` exit 0（实测读出 `div.chat-input-editor` 等真实候选）
+- **实测发现（待拍板 `D-30`）**：未登录的 Kimi 也有匿名 Cookie → 仅按「该 origin Cookie 非空」会误报「已登录」；建议改「`cookie_names` 命中优先 + Cookie 非空降级为『未校验』」，并为每站补 `cookie_names`
+
 **特性（M_patchB L1 收口）：网页版站点身份按「生效条目」+ 多站点会话并存 + `config.toml` 多 provider**
 
 - **`PB2-05` 补完 = `PB2-17` 网页版登录入口去硬编码（不变量 I11）**
