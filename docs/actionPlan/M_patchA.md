@@ -339,7 +339,7 @@ M1 已收口、M2 全绿、M3/M4 大部分落地，但审计发现**一批"地�
 | PB-04 ⬜ | Provider 统一抽象（设计 §8.1） | `ai/inference_provider.h`（`GenerateParams` / `ProviderResult` / `InferenceProvider{name,supports_vision,generate,generate_stream}`）+ `ai/provider_factory.{h,cpp}`；**把现有 `web_chat()` 收编为 `DeepSeekWebProvider`**（保持 `--web-chat` 行为不变） | `ai/inference_provider.h`、`ai/provider_factory.{h,cpp}`、`ai/deepseek_web_client.*` |
 | PB-05 ✅ | 官方 Provider（原 M4-05 / M4-10） | `ai/deepseek_official_provider.{h,cpp}`：`POST {api_base}/chat/completions`；**参数透传** `system_prompt/temperature/max_tokens/top_p`；`stream=true` 时解析官方 SSE 增量；错误分类（401/402/429/超时/DNS/5xx）；重试读 `config.error.*`、超时读 `config.timeout.*`；纯函数 `build_request_body/build_endpoint` 供离线自检 | `ai/deepseek_official_provider.{h,cpp}`、`ai/sse_reader.{h,cpp}` |
 | PB-06 ✅ | 凭据与网络策略（原 M4-07） | **加密文件库**：`utils/credential.{h,cpp}` 用 **DPAPI（当前用户）+ 自描述二进制容器**存放于 `~/.brain-ai/credentials/`（ACL 收紧 / 无回显 / 审计 / TTL 清理 / 损坏隔离，详见 `ai_writer_nodes.md` **附录 B**）；Key 优先级：节点参数 → 环境变量 → 凭据库（`api_key_ref`）；`--cred-list/-erase/-purge` CLI；代理（`HTTPS_PROXY/HTTP_PROXY`）与自签证书开关（默认严格）。**文档先行已完成，代码按附录 B 实现** | `utils/credential.{h,cpp}`、`ai/provider_factory.cpp`、`utils/config.*` |
-| PB-07 ⬜ | 会话失效引导（§8.5） | 识别网页版 `40002/401` 与官方 `401`；状态栏/错误条出现「会话已失效，点此重新登录」；按钮直达登录窗口（WebView2） | `ai/deepseek_web_client.cpp`、`ui/editor_state.*`、`ui/error_bar` |
+| PB-07 ⏸ | 会话失效引导（§8.5） | 识别网页版 `40002/401` 与官方 `401`；状态栏/错误条出现「会话已失效，点此重新登录」；按钮直达登录窗口（WebView2）。**延后（非核心）**：2026-09-26 决策 —— 优先推进 **M5 核心切片**（读图链路 + 图片显示），本项与 PB-02/PB-04/PB-09 一起排在其后 | `ai/deepseek_web_client.cpp`、`ui/editor_state.*`、`ui/error_bar` |
 | PB-08 ✅ | 流式呈现 | 输出面板与节点摘要逐字增长；运行中显示"生成中…（N 字）"；结束后落定并结合 PA-01 耗时 | `ui/output_panel.cpp`、`ui/node_canvas.cpp` |
 | PB-09 ⬜ | 自检扩展 | `api_probe --selftest` 增 **V-11 无 Key 请求构造**、**V-12 取消/超时语义**；`--run-selftest --official`（有 Key 时真实生成）；`--run-selftest --web` 保持 5/5 | `tools/api_probe.cpp` |
 
@@ -621,7 +621,7 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 
 ## §12 决策点（开工前请确认）
 
-> **决议状态（2026-09-26）**：D-01 ① 已实施 · D-02 ① 已实施（PB-01 线程化落地）· D-03 ① 已实施（A 接三个 + 其余归 PD-03）· D-04 待 PD-08 决策 · D-05 ② 已按 A1 / A2 两次提交。
+> **决议状态（2026-09-26）**：D-01 ① 已实施 · D-02 ① 已实施（PB-01 线程化落地）· D-03 ① 已实施（A 接三个 + 其余归 PD-03）· D-04 待 PD-08 决策 · D-05 ② 已按 A1 / A2 两次提交 · **D-06 ① 已决议（优先 M5 核心，Patch B 剩余项延后）· D-07 ② 已决议（智谱，按 OpenAI 兼容实现）**。
 
 | 编号 | 议题 | 选项 | 当前默认 |
 |---|---|---|---|
@@ -630,6 +630,8 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 | D-03 | 未接配置字段 | ① 现在就接线（A 接三个、其余 D 接）② 先标注"未生效" | ①（A-08 按此执行） |
 | D-04 | i18n | ① 最小实现 ② 从 config 移除并记入 M6 | ② |
 | D-05 | 补丁粒度 | ① A 一次提交 ② A 拆两次（A1 数据通道+日志、A2 界面呈现） | ②（便于逐步验证） |
+| D-06 | 补丁 B 剩余项（PB-02/04/07/09）与 M5 的先后 | ① 先把 M5 核心（读图链路 + 图片显示）做完，再回头补体验/健壮性项（推荐）② 先补完 Patch B 再进 M5 | ①（2026-09-26 用户决策：**PB-07 非核心，先做下一里程碑核心功能**） |
+| D-07 | M5 视觉模型后端 | ① DeepSeek 官方 API ② 智谱 ③ 硅基流动 ④ 本地 Ollama | **② 智谱**（`api_base=https://open.bigmodel.cn/api/paas/v4`，`Authorization: Bearer`，多模态用 `image_url` **data URL**，模型名走 `model_custom` 自由文本）；实现本身按 **OpenAI 兼容**规范写，②③④ 换 `api_base` + 模型名即可 |
 
 ---
 
