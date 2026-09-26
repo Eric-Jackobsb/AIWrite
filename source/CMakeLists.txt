@@ -30,6 +30,28 @@ if(NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
     mark_as_advanced(CMAKE_POLICY_VERSION_MINIMUM)
 endif()
 
+#  CMake 4.4 实测：vcpkg 自带的 toolchain（C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake）
+#  内部调用 cmake_policy(VERSION 3.7.2)（第 40 / 878 行），因此在**每次处理该 toolchain**时
+#  都会打印一串看起来像报错的弃用警告（含 cmake 调用栈）：
+#      CMake Warning (deprecated) at .../vcpkg.cmake:40 (cmake_policy):
+#        Compatibility with CMake < 3.10 will be removed from a future version of CMake.
+#  这不是本项目的问题，也不影响配置/构建（Configure 仍正常完成），但会淹没真正的错误。
+#  处理方式：
+#    * 首选在 **preset** 里关掉（见 CMakePresets.json：CMAKE_WARN_DEPRECATED=OFF +
+#      CMAKE_SUPPRESS_DEVELOPER_WARNINGS=ON）——toolchain 在本文件之前执行，
+#      只有 preset / 命令行传入的缓存变量才能影响到它；
+#    * 本文件里的同样两行只是**兜底**（供不用 preset 的 `cmake -S source -B build` 场景）。
+#      注意：CMAKE_SUPPRESS_DEVELOPER_WARNINGS（-Wno-dev）**不要**写进 preset ——
+#      它由 CMake 自身消费，作为「手工指定变量」会被 unused-cli 反过来警告一次。
+if(NOT DEFINED CMAKE_WARN_DEPRECATED)
+    set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL
+        "关闭弃用警告：屏蔽 vcpkg toolchain 的老策略版本噪音（CMake 3.31+/4.x）")
+endif()
+if(NOT DEFINED CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
+    set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS ON CACHE BOOL
+        "等价 -Wno-dev：屏蔽作者级警告（如 unused-cli）")
+endif()
+
 project(aiwrite
     VERSION 0.2.0
     DESCRIPTION "AI 小说/剧本创作软件 —— 节点工作流 + DeepSeek 后端"

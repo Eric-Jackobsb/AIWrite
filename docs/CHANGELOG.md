@@ -21,6 +21,20 @@
 
 ## [Unreleased] — M5 核心切片（M5-C）图片理解链路 + 图片显示 已落地
 
+**修复（构建）：CMake 4.4 配置输出被 vcpkg 工具链弃用警告刷屏 —— 已彻底清零**
+
+- **现象**：CMake 4.4.3 + `C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake` 时，每次配置都会打印多条带调用栈的
+  `CMake Warning (deprecated) at .../vcpkg.cmake:40 (cmake_policy): Compatibility with CMake < 3.10 will be removed from a future version of CMake.`
+  —— 观感像 CMake 报错（Configure 实际仍能完成，产物正常）
+- **根因**：vcpkg 自带工具链内部 `cmake_policy(VERSION 3.7.2)`（`vcpkg.cmake:40` 与 `:878`）在 CMake 3.31+/4.x 触发**策略版本弃用警告**；工具链在项目文件**之前**执行，因此项目里的 `cmake_minimum_required(VERSION 3.25...4.6)` 与 `CMAKE_POLICY_VERSION_MINIMUM=3.10` 都管不到它
+- **修复**（`source/CMakePresets.json`）：
+  - 增 `"CMAKE_WARN_DEPRECATED": "OFF"`（preset 缓存变量在工具链之前生效 → 警告消失）
+  - 工具链改用 preset 的 **`"toolchainFile"`** 字段（原先写成 cache 变量 `CMAKE_TOOLCHAIN_FILE`，会被 CMake 反过来判为 `unused-cli` 警告）
+  - `CMAKE_SUPPRESS_DEVELOPER_WARNINGS`（-Wno-dev）**特意不写进 preset**：它由 CMake 自身消费，作为手工变量会被 `unused-cli` 警告一次（已实测）
+- **兜底**（`source/CMakeLists.txt`）：不用 preset 的 `cmake -S source -B build` 场景同样设 `CMAKE_WARN_DEPRECATED=OFF`；补注释说明「谁先执行、为什么只能在 preset 层解决」以及 `unused-cli` 的坑
+- **文档**：`source/README.md` §6 常见问题第 3 条改写为完整修复说明
+- **实测**：全新配置 `cmake --preset default -B <新目录>` 与增量配置 `cmake --preset default` **警告/错误均 0 条**；全量编译 **0 error / 0 warning**（5 个目标）；`--graph-selftest` **111/0**、`--exec-selftest` **190/0** 回归通过
+
 **特性（M_patchB L1 第二批）：请求参数化 + 节点/UI/执行链路真正按表走 + 网页版站点参数化**
 
 - **PB2-04 请求参数化**（`ai/deepseek_official_provider.{h,cpp}`）：新增 `ProviderOptions{api_base, chat_path, auth_style, auth_header, extra_headers, env_names, connect/read_timeout_s}` 与纯函数 `build_endpoint(base, path)` / `build_auth_headers(options, key)` / `resolve_api_key(param, env_names)` / `resolve_chat_path(path, model)`（`{model}` 占位，Gemini 风格）/ `provider_options_from(spec)`；`official_chat` 的端点·认证·超时**全部按 options**（默认值 = 改造前行为，旧签名保留重载）

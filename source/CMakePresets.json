@@ -9,8 +9,8 @@
       "generator": "Visual Studio 18 2026",
       "architecture": { "value": "x64", "strategy": "external" },
       "binaryDir": "${sourceDir}/../build",
+      "toolchainFile": "C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_TARGET_TRIPLET": "x64-windows",
         "VCPKG_HOST_TRIPLET": "x64-windows",
         "VCPKG_MANIFEST_DIR": "${sourceDir}",
@@ -18,7 +18,8 @@
         "VCPKG_MANIFEST_INSTALL": "OFF",
         "CMAKE_PREFIX_PATH": "${sourceDir}/../vcpkg-installed/x64-windows;${sourceDir}/../vcpkg-installed/x64-windows/share",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_POLICY_VERSION_MINIMUM": "3.10"
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.10",
+        "CMAKE_WARN_DEPRECATED": "OFF"
       }
     }
   ],
