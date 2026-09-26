@@ -253,6 +253,182 @@
       "verified": false,
       "notes": "通用兜底：任何 OpenAI 兼容服务（自建 vLLM / LM Studio / 中转站）。请在「API 地址」手填完整前缀（含 /v1），模型名自由填写；也可复制本条目到 ~/.brain-ai/providers.d/ 做成专属条目",
       "docs_url": ""
+    },
+    {
+      "id": "kimi-web",
+      "display": "Kimi（Moonshot 网页版）",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://www.kimi.com/",
+        "window_title": "AIwrite · Kimi 网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）：登录 / 协议探测可用；生成需 DOM 适配器（L3 PB2-13…16）+ 本机实测选择器与凭证取值。入口已实测：`kimi.moonshot.cn` 会 301 到 **www.kimi.com**（本条目即取最终域）；选择器未实测（用 --web-adapter-selftest --provider kimi-web 诊断）",
+      "docs_url": ""
+    },
+    {
+      "id": "tongyi-web",
+      "display": "通义千问（阿里网页版）",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://www.tongyi.com/qianwen",
+        "window_title": "AIwrite · 通义千问网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）。⚠️ 通义已迁到 tongyi.com（旧域名 tongyi.aliyun.com 请勿使用）。入口 URL 已核实（2026-09-26）",
+      "docs_url": ""
+    },
+    {
+      "id": "qwen-web",
+      "display": "Qwen（国际站网页版）",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://chat.qwen.ai/",
+        "window_title": "AIwrite · Qwen 网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）。官方国际站；本机抓取返回「请下载 App」（疑似 UA 判定），桌面环境为聊天页 —— 未完全核实",
+      "docs_url": ""
+    },
+    {
+      "id": "chatglm-web",
+      "display": "智谱清言（ChatGLM 网页版）",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://chatglm.cn/main/alltoolsdetail",
+        "window_title": "AIwrite · 智谱清言网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）。⚠️ 站点有 WAF / 反爬（本机抓取到混淆响应）→ 选择器与凭证取值**必须实测**；入口 URL 已核实可达（2026-09-26）",
+      "docs_url": ""
+    },
+    {
+      "id": "doubao-web",
+      "display": "豆包（字节网页版）",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://www.doubao.com/chat/",
+        "window_title": "AIwrite · 豆包网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）：登录 / 协议探测可用；生成待 L3 + 实测。入口 URL 已核实（2026-09-26）",
+      "docs_url": ""
+    },
+    {
+      "id": "yuanbao-web",
+      "display": "腾讯元宝",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://yuanbao.tencent.com/",
+        "window_title": "AIwrite · 腾讯元宝网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）：登录 / 协议探测可用；生成待 L3 + 实测。入口 URL 已核实（2026-09-26）",
+      "docs_url": ""
+    },
+    {
+      "id": "ernie-web",
+      "display": "文心一言（百度文心助手）",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://yiyan.baidu.com/",
+        "window_title": "AIwrite · 文心一言网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）。站点现名「百度文心助手」；入口 URL 已核实（2026-09-26）",
+      "docs_url": ""
+    },
+    {
+      "id": "spark-web",
+      "display": "讯飞星火",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://xinghuo.xfyun.cn/",
+        "window_title": "AIwrite · 讯飞星火网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）：登录 / 协议探测可用；生成待 L3 + 实测。入口 URL 已核实（2026-09-26）",
+      "docs_url": ""
+    },
+    {
+      "id": "chatgpt-web",
+      "display": "ChatGPT（chatgpt.com）",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://chatgpt.com/",
+        "window_title": "AIwrite · ChatGPT 网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）。⚠️ 境外站点：需可访问的网络环境；本机抓取 403（反爬）**未能核实**，URL 为官方主域",
+      "docs_url": ""
+    },
+    {
+      "id": "claude-web",
+      "display": "Claude（claude.ai）",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://claude.ai/",
+        "window_title": "AIwrite · Claude 网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）。⚠️ 境外站点：需可访问的网络环境；本机抓取 403（反爬）**未能核实**，URL 为官方主域",
+      "docs_url": ""
+    },
+    {
+      "id": "gemini-web",
+      "display": "Gemini（gemini.google.com）",
+      "kind": "web",
+      "protocol": "dom",
+      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "models": [],
+      "web": {
+        "adapter": "dom",
+        "login_url": "https://gemini.google.com/app",
+        "window_title": "AIwrite · Gemini 网页版登录（登录后关闭窗口）"
+      },
+      "verified": false,
+      "notes": "登录型站点条目（PB2-26）。⚠️ 境外站点：需可访问的网络环境；本机抓取失败**未能核实**，URL 为官方主域",
+      "docs_url": ""
     }
   ]
 }

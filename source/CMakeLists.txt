@@ -230,6 +230,7 @@ src/engine/provider_resolve.cpp
     src/engine/recent_files.cpp
     src/ai/web_pow.cpp
     src/ai/deepseek_web_client.cpp
+    src/ai/dom_web_client.cpp        # L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
     src/ai/deepseek_official_provider.cpp
     src/ai/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）
     src/nodes/local_nodes.cpp

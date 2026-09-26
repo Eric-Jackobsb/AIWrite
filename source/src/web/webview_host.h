@@ -190,12 +190,25 @@ void request_protocol_probe();
 // 前置：profile 里已有登录态（用户至少登录过一次）；返回 0=探测成功 / 1=失败
 int protocol_probe(int timeout_seconds);
 
+// M_patchB L1 修订（PB2-23）：按**配置表条目**的站点探测（严格解析，**不**回落）
+//  * 站点不可用（非网页版条目 / 缺 web.login_url / 表外 id）→ 打印原因并返回 2（**不发请求、不开窗**）
+int protocol_probe_for_provider(const std::string& provider_id, int timeout_seconds);
+
+// ---- M_patchB L3（PB2-13 / PB2-15）：在**已登录窗口**内同步执行一段 JS 并取回结果 ----
+//  * 内部：按站点 `ensure_session` → 把脚本 marshal 到窗口线程执行 → 返回 `ExecuteScript` 的**原始 JSON 结果**
+//  * 脚本应 `return` 一个**对象**（JSON 可序列化）；本函数**不解释**内容（由调用方解析）
+//  * 典型用途：DOM 适配器（注入提示词 / 触发发送 / 轮询答案）与选择器探测（PB2-15）
+bool run_script_sync(const LoginRequest& site_request, const std::string& script_js, int timeout_ms,
+                     std::string* json_result, std::string* error);
+
 // 用**登录窗口内的官方 PoW worker** 求解（M4-06/M4-09 方案 A：版本自适应、零逆向）
+//  * site_url：**目标站点**（origin / 登录页；PB2-23：不再用「内置默认站点」猜 —— 决策 D-22②）
+//    空串 = 旧行为（内置默认站点，仅供 CLI 自检守 I2）
 //  * challenge_json：/api/v0/chat/create_pow_challenge 的原始响应
-//  * 若登录窗口尚未打开，会离屏启动一个（profile 已登录即可用），用户无需干预
+//  * 若登录窗口尚未打开 / 不在该站点，会**按站点**离屏启动一个（profile 已登录即可用），用户无需干预
 //  * 同步阻塞至多 timeout_ms；成功返回 answer（>=0），失败返回 -1 并写 error
-long long solve_pow_via_page(const std::string& challenge_json, int timeout_ms,
-                             std::string* error);
+long long solve_pow_via_page(const std::string& site_url, const std::string& challenge_json,
+                             int timeout_ms, std::string* error);
 
 // 确保内存会话里有可用凭证（Cookie + userToken）：没有则离屏起登录窗口并等一次协议探测完成
 // 返回 true 表示已具备凭证（幂等，已有凭证时立即返回）

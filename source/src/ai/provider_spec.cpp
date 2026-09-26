@@ -298,6 +298,131 @@ std::string web_provider_id_for(const ProviderSpec* spec, const ProviderSpecs* t
     return {};
 }
 
+// ---- M_patchB L1 修订（PB2-22 / D-22② / I14）：**严格**站点解析（不回落）----
+ProviderWebSpec strict_web_spec_for(const ProviderSpec* spec)
+{
+    if (spec == nullptr || spec->kind != "web") {
+        return {}; // 非网页版条目**没有**站点（绝不回落到「表内第一个 web 条目」）
+    }
+    return spec->web;
+}
+
+std::string strict_web_provider_id_for(const ProviderSpec* spec)
+{
+    if (spec == nullptr || spec->kind != "web") {
+        return {};
+    }
+    return spec->id;
+}
+
+namespace {
+
+// 统一的三条可操作引导（界面 / 运行前校验 / 运行期文案**逐字一致**）
+std::string web_site_guidance()
+{
+    return "；可选：① 把「提供商」改为网页版条目（如 deepseek-web）；"
+           "② 新建网页版站点条目（放进 ~/.brain-ai/providers.d/，格式见使用说明 §9 / M_patchB 附录 D）；"
+           "③ 把「模式」改回 official";
+}
+
+} // namespace
+
+std::string web_site_error(const ProviderSpec* spec)
+{
+    if (spec == nullptr) {
+        return "配置表里没有该提供商条目，无法确定网页版站点" + web_site_guidance();
+    }
+    const std::string display = spec->display.empty() ? spec->id : spec->display;
+    if (spec->kind != "web") {
+        return "「" + display + "」不是网页版条目（没有网页版站点，**不会**回落到内置默认站点）" +
+               web_site_guidance();
+    }
+    if (spec->web.login_url.empty()) {
+        return "「" + display +
+               "」缺少 web.login_url（站点登录页）——无法确定要打开哪个站点"
+               "（**不会**回落到内置默认站点）" +
+               web_site_guidance();
+    }
+    return {};
+}
+
+std::string web_site_field_warnings(const ProviderSpec* spec)
+{
+    if (spec == nullptr || spec->kind != "web") {
+        return {};
+    }
+    std::vector<std::string> login_missing; // 影响「自动探测凭证 / 展示」
+    std::vector<std::string> gen_missing;   // 生成字段（未就绪）
+    if (spec->web.window_title.empty()) {
+        login_missing.push_back("window_title");
+    }
+    if (spec->web.probe_paths.empty()) {
+        login_missing.push_back("probe_paths");
+    }
+    if (spec->web.token_expr.empty()) {
+        login_missing.push_back("token_expr");
+    }
+    if (spec->web.cookie_names.empty()) {
+        login_missing.push_back("cookie_names");
+    }
+    if (spec->web.input_selector.empty()) {
+        gen_missing.push_back("input_selector");
+    }
+    if (spec->web.send_kind.empty() || spec->web.send_value.empty()) {
+        gen_missing.push_back("send");
+    }
+    if (spec->web.answer_selector.empty()) {
+        gen_missing.push_back("answer_selector");
+    }
+    const auto join = [](const std::vector<std::string>& items) {
+        std::string joined;
+        for (const std::string& item : items) {
+            if (!joined.empty()) {
+                joined += "、";
+            }
+            joined += item;
+        }
+        return joined;
+    };
+    std::string text;
+    if (!login_missing.empty()) {
+        // 决策 D-26 / PB2-26：这些字段**可以**回落默认值，但对非 DeepSeek 站点是**误导** → 点明后果
+        text = "条目缺 " + join(login_missing) + "：该站点**无法自动探测凭证**（登录仍可用）";
+    }
+    if (!gen_missing.empty()) {
+        if (!text.empty()) {
+            text += "；";
+        }
+        text += "生成未就绪（缺 " + join(gen_missing) + "）";
+    }
+    return text;
+}
+
+// M_patchB L1 修订（PB2-26）：**登录型站点条目** —— 生成字段（选择器 / 发送 / 取答案）未就绪
+//  * 登录 / 协议探测**可用**；生成会在运行时因「适配器未实现 / 生成字段未就绪」**明确报错**
+//  * 不新增 schema 字段：L3 落地后把字段补齐即**自动**变为就绪
+bool web_login_only(const ProviderSpec* spec)
+{
+    if (spec == nullptr || spec->kind != "web" || spec->web.adapter != "dom") {
+        return false;
+    }
+    return spec->web.input_selector.empty() || spec->web.send_kind.empty() ||
+           spec->web.send_value.empty() || spec->web.answer_selector.empty();
+}
+
+bool web_adapter_implemented(const std::string& adapter)
+{
+    if (adapter.empty()) {
+        return true; // 空 = 用内置默认适配器行为
+    }
+    for (const std::string& candidate : implemented_web_adapters()) {
+        if (candidate == adapter) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const ProviderModelSpec* ProviderSpec::find_model(const std::string& model_id) const
 {
     for (const ProviderModelSpec& model : models) {
@@ -351,12 +476,14 @@ std::vector<std::string> implemented_protocols()
 {
     // L1 已接线：openai 兼容（含智谱 / 硅基流动 / Ollama / 任意用户条目）
     //            + 内置网页版适配器 deepseek-web（现有 web_chat/PoW）
-    return {"openai", "deepseek-web"};
+    // L3（PB2-13）：通用 DOM 适配器（选择器驱动）→ protocol=dom 也已实现
+    return {"openai", "deepseek-web", "dom"};
 }
 
 std::vector<std::string> implemented_web_adapters()
 {
-    return {"builtin:deepseek"};
+    // L3（PB2-13）：通用 DOM 适配器（选择器驱动）已实现（站点=纯数据；缺选择器 → 登录型条目）
+    return {"builtin:deepseek", "dom"};
 }
 
 std::string protocol_display(const std::string& protocol)
@@ -769,14 +896,16 @@ void validate_final(std::vector<ProviderSpec>* items, SpecLoadReport* report)
             if (spec.web.answer_selector.empty()) {
                 missing.push_back("answer_selector");
             }
+            const bool implemented = is_implemented_adapter(spec.web.adapter);
             if (!missing.empty()) {
-                report->errors.push_back(tag + " web.adapter=dom 缺少 " + join_list(missing) +
-                                         "（已跳过该条）");
-                drop_ids.push_back(spec.id);
-                continue;
+                // M_patchB L1 修订（PB2-26）：**登录型站点条目**（生成字段未就绪）→ **警告**，**不**跳过该条
+                //  * 登录 / 协议探测可用；生成会在运行时**明确报错**（不猜选择器、不静默降级）
+                report->warnings.push_back(tag + " 登录型站点条目：web 缺 " + join_list(missing) +
+                                           "（生成未就绪 —— 登录 / 协议探测可用）");
             }
-            if (!is_implemented_adapter(spec.web.adapter)) {
-                report->warnings.push_back(tag + " web.adapter=dom 本版本尚未实现（已实现：" +
+            else if (!implemented) {
+                report->warnings.push_back(tag + " web.adapter=" + spec.web.adapter +
+                                           " 本版本尚未实现（已实现：" +
                                            join_list(implemented_web_adapters()) +
                                            "）——选中它会在运行时明确报错");
             }
@@ -1384,9 +1513,12 @@ int provider_spec_selftest(int* passed_out)
 })JSON";
         SpecLoadReport      report;
         const ProviderSpecs specs = merge_provider_specs({{"user", web_layer}}, &report);
-        counter.check(specs.find("dom-site") == nullptr &&
-                          has_text(report.errors, "input_selector"),
-                      "dom 缺选择器 → error 且条目被丢弃");
+        // M_patchB L1 修订（PB2-26）：dom 缺生成字段 → **登录型站点条目**（警告，**不**丢弃）
+        const ProviderSpec* login_only = specs.find("dom-site");
+        counter.check(login_only != nullptr && web_login_only(login_only) &&
+                          !has_text(report.errors, "dom-site") &&
+                          has_text(report.warnings, "登录型站点条目"),
+                      "dom 缺生成字段 → 登录型站点条目（警告，不丢弃；生成未就绪）");
         const ProviderSpec* partial = specs.find("partial-endpoints");
         counter.check(partial != nullptr &&
                           partial->web.endpoints.host == "https://s2.example.com" &&

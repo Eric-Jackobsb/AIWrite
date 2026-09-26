@@ -38,6 +38,7 @@
 #include "web/webview_host.h" // plan_session_boot / interactive_login_request（纯逻辑断言用）
 #include "ai/deepseek_official_provider.h" // M5-02：多模态请求体断言
 #include "ai/provider_spec.h"              // M_patchB L1：Provider 配置表断言
+#include "ai/dom_web_client.h"             // L3（PB2-13/15）：DOM 适配器纯函数断言（VB2-22）
 
 #include <fstream>
 #include <sstream>
@@ -2395,6 +2396,161 @@ int execution_selftest()
                    "VB2-18③ kind 与 mode 不一致时**不改写** mode（official+web 保持 web；web+official 保持 official）");
             expect(check, unknown_ok,
                    "VB2-18④ 表外 id → 条目为空（不回落显示为 official）");
+        }
+
+        // ---- VB2-19 / PB2-22（决策 D-22② / D-26 / 不变量 I14）：**严格**站点解析（不回落）----
+        {
+            const aiwrite::ai::ProviderSpecs site_table = aiwrite::ai::load_provider_specs();
+            const aiwrite::ai::ProviderSpec* official      = site_table.find("deepseek");
+            const aiwrite::ai::ProviderSpec* web_entry_spec = site_table.find("deepseek-web");
+            const aiwrite::ai::ProviderSpec* no_such        = site_table.find("no-such-provider");
+
+            const aiwrite::ai::ProviderWebSpec official_site =
+                aiwrite::ai::strict_web_spec_for(official);
+            expect(check, official_site.login_url.empty() && official_site.adapter.empty(),
+                   "VB2-19① 非网页版条目 → 严格解析为空（**不**回落表内第一个 web 条目）");
+
+            const aiwrite::ai::ProviderWebSpec strict_web =
+                aiwrite::ai::strict_web_spec_for(web_entry_spec);
+            expect(check,
+                   web_entry_spec != nullptr && !strict_web.login_url.empty() &&
+                       strict_web.login_url == web_entry_spec->web.login_url &&
+                       strict_web.window_title == web_entry_spec->web.window_title,
+                   "VB2-19② 网页版条目 → 严格解析取**它自己**的 web 段（登录页 / 窗口标题一致）");
+
+            expect(check,
+                   aiwrite::ai::strict_web_spec_for(nullptr).login_url.empty() &&
+                       aiwrite::ai::strict_web_spec_for(no_such).login_url.empty(),
+                   "VB2-19③ nullptr / 表外 id → 严格解析为空（面板不再显示误导性站点）");
+
+            expect(check,
+                   aiwrite::ai::strict_web_provider_id_for(official).empty() &&
+                       aiwrite::ai::strict_web_provider_id_for(web_entry_spec) == "deepseek-web",
+                   "VB2-19④ 站点条目 id：非网页版条目为空 / 网页版条目 = 该条目 id");
+
+            expect(check,
+                   aiwrite::ai::web_site_error(web_entry_spec).empty() &&
+                       !aiwrite::ai::web_site_error(official).empty() &&
+                       !aiwrite::ai::web_site_error(nullptr).empty() &&
+                       aiwrite::ai::web_adapter_implemented("builtin:deepseek") &&
+                       aiwrite::ai::web_adapter_implemented("dom") &&
+                       !aiwrite::ai::web_adapter_implemented("builtin:unknown-site"),
+                   "VB2-19⑤ 站点错误文案（含三条引导）+ 适配器门控（builtin:deepseek/dom 已实现；未知适配器仍拒绝）");
+        }
+
+        // ---- VB2-21 / PB2-26（登录型站点条目）：可加载 + 严格解析可用 + 生成未就绪被如实标记 ----
+        {
+            const auto has_warn = [](const std::vector<std::string>& items, const std::string& needle) {
+                for (const std::string& item : items) {
+                    if (item.find(needle) != std::string::npos) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            const aiwrite::ai::ProviderSpecs login_table = aiwrite::ai::load_provider_specs();
+            const aiwrite::ai::ProviderSpec* kimi    = login_table.find("kimi-web");
+            const aiwrite::ai::ProviderSpec* ds_web2 = login_table.find("deepseek-web");
+
+            expect(check, kimi != nullptr && kimi->kind == "web" && !kimi->web.login_url.empty(),
+                   "VB2-21① 登录型站点条目可加载（kimi-web；不再因缺生成字段被跳过）");
+
+            expect(check,
+                   kimi != nullptr && aiwrite::ai::web_site_error(kimi).empty() &&
+                       aiwrite::ai::strict_web_spec_for(kimi).login_url == kimi->web.login_url,
+                   "VB2-21② 登录型条目站点可用（严格解析给出该条目的登录页；无错误）");
+
+            expect(check,
+                   kimi != nullptr && aiwrite::ai::web_login_only(kimi) &&
+                       aiwrite::ai::web_adapter_implemented(kimi->web.adapter),
+                   "VB2-21③ 生成未就绪被如实标记（dom 适配器**已实现**，但该条缺生成字段 → 登录型条目拦截）");
+
+            expect(check,
+                   ds_web2 != nullptr && !aiwrite::ai::web_login_only(ds_web2) &&
+                       aiwrite::ai::web_adapter_implemented(ds_web2->web.adapter),
+                   "VB2-21④ 已就绪条目不受影响（deepseek-web 仍是可生成条目）");
+
+            expect(check, has_warn(login_table.report.warnings, "登录型站点条目"),
+                   "VB2-21⑤ 加载报告把「缺生成字段」降级为**警告**（含「登录型站点条目」字样）");
+        }
+
+        // ---- VB2-22 / PB2-13（L3 DOM 适配器）：纯函数（轮询钳制 / 注入转义 / 脚本常量 / 就绪度 / 前置校验）----
+        {
+            aiwrite::ai::ProviderWebSpec site;
+            site.adapter         = "dom";
+            site.login_url       = "https://site.example.com/";
+            site.input_selector  = "div[contenteditable='true']";
+            site.send_kind       = "key";
+            site.send_value      = "Enter";
+            site.answer_selector = ".markdown-body";
+            site.done_kind       = "selector_gone";
+            site.done_selector   = "button[aria-label*='停止']";
+
+            int poll_ms   = 0;
+            int max_polls = 0;
+            aiwrite::ai::clamp_poll_params(site, &poll_ms, &max_polls); // 结构体默认 500 / 120
+            const bool clamp_default = (poll_ms == 500 && max_polls == 120);
+            aiwrite::ai::ProviderWebSpec tiny;
+            tiny.answer_poll_ms   = 100;
+            tiny.answer_max_polls = 5;
+            aiwrite::ai::clamp_poll_params(tiny, &poll_ms, &max_polls); // 极小 → 下限
+            const bool clamp_low = (poll_ms == 200 && max_polls == 10);
+            aiwrite::ai::ProviderWebSpec huge;
+            huge.answer_poll_ms   = 99999;
+            huge.answer_max_polls = 99999;
+            aiwrite::ai::clamp_poll_params(huge, &poll_ms, &max_polls); // 超大 → 上限
+            const bool clamp_high = (poll_ms == 2000 && max_polls == 600);
+            expect(check, clamp_default && clamp_low && clamp_high,
+                   "VB2-22① 轮询参数钳制（默认 500ms/120 次不变；极小 → 200ms/10 次；超大 → 2000ms/600 次）");
+
+            const std::string tricky_prompt = "第一行 \"引号\" \\ 反斜杠\n第二行\t制表";
+            aiwrite::ai::DomChatRequest request;
+            request.prompt = tricky_prompt;
+            request.site   = site;
+            bool cfg_ok    = false;
+            try {
+                const nlohmann::json cfg = nlohmann::json::parse(aiwrite::ai::dom_cfg_json(request));
+                cfg_ok = cfg.value("prompt", std::string()) == tricky_prompt &&
+                         cfg.value("input_selector", std::string()) == site.input_selector &&
+                         cfg.value("send_kind", std::string()) == "key" &&
+                         cfg.value("send_value", std::string()) == "Enter" &&
+                         cfg.value("answer_selector", std::string()) == site.answer_selector &&
+                         cfg.value("done_kind", std::string()) == "selector_gone" &&
+                         cfg.value("done_selector", std::string()) == site.done_selector;
+            }
+            catch (const std::exception&) {
+                cfg_ok = false;
+            }
+            expect(check, cfg_ok,
+                   "VB2-22② 注入配置可解析且**转义安全**（提示词含引号 / 反斜杠 / 换行 / 制表）");
+
+            const std::string kick = aiwrite::ai::dom_kickoff_script();
+            const std::string poll = aiwrite::ai::dom_poll_script();
+            const std::string prb  = aiwrite::ai::dom_probe_script();
+            expect(check,
+                   kick.find("window.__aiwriteDom") != std::string::npos &&
+                       poll.find("window.__aiwriteDom") != std::string::npos &&
+                       prb.find("window.__aiwriteDomProbe") != std::string::npos &&
+                       kick.find("input_selector") != std::string::npos &&
+                       poll.find("answer_selector") != std::string::npos,
+                   "VB2-22③ 页面脚本常量（kickoff/poll 读 __aiwriteDom；probe 读 __aiwriteDomProbe）");
+
+            aiwrite::ai::ProviderSpec ready_spec;
+            ready_spec.kind = "web";
+            ready_spec.web  = site;
+            aiwrite::ai::ProviderSpec short_spec = ready_spec;
+            short_spec.web.answer_selector.clear();
+            expect(check, !aiwrite::ai::web_login_only(&ready_spec) &&
+                              aiwrite::ai::web_login_only(&short_spec) &&
+                              aiwrite::ai::web_adapter_implemented("dom"),
+                   "VB2-22④ 就绪度推断：生成字段齐 → 非登录型；缺 answer_selector → 登录型（补齐即就绪）");
+
+            aiwrite::ai::DomChatRequest bad;
+            bad.site = short_spec.web; // 缺 answer_selector
+            const aiwrite::ai::DomChatResult bad_result = aiwrite::ai::dom_chat(bad);
+            expect(check, !bad_result.ok && !bad_result.error.empty(),
+                   "VB2-22⑤ dom_chat 前置校验（缺生成字段 → 立即报错；不打开窗口、不发送）");
         }
     }
 

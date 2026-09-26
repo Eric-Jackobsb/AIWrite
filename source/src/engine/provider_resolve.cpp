@@ -196,8 +196,10 @@ std::string mode_kind_hint(const EffectiveProvider& provider)
     const std::string display = provider.display.empty() ? provider.provider : provider.display;
     if (provider.kind == "official" && provider.mode == "web") {
         return "「" + display +
-               "」不是网页版条目，但模式为 web：将使用内置默认站点（DeepSeek 网页版）；"
-               "建议把「提供商」改为网页版条目（如 deepseek-web），或把「模式」改回 official";
+               "」不是网页版条目：**没有网页版站点可用**（不会再回落到内置默认站点，决策 D-22②）；"
+               "可选：① 把「提供商」改为网页版条目（如 deepseek-web）；"
+               "② 新建网页版站点条目（~/.brain-ai/providers.d/，见使用说明 §9）；"
+               "③ 把「模式」改回 official";
     }
     if (provider.kind == "web" && provider.mode == "official") {
         return "「" + display +
@@ -235,6 +237,14 @@ std::string unwired_reason(const Graph& graph, const Node& node)
                                               : std::string("见 --provider-dump");
             return effective.display + " 的模型 " + effective.model +
                    " 不支持图片理解（表内视觉模型：" + suggested + "）";
+        }
+    }
+
+    // ---- 决策 D-22② / 不变量 I14：网页版模式必须有**该条目自己的**站点（**不**回落内置默认站点）----
+    if (effective.mode == "web") {
+        const std::string site_error = ai::web_site_error(effective.spec);
+        if (!site_error.empty()) {
+            return site_error;
         }
     }
 

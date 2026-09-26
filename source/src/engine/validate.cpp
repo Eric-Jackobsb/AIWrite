@@ -139,18 +139,19 @@ bool validateBeforeRun(const Graph& graph, ValidationMessages* errors,
         const EffectiveProvider effective = resolve_display_provider(graph, node);
 
         if (mode_value == "web") {
-            // M_patchB L1 续（PB2-17）：按**生效条目**给出提示（避免「以为在登录 A，其实在登录 DeepSeek」）
-            const ai::ProviderWebSpec site =
-                ai::web_spec_for(effective.spec, effective.specs.get());
-            const std::string site_url =
-                site.login_url.empty() ? std::string("内置默认站点（DeepSeek 网页版）") : site.login_url;
-            std::string text = "[" + node.id + "] 网页版模式：站点 " + site_url;
-            if (effective.spec != nullptr && effective.kind != "web") {
-                const std::string display =
-                    effective.display.empty() ? effective.provider : effective.display;
-                text += "（「" + display +
-                        "」不是网页版条目 → 将使用**内置默认站点**；建议把「提供商」改为网页版条目"
-                        "（如 deepseek-web），或把「模式」改回 official）";
+            // M_patchB L1 修订（PB2-22 / 决策 D-22② / D-26 / 不变量 I14）：站点必须来自**该条目自己的 web 段**
+            //  * **不**回落内置默认站点；站点不可用 → 明确报错 + 三条引导
+            const std::string site_error = ai::web_site_error(effective.spec);
+            if (!site_error.empty()) {
+                // 决策 D-25：**不阻断**运行（保持既有「提示不阻断」契约），但明确告知「本次运行必定失败」
+                notes.push_back("[" + node.id + "] 网页版模式：**本次运行必定失败** —— " + site_error);
+                continue;
+            }
+            const ai::ProviderWebSpec site = ai::strict_web_spec_for(effective.spec);
+            std::string               text = "[" + node.id + "] 网页版模式：站点 " + site.login_url;
+            const std::string field_warnings = ai::web_site_field_warnings(effective.spec);
+            if (!field_warnings.empty()) {
+                text += "（" + field_warnings + "）";
             }
             text += "，请确认已在参数面板完成该站点的登录（会话只存内存，且按站点独立）";
             notes.push_back(text);

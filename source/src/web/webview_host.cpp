@@ -38,6 +38,7 @@ constexpr int            kHotkeyClose   = 2;     // ESC：关闭窗口
 constexpr UINT           kProbeMessage  = WM_APP + 1; // 请求协议探测（可在任意线程 Post）
 constexpr UINT           kSolvePowMessage = WM_APP + 2; // 请求在页面内求解 PoW（任意线程 Post）
 constexpr UINT           kLogoutMessage   = WM_APP + 3; // 请求按站点注销（删该 origin 的 Cookie + 清 localStorage）
+constexpr UINT           kRunScriptMessage = WM_APP + 4; // L3：请求在页面内执行一段脚本并回传原始 JSON（任意线程 Post）
 // 页面加载完成后到开始协议探测的等待（给 SPA 一点就绪时间）
 constexpr DWORD kProbeDelayMs = 1500;
 
@@ -220,6 +221,14 @@ int                     g_pow_stage      = 0;   // 0=空闲 / 1=已注入（轮�
 int                     g_pow_attempt    = 0;
 DWORD                   g_pow_last_poll  = 0;
 constexpr int           kPowMaxAttempts  = 240; // 240 × 500ms ≈ 120 秒
+
+// ---- L3（PB2-13 / PB2-15）：通用「窗口内同步执行脚本」的状态（一次只跑一段，串行复用）----
+std::mutex              g_script_mutex;
+std::condition_variable g_script_cv;
+bool                    g_script_done = false;
+std::string             g_script_js;
+std::string             g_script_result;
+std::string             g_script_error;
 
 // 按站点注销（PB2-19）：跨线程同步（调用方等待，窗口线程删 Cookie + 清 localStorage）
 std::mutex              g_logout_mutex;
@@ -537,6 +546,55 @@ void poll_protocol_probe()
 }
 
 // PoW：把结果交回等待中的调用线程
+// L3：结束一次「窗口内同步执行脚本」（窗口线程调用；结果 = ExecuteScript 的原始 JSON）
+void finish_run_script(std::string result, std::string error)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_script_mutex);
+        g_script_result = std::move(result);
+        g_script_error  = std::move(error);
+        g_script_done   = true;
+    }
+    g_script_cv.notify_all();
+}
+
+// L3：在窗口线程执行 g_script_js（不做解释，原样回传 JSON 结果）
+void run_script_in_window()
+{
+    if (g_webview == nullptr) {
+        finish_run_script({}, "WebView2 未就绪");
+        return;
+    }
+    std::string script_js;
+    {
+        std::lock_guard<std::mutex> lock(g_script_mutex);
+        script_js = g_script_js;
+    }
+    if (script_js.empty()) {
+        finish_run_script({}, "脚本为空");
+        return;
+    }
+    const std::wstring script = to_wide(script_js);
+    const HRESULT      hr     = g_webview->ExecuteScript(
+        script.c_str(),
+        Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
+            [](HRESULT result, LPCWSTR json_result) -> HRESULT {
+                if (FAILED(result)) {
+                    finish_run_script({}, "脚本执行失败（HRESULT " + std::to_string(result) + "）");
+                }
+                else {
+                    finish_run_script(json_result == nullptr ? std::string("null")
+                                                             : to_utf8(json_result),
+                                      {});
+                }
+                return S_OK;
+            })
+            .Get());
+    if (FAILED(hr)) {
+        finish_run_script({}, "调用 ExecuteScript 失败");
+    }
+}
+
 void finish_pow_solve(long long answer, std::string error)
 {
     {
@@ -888,6 +946,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         }
         return 0;
     }
+
+    case kRunScriptMessage: // L3：DOM 适配器 / 选择器探测
+        run_script_in_window();
+        return 0;
 
     case kProbeMessage:
         start_protocol_probe();
@@ -1395,7 +1457,107 @@ bool logout_site(const LoginRequest& site_request, int timeout_ms, std::string* 
     return ok;
 }
 
-long long solve_pow_via_page(const std::string& challenge_json, int timeout_ms, std::string* error)
+// L3：在**已开的窗口**里执行脚本并同步等待结果（不做任何会话/开窗前置）
+bool run_script_now(const std::string& script_js, int timeout_ms, std::string* json_result,
+                    std::string* error)
+{
+    if (script_js.empty()) {
+        if (error != nullptr) {
+            *error = "脚本为空";
+        }
+        return false;
+    }
+    const HWND window = g_window.load();
+    if (window == nullptr || g_webview == nullptr) {
+        if (error != nullptr) {
+            *error = "登录窗口未就绪（请先在界面「打开登录窗口」登录一次）";
+        }
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_script_mutex);
+        g_script_js = script_js;
+        g_script_result.clear();
+        g_script_error.clear();
+        g_script_done = false;
+    }
+    ::PostMessageW(window, kRunScriptMessage, 0, 0);
+
+    std::unique_lock<std::mutex> lock(g_script_mutex);
+    const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 15000);
+    if (!g_script_cv.wait_for(lock, wait_ms, [] { return g_script_done; })) {
+        if (error != nullptr) {
+            *error = "脚本执行超时（窗口可能未就绪或页面无响应）";
+        }
+        return false;
+    }
+    if (json_result != nullptr) {
+        *json_result = g_script_result;
+    }
+    if (error != nullptr) {
+        *error = g_script_error;
+    }
+    return g_script_error.empty();
+}
+
+// L3：等页面就绪（readyState = complete；最多 wait_ms）—— DOM 站点/选择器探测用
+bool wait_page_ready(int wait_ms)
+{
+    const DWORD deadline = ::GetTickCount() + static_cast<DWORD>(std::max(0, wait_ms));
+    while (::GetTickCount() <= deadline) {
+        std::string raw;
+        std::string err;
+        if (run_script_now("document.readyState", 5000, &raw, &err) &&
+            raw.find("complete") != std::string::npos) {
+            return true;
+        }
+        ::Sleep(400);
+    }
+    return false;
+}
+
+// L3（PB2-13 / PB2-15）：按站点在页面内执行一段脚本（同步等待结果；由调用方解析 JSON）
+//  * 前置（三级，逐级放宽，**不把「内存 userToken」当通用条件** —— 通用 DOM 站点的登录态在浏览器 profile 里）：
+//    ① 窗口已在该站点 → 直接执行
+//    ② `ensure_session`（会取凭证 / 复核窗口）成功 → 执行
+//    ③ 兜底：按站点**离屏开窗** + 等页面就绪 → 执行（DOM 生成与选择器探测只需页面）
+bool run_script_sync(const LoginRequest& site_request, const std::string& script_js, int timeout_ms,
+                     std::string* json_result, std::string* error)
+{
+    if (script_js.empty()) {
+        if (error != nullptr) {
+            *error = "脚本为空";
+        }
+        return false;
+    }
+    const std::string site_key = site_key_of(site_request.url);
+    if (!window_on_site(site_key)) {
+        std::string boot_error;
+        if (!ensure_session(site_request, 15000, &boot_error) && !window_on_site(site_key)) {
+            LoginWindow& window = login_window();
+            if (window.running()) {
+                window.request_close(); // 串行复用（决策 D-20）
+                window.join();
+            }
+            LoginRequest request     = site_request;
+            request.offscreen        = true;  // 离屏：不抢焦点（用户可在参数面板打开可见窗口登录）
+            request.probe_after_load = false; // 不额外触发协议探测（DOM 路径不依赖 userToken）
+            std::string start_error;
+            if (!window.start(request, &start_error)) {
+                if (error != nullptr) {
+                    *error = "打开登录窗口失败：" + start_error +
+                             (boot_error.empty() ? std::string() : ("（" + boot_error + "）"));
+                }
+                return false;
+            }
+            wait_page_ready(std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000));
+        }
+    }
+    return run_script_now(script_js, timeout_ms, json_result, error);
+}
+
+long long solve_pow_via_page(const std::string& site_url, const std::string& challenge_json,
+                             int timeout_ms, std::string* error)
 {
     if (challenge_json.empty()) {
         if (error != nullptr) {
@@ -1404,9 +1566,15 @@ long long solve_pow_via_page(const std::string& challenge_json, int timeout_ms, 
         return -1;
     }
 
-    // 确保有可用登录窗口（profile 已登录即可用；离屏启动，用户无需干预）
+    // 确保有可用登录窗口（**按目标站点**；PB2-23：不再用无参 ensure_session → 内置默认站点）
+    LoginRequest site_request;
+    if (!site_url.empty()) {
+        site_request.url = site_url;
+    }
+    site_request.offscreen        = true;
+    site_request.probe_after_load = true;
     std::string boot_error;
-    if (!ensure_session(15000, &boot_error)) {
+    if (!ensure_session(site_request, 15000, &boot_error)) {
         if (error != nullptr) {
             *error = boot_error;
         }
@@ -1444,14 +1612,19 @@ long long solve_pow_via_page(const std::string& challenge_json, int timeout_ms, 
     return g_pow_answer;
 }
 
-int protocol_probe(int timeout_seconds)
+// PB2-23：探测主体抽出，供「默认站点」与「按条目」两个入口共用（行为逐字一致）
+static int protocol_probe_with(const LoginRequest& base_request, const std::string& site_label,
+                               int timeout_seconds)
 {
     attach_parent_console();
 
     const int timeout = timeout_seconds > 0 ? timeout_seconds : 30;
     log::info("[网页版探测] 自检开始（离屏窗口，超时 " + std::to_string(timeout) + " 秒）");
+    if (!site_label.empty()) {
+        std::printf("[网页版探测] 站点：%s\n", site_label.c_str());
+    }
 
-    LoginRequest request;
+    LoginRequest request            = base_request;
     request.offscreen              = true;
     request.timeout_seconds        = timeout;
     request.probe_after_load       = true; // 页面加载完成后自动探测
@@ -1488,6 +1661,38 @@ int protocol_probe(int timeout_seconds)
 
     SessionStore::instance().clear(); // 自检不留会话
     return pass ? 0 : 1;
+}
+
+// PB2-23：「默认站点」入口（旧行为，逐字不变 —— 守 I2）
+int protocol_probe(int timeout_seconds)
+{
+    return protocol_probe_with(LoginRequest{}, std::string(), timeout_seconds);
+}
+
+// PB2-23：「按条目」入口 —— 严格解析站点（**不**回落）；不可用 → 打印原因 + 返回 2（不开窗、不发请求）
+int protocol_probe_for_provider(const std::string& provider_id, int timeout_seconds)
+{
+    attach_parent_console();
+
+    const ai::ProviderSpec* spec = ai::provider_specs().find(provider_id);
+    const std::string       site_error = ai::web_site_error(spec);
+    if (!site_error.empty()) {
+        std::printf("[网页版探测] 站点不可用（条目 %s）：%s\n", provider_id.c_str(),
+                    site_error.c_str());
+        return 2;
+    }
+
+    const ai::ProviderWebSpec site    = ai::strict_web_spec_for(spec);
+    const std::string         site_id = ai::strict_web_provider_id_for(spec);
+    const LoginRequest        request = probe_login_request(site, site_id);
+    std::printf("[网页版探测] 条目 %s → 站点 %s（适配器 %s）\n", provider_id.c_str(),
+                request.url.c_str(), site.adapter.empty() ? "builtin" : site.adapter.c_str());
+    if (!ai::web_adapter_implemented(site.adapter)) {
+        std::printf("[网页版探测] 注意：适配器 %s 本版本尚未实现（已实现：builtin:deepseek）"
+                    "—— 登录 / 探测可用，**生成**会明确报错（L3 PB2-13…16）\n",
+                    site.adapter.c_str());
+    }
+    return protocol_probe_with(request, request.url, timeout_seconds);
 }
 
 void stop_login_window()

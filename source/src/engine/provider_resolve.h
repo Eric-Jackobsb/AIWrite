@@ -81,7 +81,7 @@ std::vector<std::string> provider_mode_options(const Node& node);
 std::string provider_mode_suggestion(const Node& node);
 
 // 「提供商」条目 `kind` 与「模式」不一致时的**提示文案**（空串 = 一致 / 无提示）
-//  * official 条目 + `web`   → 将使用**内置默认站点**（DeepSeek 网页版）
+//  * official 条目 + `web`   → **没有网页版站点可用**（不再回落内置默认站点；决策 `D-22②` / `I14`）
 //  * web 条目 + `official`   → 该条目**没有官方 API 通道**（按表内 `api_base` 解析，缺失会明确报错）
 //  * 只提示、不改写：参数面板按橙色显示；运行前校验按 note 输出（D-21 / I13）
 std::string mode_kind_hint(const EffectiveProvider& provider);

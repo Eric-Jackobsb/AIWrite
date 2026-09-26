@@ -164,6 +164,27 @@ inline std::string web_provider_id_for(const ProviderSpec* spec)
     return web_provider_id_for(spec, &provider_specs());
 }
 
+// ---- M_patchB L1 修订（PB2-22 / 决策 D-22② / 不变量 I14）：**严格**站点解析（不回落）----
+//  * 站点只能来自 `kind == "web"` 条目自己的 `web` 段；非网页版条目 / 表外 id / nullptr → **空**
+//  * 与上方 `web_spec_for()`（保留旧回落语义，**仅供 CLI / 自检**守 `I2`）严格区分：
+//    界面 / 运行前校验 / 运行期**必须**用本组
+ProviderWebSpec strict_web_spec_for(const ProviderSpec* spec);
+std::string     strict_web_provider_id_for(const ProviderSpec* spec);
+
+// 站点**不可用**的可操作错误文案（空串 = 可用）：界面（红）/ 运行前校验（「本次运行必定失败」）/ 运行期（NodeError）共用
+//  * 条目为空 / 非网页版条目 / `web.login_url` 为空（决策 `D-26`：**不**回落内置默认站点）
+std::string web_site_error(const ProviderSpec* spec);
+
+// 站点**可选字段**缺失清单（可回落内置默认，但要点明；决策 `D-26`：回落 + 警告）——空串 = 无缺失
+std::string web_site_field_warnings(const ProviderSpec* spec);
+
+// 该 `web.adapter` 本版本是否已实现（R12：表里有、程序没实现 → 运行时**明确报错**；空 adapter = 视为内置默认）
+bool web_adapter_implemented(const std::string& adapter);
+
+// M_patchB L1 修订（PB2-26）：**登录型站点条目**（`adapter=dom` 且生成字段未就绪）
+//  * 登录 / 协议探测可用；生成会在运行时**明确报错**（不猜选择器、不静默降级）
+bool web_login_only(const ProviderSpec* spec);
+
 // ---- 本版本「代码能力」清单（提示「表里有、程序还没实现」的条目，R9/R12）----
 std::vector<std::string> implemented_protocols();      // 例：{"openai", "deepseek-web"}
 std::vector<std::string> implemented_web_adapters();   // 例：{"builtin:deepseek"}

@@ -9,6 +9,7 @@
 #include "ai/provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）
 #include "engine/node_registry.h"
 #include "ai/deepseek_web_client.h"
+#include "ai/dom_web_client.h"      // L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
 #include "utils/config.h"
 #include "utils/text_export.h"
 #include "utils/credential.h"
@@ -42,6 +43,12 @@ void print_usage()
     std::printf("  --web-probe [--timeout <秒>]\n");
     std::printf("                   网页版协议探测：在已登录页面内读取 userToken 并请求 PoW 挑战\n");
     std::printf("                   退出码 0=取到 userToken / 1=失败（需先登录过一次）\n");
+    std::printf("                   ＋ --provider <id>：按**配置表条目**的站点探测（PB2-23；\n");
+    std::printf("                     严格解析、不回落；站点不可用 → 打印原因 + 退出码 2）\n");
+    std::printf("  --web-adapter-selftest --provider <id>\n");
+    std::printf("                   L3（PB2-15）选择器探测 / 诊断：在**已登录窗口**里只读检查\n");
+    std::printf("                   input_selector / send / answer_selector / done_when / token_expr，\n");
+    std::printf("                   并给可操作修复建议；退出码 0=全部命中 / 1=有缺项 / 2=站点不可用\n");
     std::printf("  --web-chat \"<提示词>\"\n");
     std::printf("                   网页版生成：取 PoW 挑战 → C++ 求解 → 调用 /api/v0/chat/completion\n");
     std::printf("                   退出码 0=取到文本 / 1=失败（需先登录过一次）\n");
@@ -76,7 +83,20 @@ int run_selftest(bool use_web)
     // 默认（自检不联网）：把生成相关节点的 mode 置为 official（官方 API 占位分支）
     // --run-selftest --web：置为 web，走真实网页版生成
     // 注意：LLMGenerate 的模式取「provider 端口（ProviderConfig）」优先，故两处都要设
+    // M_patchB L1 修订（PB2-22 / 决策 D-22②）：站点**不回落** → `--web` 必须显式选**网页版条目**
+    const std::vector<std::string> web_entry_ids = aiwrite::ai::provider_specs().ids("web");
+    const std::string              web_entry =
+        web_entry_ids.empty() ? std::string() : web_entry_ids.front();
+    if (use_web && web_entry.empty()) {
+        std::printf("[运行自检] ✗ 配置表里没有网页版条目（kind=web）：无法执行 --web 自检\n");
+        return 1;
+    }
     for (aiwrite::engine::Node& node : state.graph.nodes) {
+        if (use_web && node.type == "ProviderConfig") {
+            if (aiwrite::engine::Param* provider = node.findParam("provider")) {
+                provider->value = web_entry; // 决策 D-22②：站点不回落，必须选网页版条目
+            }
+        }
         if (node.type != "LLMGenerate" && node.type != "ProviderConfig") {
             continue;
         }
@@ -85,6 +105,9 @@ int run_selftest(bool use_web)
         }
     }
     std::printf("[运行自检] 模式：%s\n", use_web ? "web（网页版真实生成）" : "official（离线占位）");
+    if (use_web) {
+        std::printf("[运行自检] 网页版条目：%s（站点取自该条目，不回落）\n", web_entry.c_str());
+    }
 
     std::printf("[运行自检] 示例工作流：节点 %zu，连线 %zu\n", state.graph.nodes.size(),
                 state.graph.edges.size());
@@ -929,10 +952,21 @@ int provider_selftest(const std::string& provider_id, const std::string& api_bas
         std::printf("[Provider 自检] 网页版 %s：适配器=%s\n", spec->display.c_str(),
                     spec->web.adapter.c_str());
         std::printf("[Provider 自检] 登录页：%s\n", spec->web.login_url.c_str());
-        std::printf("[Provider 自检] 端点：host=%s completion=%s challenge=%s\n",
-                    spec->web.endpoints.host.c_str(),
-                    spec->web.endpoints.completion_path.c_str(),
-                    spec->web.endpoints.challenge_path.c_str());
+        if (spec->web.adapter == "dom") {
+            // M_patchB L1 修订（PB2-26）：DOM 条目**没有内置端点**（真实交互由 DOM 执行器在页面内完成）
+            //  * 如实显示「不适用 / 生成未就绪」，避免把内置默认（DeepSeek）端点误读成本条目的端点
+            std::printf("[Provider 自检] 端点：不适用（DOM 适配器；无内置端点）\n");
+            std::printf("[Provider 自检] 生成：%s\n",
+                        aiwrite::ai::web_login_only(spec)
+                            ? "未就绪（登录型站点条目：缺选择器 / 发送 / 取答案）"
+                            : "未就绪（DOM 适配器本版本尚未实现，L3 PB2-13…16）");
+        }
+        else {
+            std::printf("[Provider 自检] 端点：host=%s completion=%s challenge=%s\n",
+                        spec->web.endpoints.host.c_str(),
+                        spec->web.endpoints.completion_path.c_str(),
+                        spec->web.endpoints.challenge_path.c_str());
+        }
         std::printf("[Provider 自检] 探测路径：%s\n", join_names(spec->web.probe_paths).c_str());
         std::printf("[Provider 自检] 登录态=%s（内存凭证，程序退出即销毁）\n",
                     logged_in ? "有" : "无");
@@ -1019,6 +1053,7 @@ int main(int argc, char** argv)
     bool run_selftest_web  = false;
     bool web_probe_flag    = false;
     bool web_session_selftest_flag = false;
+    bool dom_adapter_selftest_flag = false; // L3（PB2-15）：选择器探测 / 诊断
     std::string web_chat_prompt;
     bool        vlm_selftest_flag = false;                              // M5-02 图片理解自检
     std::string vlm_image;                                              // --image
@@ -1079,6 +1114,9 @@ int main(int argc, char** argv)
         }
         else if (arg == "--web-probe") {
             web_probe_flag = true;
+        }
+        else if (arg == "--web-adapter-selftest") {
+            dom_adapter_selftest_flag = true;
         }
         else if (arg == "--web-session-selftest") {
             web_session_selftest_flag = true;
@@ -1183,9 +1221,38 @@ int main(int argc, char** argv)
         return selftest_code;
     }
 
+    // L3（PB2-15）：选择器探测 / 诊断（按 dom 条目；只读，不发送内容）
+    if (dom_adapter_selftest_flag) {
+        int code = 2;
+        if (provider_id.empty()) {
+            std::printf("[选择器探测] 请用 --provider <id> 指定要诊断的网页版条目；当前表里的 web 条目：\n");
+            for (const aiwrite::ai::ProviderSpec& spec : aiwrite::ai::provider_specs().items) {
+                if (spec.kind != "web") {
+                    continue;
+                }
+                const char* kind_text = (spec.web.adapter == "dom")
+                                            ? (aiwrite::ai::web_login_only(&spec) ? "dom · 登录型"
+                                                                                  : "dom")
+                                            : spec.web.adapter.c_str();
+                std::printf("   %-16s %-28s %s\n", spec.id.c_str(), spec.display.c_str(), kind_text);
+            }
+            std::printf("  例：aiwrite.exe --web-adapter-selftest --provider kimi-web\n");
+        }
+        else {
+            code = aiwrite::ai::dom_adapter_selftest(provider_id, selftest_timeout);
+        }
+        aiwrite::log::info("AIwrite 选择器探测退出，返回码 " + std::to_string(code));
+        aiwrite::log::shutdown();
+        return code;
+    }
+
     // 网页版协议探测（需要 profile 里已有登录态）
     if (web_probe_flag) {
-        const int probe_code = aiwrite::web::protocol_probe(selftest_timeout);
+        // M_patchB L1 修订（PB2-23）：`--web-probe --provider <id>` = 按**条目**的站点（严格解析，不回落）
+        const int probe_code =
+            provider_id.empty()
+                ? aiwrite::web::protocol_probe(selftest_timeout)
+                : aiwrite::web::protocol_probe_for_provider(provider_id, selftest_timeout);
         aiwrite::log::info("AIwrite 协议探测退出，返回码 " + std::to_string(probe_code));
         aiwrite::log::shutdown();
         return probe_code;

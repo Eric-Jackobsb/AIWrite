@@ -6,6 +6,7 @@
 #include "ai/deepseek_official_provider.h"
 #include "utils/credential.h"
 #include "ai/deepseek_web_client.h"
+#include "ai/dom_web_client.h"         // L3（PB2-13）：通用 DOM 站点适配器
 #include "utils/log.h"
 #include "web/session_store.h"
 #include "web/webview_host.h"
@@ -412,14 +413,63 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     }
 
     // 网页版：凭证（Cookie + userToken）只在内存，且**按站点**归档（PB2-18）
-    //  * 站点参数来自生效条目（PB2-17）：未选网页版条目时回落内置默认站点（DeepSeek）
+    //  * 站点**只能**来自生效条目自己的 `web` 段（PB2-22 / 决策 D-22② / 不变量 I14：**不**回落内置默认站点）
     //  * 站点与当前登录窗口不一致时，ensure_session 按串行策略重开窗口
     //    （页面内 PoW 求解依赖该站点页面；决策 D-20）
-    const ai::ProviderWebSpec site    = ai::web_spec_for(effective.spec, effective.specs.get());
-    const std::string        site_id  = ai::web_provider_id_for(effective.spec, effective.specs.get());
+    const std::string site_error = ai::web_site_error(effective.spec);
+    if (!site_error.empty()) {
+        throw engine::NodeError("文本生成（网页版）不可用：" + site_error);
+    }
+    const ai::ProviderWebSpec site      = ai::strict_web_spec_for(effective.spec);
+    const std::string        site_id    = ai::strict_web_provider_id_for(effective.spec);
+    const std::string        site_label = site.login_url;
+
+    // ---- L3（PB2-13）：通用 DOM 适配器（选择器驱动）—— 站点 = 纯数据，程序里无站点专有 C++ ----
+    if (site.adapter == "dom") {
+        if (ai::web_login_only(effective.spec)) {
+            throw engine::NodeError(
+                "文本生成（网页版）不可用：站点「" + site_label +
+                "」是**登录型条目**（缺生成字段）——可用于登录 / 协议探测；生成需先补齐 "
+                "web.input_selector / send / answer_selector（见使用说明 §9）"
+                "；可用 --web-adapter-selftest --provider " + site_id + " 诊断选择器");
+        }
+        const std::string dom_field_warnings = ai::web_site_field_warnings(effective.spec);
+        if (!dom_field_warnings.empty()) {
+            ctx.console("[文本生成] " + dom_field_warnings); // 决策 D-26：可回落 + 警告
+        }
+        ctx.console("[文本生成] 站点：" + site_label + "（适配器 dom · 选择器驱动；提示词 " +
+                    std::to_string(prompt.size()) + " 字节）");
+        ai::DomChatRequest dom_request;
+        dom_request.prompt      = prompt;
+        dom_request.site        = site;
+        dom_request.provider_id = site_id;
+        const ai::DomChatResult dom = ai::dom_chat(dom_request);
+        if (!dom.ok) {
+            throw engine::NodeError("文本生成（网页版 · DOM 适配器）失败：" + dom.error);
+        }
+        if (!dom.warning.empty()) {
+            ctx.console("[文本生成] " + dom.warning); // R13：如实提示（可能仍在生成中）
+        }
+        ctx.console("[文本生成] DOM 适配器完成：输出 " + std::to_string(dom.text.size()) +
+                    " 字节，轮询 " + std::to_string(dom.polls) + " 次 / " +
+                    std::to_string(dom.elapsed_ms) + " ms" +
+                    (dom.steps.empty() ? "" : ("｜" + dom.steps)));
+        return dom.text;
+    }
+
+    if (!ai::web_adapter_implemented(site.adapter)) {
+        // R12：表里有、程序没实现 → 运行时**明确报错**（登录 / 协议探测仍可用）
+        throw engine::NodeError("文本生成（网页版）不可用：站点「" + site_label + "」的适配器 " +
+                                site.adapter +
+                                " 本版本尚未实现（已实现：builtin:deepseek、dom）"
+                                "——该站点可用于登录 / 协议探测");
+    }
+    const std::string field_warnings = ai::web_site_field_warnings(effective.spec);
+    if (!field_warnings.empty()) {
+        ctx.console("[文本生成] " + field_warnings); // 决策 D-26：可回落 + 警告
+    }
     const web::LoginRequest  boot     = web::boot_login_request(site, site_id);
     const std::string        site_key = web::login_request_site(boot);
-    const std::string site_label = site.login_url.empty() ? std::string("内置默认站点") : site.login_url;
 
     if (!web::SessionStore::instance().has_token(site_key) || !web::window_on_site(site_key)) {
         std::string boot_error;
@@ -434,7 +484,7 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     request.prompt           = prompt;
     request.model_type       = (model == "expert") ? "expert" : "default";
     request.thinking_enabled = (model == "deepseek-reasoner");
-    // M_patchB L1（PB2-05 / PB2-17）：站点端点来自**生效条目**（未选网页版条目时用内置默认 DeepSeek）
+    // M_patchB L1（PB2-05 / PB2-17）：站点端点来自**生效条目**（PB2-22：站点不可用时上面已抛错，不会用内置默认）
     if (!site.endpoints.host.empty()) {
         request.endpoints = site.endpoints;
     }
