@@ -2093,6 +2093,34 @@ int execution_selftest()
             }
         }
 
+        // ---- 9) 示例工作流 E-02（图片转小说）：可加载、可校验 ----
+#ifdef AIWRITE_SOURCE_DIR
+        {
+            std::error_code             example_ec;
+            const std::filesystem::path example =
+                std::filesystem::path(AIWRITE_SOURCE_DIR) / "workflows" / "examples" /
+                "E-02_图片转小说.json";
+            expect(check, std::filesystem::exists(example, example_ec),
+                   "M5-04 示例：E-02 图片转小说 文件存在", example.string());
+            if (std::filesystem::exists(example, example_ec)) {
+                Graph       graph;
+                std::string error;
+                const bool  loaded = engine::load_workflow(example, graph, &error);
+                expect(check, loaded, "M5-04 示例：E-02 可加载（JSON → Graph）", error);
+                if (loaded) {
+                    expect(check, graph.nodes.size() == 5 && graph.edges.size() == 4,
+                           "M5-04 示例：E-02 为 5 节点 4 连线",
+                           std::to_string(graph.nodes.size()) + " 节点 / " +
+                               std::to_string(graph.edges.size()) + " 连线");
+                    engine::ValidationMessages errors;
+                    const bool               valid = engine::validateWorkflow(graph, &errors);
+                    expect(check, valid, "M5-04 示例：E-02 加载校验通过（端口/参数/无环）",
+                           errors.empty() ? std::string() : errors.front());
+                }
+            }
+        }
+#endif
+
         std::filesystem::remove_all(vlm_root, ec);
     }
 

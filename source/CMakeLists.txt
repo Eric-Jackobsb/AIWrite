@@ -256,6 +256,8 @@ target_link_libraries(aiwrite PRIVATE
     shell32)   # M5-03：ShellExecuteW（在资源管理器中定位图片）
 # stb_image（图片解码）：端口无 CMake config，头文件目录手工挂上
 target_include_directories(aiwrite PRIVATE "${AIWRITE_STB_INCLUDE_DIR}")
+# 源码目录（自检用：默认示例图片路径可复现）
+target_compile_definitions(aiwrite PRIVATE AIWRITE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 if(MSVC)
     target_compile_options(aiwrite PRIVATE /W4)
     # GUI 程序但保留 main() 入口（便于命令行参数解析）
@@ -275,6 +277,8 @@ target_link_libraries(api_probe PRIVATE
 if(MSVC)
     target_compile_options(api_probe PRIVATE /W4)
 endif()
+# 源码目录（自检用：加载仓库内的示例工作流，路径可复现）
+target_compile_definitions(api_probe PRIVATE AIWRITE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 aiwrite_copy_runtime_dlls(api_probe)
 aiwrite_sync_vcpkg_bin(api_probe)
 

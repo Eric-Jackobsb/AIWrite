@@ -50,6 +50,11 @@ void print_usage()
     std::printf("                   执行自检：创建示例工作流 → 运行到结束，打印各节点状态与统计\n");
     std::printf("                   --web：LLMGenerate 走网页版真实生成（需已登录过一次）\n");
     std::printf("                   默认 LLMGenerate 为占位实现，预期该节点 error、下游 skipped\n");
+    std::printf("  --vlm-selftest [--image <路径>] [--api-base <地址>] [--model <模型名>]\n");
+    std::printf("                 [--key-ref <凭据引用名>]\n");
+    std::printf("                   图片理解（M5-02）自检：编码图片 → 构造多模态请求体（离线断言）\n");
+    std::printf("                   → 有 Key 时真实调用并打印生成文本\n");
+    std::printf("                   退出码 0=通过 / 1=失败 / 2=缺少 API Key（离线部分已通过）\n");
     std::printf("  --help           显示本帮助\n");
 }
 
@@ -759,6 +764,73 @@ int web_session_selftest()
     return pass ? 0 : 1;
 }
 
+// --vlm-selftest：图片理解（M5-02）自检
+//   ① 离线：编码图片 → 构造 OpenAI 兼容多模态请求体（不需要 Key）
+//   ② 联网：Key 三级优先级（参数 → 环境变量 → 凭据库引用）解析成功时真实调用
+//   退出码：0=通过（联网取到文本）/ 1=失败 / 2=缺少 API Key（离线部分已通过）
+int vlm_selftest(const std::string& image_path, const std::string& api_base,
+                 const std::string& model, const std::string& key_ref)
+{
+    aiwrite::ai::OfficialChatRequest request;
+    request.api_base    = api_base;
+    request.model       = model;
+    request.prompt      = "用一句中文描述这张图片的主要内容。";
+    request.images      = {image_path};
+    request.temperature = 1.0;
+    request.max_tokens  = 512;
+    request.top_p       = 0.95;
+
+    // ---- ① 离线：图片编码 + 请求体构造 ----
+    std::string       encode_error;
+    const std::string data_url =
+        aiwrite::ai::encode_image_data_url(image_path, request.image_max_bytes, &encode_error);
+    if (data_url.empty()) {
+        std::printf("[图片理解自检] FAIL：图片编码失败：%s\n", encode_error.c_str());
+        return 1;
+    }
+    const nlohmann::json       body     = aiwrite::ai::build_request_body(request);
+    const nlohmann::json&      messages = body["messages"];
+    // 注意：未设置 system_prompt 时 messages 只有 1 条 → 取最后一条（user）
+    const nlohmann::json&      parts    = messages.back()["content"];
+    const bool                 body_ok  =
+        parts.is_array() && parts.size() == 2 && parts[0]["type"] == "text" &&
+        parts[1]["type"] == "image_url" &&
+        parts[1]["image_url"]["url"].get<std::string>() == data_url;
+    std::printf("[图片理解自检] 端点：%s\n", aiwrite::ai::build_endpoint(api_base).c_str());
+    std::printf("[图片理解自检] 模型：%s\n", model.c_str());
+    std::printf("[图片理解自检] 图片：%s（data URL %zu 字符）\n", image_path.c_str(),
+                data_url.size());
+    if (!body_ok) {
+        std::printf("[图片理解自检] FAIL：请求体不是预期的多模态结构（text + image_url）\n");
+        return 1;
+    }
+    std::printf("[图片理解自检] 离线请求体构造 PASS\n");
+
+    // ---- ② 联网：Key 解析（参数 → 环境变量 → 凭据库引用）----
+    const aiwrite::utils::ResolvedSecret secret =
+        aiwrite::utils::resolve_secret(std::string(), key_ref);
+    if (secret.key.empty()) {
+        std::printf("[图片理解自检] 未找到 API Key（环境变量 DEEPSEEK_API_KEY 或凭据库 %s）\n",
+                    key_ref.c_str());
+        std::printf("  提示：在界面「提供商配置 → API Key」填写一次即会自动入库（ref=%s）\n",
+                    key_ref.c_str());
+        return 2;
+    }
+    request.api_key = secret.key;
+    std::printf("[图片理解自检] 凭据来源=%s，开始真实调用…\n", secret.source.c_str());
+
+    const aiwrite::ai::OfficialChatResult result = aiwrite::ai::official_chat(request);
+    std::printf("[图片理解自检] HTTP %d，耗时 %.0f ms\n", result.http_status, result.elapsed_ms);
+    if (!result.ok || result.text.empty()) {
+        std::printf("[图片理解自检] FAIL：%s\n",
+                    result.error.empty() ? "未取到文本" : result.error.c_str());
+        return 1;
+    }
+    std::printf("---- 生成文本 ----\n%s\n", result.text.c_str());
+    std::printf("[图片理解自检] PASS\n");
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -770,6 +842,11 @@ int main(int argc, char** argv)
     bool web_probe_flag    = false;
     bool web_session_selftest_flag = false;
     std::string web_chat_prompt;
+    bool        vlm_selftest_flag = false;                              // M5-02 图片理解自检
+    std::string vlm_image;                                              // --image
+    std::string vlm_api_base = "https://open.bigmodel.cn/api/paas/v4";   // 智谱（D-07）
+    std::string vlm_model    = "glm-4v-flash";
+    std::string vlm_key_ref  = "brain-ai/zhipu";
     int  selftest_timeout = 30;
 
     for (int i = 1; i < argc; ++i) {
@@ -835,6 +912,37 @@ int main(int argc, char** argv)
         else if (arg == "--run-selftest") {
             run_selftest_flag = true;
         }
+        else if (arg == "--vlm-selftest") {
+            vlm_selftest_flag = true;
+        }
+        else if (arg == "--image") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --image 缺少取值\n");
+                return 2;
+            }
+            vlm_image = argv[++i];
+        }
+        else if (arg == "--api-base") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --api-base 缺少取值\n");
+                return 2;
+            }
+            vlm_api_base = argv[++i];
+        }
+        else if (arg == "--model") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --model 缺少取值\n");
+                return 2;
+            }
+            vlm_model = argv[++i];
+        }
+        else if (arg == "--key-ref") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --key-ref 缺少取值\n");
+                return 2;
+            }
+            vlm_key_ref = argv[++i];
+        }
         else if (arg == "--web") {
             run_selftest_web = true; // 与 --run-selftest 组合：真实调用网页版生成
         }
@@ -895,6 +1003,26 @@ int main(int argc, char** argv)
         aiwrite::log::info("AIwrite 网页版生成退出，返回码 " + std::to_string(chat_code));
         aiwrite::log::shutdown();
         return chat_code;
+    }
+
+    // 图片理解自检（M5-02）：离线请求体断言 + 有 Key 时真实读图生成
+    if (vlm_selftest_flag) {
+        std::string image = vlm_image;
+#ifdef AIWRITE_SOURCE_DIR
+        if (image.empty()) {
+            image = (std::filesystem::path(AIWRITE_SOURCE_DIR) / "assets" / "images" /
+                     "sample.png")
+                        .string();
+        }
+#endif
+        if (image.empty()) {
+            std::fprintf(stderr, "请用 --image <路径> 指定要理解的图片\n");
+            return 2;
+        }
+        const int vlm_code = vlm_selftest(image, vlm_api_base, vlm_model, vlm_key_ref);
+        aiwrite::log::info("AIwrite 图片理解自检退出，返回码 " + std::to_string(vlm_code));
+        aiwrite::log::shutdown();
+        return vlm_code;
     }
 
     // 执行自检（不需要 GUI）：验证 EditorState 的运行接线

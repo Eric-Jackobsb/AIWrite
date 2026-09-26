@@ -1,0 +1,87 @@
+{
+  "version": "1.0",
+  "name": "E-02 图片转小说",
+  "description": "图片输入 → 图片理解(VLM) → 文本输出。运行前请在「提供商配置」填写视觉模型的 API 地址、模型名与 API Key（示例为智谱 GLM）。图片路径请按需替换为你自己的图片（示例路径指向仓库内的示例图）。",
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "ImageInput",
+      "title": "图片输入",
+      "position": { "x": -640.0, "y": -220.0 },
+      "params": {
+        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/sample.png"
+      }
+    },
+    {
+      "id": "n2",
+      "type": "TextInput",
+      "title": "提示词",
+      "position": { "x": -640.0, "y": 40.0 },
+      "params": {
+        "text": "把这张图写成一个小说开头：150 字以内，有画面感，写出时间、地点与氛围。"
+      }
+    },
+    {
+      "id": "n3",
+      "type": "VLMGenerate",
+      "title": "图片理解",
+      "position": { "x": -220.0, "y": -90.0 },
+      "params": {
+        "system_prompt": "你是小说作家，擅长把画面转成克制的文字描写。",
+        "temperature": 1.0,
+        "max_tokens": 1024,
+        "top_p": 0.95,
+        "stream": false
+      }
+    },
+    {
+      "id": "n4",
+      "type": "TextOutput",
+      "title": "文本输出",
+      "position": { "x": 200.0, "y": -90.0 },
+      "params": {
+        "label": "图片转小说",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n5",
+      "type": "ProviderConfig",
+      "title": "提供商配置",
+      "position": { "x": -220.0, "y": 220.0 },
+      "params": {
+        "provider": "deepseek",
+        "mode": "official",
+        "api_base": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "deepseek-chat",
+        "model_custom": "glm-4v-flash",
+        "api_key_ref": "brain-ai/zhipu"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": { "node": "n1", "port": "image" },
+      "to": { "node": "n3", "port": "image" }
+    },
+    {
+      "id": "e2",
+      "from": { "node": "n2", "port": "text" },
+      "to": { "node": "n3", "port": "prompt" }
+    },
+    {
+      "id": "e3",
+      "from": { "node": "n3", "port": "text" },
+      "to": { "node": "n4", "port": "text" }
+    },
+    {
+      "id": "e4",
+      "from": { "node": "n5", "port": "provider" },
+      "to": { "node": "n3", "port": "provider" }
+    }
+  ],
+  "viewport": { "x": 0.0, "y": 0.0, "zoom": 1.0 }
+}
