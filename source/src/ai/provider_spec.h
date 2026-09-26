@@ -77,6 +77,28 @@ struct ProviderWebSpec {            // 网页版站点描述（kind=web）
     int         answer_max_polls = 120;
 };
 
+// ---- M_patchB L4（PB2-27 / 决策 D-27 / 不变量 I15）：**站点无关**的「已登录」判定 ----
+//  * 判据取**并集**（`D-27`）：① 条目 `cookie_names` 命中 ② 该 origin 的 Cookie 非空
+//  * **不看** `userToken` / `ds_session_id` / 任何 `/api/v0/*` 端点是否可用（`I15`）
+//  * 证据由调用方提供（见 `web::web_session_evidence(session)`）→ 本层**不依赖** `web/**`，
+//    因此可在 `api_probe --exec-selftest` 里做纯函数断言（`VB2-24`）
+enum class WebSessionState {
+    unknown,    // 尚无证据（该站点本轮还没读过 Cookie：重启后 / 从未开过窗口）
+    logged_in,  // 有站点无关的登录证据
+    logged_out, // 已读过该站点 Cookie，但没有登录证据（未登录 / 会话已失效）
+};
+
+struct WebSessionEvidence {
+    bool                     cookies_known = false; // 是否已读过该站点的 Cookie 快照
+    std::size_t              cookie_count  = 0;     // 该 origin 的 Cookie 条数
+    std::vector<std::string> cookie_names;          // 该 origin 实际存在的 Cookie 名
+};
+
+struct WebSessionVerdict {
+    WebSessionState state  = WebSessionState::unknown;
+    std::string     reason; // 站点无关的原因（可直接上界面 / 日志）
+};
+
 // ------------------------------------------------------------------ 条目本体 --
 
 struct ProviderSpec {
@@ -184,6 +206,31 @@ bool web_adapter_implemented(const std::string& adapter);
 // M_patchB L1 修订（PB2-26）：**登录型站点条目**（`adapter=dom` 且生成字段未就绪）
 //  * 登录 / 协议探测可用；生成会在运行时**明确报错**（不猜选择器、不静默降级）
 bool web_login_only(const ProviderSpec* spec);
+
+// ---- M_patchB L4（PB2-27）：站点无关的登录态判定 / 显示条件 / 探测适用性（全部**纯函数**）----
+
+// 「已登录 / 未登录 / 未确认」判定（判据见 `D-27`；**不看** `userToken`，不变量 `I15`）
+//  * `spec` 为空 / 非网页版条目 → `unknown`（没有站点登录态这个概念）
+//  * 配了 `cookie_names` → 命中任一即 `logged_in`；已读过 Cookie 但未命中 → `logged_out`
+//  * 未配 `cookie_names` → 该 origin 的 Cookie 非空即 `logged_in`（并集，不强制配 Cookie 名）
+WebSessionVerdict web_session_state(const ProviderSpec* spec, const WebSessionEvidence& evidence);
+
+// 状态标签（界面 / 状态栏用）：已登录 / 未登录 / 未确认
+std::string web_session_state_label(WebSessionState state);
+
+// `D-28` ①：界面是否显示 `userToken` 行 —— **仅当**条目显式配了 `token_expr`
+//  * 通用 DOM 站点不产生 `userToken` → 不显示该行（改为「登录态由浏览器 profile 维持」）
+//  * 内置 `deepseek-web` 配了 `token_expr` → 行为不变（守 `I2`）
+bool web_shows_user_token(const ProviderSpec* spec);
+
+// ---- M_patchB L4（PB2-28 / 不变量 `I16`）：**协议探测**（PoW 挑战 / 站点端点 / `localStorage.userToken`）
+//      对该条目是否**适用** ----
+//  * 内置适配器（`adapter` 空 / `builtin:*`）→ **适用**（协议探测就是为它设计的）
+//  * `dom` 站点 → 仅当**显式**配了 `probe_paths` 或 `token_expr` 才适用
+//    （`web.endpoints` 对 `dom` 无意义，加载期已给警告）；否则**不适用** ——
+//    页面内只做**只读诊断**，**不注入**任何 DeepSeek 端点 / `userToken` 读取
+bool probe_is_applicable(const ProviderWebSpec& web);
+bool probe_is_applicable(const ProviderSpec* spec);
 
 // ---- 本版本「代码能力」清单（提示「表里有、程序还没实现」的条目，R9/R12）----
 std::vector<std::string> implemented_protocols();      // 例：{"openai", "deepseek-web"}

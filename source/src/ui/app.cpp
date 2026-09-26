@@ -18,6 +18,7 @@
 #include "web/session_store.h"
 
 #include "engine/recent_files.h"
+#include "engine/provider_resolve.h"   // L4（PB2-27）：状态栏按生效条目站点判登录态
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -193,6 +194,8 @@ void build_default_layout(ImGuiID dockspace_id, const ImVec2& size)
 }
 
 // 工作流使用的推理后端模式（取第一个 ProviderConfig 节点）+ 网页版会话状态
+//  * L4（PB2-27③ / 不变量 I15）：状态栏按**生效条目自己的站点键**判登录态
+//    （不再读「默认槽」会话，也不再以 `userToken` 为判据 → 多站点下不再显示别的站点状态）
 std::string provider_mode_text(const EditorState& state)
 {
     for (const engine::Node& node : state.graph.nodes) {
@@ -204,11 +207,19 @@ std::string provider_mode_text(const EditorState& state)
         if (mode_value != "web") {
             return "推理模式: 官方 API";
         }
-        const web::Session session = web::SessionStore::instance().snapshot();
-        return session.logged_in
-                   ? ("推理模式: 网页版（已登录 " + std::to_string(session.cookie_count()) +
-                      " 条 Cookie）")
-                   : std::string("推理模式: 网页版（未登录）");
+        const engine::EffectiveProvider effective = engine::resolve_self_provider(node);
+        const ai::ProviderWebSpec       site      = ai::strict_web_spec_for(effective.spec);
+        const std::string               site_key  = web::site_key_of(site.login_url);
+        const web::Session              session   = web::SessionStore::instance().snapshot(site_key);
+        const ai::WebSessionVerdict     verdict =
+            ai::web_session_state(effective.spec, web::web_session_evidence(session));
+        if (verdict.state == ai::WebSessionState::logged_in) {
+            return "推理模式: 网页版（已登录 " +
+                   (site_key.empty() ? std::string("该站点") : site_key) + "，Cookie " +
+                   std::to_string(session.cookie_count()) + " 条）";
+        }
+        return "推理模式: 网页版（" + ai::web_session_state_label(verdict.state) +
+               (site_key.empty() ? std::string() : "：" + site_key) + "）";
     }
     return "推理模式: 未配置（缺少提供商配置节点）";
 }

@@ -2555,6 +2555,103 @@ int execution_selftest()
     }
 
     {
+        std::printf("   -- L4 登录态判定 / 文案与渲染条件（M_patchB PB2-27 / D-27 / D-28① / I15）--\n");
+
+        using aiwrite::ai::ProviderSpec;
+        using aiwrite::ai::WebSessionEvidence;
+        using aiwrite::ai::WebSessionState;
+        using aiwrite::ai::WebSessionVerdict;
+
+        // ---- VB2-24：登录态判定（纯函数 · 5 例；判据**不看** userToken）----
+        {
+            ProviderSpec dom; // DOM 站点（未配 cookie_names）
+            dom.id            = "site-a";
+            dom.kind          = "web";
+            dom.web.adapter   = "dom";
+            dom.web.login_url = "https://site-a.example.com/";
+
+            ProviderSpec dom_named      = dom; // 配了 cookie_names
+            dom_named.web.cookie_names  = {"session_token", "sid"};
+
+            const WebSessionVerdict v4 = aiwrite::ai::web_session_state(&dom, WebSessionEvidence{});
+
+            WebSessionEvidence hit; // ① cookie_names 命中
+            hit.cookies_known = true;
+            hit.cookie_count  = 2;
+            hit.cookie_names  = {"sid", "other"};
+            const WebSessionVerdict v1 = aiwrite::ai::web_session_state(&dom_named, hit);
+
+            WebSessionEvidence miss = hit; // ② 未命中
+            miss.cookie_names       = {"other", "another"};
+            const WebSessionVerdict v2 = aiwrite::ai::web_session_state(&dom_named, miss);
+
+            WebSessionEvidence cookies_only; // ③ 未配 cookie_names 但该 origin 有 Cookie
+            cookies_only.cookies_known = true;
+            cookies_only.cookie_count  = 3;
+            const WebSessionVerdict v3 = aiwrite::ai::web_session_state(&dom, cookies_only);
+
+            ProviderSpec token_expr_spec   = dom; // ⑤ 配了 token_expr 但没有 token
+            token_expr_spec.web.token_expr = "localStorage.getItem('userToken')";
+            WebSessionEvidence no_cookies;
+            no_cookies.cookies_known = true;
+            const WebSessionVerdict v5 = aiwrite::ai::web_session_state(&token_expr_spec, no_cookies);
+
+            expect(check, v1.state == WebSessionState::logged_in,
+                   "VB2-24① 条目 cookie_names 命中 → logged_in");
+            expect(check, v2.state == WebSessionState::logged_out,
+                   "VB2-24② cookie_names 未命中（已读过该站点 Cookie）→ logged_out");
+            expect(check, v3.state == WebSessionState::logged_in,
+                   "VB2-24③ 未配 cookie_names 但该 origin 有 Cookie → logged_in（D-27 并集）");
+            expect(check,
+                   v4.state == WebSessionState::unknown &&
+                       v4.reason.find("尚未读取") != std::string::npos,
+                   "VB2-24④ 空会话（从未读过 Cookie）→ unknown（不误报「未登录」）");
+            expect(check,
+                   v5.state == WebSessionState::logged_out &&
+                       v5.reason.find("userToken") == std::string::npos,
+                   "VB2-24⑤ 配了 token_expr 但没有 token → 仍按 Cookie 判（判据**不看** userToken；I15）");
+        }
+
+        // ---- VB2-26：文案与渲染条件（可离线断言部分）----
+        {
+            const aiwrite::ai::ProviderSpecs  table = aiwrite::ai::load_provider_specs();
+            const aiwrite::ai::ProviderSpec* kimi   = table.find("kimi-web");
+            const aiwrite::ai::ProviderSpec* ds_web = table.find("deepseek-web");
+
+            const std::string kimi_warn = aiwrite::ai::web_site_field_warnings(kimi);
+            expect(check,
+                   kimi != nullptr && !kimi_warn.empty() &&
+                       kimi_warn.find("无法自动探测凭证") == std::string::npos &&
+                       kimi_warn.find("协议探测不适用") != std::string::npos,
+                   "VB2-26① DOM 条目的字段警告**不再**含「无法自动探测凭证」（改为「协议探测不适用」）");
+
+            ProviderSpec with_token        = {};
+            with_token.kind                = "web";
+            with_token.web.token_expr      = "localStorage.getItem('userToken')";
+            ProviderSpec without_token     = with_token;
+            without_token.web.token_expr.clear();
+            expect(check,
+                   aiwrite::ai::web_shows_user_token(&with_token) &&
+                       !aiwrite::ai::web_shows_user_token(&without_token) &&
+                       aiwrite::ai::web_shows_user_token(ds_web) &&
+                       !aiwrite::ai::web_shows_user_token(kimi),
+                   "VB2-26② userToken 行渲染条件 = !token_expr.empty()（D-28①：deepseek-web 显示 / DOM 站点不显示）");
+
+            const WebSessionVerdict kimi_verdict =
+                aiwrite::ai::web_session_state(kimi, WebSessionEvidence{});
+            const WebSessionVerdict ds_verdict =
+                aiwrite::ai::web_session_state(ds_web, WebSessionEvidence{});
+            expect(check,
+                   kimi_verdict.reason.find("userToken") == std::string::npos &&
+                       kimi_verdict.reason.find("ds_session_id") == std::string::npos &&
+                       kimi_verdict.reason.find("/api/v0/") == std::string::npos &&
+                       ds_verdict.reason.find("/api/v0/") == std::string::npos,
+                   "VB2-26③ 会话结论文案只描述**站点无关**原因（Cookie / 页面），无 DeepSeek 专有名词");
+        }
+    }
+
+
+    {
         std::printf("   -- 会话按站点键控（M_patchB L1 续 / PB2-16）--\n");
 
         using aiwrite::web::Session;

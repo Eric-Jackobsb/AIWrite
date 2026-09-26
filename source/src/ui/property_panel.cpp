@@ -122,11 +122,11 @@ WebSiteContext web_site_context(const engine::Node& node, const engine::Graph& g
     return ctx;
 }
 
-// 该站点用于界面展示的 Cookie 名（表内 cookie_names 第一项；空 = 内置默认 ds_session_id）
+// 该站点用于界面展示的 Cookie 名（**只**取条目自己的 `cookie_names`；空 = 该条目未声明 → 不显示具体 Cookie）
+//  * L4（PB2-27 / 不变量 I15）：界面**不得**再回落到任何厂商专有 Cookie 名（一律以条目为准）
 std::string site_cookie_name(const WebSiteContext& ctx)
 {
-    return ctx.site.cookie_names.empty() ? std::string(web::kDefaultCookieName)
-                                         : ctx.site.cookie_names.front();
+    return ctx.site.cookie_names.empty() ? std::string() : ctx.site.cookie_names.front();
 }
 
 // 按**站点**注销（PB2-19）：清该站点的内存会话 + 删该 origin 的 Cookie / localStorage
@@ -212,36 +212,53 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
     ImGui::TextDisabled("适配器：%s",
                         ctx.site.adapter.empty() ? "builtin" : ctx.site.adapter.c_str());
 
-    // ---- 该站点会话状态 ----
+    // ---- 该站点会话状态（L4 / PB2-27：**站点无关**判据 —— 不看 userToken，不变量 I15）----
+    const ai::WebSessionVerdict verdict =
+        ai::web_session_state(ctx.effective.spec, web::web_session_evidence(session));
     const std::string cookie_name = site_cookie_name(ctx);
-    if (session.logged_in) {
-        ImGui::TextColored(ImVec4(0.31f, 0.75f, 0.42f, 1.0f), "状态：已登录（Cookie %zu 条）",
+    if (verdict.state == ai::WebSessionState::logged_in) {
+        ImGui::TextColored(ImVec4(0.31f, 0.75f, 0.42f, 1.0f), "状态：已登录（该站点，Cookie %zu 条）",
                            session.cookie_count());
         ImGui::TextDisabled("来源：%s", session.url.c_str());
         ImGui::TextDisabled("更新：%s", session.updated_at.c_str());
-        if (const web::Cookie* cookie = session.find(cookie_name)) {
-            ImGui::TextDisabled("%s = %s", cookie_name.c_str(),
-                                web::mask_value(cookie->value).c_str());
+        if (!cookie_name.empty()) {
+            if (const web::Cookie* cookie = session.find(cookie_name)) {
+                ImGui::TextDisabled("%s = %s", cookie_name.c_str(),
+                                    web::mask_value(cookie->value).c_str());
+            }
         }
     }
     else {
-        ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f), "状态：未登录（该站点）");
+        ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f), "状态：%s（该站点）",
+                           ai::web_session_state_label(verdict.state).c_str());
+    }
+    ImGui::TextDisabled("%s", verdict.reason.c_str());
+    if (verdict.state != ai::WebSessionState::logged_in) {
+        ImGui::TextDisabled("点「打开登录窗口」在该站点**手动登录**；登录后**无需**再点「探测网页版协议」。");
     }
 
-    // 协议探测状态（M4-06/M4-08 逆向用）：网页版接口真正需要的是 userToken（不是 Cookie）
+    // 协议探测状态（M4-06/M4-08 逆向用）
+    //  * L4（PB2-27 / D-28①）：`userToken` 行**仅当**条目配了 `token_expr` 才显示；
+    //    否则说明「本条目为 DOM 站点」（生成不依赖 userToken）
+    //  * L4（PB2-27 / 不变量 I16）：**探测不适用**的站点不再显示红字「探测错误」（那是 DeepSeek 端点 404）
     const web::ProbeResult& probe = session.probe;
-    if (probe.has_user_token) {
-        ImGui::TextColored(ImVec4(0.31f, 0.75f, 0.42f, 1.0f), "userToken：%s",
-                           probe.user_token_masked.c_str());
+    if (ai::web_shows_user_token(ctx.effective.spec)) {
+        if (probe.has_user_token) {
+            ImGui::TextColored(ImVec4(0.31f, 0.75f, 0.42f, 1.0f), "userToken：%s",
+                               probe.user_token_masked.c_str());
+        }
+        else {
+            ImGui::TextDisabled("userToken：未获取（网页版接口需要它，请先登录）");
+        }
     }
     else {
-        ImGui::TextDisabled("userToken：未获取（网页版接口需要它，请先登录）");
+        ImGui::TextDisabled("本条目为 DOM 站点：登录态由浏览器 profile 维持（生成不依赖 userToken）");
     }
     if (!probe.challenge_json.empty()) {
         ImGui::TextDisabled("PoW 挑战：已获取（%zu 字节，见 Console / app.log）",
                             probe.challenge_json.size());
     }
-    if (!probe.error.empty()) {
+    if (!probe.error.empty() && ai::probe_is_applicable(ctx.site)) {
         ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "探测错误：%s", probe.error.c_str());
     }
 
@@ -282,8 +299,8 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("站点取自「生效条目」：%s\n"
-                          "profile 会记住登录态；窗口页面加载完成后自动探测一次（读取内存 userToken），\n"
-                          "之后点运行无需再等。切换网页版条目时会改用该条目的登录页（先关旧窗口）。",
+                          "profile 会记住登录态（重启后仍在）；窗口打开后会复读该站点 Cookie，面板随即显示登录态。\n"
+                          "切换网页版条目时会改用该条目的登录页（先关旧窗口）。",
                           ctx.login_url.c_str());
     }
 
@@ -309,7 +326,7 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
                           "Token 只以脱敏形式记录");
     }
 
-    if (session.logged_in) {
+    if (verdict.state == ai::WebSessionState::logged_in) {
         ImGui::Spacing();
         if (ImGui::Button("注销该站点（清会话 + 删该站点 Cookie）", ImVec2(-FLT_MIN, 0.0f))) {
             logout_web_session(ctx);

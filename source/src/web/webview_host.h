@@ -29,7 +29,6 @@ namespace aiwrite::web {
 inline constexpr const char* kDefaultSiteLoginUrl    = "https://chat.deepseek.com/";
 inline constexpr const char* kDefaultSiteWindowTitle = "AIwrite · DeepSeek 网页版登录（登录后关闭本窗口）";
 inline constexpr const char* kDefaultSiteProbeTitle  = "AIwrite · 网页版协议探测（登录后自动探测）";
-inline constexpr const char* kDefaultCookieName      = "ds_session_id";
 
 struct LoginRequest {
     std::string url          = kDefaultSiteLoginUrl;
@@ -48,6 +47,11 @@ struct LoginRequest {
     std::string              provider_id;         // 配置表条目 id（诊断 / 界面显示）
     std::string              token_expr;          // 页面内取 token 表达式（空 = 内置脚本原样）
     std::vector<std::string> cookie_names;        // 需要的 Cookie 名（空 = 界面按内置默认显示）
+    // ---- M_patchB L4（PB2-27 / PB2-28）：该站点的**协议探测**是否适用（= 条目可否直接用内置协议栈）----
+    //  * 默认 true → 无参路径 / CLI 自检（--web-probe、--web-chat、--login-selftest）**逐字不变**（守 I2）
+    //  * `false`（DOM 站点）：`ensure_session` 不再等内存 `userToken`（只看该 origin 有没有 Cookie，I15），
+    //    页面内只做**只读诊断**，**不注入**任何 DeepSeek 端点（I16）
+    bool                     probe_applicable = true;
 };
 
 // 登录请求所属站点键（origin）—— 会话归档 / 窗口归属判定（与 SessionStore 同源）
@@ -78,6 +82,8 @@ inline LoginRequest login_request_of(const ai::ProviderWebSpec& site, const std:
     request.completion_path  = site.endpoints.completion_path;
     request.token_expr       = site.token_expr;
     request.cookie_names     = site.cookie_names;
+    // L4（PB2-27 / I15）：协议探测**只对内置协议站点适用**；DOM 站点 → false（不等 userToken、不注入端点）
+    request.probe_applicable = ai::probe_is_applicable(site);
     return request;
 }
 

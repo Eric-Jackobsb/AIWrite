@@ -325,6 +325,19 @@ std::string web_site_guidance()
            "③ 把「模式」改回 official";
 }
 
+// 字段名 / Cookie 名清单拼接（界面与警告文案共用）
+std::string join_names(const std::vector<std::string>& items)
+{
+    std::string joined;
+    for (const std::string& item : items) {
+        if (!joined.empty()) {
+            joined += "、";
+        }
+        joined += item;
+    }
+    return joined;
+}
+
 } // namespace
 
 std::string web_site_error(const ProviderSpec* spec)
@@ -374,26 +387,26 @@ std::string web_site_field_warnings(const ProviderSpec* spec)
     if (spec->web.answer_selector.empty()) {
         gen_missing.push_back("answer_selector");
     }
-    const auto join = [](const std::vector<std::string>& items) {
-        std::string joined;
-        for (const std::string& item : items) {
-            if (!joined.empty()) {
-                joined += "、";
-            }
-            joined += item;
-        }
-        return joined;
-    };
     std::string text;
     if (!login_missing.empty()) {
-        // 决策 D-26 / PB2-26：这些字段**可以**回落默认值，但对非 DeepSeek 站点是**误导** → 点明后果
-        text = "条目缺 " + join(login_missing) + "：该站点**无法自动探测凭证**（登录仍可用）";
+        // M_patchB L4（PB2-27④ / 不变量 I16）：DOM 站点**不适用**协议探测 →
+        // 不得写成「无法自动探测凭证」（那是 DeepSeek 协议站点的语义，会被读作「登录失败」）
+        if (!probe_is_applicable(spec->web)) {
+            text = "条目缺 " + join_names(login_missing) +
+                   "：**协议探测不适用**（DOM 站点：登录态由浏览器 profile 维持，"
+                   "登录 / 生成不受影响；探测仅做只读诊断）";
+        }
+        else {
+            // 决策 D-26 / PB2-26：这些字段**可以**回落默认值，但对非 DeepSeek 站点是**误导** → 点明后果
+            text = "条目缺 " + join_names(login_missing) +
+                   "：该站点**无法自动探测凭证**（登录仍可用）";
+        }
     }
     if (!gen_missing.empty()) {
         if (!text.empty()) {
             text += "；";
         }
-        text += "生成未就绪（缺 " + join(gen_missing) + "）";
+        text += "生成未就绪（缺 " + join_names(gen_missing) + "）";
     }
     return text;
 }
@@ -409,6 +422,88 @@ bool web_login_only(const ProviderSpec* spec)
     return spec->web.input_selector.empty() || spec->web.send_kind.empty() ||
            spec->web.send_value.empty() || spec->web.answer_selector.empty();
 }
+
+// ---- M_patchB L4（PB2-27）：站点无关的登录态判定 / 显示条件 / 探测适用性（纯函数）----
+// 说明：三条都**不含**任何 DeepSeek 专有物（不读 userToken / ds_session_id / /api/v0/*，不变量 I15）
+WebSessionVerdict web_session_state(const ProviderSpec* spec, const WebSessionEvidence& evidence)
+{
+    WebSessionVerdict verdict;
+    if (spec == nullptr || spec->kind != "web") {
+        verdict.state  = WebSessionState::unknown;
+        verdict.reason = "该条目不是网页版条目：没有站点登录态";
+        return verdict;
+    }
+
+    // ① 条目声明了 cookie_names → 命中任一即「已登录」（D-27 ①，站点无关证据优先）
+    if (!spec->web.cookie_names.empty()) {
+        for (const std::string& name : evidence.cookie_names) {
+            for (const std::string& wanted : spec->web.cookie_names) {
+                if (name == wanted) {
+                    verdict.state  = WebSessionState::logged_in;
+                    verdict.reason = "该站点 Cookie「" + name + "」已就位（判据：条目 cookie_names 命中）";
+                    return verdict;
+                }
+            }
+        }
+        if (!evidence.cookies_known) {
+            verdict.state  = WebSessionState::unknown;
+            verdict.reason = "尚未读取该站点 Cookie（点「打开登录窗口」，或直接点运行由程序复读）";
+            return verdict;
+        }
+        verdict.state  = WebSessionState::logged_out;
+        verdict.reason = "该站点 Cookie 里没有 " + join_names(spec->web.cookie_names) +
+                         "（未登录，或会话已失效）";
+        return verdict;
+    }
+
+    // ② 未配 cookie_names → 该 origin 只要有 Cookie 即视为已登录（D-27「并集」）
+    if (evidence.cookie_count > 0) {
+        verdict.state  = WebSessionState::logged_in;
+        verdict.reason = "该站点已有 " + std::to_string(evidence.cookie_count) +
+                         " 条 Cookie（判据：该 origin Cookie 非空；条目未配 cookie_names）";
+        return verdict;
+    }
+    if (evidence.cookies_known) {
+        verdict.state  = WebSessionState::logged_out;
+        verdict.reason = "该站点没有 Cookie（未登录）";
+        return verdict;
+    }
+    verdict.state  = WebSessionState::unknown;
+    verdict.reason = "尚未读取该站点 Cookie（点「打开登录窗口」，或直接点运行由程序复读）";
+    return verdict;
+}
+
+std::string web_session_state_label(WebSessionState state)
+{
+    switch (state) {
+    case WebSessionState::logged_in:
+        return "已登录";
+    case WebSessionState::logged_out:
+        return "未登录";
+    default:
+        return "未确认";
+    }
+}
+
+bool web_shows_user_token(const ProviderSpec* spec)
+{
+    return spec != nullptr && spec->kind == "web" && !spec->web.token_expr.empty();
+}
+
+bool probe_is_applicable(const ProviderWebSpec& web)
+{
+    if (web.adapter.empty() || starts_with(web.adapter, "builtin:")) {
+        return true; // 内置适配器：协议探测（站点端点 / PoW / token）就是为它设计的
+    }
+    // 非内置（dom 等）：只有**显式**配了探测字段才适用（endpoints 对 dom 无意义，加载期已警告）
+    return !web.probe_paths.empty() || !web.token_expr.empty();
+}
+
+bool probe_is_applicable(const ProviderSpec* spec)
+{
+    return spec != nullptr && spec->kind == "web" && probe_is_applicable(spec->web);
+}
+
 
 bool web_adapter_implemented(const std::string& adapter)
 {
@@ -899,9 +994,10 @@ void validate_final(std::vector<ProviderSpec>* items, SpecLoadReport* report)
             const bool implemented = is_implemented_adapter(spec.web.adapter);
             if (!missing.empty()) {
                 // M_patchB L1 修订（PB2-26）：**登录型站点条目**（生成字段未就绪）→ **警告**，**不**跳过该条
-                //  * 登录 / 协议探测可用；生成会在运行时**明确报错**（不猜选择器、不静默降级）
+                //  * 登录可用；生成会在运行时**明确报错**（不猜选择器、不静默降级）
+                //  * L4（PB2-28 / 不变量 I16）：DOM 站点**不适用**协议探测 → 文案不得写成「协议探测可用」
                 report->warnings.push_back(tag + " 登录型站点条目：web 缺 " + join_list(missing) +
-                                           "（生成未就绪 —— 登录 / 协议探测可用）");
+                                           "（生成未就绪 —— 登录可用；协议探测：不适用（DOM 站点））");
             }
             else if (!implemented) {
                 report->warnings.push_back(tag + " web.adapter=" + spec.web.adapter +

@@ -1301,6 +1301,18 @@ bool ensure_session(int timeout_ms, std::string* error)
 bool ensure_session(const LoginRequest& site_request, int timeout_ms, std::string* error)
 {
     const std::string site = site_key_of(site_request.url);
+    // ---- M_patchB L4（PB2-27 / 决策 D-27 / 不变量 I15）：**站点无关**的就绪判据 ----
+    //  * 内置协议站点（probe_applicable=true，如 deepseek-web）：仍需内存 userToken
+    //    （页面内 PoW / 端点调用依赖它 → 逐字保持改造前语义，守 I2）
+    //  * DOM 站点（probe_applicable=false）：登录态由浏览器 profile 维持 →
+    //    **只看该 origin 有没有 Cookie**，绝不因「内存里没有 userToken」空等到超时（AB2-20）
+    const bool needs_token = site_request.probe_applicable;
+    const auto ready       = [&site, needs_token]() {
+        if (needs_token) {
+            return SessionStore::instance().has_token(site);
+        }
+        return !SessionStore::instance().snapshot(site).cookies.empty();
+    };
     const DWORD       deadline =
         ::GetTickCount() + static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 30000);
 
@@ -1317,7 +1329,7 @@ bool ensure_session(const LoginRequest& site_request, int timeout_ms, std::strin
         LoginRequest request     = site_request;
         request.offscreen        = true;   // 离屏可见窗口（完全隐藏时 WebView2 不创建控制器）
         request.timeout_seconds  = 0;
-        request.probe_after_load = true;
+        request.probe_after_load = needs_token; // L4：DOM 站点不触发协议探测（探测不适用，I16）
         std::string start_error;
         if (!login_window().start(request, &start_error)) {
             if (error != nullptr) {
@@ -1327,35 +1339,50 @@ bool ensure_session(const LoginRequest& site_request, int timeout_ms, std::strin
             return false;
         }
         log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
-                  (SessionStore::instance().has_token(site)
-                       ? " 已有凭证但窗口不在该站点：已按串行策略重新打开（页面内 PoW 求解依赖该站点页面）"
-                       : " 内存无凭证：已离屏启动登录窗口（页面加载后自动探测）"));
+                  (ready() ? (needs_token
+                                  ? " 已有凭证但窗口不在该站点：已按串行策略重新打开（页面内 PoW 求解依赖该站点页面）"
+                                  : " 已有 Cookie 但窗口不在该站点：已按串行策略重新打开（DOM 生成 / 选择器探测需要该站点页面）")
+                           : " 内存无会话：已离屏启动登录窗口（页面加载后自动提取该站点 Cookie" +
+                                 std::string(needs_token ? "并探测协议" : "）")));
     }
-    else if (SessionStore::instance().has_token(site)) {
-        return true; // 幂等：窗口与凭证都已就绪
+    else if (ready()) {
+        return true; // 幂等：窗口与站点态都已就绪
     }
-    else {
+    else if (needs_token) {
         // 窗口已在该站点但没有凭证（用户手动开的窗口不会自动探测 / 上次探测失败）→ 显式补一次探测
         request_protocol_probe();
         log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
                   " 内存无凭证：复用已打开的登录窗口，已请求一次协议探测");
     }
+    else {
+        // L4：DOM 站点 —— 不适用协议探测；窗口自身会定时复读 Cookie（登录后自动变「已登录」）
+        log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
+                  " 尚未读到 Cookie：复用已打开的登录窗口（DOM 站点不适用协议探测，等待登录后自动复读）");
+    }
 
-    // ---- 等该站点的凭证（页面加载后自动探测 / 每 6 秒补一次）----
+    // ---- 等站点就绪（内置站点：页面加载后自动探测 / 每 6 秒补一次；DOM 站点：等 Cookie 复读）----
     const DWORD retry_ms   = 6000; // 每 6 秒补一次探测（登录动作可能发生在页面加载之后）
     int         probes     = window_ready ? 1 : 0;
     DWORD       next_retry = ::GetTickCount() + retry_ms;
 
     while (::GetTickCount() < deadline) {
-        if (SessionStore::instance().has_token(site)) {
-            log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
-                      " 已取得内存凭证（userToken 长度 " +
-                      std::to_string(SessionStore::instance().snapshot(site).user_token.size()) +
-                      "，仅内存；路径=" + (window_ready ? "复用已开窗口补探测" : "离屏开窗探测") + "）");
+        if (ready()) {
+            if (needs_token) {
+                log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
+                          " 已取得内存凭证（userToken 长度 " +
+                          std::to_string(SessionStore::instance().snapshot(site).user_token.size()) +
+                          "，仅内存；路径=" + (window_ready ? "复用已开窗口补探测" : "离屏开窗探测") + "）");
+            }
+            else {
+                log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
+                          " 已读到该站点 Cookie（" +
+                          std::to_string(SessionStore::instance().snapshot(site).cookies.size()) +
+                          " 条；DOM 站点不依赖内存 userToken，仅内存，程序退出即销毁）");
+            }
             return true;
         }
         const DWORD now = ::GetTickCount();
-        if (probes < 3 && now >= next_retry) {
+        if (needs_token && probes < 3 && now >= next_retry) {
             ++probes;
             next_retry = now + retry_ms;
             request_protocol_probe();
@@ -1367,10 +1394,19 @@ bool ensure_session(const LoginRequest& site_request, int timeout_ms, std::strin
     }
 
     if (error != nullptr) {
-        *error = (site.empty() ? std::string() : "站点 " + site + " ") +
-                 "未取得网页版凭证（内存里没有 userToken）"
-                 "：请在已登录的登录窗口内点「探测网页版协议（dev）」后重试，"
-                 "或运行 aiwrite.exe --web-probe 确认登录态（退出码 0 = 可用）";
+        if (needs_token) {
+            *error = (site.empty() ? std::string() : "站点 " + site + " ") +
+                     "未取得网页版凭证（内存里没有 userToken）"
+                     "：请在已登录的登录窗口内点「探测网页版协议（dev）」后重试，"
+                     "或运行 aiwrite.exe --web-probe 确认登录态（退出码 0 = 可用）";
+        }
+        else {
+            // L4：站点无关文案 —— 不再提 userToken；也不要求用户去点「探测网页版协议」
+            *error = (site.empty() ? std::string() : "站点 " + site + " ") +
+                     "未读到该站点 Cookie（浏览器 profile 里没有该站点的登录态）："
+                     "请点参数面板的「打开登录窗口（WebView2）」在该站点手动登录；"
+                     "该站点不适用协议探测，登录后**无需**再点「探测网页版协议」";
+        }
     }
     return false;
 }

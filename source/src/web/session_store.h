@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include "ai/provider_spec.h"   // L4（PB2-27）：站点无关登录证据类型（ai::WebSessionEvidence / WebSessionState）
+
 namespace aiwrite::web {
 
 struct Cookie {
@@ -72,6 +74,12 @@ struct Session {
 
 // 脱敏：≤8 位全星号 + 长度；>8 位保留前 4 后 4（与 webview2_login 工具一致）
 std::string mask_value(const std::string& value);
+
+// ---- M_patchB L4（PB2-27）：会话 → **站点无关**的登录证据 ----
+//  * 供 `ai::web_session_state()` 判定「已登录 / 未登录 / 未确认」（判据见决策 `D-27`）
+//  * 只暴露「是否读过 Cookie / 条数 / 名字」——**不含** `userToken`（不变量 `I15`：判据不得依赖厂商专有物）
+//  * `cookies_known` = 该站点写过会话快照（登录窗口每次提取都会写，含空快照）
+ai::WebSessionEvidence web_session_evidence(const Session& session);
 
 // 多站点会话存储（M_patchB L1 续 / PB2-18）
 //

@@ -1,5 +1,6 @@
 #include "web/session_store.h"
 
+#include "ai/provider_spec.h"   // L4（PB2-27）：站点无关登录证据（ai::WebSessionEvidence）
 #include "utils/log.h"
 
 #include <cctype>
@@ -78,6 +79,21 @@ std::string site_key_of(const std::string& url)
     }
     return origin;
 }
+// M_patchB L4（PB2-27）：把内存会话转成「站点无关」的登录证据
+//  * 只取 Cookie 维度（是否读过 / 条数 / 名字）——**不取** user_token（不变量 I15）
+ai::WebSessionEvidence web_session_evidence(const Session& session)
+{
+    ai::WebSessionEvidence evidence;
+    evidence.cookies_known = !session.url.empty(); // 写过会话快照（登录窗口提取过 Cookie）
+    evidence.cookie_count  = session.cookies.size();
+    evidence.cookie_names.reserve(session.cookies.size());
+    for (const Cookie& cookie : session.cookies) {
+        evidence.cookie_names.push_back(cookie.name);
+    }
+    return evidence;
+}
+
+
 
 SessionStore& SessionStore::instance()
 {
