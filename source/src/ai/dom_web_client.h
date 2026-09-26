@@ -62,4 +62,9 @@ DomChatResult dom_chat(const DomChatRequest& request);
 //  * 返回码：0 = 必需选择器全部命中；1 = 有缺项；2 = 站点不可用 / 非 dom 条目
 int dom_adapter_selftest(const std::string& provider_id, int timeout_ms);
 
+// M_patchB L4（PB2-29 / v15）：**选择器候选枚举**（只读）—— 让「填选择器」不必靠人肉 F12
+//  * 在当前页面枚举候选 input / textarea / contenteditable、发送按钮、回答容器，打印指纹 + **建议选择器**
+//  * 返回码：0 = 枚举成功；1 = 页面 / 脚本未就绪；2 = 条目不可用（非网页版条目 / 缺 login_url / 表外 id）
+int dom_selector_dump(const std::string& provider_id, int timeout_ms);
+
 } // namespace aiwrite::ai

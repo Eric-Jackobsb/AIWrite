@@ -46,4 +46,12 @@ struct WebChatResult {
 // 用内存会话调用网页版生成；不落盘、不写日志明文（日志只记长度与状态）
 WebChatResult web_chat(const web::Session& session, const WebChatRequest& request);
 
+// ---- M_patchB L4（PB2-28④ / PB2-25 / 2026-09-27）：**会话失效识别**（DeepSeek 网页版专有错误）----
+//  * 判据：HTTP `401` / 响应体 `code=40002`（鉴权或会话失效）与 `code=40003`（请求被拒：PoW / 频率 / 前端版本）
+//  * `web_session_failure_hint()` → **可操作**提示（空串 = 未识别；纯函数，可离线断言 `VB2-27`）
+//  * `web_session_failure_needs_relogin()` → true 表示**必须重新登录**，调用方应作废该站点的内存会话
+//    （`web_chat()` 内已自动处理：清该 origin 的内存会话 → 面板随即显示「未登录」并给登录引导）
+std::string web_session_failure_hint(int http_status, const std::string& body);
+bool        web_session_failure_needs_relogin(int http_status, const std::string& body);
+
 } // namespace aiwrite::ai

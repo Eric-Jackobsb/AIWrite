@@ -75,7 +75,8 @@ void print_usage()
 }
 
 // --run-selftest：不打开窗口，直接验证 EditorState 的运行接线（start_run / tick_run / 状态文本）
-int run_selftest(bool use_web)
+//  * M_patchB L4（PB2-30①）：`--provider <id>` 可指定**任意网页版条目**（默认 = 表内第一个 web 条目）
+int run_selftest(bool use_web, const std::string& provider_id)
 {
     aiwrite::ui::EditorState& state = aiwrite::ui::editor();
     state.create_sample_workflow();
@@ -84,12 +85,39 @@ int run_selftest(bool use_web)
     // --run-selftest --web：置为 web，走真实网页版生成
     // 注意：LLMGenerate 的模式取「provider 端口（ProviderConfig）」优先，故两处都要设
     // M_patchB L1 修订（PB2-22 / 决策 D-22②）：站点**不回落** → `--web` 必须显式选**网页版条目**
-    const std::vector<std::string> web_entry_ids = aiwrite::ai::provider_specs().ids("web");
-    const std::string              web_entry =
-        web_entry_ids.empty() ? std::string() : web_entry_ids.front();
+    std::string web_entry = provider_id;
     if (use_web && web_entry.empty()) {
-        std::printf("[运行自检] ✗ 配置表里没有网页版条目（kind=web）：无法执行 --web 自检\n");
-        return 1;
+        const std::vector<std::string> web_entry_ids = aiwrite::ai::provider_specs().ids("web");
+        web_entry = web_entry_ids.empty() ? std::string() : web_entry_ids.front();
+    }
+    if (use_web) {
+        // PB2-30①：显式指定的条目必须真的存在且是网页版条目（严格解析，**不**回落）
+        const aiwrite::ai::ProviderSpec* spec = aiwrite::ai::provider_specs().find(web_entry);
+        if (web_entry.empty()) {
+            std::printf("[运行自检] ✗ 配置表里没有网页版条目（kind=web）：无法执行 --web 自检\n");
+            return 1;
+        }
+        if (spec == nullptr) {
+            std::printf("[运行自检] ✗ 表里没有 id=%s（用 --provider-dump 查看全部）\n", web_entry.c_str());
+            return 2;
+        }
+        if (spec->kind != "web") {
+            std::printf("[运行自检] ✗ 条目 %s 不是网页版条目（kind=%s）：--web 自检需要 kind=web"
+                        "（决策 D-22②，站点不回落）\n",
+                        web_entry.c_str(), spec->kind.c_str());
+            return 2;
+        }
+        if (aiwrite::ai::web_site_error(spec) != std::string()) {
+            std::printf("[运行自检] ✗ 条目 %s 站点不可用：%s\n", web_entry.c_str(),
+                        aiwrite::ai::web_site_error(spec).c_str());
+            return 2;
+        }
+        if (aiwrite::ai::web_login_only(spec)) {
+            std::printf("[运行自检] ✗ 条目 %s 是**登录型条目**（缺生成字段）：请先补齐 web.input_selector / "
+                        "send / answer_selector（用 --web-adapter-selftest --provider %s 诊断）\n",
+                        web_entry.c_str(), web_entry.c_str());
+            return 1;
+        }
     }
     for (aiwrite::engine::Node& node : state.graph.nodes) {
         if (use_web && node.type == "ProviderConfig") {
@@ -1054,6 +1082,7 @@ int main(int argc, char** argv)
     bool web_probe_flag    = false;
     bool web_session_selftest_flag = false;
     bool dom_adapter_selftest_flag = false; // L3（PB2-15）：选择器探测 / 诊断
+    bool dom_dump_flag             = false; // L4（PB2-29 / v15）：选择器候选枚举
     std::string web_chat_prompt;
     bool        vlm_selftest_flag = false;                              // M5-02 图片理解自检
     std::string vlm_image;                                              // --image
@@ -1117,6 +1146,9 @@ int main(int argc, char** argv)
         }
         else if (arg == "--web-adapter-selftest") {
             dom_adapter_selftest_flag = true;
+        }
+        else if (arg == "--web-dom-dump") {
+            dom_dump_flag = true; // L4（PB2-29）：只读枚举页面候选元素 + 建议选择器
         }
         else if (arg == "--web-session-selftest") {
             web_session_selftest_flag = true;
@@ -1246,6 +1278,21 @@ int main(int argc, char** argv)
         return code;
     }
 
+    // L4（PB2-29 / v15）：选择器**候选枚举**（只读）—— 输出页面候选元素指纹 + 建议选择器
+    if (dom_dump_flag) {
+        int code = 2;
+        if (provider_id.empty()) {
+            std::printf("[候选枚举] 请用 --provider <id> 指定网页版条目"
+                        "（例：--web-dom-dump --provider kimi-web）\n");
+        }
+        else {
+            code = aiwrite::ai::dom_selector_dump(provider_id, selftest_timeout);
+        }
+        aiwrite::log::info("AIwrite 选择器候选枚举退出，返回码 " + std::to_string(code));
+        aiwrite::log::shutdown();
+        return code;
+    }
+
     // 网页版协议探测（需要 profile 里已有登录态）
     if (web_probe_flag) {
         // M_patchB L1 修订（PB2-23）：`--web-probe --provider <id>` = 按**条目**的站点（严格解析，不回落）
@@ -1309,7 +1356,7 @@ int main(int argc, char** argv)
 
     // 执行自检（不需要 GUI）：验证 EditorState 的运行接线
     if (run_selftest_flag) {
-        const int selftest_code = run_selftest(run_selftest_web);
+        const int selftest_code = run_selftest(run_selftest_web, provider_id);
         aiwrite::log::info("AIwrite 运行自检退出，返回码 " + std::to_string(selftest_code));
         aiwrite::log::shutdown();
         return selftest_code;

@@ -135,6 +135,45 @@ constexpr const char* kProbeScript = R"JS(
   return out;
 })();
 )JS";
+// M_patchB L4（PB2-29 / v15）：**选择器候选枚举**（只读）—— 让「填选择器」不必靠人肉 F12
+//  * 在**当前页面**里枚举候选输入框 / 发送按钮 / 回答容器，回传标签·id·class·placeholder·aria 等指纹
+//  * C++ 侧再据此给出**建议选择器**（优先 id → placeholder/aria → tag.class…），配合命中数探测即可逐站回填
+//  * 纯只读：不写入、不发送、不读取任何值（与 `kProbeScript` 同族）
+constexpr const char* kDiscoverScript = R"JS(
+(function () {
+  const out = { url: location.href, title: document.title || '', inputs: [], sends: [], answers: [] };
+  const visible = function (el) {
+    try { const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; } catch (e) { return false; }
+  };
+  const desc = function (el) {
+    const cls = (typeof el.className === 'string') ? el.className : '';
+    return {
+      tag: el.tagName.toLowerCase(),
+      id: el.id || '',
+      cls: cls.replace(/\s+/g, ' ').trim().slice(0, 200),
+      name: el.getAttribute('name') || '',
+      ph: el.getAttribute('placeholder') || '',
+      ce: el.getAttribute('contenteditable') || '',
+      aria: el.getAttribute('aria-label') || '',
+      role: el.getAttribute('role') || '',
+      visible: visible(el),
+      text: (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 40)
+    };
+  };
+  const push = function (list, el, limit) { if (list.length < limit) { list.push(desc(el)); } };
+  try {
+    document.querySelectorAll('textarea, input[type="text"], input[type="search"], input:not([type]), [contenteditable="true"], [contenteditable=""], [role="textbox"]')
+      .forEach(function (el) { push(out.inputs, el, 14); });
+    document.querySelectorAll('button, [role="button"], [type="submit"], a[class*="send"], [class*="send"]')
+      .forEach(function (el) { push(out.sends, el, 14); });
+    document.querySelectorAll('[class*="markdown"], [class*="message"], [class*="answer"], [class*="chat-content"], [class*="response"], article, [role="listitem"]')
+      .forEach(function (el) { push(out.answers, el, 14); });
+  } catch (e) { out.error = (e && e.message) ? e.message : String(e); }
+  return JSON.stringify(out);
+})();
+)JS";
+
+
 
 } // namespace
 
@@ -308,6 +347,185 @@ DomChatResult dom_chat(const DomChatRequest& request)
               (result.warning.empty() ? "" : ("；警告：" + result.warning)) +
               (result.error.empty() ? "" : ("；错误：" + result.error)));
     return finish();
+}
+
+// M_patchB L4（PB2-29 / v15）：**选择器候选枚举**（只读）—— 输出候选元素指纹 + 建议选择器
+//  * 用途：`--web-dom-dump --provider <id>`；配合 `--web-adapter-selftest` 的命中数即可逐站回填选择器
+//  * 只读：不写入、不发送、不读取任何值
+std::string suggest_selector_of(const nlohmann::json& d)
+{
+    const std::string id   = d.value("id", std::string());
+    const std::string ph   = d.value("ph", std::string());
+    const std::string aria = d.value("aria", std::string());
+    const std::string tag  = d.value("tag", std::string("div"));
+    if (!id.empty()) {
+        return "#" + id;
+    }
+    if (!ph.empty()) {
+        return tag + "[placeholder=\"" + ph + "\"]";
+    }
+    if (!aria.empty()) {
+        return "[aria-label=\"" + aria + "\"]";
+    }
+    // class 兜底：取前两个「不像哈希/状态」的类名（含数字且较长的一律跳过）
+    const std::string cls = d.value("cls", std::string());
+    std::vector<std::string> keep;
+    std::size_t              begin = 0;
+    while (begin < cls.size() && keep.size() < 2) {
+        const std::size_t end  = cls.find(' ', begin);
+        const std::string item = cls.substr(begin, end == std::string::npos ? std::string::npos
+                                                                           : end - begin);
+        if (!item.empty() && item.size() <= 24 &&
+            !(item.find_first_of("0123456789") != std::string::npos && item.size() > 14)) {
+            keep.push_back(item);
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        begin = end + 1;
+    }
+    if (keep.empty()) {
+        return {};
+    }
+    std::string selector = tag;
+    for (const std::string& item : keep) {
+        selector += "." + item;
+    }
+    return selector;
+}
+
+int dom_selector_dump(const std::string& provider_id, int timeout_ms)
+{
+  try { // 兜底：把任何 C++ 异常转成可读错误（否则 std::terminate → __fastfail 0xC0000409，输出全丢）
+    const ProviderSpec* spec       = provider_specs().find(provider_id);
+    const std::string   site_error = web_site_error(spec);
+    if (!site_error.empty()) {
+        std::printf("[候选枚举] 站点不可用（条目 %s）：%s\n", provider_id.c_str(), site_error.c_str());
+        return 2;
+    }
+    const ProviderWebSpec   site    = strict_web_spec_for(spec);
+    const std::string       site_id = strict_web_provider_id_for(spec);
+    const web::LoginRequest request = web::interactive_login_request(site, site_id);
+
+    std::printf("\n===== 选择器候选枚举（只读；用于填 input_selector / send / answer_selector）=====\n");
+    std::printf("条目     : %s（%s）\n", spec->id.c_str(), spec->display.c_str());
+    std::printf("登录页   : %s\n", site.login_url.c_str());
+    std::fflush(stdout); // 排障：崩溃前已产生的输出先落盘（__fastfail 会丢缓冲）
+
+    std::string boot_error;
+    const int   boot_timeout =
+        std::max(10000, std::min(timeout_ms > 0 ? timeout_ms * 1000 : 30000, 60000));
+    const bool        session_ok = web::ensure_session(request, boot_timeout, &boot_error);
+    const std::string site_key   = web::login_request_site(request);
+    const web::Session session   = web::SessionStore::instance().snapshot(site_key);
+    const WebSessionVerdict verdict =
+        web_session_state(spec, web::web_session_evidence(session));
+    std::printf("站点键   : %s\n", site_key.c_str());
+    std::printf("登录态   : %s（%s）\n", web_session_state_label(verdict.state).c_str(),
+                verdict.reason.c_str());
+    std::printf("说明     : %s\n",
+                session_ok ? "页面已就绪（候选来自**当前页面**）"
+                           : "未取到内存会话：候选来自**未登录页面**（登录后建议重跑）");
+    if (!session_ok && !boot_error.empty()) {
+        std::printf("会话提示 : %s\n", boot_error.c_str());
+    }
+    std::fflush(stdout); // 排障：确认 ensure_session 已返回
+
+    std::string raw;
+    std::string script_error;
+    if (!web::run_script_sync(request, std::string(kDiscoverScript), 15000, &raw, &script_error)) {
+        std::printf("枚举失败 : %s\n", script_error.c_str());
+        std::printf("（提示：窗口 / 页面未就绪，或站点拒绝脚本执行；可重跑本命令）\n");
+        return 1;
+    }
+    std::fflush(stdout); // 排障：确认发现脚本已执行
+    nlohmann::json root;
+    try {
+        nlohmann::json parsed = nlohmann::json::parse(raw);
+        // ExecuteScript 会把「脚本 return 的字符串」再包一层 JSON 字符串（既有做法见
+        // webview_host.cpp 的 poll_protocol_probe）→ 这里统一解包，避免 type_error.306
+        if (parsed.is_string()) {
+            parsed = nlohmann::json::parse(parsed.get<std::string>());
+        }
+        if (!parsed.is_object()) {
+            std::printf("枚举结果不是对象（实际类型 %s）：%s\n", parsed.type_name(),
+                        raw.substr(0, 200).c_str());
+            return 1;
+        }
+        root = std::move(parsed);
+    }
+    catch (const std::exception& ex) {
+        std::printf("枚举结果解析失败：%s；原始：%s\n", ex.what(), raw.substr(0, 200).c_str());
+        return 1;
+    }
+    std::printf("\nURL      : %s\n", root.value("url", std::string("?")).c_str());
+    std::printf("标题     : %s\n", root.value("title", std::string("?")).c_str());
+    std::fflush(stdout); // 排障：确认已解析并回显页面信息
+    const auto dump_list = [&](const char* title, const char* key, const char* field) {
+        const nlohmann::json list = root.contains(key) ? root[key] : nlohmann::json::array();
+        std::printf("\n--- %s（%zu 个候选）---\n", title, list.size());
+        int         shown = 0;
+        std::string first_visible;
+        for (const nlohmann::json& d : list) {
+            const std::string selector = suggest_selector_of(d);
+            const bool        visible  = d.value("visible", false);
+            if (!visible && shown >= 8) {
+                continue; // 隐藏元素只列前 8 个（多为模板 / 预渲染节点）
+            }
+            ++shown;
+            std::printf("  %-2d %s %s [%s]\n", shown, visible ? "[可见]" : "[隐藏]",
+                        selector.empty() ? "(无可用指纹)" : selector.c_str(),
+                        d.value("tag", std::string("?")).c_str());
+            if (!d.value("id", std::string()).empty()) {
+                std::printf("      id=%s\n", d.value("id", std::string()).c_str());
+            }
+            if (!d.value("cls", std::string()).empty()) {
+                std::printf("      class=%s\n", d.value("cls", std::string()).c_str());
+            }
+            if (!d.value("ph", std::string()).empty()) {
+                std::printf("      placeholder=%s\n", d.value("ph", std::string()).c_str());
+            }
+            if (!d.value("aria", std::string()).empty()) {
+                std::printf("      aria-label=%s\n", d.value("aria", std::string()).c_str());
+            }
+            if (!d.value("ce", std::string()).empty()) {
+                std::printf("      contenteditable=%s\n", d.value("ce", std::string()).c_str());
+            }
+            if (!d.value("text", std::string()).empty()) {
+                std::printf("      text=%s\n", d.value("text", std::string()).c_str());
+            }
+            if (visible && first_visible.empty() && !selector.empty()) {
+                first_visible = selector;
+            }
+        }
+        if (!first_visible.empty()) {
+            std::printf("  ⇒ 建议 %s = %s\n", field, first_visible.c_str());
+        }
+        else {
+            std::printf("  ⇒ 建议 %s = （未发现可见候选：可能需先登录 / 页面未渲染完）\n", field);
+        }
+    };
+
+    dump_list("输入框候选（input / textarea / contenteditable）", "inputs", "input_selector");
+    dump_list("发送候选（button / submit / send）", "sends", "send.selector");
+    dump_list("回答容器候选（markdown / message / answer）", "answers", "answer_selector");
+
+    std::printf("\n下一步：把建议填进该条目的 web 段 → 重跑 "
+                "`aiwrite.exe --web-adapter-selftest --provider %s` 确认可达\n",
+                provider_id.c_str());
+    std::fflush(stdout);
+    return 0;
+  }
+  catch (const std::exception& ex) {
+    std::printf("枚举异常（已兜底，不再崩溃）：%s\n", ex.what());
+    std::fflush(stdout);
+    return 1;
+  }
+  catch (...) {
+    std::printf("枚举异常（未知类型，已兜底）\n");
+    std::fflush(stdout);
+    return 1;
+  }
 }
 
 int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)

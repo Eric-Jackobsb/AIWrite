@@ -40,6 +40,7 @@
 #include "ai/provider_spec.h"              // M_patchB L1：Provider 配置表断言
 #include "ai/dom_web_client.h"             // L3（PB2-13/15）：DOM 适配器纯函数断言（VB2-22）
 #include "web/webview_host.h"              // L4（PB2-28）：探测脚本适用性断言（VB2-25）
+#include "ai/deepseek_web_client.h"       // L4（PB2-28④）：会话失效识别断言（VB2-27）
 
 #include <fstream>
 #include <sstream>
@@ -2692,6 +2693,37 @@ int execution_selftest()
                        readonly_script.find("location.href") != std::string::npos &&
                        readonly_script.find("document.cookie") != std::string::npos,
                    "VB2-25⑤ 不适用分支脚本**不含** `/api/v0/` 与 `localStorage.getItem('userToken')`（只读诊断；I16）");
+        }
+
+        // ---- VB2-27（新增 · PB2-25 / PB2-28④）：会话失效识别（纯函数）----
+        {
+            const std::string auth_body = "{\"code\":40002,\"msg\":\"auth failed\"}";
+            const std::string pow_body  = "{\"data\":{\"biz_code\":40003}}";
+            const std::string ok_body   = "{\"code\":0,\"data\":{\"v\":\"hi\"}}";
+            const std::string spaced    = "{ \"code\": 40002 }";
+
+            const std::string hint_401 = aiwrite::ai::web_session_failure_hint(401, "");
+            const std::string hint_2   = aiwrite::ai::web_session_failure_hint(200, auth_body);
+            const std::string hint_3   = aiwrite::ai::web_session_failure_hint(200, pow_body);
+            const std::string hint_ok  = aiwrite::ai::web_session_failure_hint(200, ok_body);
+
+            expect(check, !hint_401.empty() && aiwrite::ai::web_session_failure_needs_relogin(401, ""),
+                   "VB2-27① HTTP 401 → 识别为「会话已失效」且需重新登录");
+            expect(check,
+                   hint_2.find("重新登录") != std::string::npos &&
+                       aiwrite::ai::web_session_failure_needs_relogin(200, auth_body) &&
+                       aiwrite::ai::web_session_failure_needs_relogin(200, spaced),
+                   "VB2-27② code=40002（含带空格写法）→ 提示重新登录并作废该站点会话");
+            expect(check,
+                   hint_3.find("40003") != std::string::npos &&
+                       !aiwrite::ai::web_session_failure_needs_relogin(200, pow_body),
+                   "VB2-27③ code=40003 → 给可操作提示但**不**作废会话（PoW / 频率 / 前端版本）");
+            expect(check, hint_ok.empty() && !aiwrite::ai::web_session_failure_needs_relogin(200, ok_body),
+                   "VB2-27④ 正常响应 → 不误报（hint 为空）");
+            expect(check,
+                   hint_401.find("userToken") == std::string::npos &&
+                       hint_2.find("ds_session_id") == std::string::npos,
+                   "VB2-27⑤ 失效提示文案不含厂商专有物（userToken / ds_session_id；I15 口径）");
         }
     }
 

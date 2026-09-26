@@ -346,7 +346,75 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
     else if (result.text.empty()) {
         result.error = "HTTP 200 但未解析出文本（请查看 raw_head 原始行以对齐解析规则）";
     }
+
+    // ---- M_patchB L4（PB2-28④ / PB2-25）：**会话失效识别** ----
+    //  * 401 / code=40002 → 必须重新登录：作废**该站点**的内存会话（面板随即显示「未登录」）
+    //  * code=40003 → 请求被拒（PoW / 频率 / 前端版本）：给可操作提示，不作废会话
+    const std::string failure_hint =
+        web_session_failure_hint(response->status, response->body);
+    if (!failure_hint.empty()) {
+        if (!result.error.empty()) {
+            result.error += "；";
+        }
+        result.error += failure_hint;
+        log::warn("[网页版] " + failure_hint);
+        if (web_session_failure_needs_relogin(response->status, response->body)) {
+            const std::string site = web::site_key_of(request.endpoints.host);
+            web::SessionStore::instance().clear(site);
+            log::warn("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
+                      " 的内存会话已作废（需重新登录；Cookie 仍在浏览器 profile 里）");
+        }
+    }
     return result;
+}
+
+// M_patchB L4（PB2-28④ / PB2-25）：DeepSeek 网页版**会话失效**判据（纯函数，离线可断言 `VB2-27`）
+//  * 只看 HTTP 状态与响应体里的错误码 —— **不**读 `userToken`（不变量 `I15` 的口径）
+namespace {
+
+// 响应体里是否出现「错误码 code」（容错：`"code":40002` / `"code": 40002` / `"biz_code":40003` 都算）
+bool body_has_error_code(const std::string& body, int code)
+{
+    const std::string digits = std::to_string(code);
+    std::size_t       pos    = body.find(digits);
+    while (pos != std::string::npos) {
+        const std::size_t begin  = pos > 24 ? pos - 24 : 0;
+        const std::string window = body.substr(begin, pos - begin);
+        if (window.find("code") != std::string::npos) {
+            return true;
+        }
+        pos = body.find(digits, pos + digits.size());
+    }
+    return false;
+}
+
+} // namespace
+
+std::string web_session_failure_hint(int http_status, const std::string& body)
+{
+    if (http_status == 401) {
+        return "会话已失效（HTTP 401）：登录态已过期或被站点拒绝 —— 请在参数面板点"
+               "「打开登录窗口（WebView2）」重新登录该站点后重试";
+    }
+    if (http_status == 403) {
+        return "站点拒绝访问（HTTP 403）：可能触发风控 / 需要人机验证 —— 请在参数面板点"
+               "「打开登录窗口（WebView2）」完成验证后重试";
+    }
+    if (body_has_error_code(body, 40002)) {
+        return "会话已失效（code 40002）：登录态无效或已过期 —— 请在参数面板点"
+               "「打开登录窗口（WebView2）」重新登录该站点后重试";
+    }
+    if (body_has_error_code(body, 40003)) {
+        return "请求被站点拒绝（code 40003）：常见于 PoW 校验失败 / 频率限制 / 前端版本变化 —— "
+               "先重新登录；若持续出现，请用 `aiwrite.exe --web-probe` 复核 challenge 与端点"
+               "（M_patchB §9.4 / R19·R20）";
+    }
+    return {};
+}
+
+bool web_session_failure_needs_relogin(int http_status, const std::string& body)
+{
+    return http_status == 401 || body_has_error_code(body, 40002);
 }
 
 } // namespace aiwrite::ai
