@@ -11,6 +11,7 @@
 | [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6） |
 | [actionPlan/](actionPlan/) · [Archive/actionPlan/](Archive/actionPlan/) | 各里程碑 Action Plan（进行中 / 已完成归档） |
 | [actionPlan/M_patchA.md](actionPlan/M_patchA.md) | **地基补丁系列 A–D**（结果回流与可观测性 / 异步与流式 / 数据安全 / 交互打磨）行动计划 |
+| [actionPlan/M_patchB.md](actionPlan/M_patchB.md) | **Provider 可插拔化**（`PB-04` 展开计划）：现状审计 + L1 描述表 / L2 接口工厂 / L3 网页版适配器三层方案 + `PB2-*` 任务与验收 —— 🟡 草案（待审核） |
 | [DevPlan.todo](DevPlan.todo) | **开发计划看板**：TodoList 格式（根键 `todotree`），Debug / Feature / Test / Docs / Archive 五类 × M1–M6 分层，每条含一行描述与 `fileLink` 文档链接 |
 | [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) | M1 实测环境、验证结果与问题记录（已归档） |
 | [Archive/README.md](Archive/README.md) | 归档索引与归档规则 |
