@@ -40,8 +40,27 @@
   Python 运行时**升级为 M6 硬门槛**（`Q7`）
 - 任务：**6 批** `M7B-10`~`M7B-41` + 前置验证 `M7B-01`~`08`（含 **CDP 增量三路线实测**、**DeepSeek 网页版选择器实测**）；
   **先建后拆**（批 1–4 保留 WebView2，批 5 才删）；每批结束跑基线
+- ✅ **`MB-D1` 已定（2026-09-28）：先建后拆** —— 批 1–4 保留 WebView2（可切回），批 5 才删；由此外加两条纪律：
+  **批 1–4 只新增不删改**（`--exec-selftest` **只升不降**，任何下降即真回归）、**配置表收敛与删除类断言统一归批 5**
+  （新增 `M7B-42` / `M7B-43`）。**回滚锚点** = 提交 `a1a7e0c` / 标签 `pre-m7b` —— 见 [actionPlan/M7B.md](actionPlan/M7B.md) §12
 - ⚠️ **基线提示**：`--exec-selftest` 会**先降后升**（`I2` 作废删 `VB2-17` 前半与 `VB2-25①③④`；新增 `VB2-28`~`VB2-36` 共 9 条）——
   预期路径见 [actionPlan/M7B.md](actionPlan/M7B.md) §9.3，**不得误判为回归**
+
+**阶段 0 完成（`M7B` 开工前置 · 2026-09-28 · 未动一行产品代码）**
+
+- **基线复测（锚点 `pre-m7b` / `a1a7e0c` · Debug · 本机）**：`build.ps1` 编译成功 · `api_probe --selftest` **七组 PASS** ·
+  `--exec-selftest` **251 / 0** · `--graph-selftest` **110 / 0** · `aiwrite --provider-selftest` **50 / 0**（`--provider-dump` 21 条）·
+  `aiwrite --run-selftest` **PASS** · `aiwrite --run-selftest --web` **PASS** · 文档断链 **265 / 0**
+  → 批 1–4 守门数字 = **251 / 110 / 50**（[actionPlan/M7B.md](actionPlan/M7B.md) §11.1）
+- 🐛 **纠正文档错误**：`--provider-selftest` / `--provider-dump` 属 **`aiwrite.exe`**，**不是** `api_probe.exe`（原表写错）
+- **Pydoll 环境就绪**：Python **3.12.1** + 项目内 **`.venv`** + **pydoll-python 2.27.0**（Chrome **156.0.8072.0** / Edge 存在）；
+  **冒烟通过**（自动探测 Chrome → CDP 读 Cookie → `execute_script` → 关窗）—— 据此**修正三处计划假设**：
+  网络日志/响应体有库级 API（`get_network_logs` / `get_network_response_body`）、文件注入优先
+  `expect_file_chooser`（`DataTransfer` 降为备选）、`Edge` 兜底在 API 层已确认 —— 见 [actionPlan/M7B.md](actionPlan/M7B.md) §5
+- ⚠️ **新增合规禁用清单**（Pydoll 自带能力，必须代码零命中 · 断言 `VB2-37`）：
+  `expect_and_bypass_cloudflare_captcha` / `enable_auto_solve_cloudflare_captcha`（验证码规避）、
+  `apply_fingerprint` / `FingerprintApplier`（指纹伪造）—— 见 [actionPlan/M7B.md](actionPlan/M7B.md) §13
+- **回滚锚点已建立**：标签 `pre-m7b` → 提交 `a1a7e0c`（已推送）；`.gitignore` 补 Python 运行时忽略项
 
 **文档（新增）：`docs/roadmap.md` —— 长期路线图 v1.0（一页纸）**
 

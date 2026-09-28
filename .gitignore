@@ -76,3 +76,17 @@ Desktop.ini
 # 程序数据目录默认在 %USERPROFILE%\.brain-ai（不在仓库内）；这里兜底防止误放
 .brain-ai/
 *.brain-ai.json
+
+# ------------------------------------------- Python 运行时（Pydoll · M7B）----
+# 说明：`python/` 是**源码目录**（守护进程 / 管道 / Pydoll 封装），必须入库；
+#       这里只忽略虚拟环境与字节码等可再生成物。
+/.venv/
+venv/
+/python/.venv/
+__pycache__/
+*.py[cod]
+*.pyd
+pip-wheel-metadata/
+/python/dist/
+/python/build/
+/python/*.egg-info/

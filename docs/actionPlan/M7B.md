@@ -25,8 +25,9 @@
    今后 DeepSeek 网页版前端一改版，**文字生成会全断**；且 `deepseek-web` 从「协议驱动」变成
    「选择器驱动」，而它的页面选择器**从未实测过**（§10）。缓解见 §4 `R1`。
 5. **实施纪律**：**先建后拆** —— 批 1–4 期间 WebView2 通道**保留**，批 5 才删；每批结束跑 §11 基线并贴数字。
-6. **基线提醒**：作废 `I2` 会**删掉**若干旧断言（`--exec-selftest` 总数**先降后升**），
-   属**预期变化**，不得误判为回归 —— 预期路径见 §11。
+6. **基线提醒**：作废 `I2` 会**删掉**若干旧断言（`--exec-selftest` 总数会变化），属**预期变化**，不得误判为回归
+   —— 但因 **`MB-D1` 已定 = 先建后拆**，**删除动作集中在批 5 一次完成**：**批 1–4 数字只升不降**
+   （任何下降即**真回归**），批 5 内**先降后升闭合**。预期路径见 **§9.3**。
 
 ---
 
@@ -68,7 +69,7 @@
 | `src/web/webview_host.h` | 6 | **删除** → 新接口头 |
 | `src/ui/property_panel.cpp` | 5 | 「打开登录窗口（WebView2）」「探测网页版协议（dev）」、注销时删 profile 路径 → 改 Pydoll 文案 |
 | `src/ai/deepseek_web_client.cpp` | 4 | 协议栈退役（`delta_text_of` / `web_session_failure_hint` **保留复用**） |
-| `src/tools/api_probe.cpp` | 3 | 断言换代（§9） |
+| `tools/api_probe.cpp`（**注意**：不在 `src/` 下） | 3 | 断言换代（§9；**删除类动作归批 5**，见 §9.3） |
 | `src/web/session_store.h` | 3 | 注释 + 证据来源改 CDP Cookie |
 | `src/ai/dom_web_client.cpp` | 2 | 改调 Pydoll 通道 |
 | `src/utils/paths.cpp` | 2 | `webview2_profile()` → `pydoll_profile()` |
@@ -154,6 +155,24 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | `M7B-07` | **会话失效证据来源实测**：CDP 状态码 / body vs 页面证据（登录墙 / 跳转） | 一次真实失效可判定，且纯函数输入契约确定 | 承接 `PB2-25` |
 | `M7B-08` | 单 profile 多站点并存（多 tab）+ **按 origin 注销** | 两站独立登录；注销 A 不动 B | 承接 `PB2-19` |
 
+> **Pydoll 2.27.0 能力实测（2026-09-28 · 环境探测 · 数字见 §11.1）**
+> 本机链路**已通**（冒烟通过）：Pydoll 自动探测 Chrome → CDP 读 Cookie → `execute_script` → 正常关窗。
+> 由此**修正三处计划假设**：
+> ① **`M7B-03`（`R2` 的主闸门）不确定性下降**：Pydoll 内置 `Tab.get_network_logs()` /
+>    `get_network_response_body()` / `enable_network_events()` —— 原三路线里的第 ③ 条
+>    （`Network` 事件 + 取响应体）**有库级 API 支撑**，不必手写 CDP 帧；仍需实测的是
+>    **能否拿到"增量/逐帧"而非一次性完整 body**（这才决定 `I22` 是否触发）。
+> ② **P7-b 文件注入（`P7b-10` / `M7B-05`）有更稳的路子**：`Tab.expect_file_chooser()` +
+>    `enable_intercept_file_chooser_dialog()` 是**一等公民 API**，应优先于 `DataTransfer` 注入（后者降为备选）。
+> ③ **`Edge` 兜底（`M7B-14`）已在 API 层确认**：`pydoll.browser.chromium` 同模块导出 `Chrome` / `Edge`。
+>
+> ⚠️ **同时发现三条必须在实现层禁用的库级能力**（合规红线，见 §13）：Pydoll 自带
+> `expect_and_bypass_cloudflare_captcha()` / `enable_auto_solve_cloudflare_captcha()` / `apply_fingerprint()`
+> —— 与「不规避验证码 / 不伪造身份」**直接冲突**，须显式禁用并加断言（`VB2-37`）。
+>
+> 附带印证：冒烟用 `headless=True` 时 UA 为 `…HeadlessChrome/156.0.0.0…` —— 这**正是** §13 要求
+> 必须 **headful** 的现实理由（无头指纹本身就是"非真实浏览器"信号）。
+
 ---
 
 ## 6. 实施任务（`M7B-10`~`M7B-41` · 6 批 · **每批结束跑 §11 基线并贴数字**）
@@ -198,7 +217,12 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | `M7B-28` | 7 条登录型站点（`tongyi-web` / `chatglm-web` / `doubao-web` / `spark-web` / `chatgpt-web` / `claude-web` / `gemini-web`）人工登录后**一次取齐三项** | 一次性完成，避免二次登录 |
 | `M7B-29` | 11 条 `answer_selector` + `cookie_names` 回填（承接 `PB2-29` / `D-30`） | 完成后**不再有登录型条目**（除未支持站点） |
 
-### 批 5 —— 撤除 WebView2
+### 批 5 —— 撤除 WebView2（**唯一不可逆点** · `MB-D1` = 先建后拆）
+
+> **进入条件**（硬门槛）：批 1–4 全绿 **且** §10 的 12 条站点选择器**全部回填完毕**。
+> **本批合并了全部「删除类」动作**（`MB-D1` 顺位修正 · 2026-09-28）：配置表收敛（§7）与删除类断言（§9.2）
+> **一律在此批落地**（`M7B-42` / `M7B-43`）—— 批 1–4 **只新增、不删改**（详见 §9.3）。
+> `M7B-42` / `M7B-43` 为本次顺位修正**追加**（编号续在批 6 之后，见 §15 v2）。
 
 | 编号 | 任务 | 验收 |
 |---|---|---|
@@ -208,6 +232,8 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | `M7B-33` | UI 文案换代：`property_panel.cpp:194/195/283/310` + 状态栏 | 无「WebView2」字样残留 |
 | `M7B-34` | **CLI 契约重建**（§8）：`--provider` 必填 + 候选枚举 + `--provider auto` + `--web-probe` 废弃 | `VB2-34` |
 | `M7B-35` | `I2` 解冻留痕 + `I20`/`I21`/`I22` 进冻结区 | `source/README.md` §4.2 |
+| `M7B-42` | **配置表收敛与警告路径**（§7 全表）：白名单收敛 `{dom}`；`builtin:deepseek` / `web.protocol=deepseek-web` → **警告不报错**；`endpoints` / `probe_paths` / `challenge_path` / `completion_path` / `token_expr` → 保留解析 + 标注「已被 `M7B` 取代」；`--web-probe` 废弃（`--help` 标替代命令） | `VB2-28` / `VB2-33` / `VB2-34` |
+| `M7B-43` | **删除类断言一次性落地**（§9.2）：删 `VB2-17`（前半）· `VB2-25①③④`；`VB2-25′` 转正 | 数字**在本批内**先降后升闭合（§9.3） |
 
 ### 批 6 —— 收口
 
@@ -368,19 +394,28 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | **`VB2-34`（新）** | `I20` CLI 契约：① `--help` 含全部子命令名与退出码 ② 缺 `--provider` 的自检命令 → **候选枚举 + 码 2**（不得静默取第一个）③ `--provider auto` → **打印实际选中 id** ④ 退出码三档**跨命令一致** | |
 | **`VB2-35`（新）** | `I2` 解冻**回归守卫**（反向断言）：旧「无参回落内置 DeepSeek」行为**已不存在** —— 默认 `LoginRequest.url` 为空、无参重载已删、内置 DeepSeek 探测脚本分支已删 | |
 | **`VB2-36`（新）** | **复用资产回归**：`web_session_failure_hint()` 在**新数据源**（CDP 状态码 / body）下判定与旧断言**一致** | |
+| **`VB2-37`（新）** | **合规禁用清单零命中**：源码内不出现 `expect_and_bypass_cloudflare_captcha` / `enable_auto_solve_cloudflare_captcha` / `apply_fingerprint` / `FingerprintApplier`（§13） | |
 
-### 9.3 基线数字的预期路径（**先降后升**，不得误判为回归）
+### 9.3 基线数字的预期路径（**先建后拆**：单调段 + 批 5 内闭合）
 
 ```
-当前（2026-09-27 记录）: --exec-selftest 251 / 0
-   │  删 VB2-17（前半）· VB2-25①③④ → 预估计数下降
+批 0（锚点 a1a7e0c）: --exec-selftest 251 / 0  ← 2026-09-27 记录；**开工前须复测取现值**
+   │  仅新增：VB2-25′ · VB2-29~32 · VB2-36（旧断言**一条不删**）
    ▼
-批 3–5 期间（过渡态）: 约 24x / 0  ← 两套通道并存，断言处于新旧交替
-   │  加 VB2-25′ · VB2-28~36（9 条）
+批 1–4: ≥ 251 / 0 —— **只升不降**（任何下降 = 真回归 ← 先建后拆的核心收益）
+   │  批 5 同批内完成「删 + 加」：
+   │    − 删 VB2-17（前半）· VB2-25①③④
+   │    + VB2-28 / VB2-33 / VB2-34 / VB2-35（配置收敛 + CLI 契约 + 解冻守卫）
    ▼
-收口: 记录新值并**全绿**（数字回填 §11）
+批 5 结束: 新值 / 0 —— **先降后升在本批之内闭合**（无跨批过渡态）
+   ▼
+批 6 收口: 记录新值并**全绿**（数字回填 §11）
 ```
 
+> **纪律（`MB-D1` = 先建后拆）**：批 5 之前**不得**删除任何旧断言、**不得**收敛配置表（§7）、**不得**废弃 `--web-probe`
+> —— 它们**全部归批 5**（`M7B-42` / `M7B-43`）。理由：WebView2 通道在批 1–4 **仍在生产路径上**，删掉「守它的断言」
+> 会制造一个**说不清是回归还是意图**的窗口；压缩到批 5 之后，批 1–4 内的任何数字下降都**唯一指向真回归**。
+>
 > `source/README.md` §4.2 的示例数字「`--exec-selftest` 237/0 → 251/0」是 **M7 第一轮 → P7** 的历史口径；
 > 本文的实际数字**必须实测回填**，不得沿用。
 
@@ -418,14 +453,35 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 |---|---|---|
 | `source\build.ps1` | 0 error / 0 warning | **不变**（硬指标） |
 | `api_probe --selftest` | 七组 PASS | 换代后全绿 |
-| `api_probe --exec-selftest` | **251 / 0** | **先降后升**（§9.3）→ 记录新值并全绿 |
+| `api_probe --exec-selftest` | **251 / 0** | 批 1–4 **只升不降**；批 5 内**先降后升闭合**（§9.3）→ 记录新值并全绿 |
 | `api_probe --graph-selftest` | 110 / 0 | 不变 |
-| `api_probe --provider-selftest` | 50 / 0（`--provider-dump` 21 条：official 9 / web 12） | 换代后全绿 |
+| `aiwrite --provider-selftest` | 50 / 0（`--provider-dump` 21 条：official 9 / web 12） | 换代后全绿 |
+| `aiwrite --provider-dump` | 21 条（official 9 / web 12） | 条目数不变 |
 | `aiwrite --run-selftest` / `--run-selftest --web` | PASS / PASS（5-5） | 换通道后重测 |
 | `--login-selftest` / `--web-chat` | 0 / 1 / 2 语义 | **调用形式与退出码不变**（`I20`） |
 | `--web-probe` | 可用 | **废弃**（`--help` 标注替代命令） |
 | **新增** `--web-stream-selftest --provider <id>` | — | CDP 增量逐帧 PASS（`I22` 断言） |
 | 文档断链 | broken **0** | **不变**（新文件先只写反引号） |
+
+> **批 0 实测（2026-09-28 复测 · 锚点 `pre-m7b` / `a1a7e0c` · Debug · 本机）**
+> 环境登记：**Python 3.12.1**（`F:\Python`）+ 项目内 **`.venv`** · **pydoll-python 2.27.0** ·
+> **Chrome 156.0.8072.0**（`C:\Program Files\Google\Chrome`）· **Edge 存在**（`C:\Program Files (x86)\Microsoft\Edge`）
+>
+> | 命令 | 实测 |
+> |---|---|
+> | `source\build.ps1` | **编译成功**（增量：无重编译单元 → 无警告输出；上次全量 = 0 error / 0 warning） |
+> | `api_probe --selftest` | **七组 PASS**（exit 0） |
+> | `api_probe --exec-selftest` | **251 / 0**（exit 0） |
+> | `api_probe --graph-selftest` | **110 / 0**（exit 0） |
+> | `aiwrite --provider-selftest` | **50 / 0**（exit 0）· `--provider-dump` **21 条** |
+> | `aiwrite --run-selftest` | **PASS**（exit 0） |
+> | `aiwrite --run-selftest --web` | **PASS**（exit 0 · 真实联网跑通） |
+> | 文档断链 | **265 / 0** |
+> | Pydoll 冒烟（一次性脚本） | **PASS**：自动探测 Chrome → CDP 读 Cookie → `execute_script` → 关窗 |
+>
+> → **批 1–4 的守门数字 = `251 / 110 / 50`**（`--exec-selftest` **只升不降**，§9.3）。
+> ⚠️ 本次复测**纠正一处文档错误**：`--provider-selftest` / `--provider-dump` 属 **`aiwrite.exe`**，
+> **不是** `api_probe.exe`（原表写错，已修并补 `--provider-dump` 行）。
 
 ### 11.2 文档同步清单（11 项 · `M7B-40`）
 
@@ -454,6 +510,9 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | 三级（阶段） | `M7B-01`~`08` 未过 → **整体停留**（同 P7-b 模式）；批 5 之前任一批未全绿 → 停在原批（**WebView2 仍在，可切回**） | 计划级 |
 | 四级（代码） | 批 5 之后（WebView2 已删）**只能 `git revert`** —— 故本文强制「**先建后拆**」（`MB-D1`） | 变更集级 |
 
+> **回滚锚点（`MB-D1` 的物理前提）**：标签 **`pre-m7b`** → 提交 **`a1a7e0c`**（2026-09-28：M7 第一轮代码 + 全部文档已入库并推送）。
+> `git revert` / `git reset --hard` **必须**以该标签为界；**标签缺失则锚点不成立**（不得靠记哈希）。
+>
 > **关键纪律**：批 5 是**不可逆点**。进入批 5 的**前置条件** = 批 1–4 全绿 + §10 的 12 条站点选择器**全部回填完毕**。
 
 ---
@@ -470,15 +529,21 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 
 （同族口径：[../节点编辑器使用说明.md](../节点编辑器使用说明.md) §10.3、[M7.md](M7.md) §12、`P7b-14`。）
 
+- **库级禁用清单（Pydoll 2.27.0 实测 · 断言 `VB2-37`）**：不得调用库内自带的
+  `expect_and_bypass_cloudflare_captcha()` / `enable_auto_solve_cloudflare_captcha()`（**验证码规避**）、
+  `apply_fingerprint()` / `FingerprintApplier`（**指纹伪造**）—— 与「像真实浏览器一样操作」≠「伪装成别人」的
+  边界冲突。这三条**不是"暂不使用"，而是代码中零命中**（grep 断言）。
+  另：本库存在 `headless` 选项，但**本项目的 Pydoll 通道一律 headful**（无头指纹本身即风险信号，见 §5 实测）。
+
 ---
 
 ## 14. 开口项与待拍板
 
-### 14.1 待拍板（`MB-D1`~`MB-D6`）
+### 14.1 待拍板（`MB-D2`~`MB-D6` · `MB-D1` 已定）
 
 | 编号 | 事项 | 建议 |
 |---|---|---|
-| `MB-D1` | **撤除时机**：一次性删 vs **先建后拆**（批 5 才删） | **先建后拆**（否则 DeepSeek 选择器未回填期间文字生成中断；`R3`） |
+| ~~`MB-D1`~~ | **撤除时机**：一次性删 vs 先建后拆 | ✅ **已定（2026-09-28）：先建后拆** —— 批 1–4 保留 WebView2（可切回），批 5 才删；**全部删除类动作（配置收敛 / 断言删除 / CLI 废弃）归批 5** |
 | `MB-D2` | 站点与标签：每站点一个 tab / 复用单 tab | 每站点一个 tab（登录态由单 profile 共享） |
 | `MB-D3` | `adapter=builtin:deepseek` 的处理：警告降级 vs 直接拒绝 | **警告 + 按 `dom` 语义**（守「旧文件能加载」） |
 | `MB-D4` | `DevPlan.todo` 编号：M7 组续号 vs 新 `M7B` 组 | 续号（`189+`），与 `Q8` 先例一致 |
@@ -507,6 +572,8 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | 日期 | 版本 | 说明 |
 |---|---|---|
 | 2026-09-28 | v1 | **`M7B` 立项**：用户决议 7 条（§2）；完成现状取证（§1）、风险（§4）、前置验证（§5）、6 批任务（§6）、配置迁移（§7）、**`I2` 解冻与 CLI 契约重建**（§8）、不变量与断言全表（§9）、站点重测清单（§10）、基线（§11）、回滚（§12）。**未开工** —— 待 §14.1 待拍板确认后进入 `M7B-01`~`08` |
+| 2026-09-28 | v2 | **`MB-D1` 已定 = 先建后拆**（用户拍板）→ ① §6 批 5 升格为「唯一不可逆点」并写明进入条件；② **顺位修正**：§7 配置收敛与 §9.2 删除类断言**全部压到批 5**（新增 `M7B-42` / `M7B-43`），**批 1–4 只新增不删改**；③ §9.3 数字路径改写为「批 1–4 只升不降 + 批 5 内闭合」（原「批 3–5 过渡态」取消）；④ §12 登记**回滚锚点**（提交 `a1a7e0c` / 标签 `pre-m7b`）；⑤ §1.3 修路径笔误（`tools/api_probe.cpp` 不在 `src/` 下）。**仍为计划、未开工** |
+| 2026-09-28 | v3 | **阶段 0 完成（文档 + 环境，未动一行产品代码）**：① **批 0 基线实测回填**（§11.1：build OK · selftest 七组 · exec **251/0** · graph **110/0** · provider **50/0** · run-selftest **PASS** · run-selftest --web **PASS** · 断链 **265/0**）；② 纠正文档错误：`--provider-selftest` / `--provider-dump` 归 **`aiwrite.exe`**；③ **Pydoll 2.27.0 环境登记 + 冒烟通过**，并据此**修正三处计划假设**（§5：网络日志/响应体有库级 API；文件注入优先 `expect_file_chooser`；`Edge` 兜底 API 已确认）；④ **新增合规禁用清单**（§13）与断言 **`VB2-37`**（验证码规避 / 指纹伪造 API 零命中）；⑤ `.gitignore` 补 Python 运行时忽略项。**仍未开工** |
 
 **站点选择器回填记录**（格式见 §10；`M7B-06` / `M7B-27` / `M7B-28` / `M7B-29` 执行时逐行追加）：
 
