@@ -1,5 +1,6 @@
 #include "ai/deepseek_official_provider.h"
 
+#include "utils/image_decode.h" // M7-05：图片格式按内容嗅探（扩展名可能骗人）
 #include "utils/log.h"
 
 #include <chrono>
@@ -58,14 +59,6 @@ std::string classify_http_error(int status, const std::string& body)
 
 // ---- M5-02：多模态辅助（纯函数；离线可断言）----
 
-std::string lower_text(std::string text)
-{
-    for (char& ch : text) {
-        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    }
-    return text;
-}
-
 // 字节数 → 便于阅读的 MB 文本（1 位小数）
 std::string megabytes_text(std::size_t bytes)
 {
@@ -96,25 +89,26 @@ std::string base64_encode(const std::string& bytes)
 
 } // namespace
 
+std::string image_mime_from_bytes(const unsigned char* data, std::size_t size)
+{
+    const utils::ImageMagic magic = utils::sniffImageBytes(data, size);
+    const char*             mime  = utils::imageFormatMime(magic.format);
+    return mime[0] != '\0' ? std::string(mime) : std::string();
+}
+
 std::string image_mime_from_path(const std::string& path)
 {
-    const std::string extension = lower_text(std::filesystem::path(path).extension().string());
-    if (extension == ".png") {
-        return "image/png";
+    // M7-05：**内容优先**（魔数嗅探）—— 扩展名可能骗人（实测：WebP 存成 .png 时
+    // 旧实现会贴 image/png 标签，后端可能因此拒图）；读不到文件头 / 格式不认识时
+    // 回退扩展名（未知扩展名仍是 image/png，守 M5-02 既有语义）
+    const utils::ImageMagic magic = utils::sniffImage(path);
+    if (magic.format != utils::ImageFormat::Unknown) {
+        const char* mime = utils::imageFormatMime(magic.format);
+        if (mime[0] != '\0') {
+            return mime;
+        }
     }
-    if (extension == ".jpg" || extension == ".jpeg") {
-        return "image/jpeg";
-    }
-    if (extension == ".webp") {
-        return "image/webp";
-    }
-    if (extension == ".bmp") {
-        return "image/bmp";
-    }
-    if (extension == ".gif") {
-        return "image/gif";
-    }
-    return "image/png"; // 未知扩展名回退（服务端多按内容嗅探）
+    return utils::mimeFromExtension(path);
 }
 
 std::string encode_image_data_url(const std::string& path, std::size_t max_bytes,

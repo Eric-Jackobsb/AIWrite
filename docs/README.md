@@ -1,8 +1,8 @@
 # AIwrite 文档中心
 
 > 项目：AI 小说/剧本创作软件（节点工作流 + DeepSeek 后端）
-> 当前进度：**M1 ✅ / M2 ✅**；**M3 🟡**（节点编辑器）、**M4 ✅ 核心完成**（文本生成链路）、**M5 🟡 核心切片完成**（图片理解 + 图片显示）；补丁系列 A ✅ / B 进行中（**PB-04 Provider 可插拔化展开计划 [M_patchB.md](actionPlan/M_patchB.md)：L1 已收口 ✅** —— 配置表 / 用户覆盖 / API 参数化 / **网页版去硬编码** / **多站点会话并存** / `config.toml` 多 provider / `--provider-selftest`；剩余 L2 工厂与协议收编）；**L4 立项（v12 · 登录层去 DeepSeek 化：站点无关「已登录」判定 + 探测「不适用」语义 + 站点选择器逐站实测 + 自建站点 UI 闭环）**；M6 未开始
-> 最近更新：2026-09-26
+> 当前进度：**M1 ✅ / M2 ✅**；**M3 🟡**（节点编辑器）、**M4 ✅ 核心完成**（文本生成链路）、**M5 🟡 核心切片完成**（图片理解 + 图片显示）、**M7 ✅ 第一轮代码与手册落地 / 🟡 第二轮 P7 已立项（计划中）**（第一轮 = 图片输入收口 + 节点精简 9→8 + 图片格式按内容嗅探/双解码后端 + **一次 CRT 断言崩溃的根因修复与冻结区 `I17`**；第二轮 = **P7-a v0.5.2**：图片内部运行（多图 + 统一资源目录）+ official 收口 + UI **A 档**；**P7-b v0.5.3**（待确认）：网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道，**先做 5 项前置验证，未过则回滚**—— 见 [actionPlan/M7.md](actionPlan/M7.md) §8–§17）；补丁系列：`Patch A` ✅ 全部完成、`M_patchB`（Provider 可插拔化）**L1 已收口 ✅ / L3 ✅ / L4 部分落地**，**前两期已完成部分已归档**（[Archive/actionPlan/](Archive/actionPlan/)）—— **补丁系列所有剩余项统一见 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)**（要点：配置表 / 用户覆盖 / API 参数化 / **网页版去硬编码** / **多站点会话并存** / `config.toml` 多 provider / `--provider-selftest`；**L4（登录层去 DeepSeek 化）**、**L2 工厂**、**原 Patch C/D/PM** 均归入承接文档）；**M7 第三轮 `M7B` 已立项（计划中）**：网页通道**整体迁 Pydoll** —— WebView2 **退场**（嵌入控件易被站点识别为非真实浏览器）、`builtin:deepseek` 协议栈退役、**CDP `Network` 事件重建 SSE 增量**（保住逐字流式）、**只维护一套登录态**、**作废不变量 `I2`**（改由 `I20` CLI 契约替代：`--provider` 必填 / 缺参列候选 + 退出码 2）—— 见 [actionPlan/M7B.md](actionPlan/M7B.md)；M6 未开始
+> 最近更新：2026-09-28
 
 ---
 
@@ -11,11 +11,13 @@
 | 文档 | 内容 | 何时看 |
 |---|---|---|
 | [ai_writer_nodes.md](ai_writer_nodes.md) | **项目设计文档 v1.0**：需求、架构、数据结构、节点、执行引擎、UI、日志、配置、开发计划、附录 | 了解整体设计 / 写代码前对齐规范 |
-| [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6）与节奏、总体验收对照 | 看整体排期与当前进度 |
-| [actionPlan/](actionPlan/)（M3–M6 + 补丁 A/B） | **进行中 / 待开发**的里程碑与补丁 Action Plan（含 [M_patchB.md](actionPlan/M_patchB.md) Provider 可插拔化 / JSON 配置表：**L1 已收口**（含网页版去硬编码与多站点会话），第二轮修订 v6 的修复项 `PB2-20` **已落地（v7）**（`mode` 恒按 `D-21` 提供 `official`/`web` 两项、面板与校验按**节点自身条目**解析站点）；另有 v9 修复项 `PB2-22`/`PB2-23` **已落地**（**站点不回落** + 三条引导 + 按条目 `--web-probe --provider`）与 v10 的 `PB2-26`（**登录型站点条目**：内置 **11 个 AI 的网页版登录入口** —— Kimi / 通义 / Qwen / 智谱清言 / 豆包 / 元宝 / 文心 / 星火 / ChatGPT / Claude / Gemini；**附录 D/E**）；**L3 已落地（v11）**（通用 DOM 站点适配器：条目补齐选择器即**真正生成**；选择器诊断 `--web-adapter-selftest --provider <id>`）；**L4 立项（v12 · 登录层去 DeepSeek 化 + 站点数据落地 + 自助闭环 —— `PB2-27`…`PB2-30` / `B2-e` / `I15`·`I16` / `AB2-20`…`AB2-22`，见该文档 §9.7）**；剩余 L2、`PB2-25`（会话失效可诊断）与 `PB2-07` 界面按钮，见该文档 §9 / §9.1 / §9.3 / §9.4 / §9.5 / §9.6 / §9.7 与附录 D/E） | 开发某个里程碑 / 补丁前 |
-| [Archive/actionPlan/](Archive/actionPlan/)（M1 · M2 · M_rerun · M_textio） | **已完成**的里程碑 / 补丁计划（归档保留） | 追溯历史决策与验收依据 |
+| [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6 + **M7**）与节奏、总体验收对照 | 看整体排期与当前进度 |
+| [roadmap.md](roadmap.md) | **长期路线图 v1.0（一页纸）**：定位（面向非技术用户 / 可能转商业）、阶段总览、P7-a → P7-b + 面向 C 前置项 → **M6 一键安装包** → 滚动发布 → 商业候选；含 **`RM-D1`~`RM-D6` 决策**、风险与回滚、不做清单、待确认项与"待同步差异" | 判断"这个改动该不该做 / 排在哪个阶段"时先看它 |
+| [actionPlan/M7.md](actionPlan/M7.md) | **M7 计划（图片输入收口 + 节点精简）**：删除图片输出节点（9→8）、图片格式**按内容嗅探**、本地解码 **stb/WIC 双后端**、可操作报错、诊断入口 `--image-decode`；**§1 记录了 CRT 断言崩溃（退出码 3 / `0x80000003`）的根因与冻结区 `I17`** | 排查「某张图无法识别/预览」、改图片解码相关代码前**必读**；做 P7（图片内部运行 / 网页版图片上传 / UI A 档）前**必读** §8–§17 |
+| [actionPlan/](actionPlan/)（M3–M6 + 补丁 A/B） | **进行中 / 待开发**的里程碑与补丁 Action Plan（**补丁系列剩余项 [M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)**；已归档的 [Archive/actionPlan/M_patchB.md](Archive/actionPlan/M_patchB.md) Provider 可插拔化 / JSON 配置表：**L1 已收口**（含网页版去硬编码与多站点会话），第二轮修订 v6 的修复项 `PB2-20` **已落地（v7）**（`mode` 恒按 `D-21` 提供 `official`/`web` 两项、面板与校验按**节点自身条目**解析站点）；另有 v9 修复项 `PB2-22`/`PB2-23` **已落地**（**站点不回落** + 三条引导 + 按条目 `--web-probe --provider`）与 v10 的 `PB2-26`（**登录型站点条目**：内置 **11 个 AI 的网页版登录入口** —— Kimi / 通义 / Qwen / 智谱清言 / 豆包 / 元宝 / 文心 / 星火 / ChatGPT / Claude / Gemini；**附录 D/E**）；**L3 已落地（v11）**（通用 DOM 站点适配器：条目补齐选择器即**真正生成**；选择器诊断 `--web-adapter-selftest --provider <id>`）；**L4 立项（v12 · 登录层去 DeepSeek 化 + 站点数据落地 + 自助闭环 —— `PB2-27`…`PB2-30` / `B2-e` / `I15`·`I16` / `AB2-20`…`AB2-22`，见该文档 §9.7）**；剩余 L2、`PB2-25`（会话失效可诊断）与 `PB2-07` 界面按钮，见 [M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §1–§9（承接文档）与已归档的 `Archive/actionPlan/M_patchB.md` §9.x / 附录 D/E —— **现行规格以承接文档 §8 附录为准**） | 开发某个里程碑 / 补丁前 |
+| [Archive/actionPlan/](Archive/actionPlan/)（M1 · M2 · M_rerun · M_textio · **M_patchA · M_patchB**） | **已完成**的里程碑 / 补丁计划（归档保留；补丁系列 2026-09-27 归档，剩余项见 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)） | 追溯历史决策与验收依据 |
 | [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) | M1 实测环境、分层验证结果、V/A 验收对照、问题与解决记录 | 想知道“为什么这么搭环境/踩过哪些坑” |
-| [节点编辑器使用说明.md](节点编辑器使用说明.md) | **M2 节点系统 P1/P2** 操作手册（鼠标操作全表、9 节点说明、参数校验、撤销规则、自检命令、20 项人工验证清单、已知限制） | 上手操作节点画布 / 做人工验收 |
+| [节点编辑器使用说明.md](节点编辑器使用说明.md) | **M2 节点系统 P1/P2** 操作手册（鼠标操作全表、**8** 节点说明、参数校验、撤销规则、自检命令、20 项人工验证清单、已知限制；§10.9 图片理解/显示 + **§10.10 P7 计划中的人工步骤**） | 上手操作节点画布 / 做人工验收 |
 | [CHANGELOG.md](CHANGELOG.md) | 全部重要变更（新增/修复/变更/移除）与验证项结果 | 每次看进度、排查“什么时候改的” |
 | [../source/README.md](../source/README.md) | 源码结构、构建、运行、调试（VS Code 任务/配置）、常见问题 | 动手构建或运行程序 |
 

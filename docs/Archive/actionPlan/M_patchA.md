@@ -1,12 +1,14 @@
 # M_patchA：地基补丁系列 —— 结果回流与可观测性
+> 📦 **已归档（2026-09-27）**：本阶段已完成；当前计划见 [../../actionPlan/](../../actionPlan/)（**补丁系列剩余项 → [M_patchAB_rest.md](../../actionPlan/M_patchAB_rest.md)**），任务看板见 [../../DevPlan.todo](../../DevPlan.todo)。
 
-> 类型：跨里程碑「地基补丁」（不占用 M1–M6 编号，与 `M1.md … M6.md` 平级互链；已完成的里程碑计划见 [../Archive/actionPlan/](../Archive/actionPlan/)）
+> 类型：跨里程碑「地基补丁」（不占用 M1–M6 编号，与 `M1.md … M6.md` 平级互链；已完成的里程碑计划见 [../Archive/actionPlan/](../../Archive/actionPlan/)）
 > 依据：2026-09-23 全库底层逻辑审计（见 §1）
 > 版本目标：v0.2.x（在已收口的 M2 之上补体验地基）
 > 预计工期：全系列 5–6 天（全职）/ 12–15 天（业余）；**Patch A 单批 ≈1.2 天**
 > 实施状态（2026-09-26 更新）：**Patch A 全部完成 ✅**；**Patch B 主体完成** —— **PB-01 执行线程化 ✅（三步）**、**PB-03 最小化 ✅（数据源暂停）**、**PB-05 官方 Provider ✅（人工验证通过）**、**PB-06 凭据库 ✅**、**PB-08 UI 侧 ✅（随数据源暂停）**；**剩余**：PB-02 真取消（延后）、PB-07 会话失效引导、流式数据源、代理与自签证书（FEA-M4-13）、PB-09 自检扩展；Patch C / D 未开工。
-> ⚠️ 流式（实时数据返回）计划按用户决议**暂停**，原因与后续选项见 [`../网页版协议实测记录.md`](../网页版协议实测记录.md) 附录 A。
-> Patch C / Patch D 未开工；任务状态以 [`../DevPlan.todo`](../DevPlan.todo) 为准。
+> 📦 **未完项承接**：Patch B 残项、原 Patch C（数据安全）、原 Patch D（交互打磨）与 PM 未完成项**已迁至** [../../actionPlan/M_patchAB_rest.md](../../actionPlan/M_patchAB_rest.md)（本文只保留已完成部分与历史规格）。
+> ⚠️ 流式（实时数据返回）计划按用户决议**暂停**，原因与后续选项见 [`../网页版协议实测记录.md`](../../网页版协议实测记录.md) 附录 A。
+> Patch C / Patch D 未开工；任务状态以 [`../DevPlan.todo`](../../DevPlan.todo) 为准。
 
 ### 实施进度（2026-09-26 更新）
 
@@ -34,7 +36,7 @@
 | B | **PB-06 凭据与密钥存储** | ✅ 已完成 | 附录 B 设计 + `utils/credential.{h,cpp}`（**DPAPI 当前用户** + `BRNC` 容器 + CRC + ACL 收紧 + `SecureZeroMemory`）；**三级优先级**（节点参数 → 环境变量 → 凭据库）+ 填一次自动入库；CLI `--cred-list` / `--cred-erase` / `--cred-purge` + 启动 TTL 惰性清理；`--cred-selftest` **8/8 PASS**（含「落盘无明文」「CRC 篡改被拒」「TTL 只删过期」） |
 | B | PB-02 真取消（HTTP 可中断 + 节点协作检查点） | ⬜ **延后（用户决议）** | 影响：「■ 停止」仍在节点边界生效；网页版最坏等 HTTP 读超时 |
 | B | PB-06 剩余 · 代理与自签证书策略 + `[credentials]` 配置项 | ⬜ 待做 | 归口 DevPlan `FEA-M4-13`；当前使用代码默认值（`~/.brain-ai/credentials`、TTL 30 天、backend `dpapi`） |
-| B | PB-03 流式回调接口（最小化：仅网页版） | ✅ 已落地 / 🚫 数据源暂停 | `195fde0`：`WebChatRequest.on_delta` → `RunEvent::Delta` → 读模型逐段追加；官方 `on_delta` 随 PB-05 未接。**暂停原因**：httplib v0.15.3 **无 POST 响应体流式接收重载**（实证见 [`../网页版协议实测记录.md`](../网页版协议实测记录.md) 附录 A） |
+| B | PB-03 流式回调接口（最小化：仅网页版） | ✅ 已落地 / 🚫 数据源暂停 | `195fde0`：`WebChatRequest.on_delta` → `RunEvent::Delta` → 读模型逐段追加；官方 `on_delta` 随 PB-05 未接。**暂停原因**：httplib v0.15.3 **无 POST 响应体流式接收重载**（实证见 [`../网页版协议实测记录.md`](../../网页版协议实测记录.md) 附录 A） |
 | B | PB-08 流式呈现 / PB-07 会话失效引导 | 🟡 / ⬜ | **PB-07 部分前置已完成（2026-09-26，FEA-M4-19）**：`ensure_session` 识别「窗口已开 → 补探测」（原来只会干等 25s 报「未取得网页版凭证」）+ 手动登录窗口自动探测 + 离线真值表断言 + 端到端 `--web-session-selftest`；**剩余**：识别 `40002/401` 与「点此重新登录」错误条引导 |
 | 后续 | **工作流变体保存**（用户后续设计） | ⬜ 延后 | 把面板保存为独立 workflow，并把当前 workflow 更新为变体；启动恢复上次工作流一并归入该项（本条**不做**，仅登记） |
 | A2 | 回归基线（PA-02 后，**历史快照**） | ✅ | 当时：七组 PASS；95/0；62/0；3-of-5；5-of-5；构建 0-0（**当前基线见 §0.4 与表格末行**） |
@@ -436,7 +438,7 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 | PD-04 ✅ | 窗口几何持久化 | `config.ui` 增 `window_width/height/pos_x/pos_y/maximized`；启动恢复 + 越屏矫正（多显示器拔插后回到主屏） | `utils/config.*`、`ui/app.cpp` |
 | PD-05 ✅ | 参数面板增强 | 每节点「重置为默认」；按类型批量应用参数；参数搜索过滤 | `ui/property_panel.cpp` |
 | PD-06 🟡 | 重跑能力 | ① **通用重跑**（「重跑该节点」「重跑该节点及下游」，依赖 `runInfos` 与拓扑；重跑前清除受影响节点结果与状态）→ 仍归口 `FEA-M4-11`；
-② **「重新生成（新 seed）」**（LLMGenerate）：写入新 seed 后重新运行，效果等同「再次运行但用不同 seed」，**不改图结构与其它参数** → 归口 `FEA-M4-17`，详见 [`M_rerun.md`](../Archive/actionPlan/M_rerun.md) | 
+② **「重新生成（新 seed）」**（LLMGenerate）：写入新 seed 后重新运行，效果等同「再次运行但用不同 seed」，**不改图结构与其它参数** → 归口 `FEA-M4-17`，详见 [`M_rerun.md`](../../Archive/actionPlan/M_rerun.md) | 
 `ui/property_panel.cpp`、`ui/editor_state.*`、`ui/node_canvas.cpp`、`ui/toolbar.cpp`、`engine/node_registry.cpp`、`ai/deepseek_official_provider.*` |
 | PD-07 ⬜ | 输出面板进阶 | 历史运行列表（内存 + 最近 N 次）、节点内搜索、复制为 Markdown/JSON | `ui/output_panel.cpp` |
 | PD-08 ⬜ | i18n 决策 | 二选一：① 最小 i18n（字符串表 + `general.language` 切换，重启生效）；② 从 `config.toml` 暂时移除 `general.language/startup` 并记入 M6（本补丁默认 ②，除非另行指定） | `utils/config.*`、文档 |
@@ -636,5 +638,5 @@ autosave 与恢复、最近列表治理、迁移框架、输出归档与 TTL、�
 
 ---
 
-**下游索引**：里程碑总览见 [`milestone_plan.md`](milestone_plan.md)；变更明细见 [`../CHANGELOG.md`](../CHANGELOG.md)；
-网页版协议与 PoW 方案见 [`../网页版协议实测记录.md`](../网页版协议实测记录.md)。
+**下游索引**：里程碑总览见 [`milestone_plan.md`](../../actionPlan/milestone_plan.md)；变更明细见 [`../CHANGELOG.md`](../../CHANGELOG.md)；
+网页版协议与 PoW 方案见 [`../网页版协议实测记录.md`](../../网页版协议实测记录.md)。

@@ -41,6 +41,7 @@
 #include "ai/dom_web_client.h"             // L3（PB2-13/15）：DOM 适配器纯函数断言（VB2-22）
 #include "web/webview_host.h"              // L4（PB2-28）：探测脚本适用性断言（VB2-25）
 #include "ai/deepseek_web_client.h"       // L4（PB2-28④）：会话失效识别断言（VB2-27）
+#include "utils/image_decode.h"           // M7-04/05：图片格式嗅探 + 解码 + 失败文案断言
 
 #include <fstream>
 #include <sstream>
@@ -75,6 +76,7 @@ struct Options {
     std::string chat_prompt;
     std::string model    = "deepseek-chat";
     std::string api_base = "https://api.deepseek.com";
+    std::string image_path;   // --image-decode：诊断某一图片文件（格式嗅探 / 解码 / 尺寸）
 };
 
 // NIST FIPS 202 标准测试向量
@@ -88,6 +90,7 @@ void print_usage()
     std::printf("  api_probe --selftest\n");
     std::printf("  api_probe --graph-selftest          # 图模型/注册表/撤销栈/序列化 自检（不需要网络）\n");
     std::printf("  api_probe --exec-selftest           # 拓扑排序 + 加载/运行前校验 + 执行器 自检（不需要网络）\n");
+    std::printf("  api_probe --image-decode <图片路径>  # 图片诊断：内容嗅探 / MIME / 解码（stb|wic）/ 尺寸 / WIC 能力\n");
     std::printf("  api_probe --sha3 <text>\n");
     std::printf("  api_probe --http <url>\n");
     std::printf("  api_probe --chat \"<prompt>\" [--model <name>] [--api-base <url>] [--insecure]\n");
@@ -713,11 +716,11 @@ int graph_selftest()
     // ---------------------------------------------------- 1. 节点注册表 -----
     engine::registerAllNodes();
     NodeRegistry& registry = NodeRegistry::instance();
-    expect_eq(check, std::to_string(registry.size()), "9", "注册表包含 9 个节点类型");
+    expect_eq(check, std::to_string(registry.size()), "8", "注册表包含 8 个节点类型");
 
     const char* expected_types[] = {"TextInput",      "ImageInput",    "PromptTemplate",
                                     "TextMerge",      "ProviderConfig", "LLMGenerate",
-                                    "VLMGenerate",    "TextOutput",    "ImagePreview"};
+                                    "VLMGenerate",    "TextOutput"};
     for (const char* type : expected_types) {
         expect(check, registry.find(type) != nullptr, std::string("已注册 ") + type);
     }
@@ -730,7 +733,7 @@ int graph_selftest()
     const CategoryCount categories[] = {
         {NodeCategory::Input, 2, "输入"}, {NodeCategory::Process, 2, "处理"},
         {NodeCategory::Config, 1, "配置"}, {NodeCategory::Inference, 2, "推理"},
-        {NodeCategory::Output, 2, "输出"}};
+        {NodeCategory::Output, 1, "输出"}}; // M7：ImagePreview 移除后「输出」只剩 TextOutput
     for (const CategoryCount& item : categories) {
         expect(check, registry.listByCategory(item.category).size() == item.count,
                std::string("分类 ") + item.name + " 节点数 = " + std::to_string(item.count));
@@ -1413,8 +1416,8 @@ int executor_selftest()
     }
     { // 端口类型不兼容：Text 输出 → Image 输入
         Graph             graph = sample;
-        const std::string preview = add_node(check, graph, "ImagePreview", "图片预览");
-        graph.edges.push_back(make_edge("e9", llm, "text", preview, "image"));
+        const std::string vlm   = add_node(check, graph, "VLMGenerate", "图片理解（类型不兼容用例）");
+        graph.edges.push_back(make_edge("e9", llm, "text", vlm, "image"));
         ValidationMessages errors;
         expect(check, !engine::validateWorkflow(graph, &errors) &&
                          contains_text(errors, "端口类型不兼容"),
@@ -1495,8 +1498,8 @@ int execution_selftest()
 
     engine::registerAllNodes();
     aiwrite::nodes::registerAllExecutors();
-    expect_eq(check, std::to_string(engine::NodeExecutorRegistry::instance().size()), "9",
-              "已注册 9 个节点执行函数");
+    expect_eq(check, std::to_string(engine::NodeExecutorRegistry::instance().size()), "8",
+              "已注册 8 个节点执行函数");
 
     // ------------------------------------------------ 1. 本地链路端到端 ------
     {
@@ -1910,8 +1913,78 @@ int execution_selftest()
                   "M5-02 MIME：.JpEg → image/jpeg");
         expect_eq(check, aiwrite::ai::image_mime_from_path("c.webp"), "image/webp",
                   "M5-02 MIME：.webp → image/webp");
-        expect_eq(check, aiwrite::ai::image_mime_from_path("d.tif"), "image/png",
+        expect_eq(check, aiwrite::ai::image_mime_from_path("d.tif"), "image/tiff",
+                  "M7-05 MIME：.tif（TIFF 属已知扩展名）→ image/tiff");
+        expect_eq(check, aiwrite::ai::image_mime_from_path("e.xyz"), "image/png",
                   "M5-02 MIME：未知扩展名回退 image/png");
+
+        // ---- 1b) M7-04/05：内容嗅探优先 + 解码 + 可操作失败文案 ----
+        {
+            const fs::path webp_fake = vlm_root / "伪装.png"; // 内容 WebP、扩展名 .png（实测场景）
+            {
+                std::ofstream              out(webp_fake, std::ios::binary);
+                const unsigned char        head[] = {'R', 'I',  'F',  'F',  0x1E, 0x00, 0x00, 0x00,
+                                                     'W', 'E',  'B',  'P',  'V',  'P',  '8',  ' ',
+                                                     0x12, 0x00, 0x00, 0x00};
+                out.write(reinterpret_cast<const char*>(head), sizeof(head));
+            }
+            const aiwrite::utils::ImageMagic magic = aiwrite::utils::sniffImage(webp_fake.string());
+            expect(check, magic.format == aiwrite::utils::ImageFormat::WebP,
+                   "M7-05 嗅探：RIFF/WEBP 文件头 → WebP（不看扩展名）");
+            expect(check, magic.mismatch, "M7-05 嗅探：内容 WebP + 扩展名 .png → 标记不一致");
+            expect_eq(check, aiwrite::ai::image_mime_from_path(webp_fake.string()), "image/webp",
+                      "M7-05 MIME：WebP 伪装 .png → image/webp（不再谎报 image/png）");
+            expect_eq(check, aiwrite::ai::image_mime_from_path(png_a.string()), "image/png",
+                      "M7-05 MIME：真 PNG（大写扩展名）→ image/png");
+
+            const unsigned char png_head[] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+            expect_eq(check, aiwrite::ai::image_mime_from_bytes(png_head, sizeof(png_head)), "image/png",
+                      "M7-05 MIME（纯函数）：PNG 魔数 → image/png");
+            expect_eq(check, aiwrite::ai::image_mime_from_bytes(nullptr, 0), "",
+                      "M7-05 MIME（纯函数）：空数据 → 空串（调用方回退扩展名）");
+
+            const std::string message = aiwrite::utils::decodeErrorMessage(
+                webp_fake.string(), magic, "stb：unknown image type；WIC：没有可用解码器");
+            expect(check,
+                   message.find("WebP") != std::string::npos &&
+                       message.find("另存为") != std::string::npos,
+                   "M7-04 文案：指明「内容其实是 WebP」+ 可操作建议（另存为 PNG/JPG）", message);
+            expect(check, message.find("图片理解") != std::string::npos,
+                   "M7-04 文案：说明「本地预览失败不影响发给模型」", message);
+
+            const aiwrite::utils::DecodedImage decoded = aiwrite::utils::decodeImageRgba8(png_a.string());
+            expect(check,
+                   decoded.error.empty() && decoded.width == 1 && decoded.height == 1 &&
+                       decoded.rgba.size() == 4,
+                   "M7-04 解码：真 PNG → 1×1 RGBA8（decoder=" + decoded.decoder + "）", decoded.error);
+            expect(check, !decoded.decoder.empty(), "M7-04 解码：记录实际解码器（stb / wic）");
+
+            const fs::path text_fake = vlm_root / "文本.png";
+            {
+                std::ofstream out(text_fake, std::ios::binary);
+                out << "this is not an image at all\n";
+            }
+            const aiwrite::utils::DecodedImage broken = aiwrite::utils::decodeImageRgba8(text_fake.string());
+            expect(check, !broken.error.empty() && broken.error.find("无法识别") != std::string::npos,
+                   "M7-04 解码：非图片内容（.png 后缀）→ 「无法识别的图片格式」+ 文件头", broken.error);
+            expect(check, broken.error.find("解码器原因") != std::string::npos,
+                   "M7-04 解码：错误文案附解码器原因（可诊断）", broken.error);
+
+            int         width      = 0;
+            int         height     = 0;
+            std::string size_error;
+            expect(check,
+                   aiwrite::utils::readImageSize(png_a.string(), &width, &height, &size_error) &&
+                       width == 1 && height == 1,
+                   "M7-04 尺寸：真 PNG → 1×1", size_error);
+            expect(check,
+                   !aiwrite::utils::readImageSize(empty_file.string(), &width, &height, &size_error) &&
+                       size_error.find("为空") != std::string::npos,
+                   "M7-04 尺寸：空文件 → 可操作错误", size_error);
+            expect(check,
+                   !aiwrite::utils::decodeImageRgba8((vlm_root / "无此文件.png").string()).error.empty(),
+                   "M7-04 解码：文件不存在 → 明确错误");
+        }
 
         // ---- 2) 编码成功路径（与 Python 参考实现的 base64 逐字符比对）----
         {
@@ -2116,15 +2189,14 @@ int execution_selftest()
         }
 
         // ---- 8) 快照图片通道（M5-03：无 GL 也能验，UI 据此渲染缩略图）----
+        //      M7：ImagePreview 汇点已移除 —— 图片结果只来自 image 端口（如「图片输入」）
         {
             Graph             graph;
-            const std::string img     = add_node(check, graph, "ImageInput", "快照图片输入");
-            const std::string preview = add_node(check, graph, "ImagePreview", "快照图片预览");
-            const std::string text    = add_node(check, graph, "TextInput", "快照文本");
-            const std::string output  = add_node(check, graph, "TextOutput", "快照文本输出");
+            const std::string img    = add_node(check, graph, "ImageInput", "快照图片输入");
+            const std::string text   = add_node(check, graph, "TextInput", "快照文本");
+            const std::string output = add_node(check, graph, "TextOutput", "快照文本输出");
             set_param(graph, img, "path", png_a.string());
             set_param(graph, text, "text", "纯文本");
-            graph.edges.push_back(make_edge("s1", img, "image", preview, "image"));
             graph.edges.push_back(make_edge("s2", text, "text", output, "text"));
 
             Executor    executor;
@@ -2139,11 +2211,6 @@ int execution_selftest()
                        img_view != nullptr && img_view->images.size() == 1 &&
                            img_view->images[0] == png_a.string(),
                        "M5-03 快照：ImageInput 的 image 端口进入 RunNodeView.images");
-                const engine::RunNodeView* preview_view = snapshot.find(preview);
-                expect(check,
-                       preview_view != nullptr && preview_view->images.size() == 1 &&
-                           preview_view->images[0] == png_a.string(),
-                       "M5-03 快照：ImagePreview（汇点 __result）也进入 images");
                 const engine::RunNodeView* text_view = snapshot.find(output);
                 expect(check, text_view != nullptr && text_view->images.empty(),
                        "M5-03 快照：纯文本节点的 images 为空（不误判为图片）");
@@ -2800,6 +2867,45 @@ int execution_selftest()
     return check.failed == 0 ? 0 : 1;
 }
 
+// M7 诊断入口：--image-decode <路径>（只读、不联网、不改任何状态）
+//   用途：① 排查「无法识别/无法预览某张图」② 验证 stb / WIC 两条解码路径
+int image_decode_report(const std::string& path)
+{
+    std::printf("=== 图片诊断（M7）===\n");
+    std::printf("路径        : %s\n", path.c_str());
+
+    const aiwrite::utils::ImageMagic magic = aiwrite::utils::sniffImage(path);
+    std::printf("内容嗅探    : %s（扩展名 %s；按扩展名的 MIME %s）\n",
+                aiwrite::utils::imageFormatName(magic.format),
+                magic.ext_label.empty() ? "(无)" : magic.ext_label.c_str(), magic.ext_mime.c_str());
+    std::printf("内容 MIME   : %s（发给模型时使用）\n",
+                aiwrite::ai::image_mime_from_path(path).c_str());
+    std::printf("扩展名一致  : %s\n", magic.mismatch ? "否 —— 扩展名与实际格式不一致" : "是");
+    std::printf("文件头      : %s\n", magic.head_hex.empty() ? "(读不到)" : magic.head_hex.c_str());
+    std::printf("WIC 能力    : %s\n", aiwrite::utils::wicInfo().note.c_str());
+
+    const aiwrite::utils::DecodedImage decoded = aiwrite::utils::decodeImageRgba8(path);
+    if (decoded.error.empty()) {
+        std::printf("本地解码    : OK（解码器 %s，%d×%d，RGBA8 %zu 字节）\n", decoded.decoder.c_str(),
+                    decoded.width, decoded.height, decoded.rgba.size());
+    }
+    else {
+        std::printf("本地解码    : FAIL\n  可操作提示: %s\n", decoded.error.c_str());
+    }
+
+    int         width      = 0;
+    int         height     = 0;
+    std::string size_error;
+    if (aiwrite::utils::readImageSize(path, &width, &height, &size_error)) {
+        std::printf("只读尺寸    : %d×%d\n", width, height);
+    }
+    else {
+        std::printf("只读尺寸    : FAIL（%s）\n", size_error.c_str());
+    }
+    std::printf("结论        : %s\n", decoded.error.empty() ? "本地可预览" : "本地不可预览（见上）");
+    return decoded.error.empty() ? 0 : 2;
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -2827,6 +2933,9 @@ int main(int argc, char** argv)
         }
         else if (arg == "--exec-selftest") {
             options.exec_selftest = true;
+        }
+        else if (arg == "--image-decode") {
+            options.image_path = next("--image-decode");
         }
         else if (arg == "--insecure") {
             options.insecure = true;
@@ -2869,7 +2978,8 @@ int main(int argc, char** argv)
     }
 
     if (options.sha3_text == "" && !options.selftest && !options.graph_selftest &&
-        !options.exec_selftest && options.http_url.empty() && options.chat_prompt.empty()) {
+        !options.exec_selftest && options.http_url.empty() && options.chat_prompt.empty() &&
+        options.image_path.empty()) {
         print_usage();
         aiwrite::log::shutdown();
         return 2;
@@ -2927,6 +3037,13 @@ int main(int argc, char** argv)
         }
         if (execution_selftest() != 0) {
             exit_code = 1;
+        }
+    }
+
+    if (!options.image_path.empty()) { // M7：图片诊断（只读，不联网）
+        const int image_code = image_decode_report(options.image_path);
+        if (image_code != 0) {
+            exit_code = image_code;
         }
     }
 

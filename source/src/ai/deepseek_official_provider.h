@@ -83,7 +83,9 @@ std::vector<std::pair<std::string, std::string>> build_auth_headers(const Provid
 // M_patchB L1 / PB2-04：把 {model} 占位替换为实际模型名
 std::string    resolve_chat_path(const std::string& chat_path, const std::string& model);
 
-// M5-02：扩展名 → MIME（png/jpg/jpeg/bmp/webp/gif；未知回退 image/png）
+// M7-05：内容（魔数）→ MIME；认不出来返回空串
+std::string    image_mime_from_bytes(const unsigned char* data, std::size_t size);
+// M5-02 / M7-05：路径 → MIME（**内容优先**，扩展名回退；未知扩展名仍是 image/png）
 std::string    image_mime_from_path(const std::string& path);
 // M5-02：读文件 → "data:<mime>;base64,<...>"；失败返回空串并把原因写入 *error
 std::string    encode_image_data_url(const std::string& path, std::size_t max_bytes,

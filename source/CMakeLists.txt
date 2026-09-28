@@ -220,6 +220,7 @@ add_library(aiwrite_core STATIC
     src/utils/crypto.cpp
     src/utils/output_archive.cpp
     src/utils/diagnostics.cpp
+    src/utils/image_decode.cpp     # M7-04：图片格式嗅探 + stb/WIC 解码（texture_cache 与自检共用）
     src/engine/graph.cpp
     src/engine/node_registry.cpp
     src/engine/undo_stack.cpp
@@ -247,6 +248,10 @@ target_link_libraries(aiwrite_core
     PUBLIC httplib::httplib   # ai/：网页版 PoW + /api/v0/chat/completion（M4-06）
     ${AIWRITE_WEBVIEW2}       # web/：内嵌 WebView2 登录窗口 + 页面内 PoW 求解（M4-06/M4-08）
     PRIVATE psapi)   # 诊断模块：GetProcessMemoryInfo
+# M7-04 图片解码：stb_image 只有头文件（端口无 CMake config）→ 手工挂 include；
+#   Windows 系统解码器 WIC（WebP/TIFF/ICO/HEIF 等）+ COM 初始化（ole32）
+target_include_directories(aiwrite_core PRIVATE "${AIWRITE_STB_INCLUDE_DIR}")
+target_link_libraries(aiwrite_core PRIVATE windowscodecs ole32 uuid)
 if(MSVC)
     target_compile_options(aiwrite_core PRIVATE /W4)
 endif()
@@ -293,8 +298,7 @@ target_link_libraries(aiwrite PRIVATE
     OpenGL::GL
     nfd::nfd
     shell32)   # M5-03：ShellExecuteW（在资源管理器中定位图片）
-# stb_image（图片解码）：端口无 CMake config，头文件目录手工挂上
-target_include_directories(aiwrite PRIVATE "${AIWRITE_STB_INCLUDE_DIR}")
+# 图片解码的 stb include 与 WIC 链接已随 src/utils/image_decode.cpp 归到 aiwrite_core（M7-04）
 # 源码目录（自检用：默认示例图片路径可复现）
 target_compile_definitions(aiwrite PRIVATE AIWRITE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 if(MSVC)

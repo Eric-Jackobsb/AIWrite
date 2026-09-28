@@ -94,9 +94,11 @@
 | spdlog | 日志 | vcpkg |
 | toml++ | 配置管理 | 单头文件 |
 | cpp-httplib | HTTP 客户端 | vcpkg / 单头文件 |
-| OpenSSL | SHA3（PoW） | vcpkg |
-| WebView2 | 嵌入浏览器 | NuGet / vcpkg |
+| OpenSSL | SHA3-256（历史用途 = 网页版 PoW 求解，**已随 [actionPlan/M7B.md](actionPlan/M7B.md) 退役**；现仅自检 `V-05` 使用） | vcpkg |
+| WebView2 | 嵌入浏览器 | ⚠️ **退场（计划 · 2026-09-28 · [actionPlan/M7B.md](actionPlan/M7B.md) `MB-D0-2`）**：嵌入控件易被站点识别为非真实浏览器 → 改为 **Python + Pydoll 驱动本机真实 Edge / Chrome** |
 | glm | 数学库（可选） | vcpkg |
+| Python 3.12 + Pydoll（**必需 · M7 第三轮 `M7B`**；原「计划 · P7-b」） | **网页版全部通道**（文字 + 图片）：启动独立浏览器做自动化 | 检测与引导由 `M7B-13` / `M7B-14` 定；**是否内嵌**由 `MB-D6`（原 `Q7`）定 —— 已升级为 **M6 硬门槛** |
+| 命名管道 + Win32 事件对象（**必需 · M7 第三轮 `M7B`**；原「计划 · P7-b」） | C++ ↔ Python 守护进程双向通信（**网页版唯一通道**） | 系统 API（无第三方依赖）；抽象层 `IpcChannel`（`RM-D3`） |
 | Font Awesome | 图标（可选） | 源码集成 |
 
 ### 2.3 移除
@@ -115,7 +117,7 @@
 | 配置 / 编译 | `cmake --preset default` → `cmake --build --preset debug`（或 `release`）；也可用 `source/build.ps1` |
 | 依赖安装 | `source/install-deps.cmd`（vcpkg manifest → `vcpkg-installed/`，下载与二进制缓存 → `vcpkg-cache/`，均在 F: 盘） |
 | 依赖安装用 CMake | 固定 `source/../third_party/cmake-3.31.6`（本 vcpkg 快照的 ports 与 CMake 4.x 不兼容） |
-| 可执行文件 | `build/bin/aiwrite.exe`（唯一主程序）、`api_probe.exe`（验证工具）、`webview2_login.exe`（登录/取 Cookie） |
+| 可执行文件 | `build/bin/aiwrite.exe`（唯一主程序）、`api_probe.exe`（验证工具）、`webview2_login.exe`（登录/取 Cookie；**计划退场** → `pydoll_login`，见 `M7B-30`） |
 | 运行数据 | `C:\Users\<用户>\.brain-ai\`：`outputs/`、`workflows/`、`snapshots/`、`logs/app.log`、`config.toml`、`imgui.ini` |
 | 字体 | 运行时加载系统字体（`msyh.ttc` 14px、`consola.ttf` 13px），仓库内不放字体文件 |
 
@@ -197,9 +199,12 @@ Workflow
 | 处理节点 | 转换数据 | Prompt Template / Text Merge |
 | 配置节点 | 配置提供商 | Provider Config |
 | 推理节点 | 调用 AI | LLM Generate / VLM Generate |
-| 输出节点 | 展示结果 | Text Output / Image Preview |
+| 输出节点 | 展示结果 | Text Output |
 
-### 4.4 MVP 节点清单（9 个）
+> **M7（2026-09-27）**：原「输出节点 · Image Preview」已删除（N-09）—— 图片结果由 `Image Input` 的
+> `image` 端口在输出面板 / 参数面板渲染缩略图，无需专用汇点节点。见 [actionPlan/M7.md](actionPlan/M7.md)。
+
+### 4.4 MVP 节点清单（8 个；M7 起由 9 个精简）
 
 | 编号 | 节点 | 分类 | 输入 | 输出 |
 |---|---|---|---|---|
@@ -211,7 +216,7 @@ Workflow
 | N-06 | LLM Generate | 推理 | prompt, provider | text |
 | N-07 | VLM Generate | 推理 | prompt, image, provider | text |
 | N-08 | Text Output（**最终输出**） | 输出 | text | — |
-| N-09 | Image Preview | 输出 | image | — |
+| ~~N-09~~ | ~~Image Preview~~（**M7 已移除**） | ~~输出~~ | ~~image~~ | ~~—~~ |
 
 ### 4.5 端口类型系统
 
@@ -535,9 +540,9 @@ private:
 | 菜单栏 | 显示 | — |
 | 工具栏 | 显示 | — |
 | 视图切换 | 显示 | — |
-| 节点库 | **隐藏** | 可切换 |
+| 节点库 | **隐藏**（⚠️ **P7-a 起改为默认显示** —— `P7a-12`，见 [actionPlan/M7.md](actionPlan/M7.md) §11.3） | 可切换 |
 | 画布 | 显示 | — |
-| 参数面板 | **隐藏** | 可切换 |
+| 参数面板 | **隐藏**（⚠️ **P7-a 起改为默认显示** —— `P7a-12`） | 可切换 |
 | Console | 显示 | 可切换 |
 | 状态栏 | 显示 | — |
 | Output 窗口 | 隐藏 | 可切换 |
@@ -623,7 +628,7 @@ nlohmann::json execute(
 | VLM Generate | 同 LLM，但多了图片输入 |
 | Text Output | **最终输出**：正文作为工作流最终结果（输出面板置顶/高亮、画布摘要与参数面板标注）＋
   **导出为文档**（参数面板/输出面板「导出为文档…」，`.md`/`.txt`，原子写、元信息头可选；见 `Archive/actionPlan/M_textio.md`） |
-| Image Preview | 推送图片到 Output 窗口，透传 |
+| Image Preview | ⛔ **M7 起已移除**（N-09）：图片结果由 `Image Input` 的 `image` 端口经 `RunNodeView.images` 在输出面板 / 参数面板渲染缩略图（含「打开所在文件夹」） |
 
 ### 9.3 错误处理
 
@@ -681,7 +686,7 @@ void Executor::cancel() {
 > 留待 M4 的独立 HTTP 线程。
 >
 > 节点执行函数在 `NodeExecutorRegistry` 注册（`nodes::registerAllExecutors()`）；M2 期
-> TextInput / ImageInput / PromptTemplate / TextMerge / ProviderConfig / TextOutput / ImagePreview 为本地实现，
+> TextInput / ImageInput / PromptTemplate / TextMerge / ProviderConfig / TextOutput 为本地实现，
 > LLMGenerate / VLMGenerate 为占位（抛 `NodeError`），等待 **M4-05 官方 API / M4-06 网页版**接线。
 > 自检：`api_probe.exe --exec-selftest`（129 项断言，全离线）。
 
@@ -708,6 +713,8 @@ void Executor::cancel() {
 ├── logs/
 │   ├── app.log
 │   └── workflow.log
+├── assets/
+│   └── images/                ← 统一资源目录（**计划 · P7-a**：内容寻址 `<sha1>.<ext>`，工作流存资源引用）
 ├── config.toml
 └── recent.json
 ```
@@ -1093,6 +1100,14 @@ void Executor::cancel() {
 | M4：文本生成 | v0.4 | 能生成文本 | ⏳ 未开始 |
 | M5：多模态 | v0.5 | 能读图生成文字 | ⏳ 未开始 |
 | M6：MVP | v1.0 | 功能完整，可自用 | ⏳ 未开始 |
+| M7：图片输入收口 + 节点精简 | v0.5.1 | 删图片输出节点（9→8）+ 图片格式按内容嗅探 + 可操作报错 | ✅ 代码与手册已落地（2026-09-27；见 [actionPlan/M7.md](actionPlan/M7.md)）；待 GUI 端到端实测 |
+| M7 第二轮 P7-a：图片内部运行 + official 收口 + UI A 档 | v0.5.2 | 3 个「图片输入」可同时连入「图片理解」+ 资源目录/资源引用 + 面板与画布可用性 | ⬜ **计划中**（2026-09-27 会议决议 `D1`–`D9`；见 [actionPlan/M7.md](actionPlan/M7.md) §8–§17） |
+| M7 第二轮 P7-b：网页版图片上传 | v0.5.3（待确认） | 网页版跑通 `E-02`（图片先"进站"再发送） | ⬜ **计划中**：Pydoll 独立浏览器 + Python 守护进程 + 命名管道；**先做 `P7b-01~05` 前置技术验证，未过则回滚** |
+| M7 第三轮 `M7B`：网页通道整体迁 Pydoll（**WebView2 退场**） | v0.5.4（内部） | WebView2 退场 + 网页版全部走 Pydoll（协议栈退役）+ **CDP `Network` 事件重建 SSE 增量** + 单登录态 + **作废 `I2`**（→ `I20` CLI 契约 / `I21` 不静默降级 / `I22` 流式降级显式） | ⬜ **计划中**（2026-09-28 决议 7 条）：6 批 `M7B-10`~`M7B-41` + **先建后拆** + 前置验证 `M7B-01`~`08`；见 [actionPlan/M7B.md](actionPlan/M7B.md) |
+
+> ⚠️ **M7 第三轮 `M7B`（计划）会使上表 M1 时期的验证记录口径变化**：`V-03`（`webview2_login` 登录 + Cookie 提取）、
+> `T-01`（网页版逆向：WebView2 + C++ PoW + SSE）、`P0-04`（WebView2 集成验证）对应的实现将被**退场 / 改写**，
+> 逐项处置见 [actionPlan/M7B.md](actionPlan/M7B.md) §1.3 与 §8.5。
 
 > 变更明细见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -1147,7 +1162,7 @@ AIwrite/                              （= F:\GameDao\Tools\AIwrite）
     │   │   ├── app.cpp               ✅ 窗口/主题/字体/停靠/菜单/工具栏/状态栏
     │   │   ├── editor_state.cpp      ✅ 编辑器状态（Graph + UndoStack + 复制粘贴 + 示例工作流）
     │   │   ├── node_canvas.cpp       ✅ 节点画布（渲染 + 全部鼠标交互 + 右键菜单）
-    │   │   ├── node_library.cpp      ✅ 节点库（9 节点按分类，点击添加）
+    │   │   ├── node_library.cpp      ✅ 节点库（8 节点按分类，点击添加）
     │   │   ├── toolbar.cpp           ✅ 工具栏（撤销/重做/复制/粘贴/删除/新建/示例）
     │   │   ├── property_panel.cpp    ✅ 参数面板（9 种参数控件 + 校验提示）
     │   │   ├── theme.h               ✅ 分类/端口/状态配色（设计 14.3 / 4.5 / 4.6）
@@ -1157,10 +1172,10 @@ AIwrite/                              （= F:\GameDao\Tools\AIwrite）
     │   │   └── welcome_window.cpp    (M6) 首次运行引导
     │   ├── engine/                   ✅ 已落地（M2 P1）
     │   │   ├── graph.cpp             数据模型：Node/Port/Param/Edge/Graph + 校验 + 增删
-    │   │   ├── node_registry.cpp     9 个节点的注册表（类型/端口/参数/默认值）
+    │   │   ├── node_registry.cpp     8 个节点的注册表（类型/端口/参数/默认值；M7 起 N-09 已移除）
     │   │   ├── undo_stack.cpp        快照式撤销/重做（深度 50）
     │   │   └── (M4) executor.cpp     工作流执行器
-    │   ├── nodes/                    (M4/M5) 9 个节点实现 + register.cpp
+    │   ├── nodes/                    (M4/M5) 8 个节点实现 + register.cpp（M7 起 N-09 已移除）
     │   ├── ai/                       (M4) inference_provider / deepseek_*_provider
     │   └── utils/
     │       ├── paths.cpp             ✅ ~/.brain-ai 数据目录
@@ -1352,7 +1367,7 @@ int                 purge_expired_credentials(int ttl_days, std::string* error);
 7. `backend=memory` 时任何 `save` 都拒绝落盘（只允许内存/env）
 
 ### B.9 与既有计划的关系
-- `M_patchA.md §4.1 PB-06` 条目按本附录更新（Windows Credential Manager 降级为**可选后端**，不在本批实现）
+- `Archive/actionPlan/M_patchA.md §4.1 PB-06`（**现行承接**：`actionPlan/M_patchAB_rest.md` §2.3）条目按本附录更新（Windows Credential Manager 降级为**可选后端**，不在本批实现）
 - 代理与自签证书策略仍属 PB-06 范围（`HTTPS_PROXY/HTTP_PROXY` + 严格校验默认），随实现一并落地
 
 

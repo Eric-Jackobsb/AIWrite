@@ -1,4 +1,5 @@
 # M_patchB：Provider 可插拔化 —— 配置表（JSON）驱动 + 用户可自定义
+> 📦 **已归档（2026-09-27）**：本阶段已完成；当前计划见 [../../actionPlan/](../../actionPlan/)（**补丁系列剩余项 → [M_patchAB_rest.md](../../actionPlan/M_patchAB_rest.md)**），任务看板见 [../../DevPlan.todo](../../DevPlan.todo)。
 
 > 类型：跨里程碑「地基补丁」第二期（**不占用 M1–M6 编号**，与 `M1.md … M6.md`、[M_patchA.md](M_patchA.md) 平级互链）
 > 依据：2026-09-26 全库 provider / 推理链路审计（见 §1，逐条附**文件:行号**证据）
@@ -10,6 +11,7 @@
 > 现状结论（一句话）：**OpenAI 兼容的 API 已经「能配出来」（零代码），但架构层未模块化；API 与网页版的厂商/站点元数据全部硬编码在 C++ 里，非兼容协议（Anthropic / Gemini / Azure）与「任意 AI 的网页版」都必须改源码。**
 > 核心改造方向：**把「API 厂商」与「网页版站点」两种元数据统一搬进一份 JSON 配置表** —— 程序只负责**加载 / 合并 / 校验 / 分派 / 消费**；用户在自己的目录里加一份 JSON，即可接入新 API **或**新站点（**不改代码、不重编译**）。
 > 状态：🟡 **待审核确认**（§6 为待确认决策清单；`D-11/D-12/D-15` 已按你的指示定稿，**web 与 API 同机制为硬性要求**）—— **补充（2026-09-26）**：`PB2-01…PB2-03`/`PB2-07`（离线部分）已落地，`PB2-04`/`PB2-05`/`PB2-06` 未开工；其中 `PB2-05` 的「网页版去硬编码」**部分未落地**、**多站点会话未开工**，见下方 **v4 复核块**
+> 📦 **未完项承接**：L2（`PB2-04` → `PB2-12`）、`PB2-07` 界面按钮、`PB2-25`、`PB2-29`（逐站回填）、`PB2-30②`、`PB2-24`（自助闭环）**已迁至** [../../actionPlan/M_patchAB_rest.md](../../actionPlan/M_patchAB_rest.md)（本文保留历史规格与各批次实测记录；§6 待确认决策原样保留供追溯，**现行决策清单**见承接文档 §9）。
 > 版本目标：v0.5.x（在已收口的 M5 核心切片之上补「推理后端可插拔」地基）
 > 预计工期（估）：**L1 ≈ 2–2.5 天 · L2 ≈ 2–3 天 · L3 ≈ 5–8 天**（全职估算，含自检与文档；L1 含**网页版去硬编码**，故高于纯 API 方案）
 >
@@ -1161,7 +1163,7 @@ void                 reload_provider_specs(); // UI「重新加载配置表」/ 
 | `gemini-web` | Gemini（gemini.google.com） | `https://gemini.google.com/app` | ⚠️ 未核实（抓取失败） | ⬜ | ⬜ | 境外站点 |
 
 - **新增两列（L4 起）**：**可登录** = 该条目的「打开登录窗口 → 手动登录 → 抓取 Cookie」链路已实测通过；**可生成（选择器）** = `web.input_selector` / `send` / `answer_selector` **已实测填好**且端到端生成通过（⬜ = 尚未实测，**不填假值** —— 沿用 `PB2-26` 原则）。**L4 的目标就是把 11 行的「可生成」从 ⬜ 逐站变为 ✅**（`PB2-29`；每站需一次人工登录 + 选择器实测）。
-- **v15 逐站直连实测结果（2026-09-27，详见 [网页版协议实测记录 §7.9](../网页版协议实测记录.md)）**：
+- **v15 逐站直连实测结果（2026-09-27，详见 [网页版协议实测记录 §7.9](../../网页版协议实测记录.md)）**：
   - **「打开登录窗口」= 12/12 全部真的打开各自的站点** ✅（不再出现「不管选哪个都是 DeepSeek」）；其中 **3 条域名按实测修正为最终域**：`kimi-web`（→ `www.kimi.com`）、`tongyi-web`（→ **`www.qianwen.com`**）、`ernie-web`（→ `wenxin.baidu.com`）。
   - **输入框选择器已实测 4 条**（`kimi-web` = `div.chat-input-editor`；`qwen-web` = `textarea[placeholder="Ask Qwen"]` + 发送 `div.message-input-right-button-send`；`yuanbao-web` = `div.ql-editor.ql-blank`；`ernie-web` = `#chat-textarea`）→ 已写回 `source/assets/providers.json`，`--provider-dump` 确认这 4 条**只剩 `answer_selector` 未就绪**。
   - `chatgpt-web` / `claude-web` / `gemini-web` 在本机网络下**均可直连**（境外三站不再是「未核实」）；`chatglm-web` 首屏为 **WAF 挑战页**（需人工过验证）。

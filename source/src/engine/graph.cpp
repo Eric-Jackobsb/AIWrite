@@ -279,7 +279,7 @@ const Edge* Graph::findEdgeIntoInput(const std::string& node_id, const std::stri
 // ---------------------------------------------------------------- 增删 -------
 std::string Graph::addNode(const std::string& type, float x, float y, std::string* error)
 {
-    registerAllNodes(); // 幂等：保证首次使用时 9 个节点已注册
+    registerAllNodes(); // 幂等：保证首次使用时 8 个节点已注册
 
     const Definition* definition = NodeRegistry::instance().find(type);
     if (definition == nullptr) {

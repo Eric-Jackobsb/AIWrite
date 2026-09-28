@@ -1,5 +1,6 @@
 #include "ui/texture_cache.h"
 
+#include "utils/image_decode.h" // M7-04：格式嗅探 + stb/WIC 解码（含可操作错误文案）
 #include "utils/log.h"
 
 #include <filesystem>
@@ -15,16 +16,6 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#endif
-
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable : 4100 4189 4244 4245 4456 4457 4701 4702 4703 4996)
-#endif
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-#if defined(_MSC_VER)
-#pragma warning(pop)
 #endif
 
 #include <GL/gl.h> // glGenTextures / glTexImage2D …（GL 1.1，opengl32 直接导出）
@@ -117,32 +108,38 @@ TextureInfo texture_for(const std::string& path)
         return found->second.info;
     }
 
-    TextureInfo    info;
-    int            width    = 0;
-    int            height   = 0;
-    int            channels = 0;
-    unsigned char* pixels   = stbi_load(path.c_str(), &width, &height, &channels, 4);
-    if (pixels == nullptr) {
-        const char* reason = stbi_failure_reason();
-        info.error         = std::string("图片解码失败：") +
-                     (reason != nullptr ? reason : "未知原因") + " —— " + path;
+    TextureInfo info;
+    // M7-04：解码统一走 utils::image_decode（stb 优先 / WIC 兜底；错误文案可直接显示）
+    const utils::DecodedImage decoded = utils::decodeImageRgba8(path);
+    if (!decoded.error.empty()) {
+        info.error = decoded.error;
         log::error("[纹理缓存] " + info.error);
     }
     else {
-        GLuint texture = 0;
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        stbi_image_free(pixels);
-        info.texture = static_cast<unsigned int>(texture);
-        info.width   = width;
-        info.height  = height;
+        GLint max_texture_size = 0;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
+        if (max_texture_size > 0 && (decoded.width > max_texture_size || decoded.height > max_texture_size)) {
+            info.error = "图片过大（" + std::to_string(decoded.width) + "×" +
+                         std::to_string(decoded.height) + " 超过本机 GL 纹理上限 " +
+                         std::to_string(static_cast<int>(max_texture_size)) + "）：请先缩小后再预览";
+            log::error("[纹理缓存] " + info.error);
+        }
+        else {
+            GLuint texture = 0;
+            glGenTextures(1, &texture);
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, decoded.width, decoded.height, 0, GL_RGBA,
+                         GL_UNSIGNED_BYTE, decoded.rgba.data());
+            glBindTexture(GL_TEXTURE_2D, 0);
+            info.texture = static_cast<unsigned int>(texture);
+            info.width   = decoded.width;
+            info.height  = decoded.height;
+        }
     }
 
     g_order.push_front(key);
@@ -153,33 +150,8 @@ TextureInfo texture_for(const std::string& path)
 
 bool image_size(const std::string& path, int* width, int* height, std::string* error)
 {
-    const auto fail = [error](const std::string& message) {
-        if (error != nullptr) {
-            *error = message;
-        }
-        return false;
-    };
-    if (path.empty()) {
-        return fail("图片路径为空");
-    }
-    int           file_width  = 0;
-    int           file_height = 0;
-    int           channels    = 0;
-    if (!stbi_info(path.c_str(), &file_width, &file_height, &channels)) {
-        const char* reason = stbi_failure_reason();
-        return fail("无法读取图片信息：" + std::string(reason != nullptr ? reason : "未知原因") +
-                    " —— " + path);
-    }
-    if (width != nullptr) {
-        *width = file_width;
-    }
-    if (height != nullptr) {
-        *height = file_height;
-    }
-    if (error != nullptr) {
-        error->clear();
-    }
-    return true;
+    // M7-04：实现搬到 utils::image_decode（stb 优先 / WIC 兜底 + 可操作文案）
+    return utils::readImageSize(path, width, height, error);
 }
 
 void set_texture_capacity(std::size_t capacity)

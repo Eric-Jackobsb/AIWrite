@@ -17,7 +17,6 @@ void registerAllExecutors()
     registry.registerExecutor("LLMGenerate", &execute_llm_generate);
     registry.registerExecutor("VLMGenerate", &execute_vlm_generate);
     registry.registerExecutor("TextOutput", &execute_text_output);
-    registry.registerExecutor("ImagePreview", &execute_image_preview);
 }
 
 } // namespace aiwrite::nodes

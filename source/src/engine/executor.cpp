@@ -519,7 +519,7 @@ namespace {
 
 // M5-03：收集节点 Image 端口的运行结果（本地图片路径，按端口顺序）
 //  * 普通节点：Image 类型的输出端口（如 ImageInput.image）
-//  * 汇点节点（ImagePreview）：结果存在虚拟端口 __result（见 executeNode）
+//  * 汇点节点（TextOutput）：结果存在虚拟端口 __result（见 executeNode）
 std::vector<std::string> node_image_paths(const Graph& graph, const NodeOutputs& outputs,
                                           const std::string& node_id)
 {
@@ -558,7 +558,7 @@ std::vector<std::string> node_image_paths(const Graph& graph, const NodeOutputs&
         }
     }
     if (has_image_input && node->outputs.empty()) {
-        collect("__result"); // ImagePreview 等汇点节点
+        collect("__result"); // TextOutput 等汇点节点
     }
     return images;
 }
@@ -638,7 +638,7 @@ bool Executor::executeNode(Graph& graph, const std::string& node_id)
             outputs_.set(node_id, node->outputs[0].id, std::move(output));
         }
         else if (!output.is_null()) {
-            // M_textio P5：汇点节点（TextOutput / ImagePreview，无输出端口）也要把返回值
+            // M_textio P5：汇点节点（TextOutput，无输出端口）也要把返回值
             // 存入运行态值（虚拟端口 __result）—— 否则面板 / 归档 / 预览都读不到正文
             outputs_.set(node_id, "__result", std::move(output));
         }

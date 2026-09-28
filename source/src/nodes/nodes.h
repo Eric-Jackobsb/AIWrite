@@ -5,7 +5,9 @@
 //
 //  * 每个节点类型一个执行函数，签名见 engine::NodeExecutor（设计 §9.1）
 //  * M2 落地：TextInput / ImageInput / PromptTemplate / TextMerge / ProviderConfig /
-//    TextOutput / ImagePreview 共 7 个本地实现
+//    TextOutput 共 6 个本地实现
+//    （M7：N-09 ImagePreview 已移除 —— 图片结果改由「图片输入」的输出端口在
+//     输出面板 / 参数面板渲染缩略图，不再需要专用汇点节点）
 //  * 占位：LLMGenerate / VLMGenerate 抛 NodeError（等待 M4-05 官方 API / M4-06 网页版接线）
 //    —— 正好用于验证「节点失败 → 下游 Skipped」的失败传播（设计 §10.4）
 //  * 入口点（app / api_probe）需在运行前调用 registerAllExecutors()（幂等）
@@ -29,8 +31,6 @@ nlohmann::json execute_provider_config(const nlohmann::json& inputs, const nlohm
                                       engine::ExecutionContext& ctx);
 nlohmann::json execute_text_output(const nlohmann::json& inputs, const nlohmann::json& params,
                                   engine::ExecutionContext& ctx);
-nlohmann::json execute_image_preview(const nlohmann::json& inputs, const nlohmann::json& params,
-                                    engine::ExecutionContext& ctx);
 nlohmann::json execute_llm_generate(const nlohmann::json& inputs, const nlohmann::json& params,
                                    engine::ExecutionContext& ctx);
 nlohmann::json execute_vlm_generate(const nlohmann::json& inputs, const nlohmann::json& params,

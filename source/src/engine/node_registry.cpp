@@ -420,19 +420,6 @@ void registerAllNodes()
         };
         registry.registerNode(std::move(definition));
     }
-
-    // --- N-09 Image Preview（输出，M5-03）---------------------------------
-    {
-        Definition definition;
-        definition.type         = "ImagePreview";
-        definition.display_name = "图片预览";
-        definition.title        = "图片预览";
-        definition.category     = NodeCategory::Output;
-        definition.description  = "推送到 Output 窗口并透传";
-        definition.inputs       = {input_port("image", "图片", PortType::Image)};
-        definition.params       = {text_param("label", "标签", "图片", ParamType::String)};
-        registry.registerNode(std::move(definition));
-    }
 }
 
 } // namespace aiwrite::engine

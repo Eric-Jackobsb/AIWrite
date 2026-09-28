@@ -4,7 +4,7 @@
 //  节点注册表（设计文档 §4.3 分类 / §4.4 九个节点 / §4.5 端口类型 / §9.2 实现）
 //
 //  * Definition 描述一个节点类型：分类、输入输出端口、参数（含默认值/范围/枚举）
-//  * registerAllNodes() 注册 MVP 的 9 个节点；幂等，可重复调用
+//  * registerAllNodes() 注册 MVP 的 8 个节点；幂等，可重复调用
 //  * Graph::addNode() 依据本表创建节点实例
 // ============================================================================
 
@@ -50,7 +50,7 @@ private:
     std::vector<Definition> definitions_;
 };
 
-// 注册 MVP 的 9 个节点（幂等）
+// 注册 MVP 的 8 个节点（幂等）
 void registerAllNodes();
 
 } // namespace aiwrite::engine

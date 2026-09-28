@@ -8,18 +8,112 @@
 | 文档 | 说明 |
 |---|---|
 | [ai_writer_nodes.md](ai_writer_nodes.md) | 项目设计文档（v1.0） |
-| [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6） |
+| [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6 + **M7**） |
+| [roadmap.md](roadmap.md) | **长期路线图 v1.0（一页纸）**：定位 / 阶段总览 / 决策 `RM-D1`~`RM-D6` / 风险与不做清单 / 待确认项与"待同步差异" |
+| [actionPlan/M7.md](actionPlan/M7.md) | **M7 现行计划（两轮）**：**第一轮**（已收口）= 图片输入收口 + 节点精简（删图片输出节点 9→8）+ 图片格式按内容嗅探/双解码后端 + **CRT 断言崩溃根因与冻结区 `I17`**；**第二轮 P7**（§8–§17，计划中）= **P7-a v0.5.2**（图片内部运行：`image` 端口 variadic 多图 + 统一资源目录；official 收口；UI **A 档**）+ **P7-b v0.5.3**（待确认；网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件，先做前置技术验证）+ 不变量 `I18`/`I19` |
 | [actionPlan/](actionPlan/) · [Archive/actionPlan/](Archive/actionPlan/) | 各里程碑 Action Plan（进行中 / 已完成归档） |
-| [actionPlan/M_patchA.md](actionPlan/M_patchA.md) | **地基补丁系列 A–D**（结果回流与可观测性 / 异步与流式 / 数据安全 / 交互打磨）行动计划 |
-| [actionPlan/M_patchB.md](actionPlan/M_patchB.md) | **Provider 可插拔化**（`PB-04` 展开计划）：**JSON 配置表**（`source/assets/providers.json` + 用户覆盖层）驱动，**API 与网页版同表同机制**（含网页版去硬编码清单）+ L2 协议/适配器工厂 + L3 通用 DOM 站点 + `PB2-*` 任务与验收 —— 🟡 草案（待审核） |
-| [DevPlan.todo](DevPlan.todo) | **开发计划看板**：TodoList 格式（根键 `todotree`），Debug / Feature / Test / Docs / Archive 五类 × M1–M6 分层，每条含一行描述与 `fileLink` 文档链接 |
+| [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) | **补丁系列剩余工作总集**（Patch A/B 残项 + 数据安全 + 交互打磨 + 并行小项 + `B2` 残项）—— **后续唯一执行入口**；含现行规格（附录 B `JSON` 规范 / C 加载顺序 / D 自建站点 / E 站点清单两列）与待拍板决策 |
+| [Archive/actionPlan/M_patchA.md](Archive/actionPlan/M_patchA.md) · [Archive/actionPlan/M_patchB.md](Archive/actionPlan/M_patchB.md) | **已完成部分已归档（2026-09-27）**：Patch A（结果回流与可观测性）· `M_patchB`（Provider 可插拔化：**JSON 配置表** + **API 与网页版同表同机制** + L1 收口 + L3 DOM 站点适配器 + L4 部分落地）—— 历史规格与各批次实测记录 |
+| [DevPlan.todo](DevPlan.todo) | **开发计划看板**：TodoList 格式（根键 `todotree`），Debug / Feature / Test / Docs / Archive 五类 × M1–M7 分层，每条含一行描述与 `fileLink` 文档链接 |
 | [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) | M1 实测环境、验证结果与问题记录（已归档） |
 | [Archive/README.md](Archive/README.md) | 归档索引与归档规则 |
 | [../source/README.md](../source/README.md) | 源码构建 / 运行 / 调试说明 |
 
 ---
 
-## [Unreleased] — M5 核心切片（M5-C）图片理解链路 + 图片显示 已落地
+## [Unreleased] — M7（图片收口 + 节点精简）+ M5 核心切片（M5-C）已落地；M7 第二轮 P7 已立项；**M7 第三轮 `M7B` 立项（网页通道整体迁 Pydoll）**
+
+**立项（M7 第三轮 `M7B` · 2026-09-28 · 计划未开工）—— 网页通道整体迁 Pydoll（WebView2 退场）**
+
+- 用户 2026-09-28 决议 **7 条**（见 [actionPlan/M7B.md](actionPlan/M7B.md) §2）：**WebView2 退场**（嵌入控件易被站点识别为非真实浏览器）·
+  **全部网页版条目一律走 Pydoll**（`builtin:deepseek` 协议栈退役）· **用 CDP `Network` 事件重建 SSE 增量**（保住逐字流式）·
+  **只维护一套登录态**（单 profile `~/.brain-ai/pydoll-profile`）· **作废不变量 `I2`**（不再承诺「无参 CLI 逐字不变」→ 改由
+  **`I20` CLI 契约**替代）· 缺 `--provider` → **列候选 + 退出码 2** + 新增显式关键字 `--provider auto`
+- ✅ **新增不变量**：`I20`（CLI 契约）/ `I21`（**不静默降级**：任一依赖缺失即报错 + 引导，绝不换通道 / 换身份）/
+  `I22`（**流式降级必须显式标注「非流式」**）；`I15 → I15′`（证据来源改 **CDP Cookie**）；`I16` 升级为**全局**
+  （程序不再注入任何站点内部端点）
+- ⚠️ **破坏性变更（计划）**：`--web-chat` / `--login-selftest` 将**需要 `--provider <id>`**；
+  `--web-probe` **废弃**（由 `--web-adapter-selftest` + `--web-chat` 取代）；
+  **老用户需重新登录一次**（旧 `~/.brain-ai/webview2` 登录态格式不同、**无法迁移**）
+- 影响面：`source/` 内 **17 文件 ≈184 处** WebView2 代码进入撤除清单（§1.3）；`vcpkg.json` / `CMakeLists.txt` /
+  `paths` / UI / `webview2_login` 工具全清 → **`PM-01`（WebView2 Runtime 检测）作废**；
+  Python 运行时**升级为 M6 硬门槛**（`Q7`）
+- 任务：**6 批** `M7B-10`~`M7B-41` + 前置验证 `M7B-01`~`08`（含 **CDP 增量三路线实测**、**DeepSeek 网页版选择器实测**）；
+  **先建后拆**（批 1–4 保留 WebView2，批 5 才删）；每批结束跑基线
+- ⚠️ **基线提示**：`--exec-selftest` 会**先降后升**（`I2` 作废删 `VB2-17` 前半与 `VB2-25①③④`；新增 `VB2-28`~`VB2-36` 共 9 条）——
+  预期路径见 [actionPlan/M7B.md](actionPlan/M7B.md) §9.3，**不得误判为回归**
+
+**文档（新增）：`docs/roadmap.md` —— 长期路线图 v1.0（一页纸）**
+
+- 确立定位与边界：**面向非技术用户**（后期可能转商业）· **滚动发布**（版本号内部保留）· **数据全本地**（仅 API 请求出网）·
+  **Windows only 但预留跨平台**（IPC 抽象，不写死 Win32）
+- 决策 `RM-D1`~`RM-D6`：`PB2-24` 自建站点 UI 闭环**提升为面向非技术用户必做**（用户不接触 JSON）·
+  交付形态 = **一键安装包**（非绿色版 zip，形态待确认）· 滚动发布形态**待确认**
+- 阶段与依赖：P7-a（当前）→ P7-b + **面向 C 前置项**（并行：`PD-03` / `PM-01` / `P7b-15` / `PB2-24`）→ **M6 一键安装包（v1.0）**
+  → 滚动发布（v1.x）→ 商业候选（v2.0+，不排期）；P7-b 独立回滚
+- 附：风险与回滚点 · 不做清单（硬约束）· 待确认 `RQ-1`~`RQ-4` · **"与既有文档的差异"待同步清单（5 条）**
+- 索引：`docs/README.md` 文档地图 + `CHANGELOG.md` 相关文档索引 + `actionPlan/milestone_plan.md` 头部交叉引用已同步
+
+**计划（M7 第二轮 P7 · 2026-09-27 会议决议 `D1`–`D9` · 未开工）—— 图片内部运行 / 网页版图片上传 / UI 优化一版**
+
+- 分层：**P7-a = v0.5.2**（**图片内部运行**：`image` 端口改 **variadic 多图** + **统一资源目录** / 资源引用；
+  **official 收口**：超限直接拒（不自动缩）、打印 base64 后体积与耗时、错误分类；**UI A 档**可用性）·
+  **P7-b = v0.5.3（待确认）**（**网页版图片上传**：方案 A = **Pydoll 独立浏览器 + Python 守护进程 +
+  命名管道 + Win32 事件**；行为模拟 `humanize`；失败报错 + 显式重试，不静默降级）
+- 依据与细则：`docs/actionPlan/M7.md` **§8–§17**（决策 `D1`–`D9` / 任务表 `P7a-01~19`·`P7b-01~15` /
+  影响面 / 验证基线 / 开口项 `Q1`–`Q8`）
+- 新增不变量（**计划**）：**`I18`** 网页版图片「**无上传完成证据不得自动发送**」（仅用户本次运行显式
+  选择「不含图片继续」可降级，且必须记录「本次未含图片」）· **`I19`** `image` 端口语义升级须**向后兼容**
+  旧工作流 —— 已登记进 [../source/README.md](../source/README.md) §4.2
+- 看板：`docs/DevPlan.todo` M7 组续号 **id 176–188**（`FEA-M7-04`…`ARC-M7-02`）
+- 交付顺序：P7-a（三条线并行）→ 跑基线 → P7-b **前置技术验证**（未过即回滚）→ P7-b 实现 → 再次跑基线；
+  **落地后先评审、不自动提交**
+- **本次落档验证（2026-09-27，纯文档）**：`build.ps1` **0 error / 0 warning**（未触及 C++ 源码）·
+  文档断链 **199 checked / broken 0**（旧 190 + 本次新增 9 条链接）· `docs/DevPlan.todo` 新增 **13 条**
+  （id **176–188**，五类 M7 组同步计数；Python `json` 与 PowerShell `ConvertFrom-Json` **双解析器 PASS**，
+  id 唯一、最大 188）· 全部改动文件 **CRLF + 无 BOM**
+
+**新增（M7-04/05 · 图片格式嗅探与解码）：不再相信扩展名 + 本地支持 WebP + 可操作报错**
+
+- `utils/image_decode.{h,cpp}`（新）：魔数嗅探 `sniffImage` / `sniffImageBytes`（PNG/JPEG/GIF/BMP/**WebP**/TIFF/ICO/JXR/HEIF/AVIF/PSD/HDR/PNM，纯函数版本供离线断言）+
+  `decodeImageRgba8`（**stb 优先 / WIC 兜底**，统一 RGBA8、行序与 GL 上传一致）+ `readImageSize` +
+  `wicInfo`（解码器**元数据枚举**）+ `decodeErrorMessage`（可操作文案：实际格式 + 装扩展/另存为建议 + 文件头 + 「本地预览失败不影响发给模型」）
+- `ui/texture_cache.cpp`：`texture_for` / `image_size` 改调上述模块（**对外接口不变 ⇒ 输出面板 / 参数面板零改动**）+ GL 纹理上限检查（超限给明确提示）
+- `ai/deepseek_official_provider.{h,cpp}`：新增 `image_mime_from_bytes`；`image_mime_from_path` 改「**内容优先** → 扩展名回退」；扩展名表补 `.tif/.tiff/.ico/.heic/.heif/.avif`
+- 实测：`F:\ims.png`（扩展名 `.png`、内容实为 WebP，2048×2048）→ 嗅探 `WebP` / MIME **`image/webp`**（旧实现谎报 `image/png`）/ 本地解码 **`wic` OK**
+- 断言：`api_probe --exec-selftest` **237 → 251 通过 / 0 失败**（新增 15 条：嗅探 / MIME / 解码 / 尺寸 / 文案）
+- 诊断入口：`api_probe --image-decode <路径>`（8 行结论；exit 0 = 本地可预览 / 2 = 不可预览）
+
+**修复（M7-D7 · 冻结区不变量 `I17`）：WIC「合成文件头探测」导致 CRT 断言崩溃（退出码 3 / `0x80000003`）**
+
+- 症状：`api_probe --exec-selftest` 与「参数面板渲染 WebP 图片」进程**突然结束**（退出码 `3` / `-2147483645`），
+  输出戛然而止、`app.log` 无"结束"行；`try/catch` 与 SEH 都抓不到（`_CrtDbgReport` 直接中断）
+- 根因：初版用「30 字节**合成** WebP 头」交 WIC `CreateDecoderFromStream` 探测能力；本机装有
+  `Microsoft.WebpImageExtension 1.2.31.0` → 解码器**接受**该假头后解析比特流 → 断言/中断
+- 修复：能力探测改**解码器元数据枚举**（`CreateComponentEnumerator` + `IEnumUnknown` + `IWICComponentInfo::GetFriendlyName`，
+  **不解析任何比特流**）；删除 `wic_accepts_bytes` / `synthetic_webp_head` / `synthetic_ftyp_head`；
+  **解码分派收紧**（仅 WebP/TIFF/ICO/JXR/HEIF/AVIF 进 WIC；未知与 stb 覆盖的格式一律不进）；失败文案**不依赖**探测结果
+- 冻结：`utils/image_decode.{h,cpp}` 的 WIC 相关代码冻结 + `#define AIWRITE_IMAGE_DECODE_FROZEN 1`
+- 定位方法（已写进 [../source/README.md](../source/README.md) §6.1）：带 `fflush(stdout)` 的 `[TRACE]` 标记 + 二分，配合 `app.log` 最后一条
+
+**变更（M7-01~03 · 节点精简）：删除图片输出节点 N-09（`ImagePreview`）—— 9 → 8 节点**
+
+- 注册表块 / 执行器 `execute_image_preview` / `nodes.h` 声明 / `register_executors` 注册全部移除；
+  图片结果仍由 `ImageInput` 的 `image` 端口经 `RunNodeView.images` 在输出面板与参数面板渲染缩略图（M5-03 通道未受影响）
+- 连带：`api_probe` 计数与用例同步（注册表 9→8、类型数组、输出类 2→1、端口不兼容用例改用 `VLMGenerate.image`、
+  快照用例改为 ImageInput 独立跑 + 纯文本节点 `images` 为空）；注释与文档计数（`source/README.md` §7 等）
+- 回归：`--graph-selftest` **111 → 110 通过 / 0 失败**；`--selftest` 七组 PASS；`--run-selftest` PASS；
+  `--vlm-selftest` 离线断言 PASS；构建 **0 error / 0 warning**
+
+**文档（M7）**：新增 [actionPlan/M7.md](actionPlan/M7.md)（§0 结论 / §1 **事故记录** / §2 现状勘误 / §3 任务 / §4 决策 / §5 影响面 / §6 基线 / §7 遗留）；
+[../source/README.md](../source/README.md) 新增 **§4.2 图片诊断与图片解码冻结区**、**§6.1 崩溃 / 断言错误排查（CRT assert · 退出码 3）** 与 `--image-decode` 命令，并刷新自检项数
+
+**文档（补丁系列拆分与归档）：新增 `M_patchAB_rest` 承接剩余项 + `M_patchA` / `M_patchB` 归档**
+
+- **拆分**：新建 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) —— 把 `M_patchA`（Patch B 残项 / 原 Patch C 数据安全 / 原 Patch D 交互打磨 / PM）与 `M_patchB`（L2 `PB2-04`…`PB2-12`、`PB2-07` 界面按钮、`PB2-25`、`PB2-29`/`PB2-30②`、`PB2-24`）的**全部未完成项**收编为**唯一执行入口**；**编号不改号**（`PA-`/`PB-`/`PC-`/`PD-`/`PM-`/`PB2-*` 沿用）；刷新回归基线（构建 0/0 · `--exec-selftest` **237/0** · `--provider-selftest` 50/0 · `--graph-selftest` 111/0 · 文档断链 0）；附录 B/C/D/E 复制为**现行版本**（附录 E 就地维护「窗口可达 / 可登录 / 可生成」三列）；承接决策 `D-25`…`D-30` 并新增 `D-31`（流式方案）/ `D-32`（逐站范围）。
+- **归档**：`git mv` → [Archive/actionPlan/M_patchA.md](Archive/actionPlan/M_patchA.md) · [Archive/actionPlan/M_patchB.md](Archive/actionPlan/M_patchB.md)（顶部加 `📦 已归档（2026-09-27）` 横幅 + 「未完项承接」指引；相对链接层级修正；**正文规格与各批次实测记录原样保留**）。
+- **同步**：本文索引、[README.md](README.md)（进度行 + 文档地图 + Archive 行）、[Archive/README.md](Archive/README.md)（归档索引 + 待归档候选）、`actionPlan/milestone_plan.md`、`actionPlan/M3.md`·`M4.md`、`ai_writer_nodes.md`、[节点编辑器使用说明.md](节点编辑器使用说明.md)、[网页版协议实测记录.md](网页版协议实测记录.md)、[../source/README.md](../source/README.md) 的引用改指**承接文档 / 归档路径**；`DevPlan.todo` 的 `fileLink` 按「**已完成 → 归档；未完成 → 承接文档**」更新，并登记 `ARC-M3-18`/`ARC-M3-19`。
+- **验证**：文档断链自检 `python vcpkg-cache/check_links.py` → **broken 0**；`DevPlan.todo` JSON 可解析且全文件 CRLF；**未改任何代码**。
 
 **修复（M_patchB L4 / `B2-e` 第一批 `PB2-27`）：登录/会话层去 DeepSeek 化 —— 站点无关判据 + 文案**
 

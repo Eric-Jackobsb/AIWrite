@@ -324,19 +324,6 @@ json execute_text_output(const json& inputs, const json& /*params*/, engine::Exe
     return text;
 }
 
-// --- N-09 图片预览（M5）------------------------------------------------------
-json execute_image_preview(const json& inputs, const json& /*params*/,
-                           engine::ExecutionContext& ctx)
-{
-    std::string path;
-    const auto  it = inputs.find("image");
-    if (it != inputs.end()) {
-        path = text_of(*it);
-    }
-    ctx.console("[图片预览] " + path + "（预览窗口在 M5）");
-    return path;
-}
-
 // --- N-06 文本生成 -----------------------------------------------------------
 //  * provider.mode == "web"    → 网页版（M4-06 已接线：Cookie+userToken → PoW → SSE）
 //  * provider.mode == "official" → 官方 API（M4-05 待接线，抛错提示可先切网页版）

@@ -351,7 +351,8 @@ void draw_output_panel(const char* title, bool* open, EditorState& state)
                     }
                 }
             }
-            // M5-03：图片结果（ImageInput 透传 / ImagePreview 预览）
+            // M5-03：图片结果（M7 起只剩「图片输入」等节点的 image 端口输出；
+            // ImagePreview 汇点节点已移除）
             if (!info.images.empty()) {
                 draw_result_images(info, 480.0f);
             }
