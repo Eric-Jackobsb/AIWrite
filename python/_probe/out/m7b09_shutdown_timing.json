@@ -1,0 +1,437 @@
+{
+  "profile": "C:\\Users\\Administrator\\.brain-ai\\pydoll-profile",
+  "cases": {
+    "kill_raw": {
+      "cookie": "S_kill_raw",
+      "write": {
+        "self_check": "probe-ok",
+        "written": [
+          "S_kill_raw"
+        ],
+        "cookies": [
+          {
+            "name": "S_kill_raw",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685119.654144,
+            "same_site": null
+          }
+        ]
+      },
+      "shutdown": {
+        "mode": "kill_raw",
+        "exit_code": 1,
+        "waited_s": null
+      },
+      "restart_names": [
+        "m7b_js"
+      ],
+      "restart_cookies": [
+        {
+          "name": "m7b_js",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685127.008743,
+          "same_site": null
+        }
+      ],
+      "survived": false,
+      "artifacts_after_exit": {
+        "cookies_db": true,
+        "cookies_journal": true,
+        "cookies_db_size": 20480
+      }
+    },
+    "pydoll_stop": {
+      "cookie": "S_pydoll_stop",
+      "write": {
+        "self_check": "probe-ok",
+        "written": [
+          "S_pydoll_stop",
+          "m7b_js"
+        ],
+        "cookies": [
+          {
+            "name": "S_pydoll_stop",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685131.804303,
+            "same_site": null
+          },
+          {
+            "name": "m7b_js",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685127.008743,
+            "same_site": null
+          }
+        ]
+      },
+      "shutdown": {
+        "mode": "pydoll_stop",
+        "exit_code": 1,
+        "waited_s": null
+      },
+      "restart_names": [
+        "m7b_js"
+      ],
+      "restart_cookies": [
+        {
+          "name": "m7b_js",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685139.178377,
+          "same_site": null
+        }
+      ],
+      "survived": false,
+      "artifacts_after_exit": {
+        "cookies_db": true,
+        "cookies_journal": true,
+        "cookies_db_size": 20480
+      }
+    },
+    "close_wait": {
+      "cookie": "S_close_wait",
+      "write": {
+        "self_check": "probe-ok",
+        "written": [
+          "S_close_wait",
+          "m7b_js"
+        ],
+        "cookies": [
+          {
+            "name": "S_close_wait",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685143.950333,
+            "same_site": null
+          },
+          {
+            "name": "m7b_js",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685139.178377,
+            "same_site": null
+          }
+        ]
+      },
+      "shutdown": {
+        "mode": "close_wait",
+        "exit_code": 0,
+        "waited_s": 0.22
+      },
+      "restart_names": [
+        "S_close_wait",
+        "m7b_js"
+      ],
+      "restart_cookies": [
+        {
+          "name": "S_close_wait",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685143.950333,
+          "same_site": null
+        },
+        {
+          "name": "m7b_js",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685151.018755,
+          "same_site": null
+        }
+      ],
+      "survived": true,
+      "artifacts_after_exit": {
+        "cookies_db": true,
+        "cookies_journal": true,
+        "cookies_db_size": 20480
+      }
+    }
+  },
+  "timing": {
+    "0s": {
+      "cookie": "W0",
+      "write": {
+        "self_check": "probe-ok",
+        "written": [
+          "S_close_wait",
+          "W0",
+          "m7b_js"
+        ],
+        "cookies": [
+          {
+            "name": "S_close_wait",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685143.950333,
+            "same_site": null
+          },
+          {
+            "name": "W0",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685155.782383,
+            "same_site": null
+          },
+          {
+            "name": "m7b_js",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685151.018755,
+            "same_site": null
+          }
+        ]
+      },
+      "shutdown": {
+        "mode": "kill_raw",
+        "exit_code": 1,
+        "waited_s": null
+      },
+      "artifacts_after_kill": {
+        "cookies_db": true,
+        "cookies_journal": true,
+        "cookies_db_size": 20480
+      },
+      "restart_names": [
+        "S_close_wait",
+        "m7b_js"
+      ],
+      "survived": false
+    },
+    "10s": {
+      "cookie": "W10",
+      "write": {
+        "self_check": "probe-ok",
+        "written": [
+          "S_close_wait",
+          "W10",
+          "m7b_js"
+        ],
+        "cookies": [
+          {
+            "name": "S_close_wait",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685143.950333,
+            "same_site": null
+          },
+          {
+            "name": "W10",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685167.944487,
+            "same_site": null
+          },
+          {
+            "name": "m7b_js",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685163.133618,
+            "same_site": null
+          }
+        ]
+      },
+      "shutdown": {
+        "mode": "kill_raw",
+        "exit_code": 1,
+        "waited_s": null
+      },
+      "artifacts_after_kill": {
+        "cookies_db": true,
+        "cookies_journal": true,
+        "cookies_db_size": 20480
+      },
+      "restart_names": [
+        "S_close_wait",
+        "m7b_js"
+      ],
+      "survived": false
+    },
+    "30s": {
+      "cookie": "W30",
+      "write": {
+        "self_check": "probe-ok",
+        "written": [
+          "S_close_wait",
+          "W30",
+          "m7b_js"
+        ],
+        "cookies": [
+          {
+            "name": "S_close_wait",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685143.950333,
+            "same_site": null
+          },
+          {
+            "name": "W30",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685190.04698,
+            "same_site": null
+          },
+          {
+            "name": "m7b_js",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685185.279188,
+            "same_site": null
+          }
+        ]
+      },
+      "shutdown": {
+        "mode": "kill_raw",
+        "exit_code": 1,
+        "waited_s": null
+      },
+      "artifacts_after_kill": {
+        "cookies_db": true,
+        "cookies_journal": true,
+        "cookies_db_size": 20480
+      },
+      "restart_names": [
+        "S_close_wait",
+        "W30",
+        "m7b_js"
+      ],
+      "survived": true
+    },
+    "60s": {
+      "cookie": "W60",
+      "write": {
+        "self_check": "probe-ok",
+        "written": [
+          "S_close_wait",
+          "W30",
+          "W60",
+          "m7b_js"
+        ],
+        "cookies": [
+          {
+            "name": "S_close_wait",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685143.950333,
+            "same_site": null
+          },
+          {
+            "name": "W30",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685190.04698,
+            "same_site": null
+          },
+          {
+            "name": "W60",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685232.244235,
+            "same_site": null
+          },
+          {
+            "name": "m7b_js",
+            "domain": "127.0.0.1",
+            "path": "/",
+            "http_only": false,
+            "secure": false,
+            "session": false,
+            "expires": 1790685227.448294,
+            "same_site": null
+          }
+        ]
+      },
+      "shutdown": {
+        "mode": "kill_raw",
+        "exit_code": 1,
+        "waited_s": null
+      },
+      "artifacts_after_kill": {
+        "cookies_db": true,
+        "cookies_journal": true,
+        "cookies_db_size": 20480
+      },
+      "restart_names": [
+        "S_close_wait",
+        "W30",
+        "W60",
+        "m7b_js"
+      ],
+      "survived": true
+    }
+  },
+  "findings": {
+    "close_wait_keeps_persistent": true,
+    "pydoll_stop_drops_persistent": true,
+    "kill_raw_drops_persistent": true,
+    "delayed_commit_window_s": [
+      30,
+      60
+    ],
+    "close_wait_elapsed_s": 0.22
+  }
+}

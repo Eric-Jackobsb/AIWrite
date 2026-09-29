@@ -1,0 +1,49 @@
+{
+  "profile": "C:\\Users\\Administrator\\.brain-ai\\pydoll-profile",
+  "steps": {
+    "manual_close": {
+      "self_check": "probe-ok",
+      "close_reply_error": null,
+      "process_exit_waited_s": 0.2,
+      "stop_exception": "BrowserNotRunning",
+      "cookie_survived": true,
+      "restart_names": [
+        "HEAL_ext",
+        "S_close_wait",
+        "W30",
+        "W60",
+        "m7b_http",
+        "m7b_js",
+        "m7b_js_session",
+        "m7b_plain"
+      ]
+    },
+    "residual_instance": {
+      "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "pid": 31072,
+      "devtools_version_ok": true,
+      "browser": "Chrome/156.0.8072.0",
+      "ws_address": "ws://127.0.0.1:9333/devtools/browser/77081809-b67b-48d7-8486-30e5dcba5e3a"
+    },
+    "second_launch_same_profile": {
+      "ok": true,
+      "opened_tabs": 2,
+      "current_url": "about:blank"
+    },
+    "attach": {
+      "ok": true,
+      "cookie_names": [],
+      "cookies": []
+    },
+    "cleanup": {
+      "residual_exit_waited_s": 0.2,
+      "exit_code": 0
+    }
+  },
+  "findings": {
+    "manual_close_keeps_login": true,
+    "stop_exception_on_manual_close": "BrowserNotRunning",
+    "second_launch_same_profile": "ok（疑似附着）",
+    "attach_works": true
+  }
+}

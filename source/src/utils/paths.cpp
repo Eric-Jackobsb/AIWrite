@@ -2,8 +2,10 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 namespace aiwrite::paths {
 namespace {
@@ -108,6 +110,13 @@ const std::filesystem::path& webview2_profile()
     return value;
 }
 
+// P7a-04：统一资源目录（图片归档根）
+const std::filesystem::path& assets_images_dir()
+{
+    static const std::filesystem::path value = data_root() / "assets" / "images";
+    return value;
+}
+
 const std::filesystem::path& exe_dir()
 {
     static const std::filesystem::path value = compute_exe_dir();
@@ -153,6 +162,7 @@ int ensure_data_dirs()
     int failures = 0;
     const std::filesystem::path dirs[] = {data_root(),         outputs_dir(),     workflows_dir(),
                                           snapshots_dir(),     logs_dir(),
+                                          assets_images_dir(), // P7a-04：统一资源目录
                                           user_providers_dir()}; // 配置表用户目录（PB2-02）
 
     for (const auto& dir : dirs) {
@@ -163,6 +173,50 @@ int ensure_data_dirs()
         }
     }
     return failures;
+}
+
+// ---------------------------------------------- 多值路径串（P7a-02 / M7）------
+std::vector<std::string> split_path_list(const std::string& value)
+{
+    std::vector<std::string> paths;
+    std::string              current;
+
+    const auto flush = [&paths, &current]() {
+        const std::size_t begin = current.find_first_not_of(" \t\r");
+        if (begin != std::string::npos) {
+            const std::size_t end  = current.find_last_not_of(" \t\r");
+            const std::string item = current.substr(begin, end - begin + 1);
+            if (!item.empty() && std::find(paths.begin(), paths.end(), item) == paths.end()) {
+                paths.push_back(item);
+            }
+        }
+        current.clear();
+    };
+
+    for (const char ch : value) {
+        if (ch == '\n') {
+            flush();
+            continue;
+        }
+        current += ch;
+    }
+    flush();
+    return paths;
+}
+
+std::string join_path_list(const std::vector<std::string>& paths)
+{
+    std::string text;
+    for (const std::string& path : paths) {
+        if (path.empty()) {
+            continue;
+        }
+        if (!text.empty()) {
+            text += '\n';
+        }
+        text += path;
+    }
+    return text;
 }
 
 } // namespace aiwrite::paths

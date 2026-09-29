@@ -1,0 +1,51 @@
+{
+  "profile": "C:\\Users\\Administrator\\.brain-ai\\pydoll-profile",
+  "origins": {
+    "a": "http://127.0.0.1:50406",
+    "b": "http://localhost:50407",
+    "note": "Cookie 按域名隔离（端口不参与）→ 用 127.0.0.1 与 localhost"
+  },
+  "before": {
+    "tab_a_view": [
+      "m7b_http",
+      "m7b_js",
+      "m7b_js_session",
+      "m7b_plain"
+    ],
+    "tab_b_view": [
+      "m7b_http",
+      "m7b_js_session",
+      "m7b_plain"
+    ],
+    "browser_view": [
+      "m7b_http",
+      "m7b_http",
+      "m7b_js",
+      "m7b_js_session",
+      "m7b_js_session",
+      "m7b_plain",
+      "m7b_plain"
+    ]
+  },
+  "after": {
+    "tab_a_view": [],
+    "tab_b_view": [
+      "m7b_http",
+      "m7b_js_session",
+      "m7b_plain"
+    ],
+    "browser_view": [
+      "m7b_http",
+      "m7b_js_session",
+      "m7b_plain"
+    ],
+    "clear_response": {}
+  },
+  "b_page_cookie": "m7b_plain=plain1; m7b_js_session=sess1",
+  "verdict": {
+    "single_profile_both_origins": true,
+    "clear_a_removes_a_cookies": true,
+    "clear_a_keeps_b_cookies": true,
+    "b_page_still_has_cookie": true
+  }
+}

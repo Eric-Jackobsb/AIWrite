@@ -6,6 +6,7 @@
 #include "ui/output_panel.h"
 #include "ui/text_view.h"
 #include "ui/texture_cache.h"
+#include "utils/asset_store.h"
 #include "utils/file_dialog.h"
 #include "utils/log.h"
 #include "utils/paths.h"
@@ -53,6 +54,41 @@ std::string param_error(const Param& param)
     std::string error;
     engine::Graph::validateParam(param, &error);
     return error;
+}
+
+// P7a-15：「输入」分组的端口连通清单
+//  * 判据与运行前校验一致：非 optional 且连接数 0 → 必填未连（红字）
+//  * 变长端口显示已连条数（P7a-01 起「图片理解」的 image 为变长）
+void draw_input_port_summary(const Node& node)
+{
+    if (node.inputs.empty()) {
+        ImGui::TextDisabled("本节点没有输入端口");
+        return;
+    }
+    ImGui::Separator();
+    ImGui::TextDisabled("输入端口（%d）", static_cast<int>(node.inputs.size()));
+    for (const engine::Port& port : node.inputs) {
+        const int   connections = editor().graph.inputConnectionCount(node.id, port.id);
+        std::string text        = port.display_name;
+        if (port.is_variadic) {
+            text += "（变长）";
+        }
+        if (connections > 0) {
+            text += "：已连 " + std::to_string(connections) + " 条";
+            if (port.is_variadic && connections > 1) {
+                text += "（按顺序全部送入）";
+            }
+            ImGui::BulletText("%s", text.c_str());
+        }
+        else if (port.is_optional) {
+            ImGui::TextDisabled("  · %s：未连接（可选）", text.c_str());
+        }
+        else {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+            ImGui::BulletText("%s：未连接（必填）", text.c_str());
+            ImGui::PopStyleColor();
+        }
+    }
 }
 
 void help_marker(const std::string& description)
@@ -780,7 +816,125 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
         note_activation();
         break;
     }
-    case ParamType::File:
+    case ParamType::File: {
+        // P7a-02：File 参数支持**多值**（每行一个路径；换行为分隔符，见 utils/paths.h）
+        //  * 2 行输入框 + 右侧按钮组（浏览…=替换 / 多选…=追加去重 / 清空）
+        //  * 多行控件的 SameLine 落点不可靠 → 用 SetCursorScreenPos 定位按钮组
+        std::string value = param.text();
+
+        const ImVec2 start    = ImGui::GetCursorScreenPos();
+        const float  spacing  = ImGui::GetStyle().ItemSpacing.x;
+        const float  button_w = 84.0f;
+        const float  field_w  = ImGui::GetContentRegionAvail().x - button_w - spacing;
+        const float  field_h  = ImGui::GetTextLineHeight() * 2.0f +
+                               ImGui::GetStyle().FramePadding.y * 2.0f;
+
+        const bool touched =
+            ImGui::InputTextMultiline("##value", &value, ImVec2(field_w, field_h));
+        if (touched) {
+            changed_now = write_param(param, value);
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            edited = true;
+        }
+        note_activation();
+
+        const ImVec2 after_field = ImGui::GetCursorScreenPos();
+        ImGui::SetCursorScreenPos(ImVec2(start.x + field_w + spacing, start.y));
+        ImGui::BeginGroup();
+        if (ImGui::Button("浏览…", ImVec2(button_w, 0.0f))) {
+            const std::string picked = utils::open_file(filters_for(node), param.text());
+            if (!picked.empty()) {
+                write_param(param, picked);
+                edited      = true;
+                changed_now = true;
+            }
+        }
+        if (ImGui::Button("多选…", ImVec2(button_w, 0.0f))) {
+            const std::vector<std::string> picked =
+                utils::open_files(filters_for(node), param.text());
+            if (!picked.empty()) {
+                std::vector<std::string> merged = paths::split_path_list(param.text());
+                for (const std::string& item : picked) {
+                    if (std::find(merged.begin(), merged.end(), item) == merged.end()) {
+                        merged.push_back(item);
+                    }
+                }
+                write_param(param, paths::join_path_list(merged));
+                edited      = true;
+                changed_now = true;
+            }
+        }
+        if (ImGui::Button("清空", ImVec2(button_w, 0.0f))) {
+            write_param(param, std::string());
+            edited      = true;
+            changed_now = true;
+        }
+        ImGui::EndGroup();
+        ImGui::SetCursorScreenPos(after_field);
+
+        const std::vector<std::string> entries = paths::split_path_list(param.text());
+        const int count = static_cast<int>(entries.size());
+        if (count > 1) {
+            ImGui::TextDisabled("共 %d 张图片（每行一个路径）", count);
+        }
+
+        // P7a-04/07：令牌 → 资源目录里的真实路径（可见完整路径；缺失时红字告警）
+        bool has_legacy = false;
+        for (const std::string& entry : entries) {
+            if (asset::needs_migration(entry)) {
+                has_legacy = true;
+                continue;
+            }
+            bool              missing = false;
+            std::string       resolve_error;
+            const std::string local = asset::to_local_path(entry, &missing, &resolve_error);
+            if (missing || local.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+                ImGui::TextWrapped("%s",
+                                   resolve_error.empty() ? "图片资源缺失（可能已被删除）"
+                                                         : resolve_error.c_str());
+                ImGui::PopStyleColor();
+            }
+            else {
+                ImGui::TextDisabled("→ %s", local.c_str());
+            }
+        }
+
+        // P7a-06：外部路径 → 一键迁进资源目录（失败项**保持原值**，不丢用户数据）
+        if (has_legacy) {
+            ImGui::TextDisabled("其中含**外部路径**：迁移进资源目录后，换目录 / 换机仍能取到图片");
+            if (ImGui::Button("迁移到资源目录", ImVec2(150.0f, 0.0f))) {
+                std::vector<std::string> migrated;
+                std::vector<std::string> failures;
+                for (const std::string& entry : entries) {
+                    if (!asset::needs_migration(entry)) {
+                        migrated.push_back(entry);
+                        continue;
+                    }
+                    std::string       import_error;
+                    const std::string token = asset::import_file(entry, &import_error);
+                    if (token.empty()) {
+                        if (!import_error.empty()) {
+                            failures.push_back(import_error);
+                        }
+                        migrated.push_back(entry);
+                        continue;
+                    }
+                    migrated.push_back(token);
+                }
+                write_param(param, paths::join_path_list(migrated));
+                edited      = true;
+                changed_now = true;
+                log::info("[资源目录] 迁移完成：" + std::to_string(entries.size()) + " 项，失败 " +
+                          std::to_string(failures.size()) + " 项");
+                if (!failures.empty()) {
+                    log::error("[资源目录] 迁移失败：" + failures.front());
+                }
+            }
+        }
+        break;
+    }
     case ParamType::Directory: {
         std::string value = param.text();
         ImGui::SetNextItemWidth(-FLT_MIN - 90.0f);
@@ -793,10 +947,8 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
         }
         note_activation();
         ImGui::SameLine();
-        if (ImGui::Button(param.type == ParamType::File ? "浏览…" : "选择…", ImVec2(80.0f, 0.0f))) {
-            const std::string picked = (param.type == ParamType::File)
-                                           ? utils::open_file(filters_for(node), param.text())
-                                           : utils::pick_folder(param.text());
+        if (ImGui::Button("选择…", ImVec2(80.0f, 0.0f))) {
+            const std::string picked = utils::pick_folder(param.text());
             if (!picked.empty()) {
                 write_param(param, picked);
                 edited      = true;
@@ -863,32 +1015,42 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     engine::registerAllNodes();
     const engine::Definition* definition = engine::NodeRegistry::instance().find(node->type);
 
-    // ---- 概览 ----
-    ImGui::Text("节点 %s", node->id.c_str());
-    ImGui::SameLine();
-    ImGui::TextDisabled("(%s)", node->type.c_str());
-    ImGui::TextDisabled("分类: %s    状态: %s",
-                        definition != nullptr ? engine::categoryName(definition->category) : "未知",
-                        engine::nodeStateName(node->state));
+    // ---- P7a-15：三组可折叠（输入 / 参数 / 运行状态）----
+    //  * 折叠状态由 ImGui 持久化到 `io.IniFilename`（app.cpp 已指向数据目录）→ **跨运行保留**
+    if (ImGui::CollapsingHeader("输入", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // ---- 概览 ----
+        ImGui::Text("节点 %s", node->id.c_str());
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%s)", node->type.c_str());
+        ImGui::TextDisabled("分类: %s    状态: %s",
+                            definition != nullptr ? engine::categoryName(definition->category) : "未知",
+                            engine::nodeStateName(node->state));
 
-    ImGui::TextUnformatted("标题");
-    if (editor().request_focus_title) { // 双击节点 / 右键"改名" → 自动聚焦
-        ImGui::SetKeyboardFocusHere();
-        editor().request_focus_title = false;
-    }
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    const bool title_touched = ImGui::InputTextWithHint("##title", "节点标题", &node->title);
-    if (title_touched || ImGui::IsItemDeactivatedAfterEdit()) {
-        result.renamed = true;
-    }
-    if (ImGui::IsItemActivated()) {
-        result.begin_edit = true; // 改名前的快照
+        ImGui::TextUnformatted("标题");
+        if (editor().request_focus_title) { // 双击节点 / 右键"改名" → 自动聚焦
+            ImGui::SetKeyboardFocusHere();
+            editor().request_focus_title = false;
+        }
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        const bool title_touched = ImGui::InputTextWithHint("##title", "节点标题", &node->title);
+        if (title_touched || ImGui::IsItemDeactivatedAfterEdit()) {
+            result.renamed = true;
+        }
+        if (ImGui::IsItemActivated()) {
+            result.begin_edit = true; // 改名前的快照
+        }
+
+        if (definition != nullptr && !definition->description.empty()) {
+            ImGui::TextWrapped("%s", definition->description.c_str());
+        }
+
+        // P7a-15：输入端口连通清单（必填未连 → 红字）
+        draw_input_port_summary(*node);
     }
 
-    if (definition != nullptr && !definition->description.empty()) {
-        ImGui::TextWrapped("%s", definition->description.c_str());
-    }
-
+    // ---- P7a-15：「参数」分组（可折叠）----
+    //  * 分组体为既有代码，**保持原缩进**以便本次改动可审（纯格式差异，功能不受影响）
+    if (ImGui::CollapsingHeader("参数", ImGuiTreeNodeFlags_DefaultOpen)) {
     // ---- 生效提供商（P1-a）：provider 输入优先，覆盖节点自身参数 ----
     // 解决"改了节点「模式」却不生效"的困惑；official（官方 API）与图片理解（M5-02）给出红字与提示
     if (engine::uses_provider(node->type)) {
@@ -1103,29 +1265,51 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
             }
         }
     }
+    } // P7a-15：「参数」分组结束
 
     // M5-01 收尾：图片输入的尺寸摘要（只读文件头，不需要 GL 上下文）
+    // P7a-04/07：先解析资源令牌 → 真实路径；缺失时给可操作告警（不再只说「读不到文件头」）
     if (node->type == "ImageInput") {
-        const engine::Param* path_param = node->findParam("path");
-        const std::string    image_path = path_param != nullptr ? path_param->text() : std::string();
-        if (!image_path.empty()) {
-            int         width  = 0;
-            int         height = 0;
-            std::string error;
-            if (image_size(image_path, &width, &height, &error)) {
-                ImGui::TextDisabled("图片尺寸：%d×%d", width, height);
+        const engine::Param*           path_param = node->findParam("path");
+        const std::vector<std::string> entries =
+            path_param != nullptr ? paths::split_path_list(path_param->text())
+                                  : std::vector<std::string>();
+        if (!entries.empty()) {
+            bool              missing = false;
+            std::string       resolve_error;
+            const std::string image_path = asset::to_local_path(entries.front(), &missing, &resolve_error);
+            if (missing || image_path.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+                ImGui::TextWrapped("%s",
+                                   resolve_error.empty() ? "图片资源缺失（可能已被删除）"
+                                                         : resolve_error.c_str());
+                ImGui::PopStyleColor();
             }
             else {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
-                ImGui::TextWrapped("%s", error.c_str());
-                ImGui::PopStyleColor();
+                int         width  = 0;
+                int         height = 0;
+                std::string error;
+                if (image_size(image_path, &width, &height, &error)) {
+                    if (entries.size() > 1) {
+                        ImGui::TextDisabled("图片尺寸：%d×%d（共 %d 张，此处显示第 1 张）", width,
+                                            height, static_cast<int>(entries.size()));
+                    }
+                    else {
+                        ImGui::TextDisabled("图片尺寸：%d×%d", width, height);
+                    }
+                }
+                else {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+                    ImGui::TextWrapped("%s", error.c_str());
+                    ImGui::PopStyleColor();
+                }
             }
         }
     }
 
-    // ---- 运行结果（PA-03）：只读展示 + 复制（与输出面板 / 画布节点摘要同源）----
+    // ---- 运行状态（PA-03）：只读展示 + 复制（与输出面板 / 画布节点摘要同源）----
     ImGui::Separator();
-    if (ImGui::CollapsingHeader("运行结果", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("运行状态", ImGuiTreeNodeFlags_DefaultOpen)) {
         const engine::RunSnapshot& snapshot = editor().run_snapshot_view();
         const engine::RunNodeView* run      = snapshot.find(node->id);
 

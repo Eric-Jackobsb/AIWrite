@@ -6,8 +6,10 @@
 #include "ui/output_panel.h"
 #include "ui/theme.h"
 #include "utils/config.h"
+#include "utils/asset_store.h" // P7a-16：图片卡片解析资源令牌
 #include "utils/log.h"
 #include "utils/paths.h"
+#include "ui/texture_cache.h"  // P7a-16：节点卡片缩略图 + 格式徽标
 
 #include <imgui.h>
 #include <imgui_node_editor.h>
@@ -15,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
@@ -405,6 +408,33 @@ NodeResultView result_view_of(const Node& node)
     return entry.view;
 }
 
+// P7a-16：节点卡片要显示的图片
+//  * 优先**本次运行结果**（RunNodeView.images，任意节点）
+//  * 其次「图片输入」节点的参数（解析资源令牌 → 真实路径）
+std::string node_card_image(const Node& node)
+{
+    const engine::RunSnapshot& snapshot = editor().run_snapshot_view();
+    if (const engine::RunNodeView* view = snapshot.find(node.id);
+        view != nullptr && !view->images.empty()) {
+        return view->images.front();
+    }
+    if (node.type != "ImageInput") {
+        return {};
+    }
+    const engine::Param* path_param = node.findParam("path");
+    if (path_param == nullptr) {
+        return {};
+    }
+    const std::vector<std::string> entries = paths::split_path_list(path_param->text());
+    if (entries.empty()) {
+        return {};
+    }
+    bool              missing = false;
+    std::string       error;
+    const std::string local = asset::to_local_path(entries.front(), &missing, &error);
+    return missing ? std::string() : local;
+}
+
 void draw_node_body(const Node& node)
 {
     engine::registerAllNodes();
@@ -473,6 +503,30 @@ void draw_node_body(const Node& node)
             ImGui::TextDisabled("%s: %s", param.display_name.c_str(),
                                 value.empty() ? "(空)" : value.c_str());
             ++shown;
+        }
+    }
+
+    // ---- P7a-16：图片卡片（缩略图 + 尺寸 + 格式徽标；格式取内容嗅探结果）----
+    if (const std::string card_image = node_card_image(node); !card_image.empty()) {
+        const TextureInfo texture = texture_for(card_image);
+        ImGui::Separator();
+        if (texture.texture != 0) {
+            float width  = static_cast<float>(texture.width);
+            float height = static_cast<float>(texture.height);
+            if (width > kNodeContentWidth && width > 0.0f) {
+                const float shrink = kNodeContentWidth / width;
+                width *= shrink;
+                height *= shrink;
+            }
+            ImGui::Image(
+                reinterpret_cast<ImTextureID>(static_cast<std::intptr_t>(texture.texture)),
+                ImVec2(width, height));
+            ImGui::TextDisabled("%d×%d · %s", texture.width, texture.height,
+                                texture.format.empty() ? "未知格式" : texture.format.c_str());
+        }
+        else {
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "图片预览失败：%s",
+                               texture.error.empty() ? "未知原因" : texture.error.c_str());
         }
     }
 
@@ -905,7 +959,32 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         state.request_navigate_to_content = false;
     }
 
+    // P7a-17：错误条点击「定位」→ 视图**居中并放大**到选中节点（不是仅跟随全部内容）
+    if (state.request_focus_selection) {
+        if (positions_sane) {
+            ed::NavigateToSelection(true);
+        }
+        state.request_focus_selection = false;
+    }
+
     ed::End();
+
+    // P7a-14：空画布引导（新用户第一眼就知道下一步做什么）
+    if (state.graph.nodes.empty()) {
+        ImDrawList*  draw_list   = ImGui::GetWindowDrawList();
+        const ImVec2 window_pos  = ImGui::GetWindowPos();
+        const ImVec2 window_size = ImGui::GetWindowSize();
+        const char*  line1 = "画布是空的：从左侧「节点库」单击一个节点，或直接拖到画布";
+        const char*  line2 = "也可以右键画布 → 新建节点；菜单「文件 → 示例工作流」可载入示例";
+        const ImVec2 size1 = ImGui::CalcTextSize(line1);
+        const ImVec2 size2 = ImGui::CalcTextSize(line2);
+        const float  center_x = window_pos.x + window_size.x * 0.5f;
+        const float  base_y   = window_pos.y + window_size.y * 0.42f;
+        draw_list->AddText(ImVec2(center_x - size1.x * 0.5f, base_y),
+                           IM_COL32(205, 205, 205, 220), line1);
+        draw_list->AddText(ImVec2(center_x - size2.x * 0.5f, base_y + size1.y + 6.0f),
+                           IM_COL32(150, 150, 150, 200), line2);
+    }
 
     if (!options.show_grid) {
         ed::PopStyleColor();

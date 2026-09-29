@@ -89,6 +89,60 @@ std::string open_file(const std::vector<FileFilter>& filters, const std::string&
     return path;
 }
 
+// P7a-02：多选文件（一次选 N 张）
+//  * 取消 / 失败 / NFD 不可用 → 空列表（调用方按「未选择」处理）
+//  * 顺序 = 对话框中的选择顺序；不做去重（调用方按需合并）
+std::vector<std::string> open_files(const std::vector<FileFilter>& filters,
+                                    const std::string& default_path)
+{
+    std::vector<std::string> picked;
+
+    NfdSession session;
+    if (!session.ok()) {
+        return picked;
+    }
+
+    std::vector<nfdu8filteritem_t> items;
+    items.reserve(filters.size());
+    for (const FileFilter& filter : filters) {
+        items.push_back(nfdu8filteritem_t{filter.label.c_str(), filter.pattern.c_str()});
+    }
+
+    NFD::UniquePathSet out_paths;
+    const nfdresult_t result =
+        NFD::OpenDialogMultiple(out_paths, items.empty() ? nullptr : items.data(),
+                                static_cast<nfdfiltersize_t>(items.size()),
+                                default_path.empty() ? nullptr : default_path.c_str());
+
+    if (result == NFD_ERROR) {
+        log::error(std::string("[文件对话框] 多选文件失败: ") + NFD::GetError());
+        return picked;
+    }
+    if (result == NFD_CANCEL) {
+        return picked;
+    }
+
+    nfdpathsetsize_t count = 0;
+    if (NFD::PathSet::Count(out_paths, count) != NFD_OKAY) {
+        log::error(std::string("[文件对话框] 多选文件：读取数量失败: ") + NFD::GetError());
+        return picked;
+    }
+
+    picked.reserve(count);
+    for (nfdpathsetsize_t index = 0; index < count; ++index) {
+        NFD::UniquePathSetPathU8 path;
+        if (NFD::PathSet::GetPath(out_paths, index, path) != NFD_OKAY) {
+            continue;
+        }
+        if (path != nullptr) {
+            picked.emplace_back(path.get());
+        }
+    }
+
+    log::info("[文件对话框] 多选文件: " + std::to_string(picked.size()) + " 个");
+    return picked;
+}
+
 std::string pick_folder(const std::string& default_path)
 {
     NfdSession session;

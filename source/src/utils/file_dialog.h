@@ -22,6 +22,11 @@ struct FileFilter {
 std::string open_file(const std::vector<FileFilter>& filters = {},
                       const std::string& default_path = {});
 
+// P7a-02：**多选**文件（一次选 N 张）；取消 / 失败 / 不支持时返回空列表
+//  * 顺序 = 用户在对话框里的选择顺序；不做去重（由调用方按需处理）
+std::vector<std::string> open_files(const std::vector<FileFilter>& filters = {},
+                                    const std::string& default_path = {});
+
 // 保存文件对话框；取消/失败返回空字符串（default_name 为默认文件名）
 std::string save_file(const std::vector<FileFilter>& filters = {},
                       const std::string& default_path = {},

@@ -86,6 +86,7 @@ struct EditorState {
     // 一次性请求（由画布消费）
     bool request_focus_title          = false; // 双击节点标题 → 参数面板聚焦标题输入框
     bool request_navigate_to_content  = false; // 新建/粘贴后视图跟随内容
+    bool request_focus_selection      = false; // P7a-17：错误条定位 → 视图**居中并放大**到选中节点
 
     // ------------------------------------------------------------- 编辑 -----
     void        snapshot(const std::string& label);   // 修改前压快照

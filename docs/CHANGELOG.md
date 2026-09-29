@@ -21,7 +21,36 @@
 
 ---
 
-## [Unreleased] — M7（图片收口 + 节点精简）+ M5 核心切片（M5-C）已落地；M7 第二轮 P7 已立项；**M7 第三轮 `M7B` 立项（网页通道整体迁 Pydoll）**
+## [Unreleased] — M7（图片收口 + 节点精简）+ M5 核心切片（M5-C）已落地；**M7 第二轮 P7-a 已落地（v0.5.2）**；M7 第三轮 `M7B` 立项（网页通道整体迁 Pydoll）
+
+**✅ M7 第二轮 P7-a 落地（v0.5.2 · 2026-09-28）—— 图片多图 + 统一资源目录 + official 收口 + UI A 档（`P7a-01`~`P7a-19` 全部完成）**
+
+- **图片内部运行**：`image` 端口改 **变长**（`P7a-01` —— 只改端点声明，变长收集 / 校验机制引擎早已通用）→ 多个「图片输入」
+  可同时连入「图片理解」；「图片输入」支持 **多选**（`P7a-02`：新增 `file_dialog::open_files`（NFD 多选）+
+  `paths::split_path_list / join_path_list`（**换行分隔**、去空行 / 去首尾空白 / 去重 / 保序）+ 参数面板改「2 行输入框 + 浏览… / 多选… / 清空」）；
+  多图请求体断言（`P7a-03`：`content` 含 **3 个 `image_url`**）
+- **统一资源目录（新增 `source/src/utils/asset_store.{h,cpp}`）**：资源根 `~/.brain-ai/assets/images/`
+  （`paths::assets_images_dir`，随 `ensure_data_dirs` 创建）；**内容寻址** `<SHA3-256>.<ext>`（同内容只存一份 —— 复用仓库既有
+  `utils/crypto.h`，**零新依赖**）；工作流存 **令牌** `aiwrite-asset:<64 位摘要>`（`P7a-04` / `P7a-05`：**换目录 / 换机仍能取到图片**，
+  实测**无需改 `workflow_io`**）；**旧绝对路径照旧可用**（不变量 `I19`）+ Console 迁移提示 + 参数面板「**迁移到资源目录**」按钮
+  （失败项保留原值，**不静默改写用户文件**，`P7a-06`）；资源缺失 → 文案含 **资源目录完整路径 + 预期文件 + 下一步**，
+  且**重新归档同一内容即可自愈**（`P7a-07`）
+- **official 收口**：编码缓存（`P7a-08`：键 = 路径 + 修改时间 + 大小，**加锁**（执行器已线程化），上限 32 条 → 同图重跑不重复编码）；
+  超限 **直接拒绝 + 可复制诊断**（含实际值 / 上限 / 下一步 / 配置项名，`P7a-09`）；**编码后体积与耗时**（`P7a-10`：新增
+  `OfficialChatResult.encoded_bytes / encode_ms` 与 `human_bytes()`（KB/MB 自适应）→ 执行器 Console 与控制台自检都打印）；
+  错误分类带标签 **路径 / 格式 / 体积**，400 用关键词表区分 **「内容策略」** 与「请求不合法」（`P7a-11`：`classify_http_error` 提为公开纯函数）
+- **UI A 档**：⚠️ **行为变化** —— 默认布局改为 **节点库 + 参数面板常显**（`P7a-12`；**显式 `false` 的老配置仍保持隐藏**，`P7a-13`）；
+  空画布引导（`P7a-14`）；参数面板分「**输入 / 参数 / 运行状态**」三组可折叠（折叠态经 `imgui.ini` **跨运行持久**，`P7a-15`）；
+  图片节点卡片 = 缩略图 + `W×H` + **格式徽标**（`P7a-16`，格式由 `TextureInfo.format` 内容嗅探提供，不额外读盘）；
+  错误条点击 → 视图 **居中并放大**到失败节点（`P7a-17`，`ed::NavigateToSelection`）；状态栏增「**提供商（id）· 模型**」与
+  「**耗时**（累计 / 节点数）」（`P7a-18`）；输出面板缩略图 **点击放大**（`P7a-19`，弹窗每帧只绘一次避免 ID 冲突）
+- **基线（P7-a 收口实测 · 2026-09-28）**：构建 **0 error / 0 warning** · `--selftest` **七组 PASS** ·
+  `--exec-selftest` **251 → 310 / 0**（**只升不降，0 条旧断言被删**）· `--graph-selftest` **110 / 0** ·
+  `--provider-selftest` **50 / 0** · `--run-selftest` **PASS** · `--vlm-selftest` 离线 **PASS**（无 Key `exit 2`）·
+  文档断链 **266 / 0**；GUI 冒烟：启动 8s 存活 / 首帧完成 / 无 ImGui 断言
+- 文档同步：[actionPlan/M7.md](actionPlan/M7.md)（§11 全 ✅ + §14 基线回填）· `DevPlan.todo` ·
+  [ai_writer_nodes.md](ai_writer_nodes.md)（§7.1 / §7.2 / §20.2）· [节点编辑器使用说明.md](节点编辑器使用说明.md)（§2 / §4 / §10）·
+  [../source/README.md](../source/README.md)（源文件表 + 资源目录）
 
 **立项（M7 第三轮 `M7B` · 2026-09-28 · 计划未开工）—— 网页通道整体迁 Pydoll（WebView2 退场）**
 
@@ -38,7 +67,7 @@
 - 影响面：`source/` 内 **17 文件 ≈184 处** WebView2 代码进入撤除清单（§1.3）；`vcpkg.json` / `CMakeLists.txt` /
   `paths` / UI / `webview2_login` 工具全清 → **`PM-01`（WebView2 Runtime 检测）作废**；
   Python 运行时**升级为 M6 硬门槛**（`Q7`）
-- 任务：**6 批** `M7B-10`~`M7B-41` + 前置验证 `M7B-01`~`08`（含 **CDP 增量三路线实测**、**DeepSeek 网页版选择器实测**）；
+- 任务：**6 批** `M7B-10`~`M7B-41` + 前置验证 `M7B-01`~`09` + **`M7B-06b`**（含 **CDP 增量三路线实测**、**DeepSeek 网页版选择器实测**、**关闭时序与会话持久化**）；
   **先建后拆**（批 1–4 保留 WebView2，批 5 才删）；每批结束跑基线
 - ✅ **`MB-D1` 已定（2026-09-28）：先建后拆** —— 批 1–4 保留 WebView2（可切回），批 5 才删；由此外加两条纪律：
   **批 1–4 只新增不删改**（`--exec-selftest` **只升不降**，任何下降即真回归）、**配置表收敛与删除类断言统一归批 5**
@@ -61,6 +90,44 @@
   `expect_and_bypass_cloudflare_captcha` / `enable_auto_solve_cloudflare_captcha`（验证码规避）、
   `apply_fingerprint` / `FingerprintApplier`（指纹伪造）—— 见 [actionPlan/M7B.md](actionPlan/M7B.md) §13
 - **回滚锚点已建立**：标签 `pre-m7b` → 提交 `a1a7e0c`（已推送）；`.gitignore` 补 Python 运行时忽略项
+
+**前置验证进行中（`M7B-01`~`M7B-09` · 2026-09-28 · 仍未动一行产品代码）**
+
+- ✅ **已过 5 项**（脚本 + JSON 证据在 `python/_probe/`，一次性、不进主管道）：
+  - **`M7B-01`**（headful + 单 profile + CDP 读 Cookie）：profile 落 `~/.brain-ai/pydoll-profile`（1064 文件，含 `Cookies` 库）；
+    **CDP 读回含 `httpOnly` Cookie，而 `document.cookie` 看不到它**；**重启同 profile 后持久 Cookie 仍在**、会话 Cookie 正确消失
+  - **`M7B-03`**（CDP 增量流式 · `R2` 主闸门）：主路线 = **`Fetch.takeResponseBodyAsStream` + `IO.read(size=128~256)`**（`size` 即推送粒度，实测 256 B/帧、41 帧 / 10 KB 流）
+  - **`M7B-05`**（页面驱动）：**154 ms/字符**逐字输入（21 次 input 事件）+ 文件注入 **两条路径都成功**（`expect_file_chooser` / `DOM.setFileInputFiles`，后者触发 change）
+  - **`M7B-08`**（单 profile 多站点 + 按 origin 注销）：两域并存 → `Storage.clearDataForOrigin(A)` 后 **A 空 / B 完整**；⚠️ Cookie **按域名隔离、端口不参与**
+  - **`M7B-09`**（关闭时序 / 持久化 / 接管 · `MB-D0-8` L1~L4 闸门 · 四轮 V-a~V-d）：
+    ① **干净退出保住持久 Cookie**，`Browser.close` → 等进程退出只需 **0.22 s**；强杀与库默认 `stop()` 会丢（且残留 `Cookies-journal`）；
+    ② 写 Cookie 后 **≥30 s** 再强杀仍存活 ⇒ **10–30 s 延迟提交窗口**；
+    ③ 外部关窗（等价用户点 X）**干净**且 Cookie 保住，随后 `stop()` 抛 **`BrowserNotRunning`（实现层必须吞）**；
+    ④ **会期 Cookie 干净退出必掉**（每 case 全新 profile 对照实证），`--restore-last-session` 能保但**会重开上次标签页**（副作用）⇒
+    **改用 L2 加密快照**：回灌后 `session`/`httpOnly` 属性保持且**服务端 `/eyes` 认账**（端到端已验）；
+    ⑤ profile 被占时**同端口 = 静默附着到既有实例 / 随机端口 = `FailedToStartBrowser`**，`browser.connect(ws)` **attach 可行**
+    ⇒ **启动前先探端口，禁止强杀**
+- ⏳ **待过 4 项 + 1 项加强**：`M7B-02` / `M7B-04`（C++ ↔ Python **命名管道双向 IPC**；C++ 工具链冒烟已通
+  ⇒ 剩管道本体）、`M7B-06` / `M7B-07`（DeepSeek 网页版选择器 / 会话失效证据来源，**需真站点人工登录**）、
+  `M7B-06b`（真站点「重启仍登录」+ 回填 §10「登录 Cookie 存活口径」表）
+- ⚠️ **一条计划级发现（已改进计划 · 决议 `MB-D0-8`）**：Pydoll 的 `browser.stop()` 是
+  **「发 `Browser.close` 后立刻 `terminate()`（硬杀）」** → Chrome 来不及把 Cookie 库落盘 →
+  **登录态每次退出即丢**（实测：强杀 = 丢 / `close` + 等 3 s = 保住；源码证据
+  `pydoll/browser/chromium/base.py:223-243` + `browser/managers/browser_process_manager.py:73-89`）。
+  用户拍板 **四层保障全做**：**L1 干净退出**（`Browser.close` → 等进程退出，默认 5 s，超时才强杀）·
+  **L2 DPAPI 加密 Cookie 快照**（启动 `Network.setCookies` 回灌，抗崩溃/断电）· **L3 启动自愈**（profile 被占 →
+  优先优雅接管，禁止为启动而强杀浏览器）· **L4 异常退出可见**（埋点 + 一键重登/恢复）
+- ✅ 文档同步：新增不变量 **`I23`**、断言 **`VB2-38`/`VB2-39`**、前置验证 **`M7B-09`**（关闭时序三档 + 提交时机 + 快照往返）
+  与 **`M7B-06b`**（真站点「重启仍登录」+ 记录登录 Cookie 的 `expires`）、开口项 `MB-Q4`/`MB-Q5`/`MB-Q6`、
+  §13 登录态快照红线；`source/README.md` 新增 **§6.2 一次性探针脚本纪律**（读回必须自证）—— 见 [actionPlan/M7B.md](actionPlan/M7B.md) v5 / v6 变更记录
+- ✅ 文档同步（v7 · `M7B-09` 收口）：不变量 **`I23⑤`**（保活手段不得改变用户可见行为）；§13 新增
+  **启动与登录态两条"不做"**（禁止为启动而强杀既有实例 / 禁止默认使用会重开上次标签页的开关）；§5 实施要点 **+⑨⑩⑪**
+  （登录态读数作用域 / profile 被占两形态 / `--restore-last-session` 默认禁用）与 **`M7B-09` 结论块**；
+  §14.2 **`MB-Q6` 结案**（默认不写 `Preferences`，会期 Cookie 交 L2）；`source/README.md` §6.2 **+3 条探针纪律**
+  （读数作用域 / `try/finally` 收尾 / 一因多果逐项排除）—— 见 [actionPlan/M7B.md](actionPlan/M7B.md) v7 变更记录
+- ✅ 文档同步（v8）：**L2 快照节奏**由 V-a 的提交窗口数字收口 —— 刷新间隔 **< 10 s** + **登录成功即写** /
+  **优雅退出前再写**（否则崩溃时快照旧一个窗口）；探针侧固化**残留自检**（`m7b09_common.shutdown()` 返回
+  `strays_after` / `strays_killed`）—— 见 [actionPlan/M7B.md](actionPlan/M7B.md) v8 变更记录
 
 **文档（新增）：`docs/roadmap.md` —— 长期路线图 v1.0（一页纸）**
 

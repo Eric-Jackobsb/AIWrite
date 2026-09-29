@@ -1,0 +1,39 @@
+{
+  "text": "真实打字测试：中文 abc 123，标点。",
+  "files": [
+    "F:\\GameDao\\Tools\\AIwrite\\python\\_probe\\out\\drive_files\\m7b-a.png",
+    "F:\\GameDao\\Tools\\AIwrite\\python\\_probe\\out\\drive_files\\m7b-b.txt"
+  ],
+  "typing": {
+    "elapsed_ms": 3234.0,
+    "value_ok": true,
+    "value": "真实打字测试：中文 abc 123，标点。",
+    "input_events": 21,
+    "char_count": 21,
+    "interval_min_ms": 144,
+    "interval_max_ms": 156,
+    "per_char_ms": 154.0
+  },
+  "file_chooser": {
+    "before": "",
+    "after": "FILES=m7b-a.png:120|m7b-b.txt:64",
+    "expected": [
+      "m7b-a.png:120",
+      "m7b-b.txt:64"
+    ]
+  },
+  "dom_set_files": {
+    "node_id": 10,
+    "response": {},
+    "files": "m7b-a.png:120|m7b-b.txt:64",
+    "change_event_log": "FILES=m7b-a.png:120|m7b-b.txt:64"
+  },
+  "verdict": {
+    "typing_text_correct": true,
+    "typing_is_per_char": true,
+    "file_chooser_injected": true,
+    "dom_set_files_injected": true,
+    "dom_set_files_second_file_ok": true,
+    "dom_set_files_fires_change": true
+  }
+}

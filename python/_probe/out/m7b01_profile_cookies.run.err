@@ -1,0 +1,61 @@
+Traceback (most recent call last):
+  File "F:\GameDao\Tools\AIwrite\python\_probe\m7b01_profile_cookies.py", line 115, in <module>
+    raise SystemExit(asyncio.run(main()))
+                     ^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\asyncio\runners.py", line 194, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\asyncio\base_events.py", line 684, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "F:\GameDao\Tools\AIwrite\python\_probe\m7b01_profile_cookies.py", line 74, in main
+    report['pass1'] = await run_pass('pass1-写入', base, navigate=True)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GameDao\Tools\AIwrite\python\_probe\m7b01_profile_cookies.py", line 54, in run_pass
+    await tab.go_to(f'{base}/setcookies')          # 服务器下 3 条 Set-Cookie（含 HttpOnly）
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GameDao\Tools\AIwrite\.venv\Lib\site-packages\pydoll\browser\tab.py", line 1005, in go_to
+    async with self._wait_page_load(timeout=timeout):
+  File "F:\Python\Lib\contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GameDao\Tools\AIwrite\.venv\Lib\site-packages\pydoll\browser\tab.py", line 1983, in _wait_page_load
+    await self.enable_page_events()
+  File "F:\GameDao\Tools\AIwrite\.venv\Lib\site-packages\pydoll\browser\tab.py", line 361, in enable_page_events
+    response = await self._execute_command(PageCommands.enable())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GameDao\Tools\AIwrite\.venv\Lib\site-packages\pydoll\elements\mixins\find_elements_mixin.py", line 744, in _execute_command
+    return await handler.execute_command(command, timeout=60)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GameDao\Tools\AIwrite\.venv\Lib\site-packages\pydoll\connection\connection_handler.py", line 115, in execute_command
+    await self._ensure_active_connection()
+  File "F:\GameDao\Tools\AIwrite\.venv\Lib\site-packages\pydoll\connection\connection_handler.py", line 240, in _ensure_active_connection
+    await self._establish_new_connection()
+  File "F:\GameDao\Tools\AIwrite\.venv\Lib\site-packages\pydoll\connection\connection_handler.py", line 247, in _establish_new_connection
+    self._ws_connection = await self._ws_connector(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GameDao\Tools\AIwrite\.venv\Lib\site-packages\websockets\asyncio\client.py", line 555, in __await_impl__
+    self.connection = await self.create_connection()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GameDao\Tools\AIwrite\.venv\Lib\site-packages\websockets\asyncio\client.py", line 470, in create_connection
+    _, connection = await loop.create_connection(factory, **kwargs)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\asyncio\base_events.py", line 1124, in create_connection
+    raise exceptions[0]
+  File "F:\Python\Lib\asyncio\base_events.py", line 1101, in create_connection
+    sock = await self._connect_sock(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\asyncio\base_events.py", line 1004, in _connect_sock
+    await self.sock_connect(sock, address)
+  File "F:\Python\Lib\asyncio\proactor_events.py", line 727, in sock_connect
+    return await self._proactor.connect(sock, address)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\asyncio\windows_events.py", line 798, in _poll
+    value = callback(transferred, key, ov)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\asyncio\windows_events.py", line 594, in finish_connect
+    ov.getresult()
+ConnectionRefusedError: [WinError 1225] The remote computer refused the network connection

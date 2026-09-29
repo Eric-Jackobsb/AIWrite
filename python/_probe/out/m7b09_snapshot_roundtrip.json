@@ -1,0 +1,287 @@
+{
+  "profile": "C:\\Users\\Administrator\\.brain-ai\\pydoll-profile",
+  "steps": {
+    "snapshot": {
+      "names": [
+        "S_close_wait",
+        "W30",
+        "W60",
+        "m7b_http",
+        "m7b_js",
+        "m7b_js_session",
+        "m7b_plain"
+      ],
+      "cookies": [
+        {
+          "name": "S_close_wait",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685143.950333,
+          "same_site": null
+        },
+        {
+          "name": "W30",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685190.04698,
+          "same_site": null
+        },
+        {
+          "name": "W60",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685232.244235,
+          "same_site": null
+        },
+        {
+          "name": "m7b_http",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": true,
+          "secure": false,
+          "session": false,
+          "expires": 1790685521.828617,
+          "same_site": null
+        },
+        {
+          "name": "m7b_js",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685522.265119,
+          "same_site": null
+        },
+        {
+          "name": "m7b_js_session",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": true,
+          "expires": -1,
+          "same_site": null
+        },
+        {
+          "name": "m7b_plain",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685521.828665,
+          "same_site": null
+        }
+      ],
+      "param_count": 7,
+      "params": [
+        {
+          "name": "m7b_plain",
+          "value": "plain1",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "secure": false,
+          "httpOnly": false,
+          "priority": "Medium",
+          "sourceScheme": "NonSecure",
+          "sourcePort": 55651,
+          "expires": 1790685521.828665
+        },
+        {
+          "name": "W30",
+          "value": "1",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "secure": false,
+          "httpOnly": false,
+          "priority": "Medium",
+          "sourceScheme": "NonSecure",
+          "sourcePort": 58776,
+          "expires": 1790685190.04698
+        },
+        {
+          "name": "m7b_js",
+          "value": "3",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "secure": false,
+          "httpOnly": false,
+          "priority": "Medium",
+          "sourceScheme": "NonSecure",
+          "sourcePort": 55651,
+          "expires": 1790685522.265119
+        },
+        {
+          "name": "S_close_wait",
+          "value": "1",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "secure": false,
+          "httpOnly": false,
+          "priority": "Medium",
+          "sourceScheme": "NonSecure",
+          "sourcePort": 58776,
+          "expires": 1790685143.950333
+        },
+        {
+          "name": "m7b_http",
+          "value": "secret1",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "secure": false,
+          "httpOnly": true,
+          "priority": "Medium",
+          "sourceScheme": "NonSecure",
+          "sourcePort": 55651,
+          "expires": 1790685521.828617
+        },
+        {
+          "name": "m7b_js_session",
+          "value": "sess1",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "secure": false,
+          "httpOnly": false,
+          "priority": "Medium",
+          "sourceScheme": "NonSecure",
+          "sourcePort": 55651
+        },
+        {
+          "name": "W60",
+          "value": "1",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "secure": false,
+          "httpOnly": false,
+          "priority": "Medium",
+          "sourceScheme": "NonSecure",
+          "sourcePort": 58776,
+          "expires": 1790685232.244235
+        }
+      ]
+    },
+    "eyes_before": "{\"cookie_header\":\"m7b_js=3; S_close_wait=1; W30=1; W60=1; m7b_http=secret1; m7b_plain=plain1; m7b_js_session=sess1\"}",
+    "after_clear": {
+      "names": [],
+      "eyes": "{\"cookie_header\":\"\"}"
+    },
+    "restore": {
+      "names": [
+        "S_close_wait",
+        "W30",
+        "W60",
+        "m7b_http",
+        "m7b_js",
+        "m7b_js_session",
+        "m7b_plain"
+      ],
+      "cookies": [
+        {
+          "name": "S_close_wait",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685143.950333,
+          "same_site": null
+        },
+        {
+          "name": "W30",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685190.04698,
+          "same_site": null
+        },
+        {
+          "name": "W60",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685232.244235,
+          "same_site": null
+        },
+        {
+          "name": "m7b_http",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": true,
+          "secure": false,
+          "session": false,
+          "expires": 1790685521.828617,
+          "same_site": null
+        },
+        {
+          "name": "m7b_js",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685522.265119,
+          "same_site": null
+        },
+        {
+          "name": "m7b_js_session",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": true,
+          "expires": -1,
+          "same_site": null
+        },
+        {
+          "name": "m7b_plain",
+          "domain": "127.0.0.1",
+          "path": "/",
+          "http_only": false,
+          "secure": false,
+          "session": false,
+          "expires": 1790685521.828665,
+          "same_site": null
+        }
+      ],
+      "document_cookie": "m7b_plain=plain1; W30=1; m7b_js=3; S_close_wait=1; m7b_js_session=sess1; W60=1",
+      "eyes": "{\"cookie_header\":\"m7b_plain=plain1; W30=1; m7b_js=3; S_close_wait=1; m7b_http=secret1; m7b_js_session=sess1; W60=1\"}",
+      "http_only_map": {
+        "S_close_wait": false,
+        "W30": false,
+        "W60": false,
+        "m7b_http": true,
+        "m7b_js": false,
+        "m7b_js_session": false,
+        "m7b_plain": false
+      }
+    }
+  },
+  "self_check": "probe-ok",
+  "shutdown": {
+    "mode": "close_wait",
+    "exit_code": 0,
+    "waited_s": 0.11
+  },
+  "findings": {
+    "names_restored": true,
+    "missing_after_restore": [],
+    "http_only_preserved": true,
+    "document_cookie_still_hides_httponly": true,
+    "server_still_recognizes": true,
+    "roundtrip_ok": true
+  }
+}

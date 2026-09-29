@@ -1,0 +1,181 @@
+{
+  "template_profile": "C:\\Users\\Administrator\\.brain-ai\\pydoll-profile",
+  "root": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\m7b09_vd",
+  "cases": {
+    "baseline": {
+      "label": "baseline",
+      "profile": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\m7b09_vd\\baseline",
+      "prefs": null,
+      "extra_args": [],
+      "self_check": "probe-ok",
+      "write_names": [
+        "PERS_baseline",
+        "SESS_baseline"
+      ],
+      "session_flag_of_sess": true,
+      "exit": {
+        "mode": "close_wait",
+        "exit_code": 0,
+        "waited_s": 0.09
+      },
+      "exit_state_before_close": {
+        "preferences_exists": false
+      },
+      "exit_state_after_close": {
+        "preferences_exists": true,
+        "exit_type": "Normal",
+        "exited_cleanly": null
+      },
+      "exit_state_after_restart": {
+        "preferences_exists": true,
+        "exit_type": "Normal",
+        "exited_cleanly": null
+      },
+      "restart_names": [
+        "PERS_baseline",
+        "m7b_js"
+      ],
+      "session_survived": false,
+      "persistent_survived": true
+    },
+    "restore_switch": {
+      "label": "restore_switch",
+      "profile": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\m7b09_vd\\restore_switch",
+      "prefs": null,
+      "extra_args": [
+        "--restore-last-session"
+      ],
+      "self_check": "probe-ok",
+      "write_names": [
+        "PERS_restore_switch",
+        "SESS_restore_switch"
+      ],
+      "session_flag_of_sess": true,
+      "exit": {
+        "mode": "close_wait",
+        "exit_code": 0,
+        "waited_s": 0.11
+      },
+      "exit_state_before_close": {
+        "preferences_exists": false
+      },
+      "exit_state_after_close": {
+        "preferences_exists": true,
+        "exit_type": "Normal",
+        "exited_cleanly": null
+      },
+      "exit_state_after_restart": {
+        "preferences_exists": true,
+        "exit_type": "Normal",
+        "exited_cleanly": null
+      },
+      "restart_names": [
+        "PERS_restore_switch",
+        "SESS_restore_switch",
+        "m7b_js"
+      ],
+      "session_survived": true,
+      "persistent_survived": true
+    },
+    "prefs_restore": {
+      "label": "prefs_restore",
+      "profile": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\m7b09_vd\\prefs_restore",
+      "prefs": {
+        "session": {
+          "restore_on_startup": 1
+        }
+      },
+      "extra_args": [],
+      "self_check": "probe-ok",
+      "write_names": [
+        "PERS_prefs_restore",
+        "SESS_prefs_restore"
+      ],
+      "session_flag_of_sess": true,
+      "exit": {
+        "mode": "close_wait",
+        "exit_code": 0,
+        "waited_s": 0.22
+      },
+      "exit_state_before_close": {
+        "preferences_exists": true,
+        "exit_type": null,
+        "exited_cleanly": null
+      },
+      "exit_state_after_close": {
+        "preferences_exists": true,
+        "exit_type": "Normal",
+        "exited_cleanly": null
+      },
+      "exit_state_after_restart": {
+        "preferences_exists": true,
+        "exit_type": "Normal",
+        "exited_cleanly": null
+      },
+      "restart_names": [
+        "PERS_prefs_restore",
+        "m7b_js"
+      ],
+      "session_survived": false,
+      "persistent_survived": true
+    },
+    "switch_and_prefs": {
+      "label": "switch_and_prefs",
+      "profile": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\m7b09_vd\\switch_and_prefs",
+      "prefs": {
+        "session": {
+          "restore_on_startup": 1
+        }
+      },
+      "extra_args": [
+        "--restore-last-session"
+      ],
+      "self_check": "probe-ok",
+      "write_names": [
+        "PERS_switch_and_prefs",
+        "SESS_switch_and_prefs"
+      ],
+      "session_flag_of_sess": true,
+      "exit": {
+        "mode": "close_wait",
+        "exit_code": 0,
+        "waited_s": 0.22
+      },
+      "exit_state_before_close": {
+        "preferences_exists": true,
+        "exit_type": null,
+        "exited_cleanly": null
+      },
+      "exit_state_after_close": {
+        "preferences_exists": true,
+        "exit_type": "Normal",
+        "exited_cleanly": null
+      },
+      "exit_state_after_restart": {
+        "preferences_exists": true,
+        "exit_type": "Normal",
+        "exited_cleanly": null
+      },
+      "restart_names": [
+        "PERS_switch_and_prefs",
+        "SESS_switch_and_prefs",
+        "m7b_js"
+      ],
+      "session_survived": true,
+      "persistent_survived": true
+    }
+  },
+  "findings": {
+    "fresh_profile_baseline_session_dropped": true,
+    "fresh_profile_baseline_persistent_kept": true,
+    "clean_exit_state": {
+      "preferences_exists": true,
+      "exit_type": "Normal",
+      "exited_cleanly": null
+    },
+    "levers_that_keep_session_cookie": [
+      "restore_switch",
+      "switch_and_prefs"
+    ]
+  }
+}

@@ -30,7 +30,8 @@ void draw_error_bar(EditorState& state)
         if (state.graph.findNode(state.last_error.node_id) != nullptr) {
             state.selected_node  = state.last_error.node_id;
             state.selected_nodes = {state.last_error.node_id};
-            state.request_navigate_to_content = true;
+            // P7a-17：**居中并放大**到该节点（NavigateToSelection），而不是仅跟随全部内容
+            state.request_focus_selection = true;
             state.set_status("已定位失败节点 " + state.last_error.node_id);
             log::info("[错误条] 定位失败节点 " + state.last_error.node_id);
         }

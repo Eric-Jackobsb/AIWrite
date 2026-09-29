@@ -42,6 +42,7 @@
 #include "web/webview_host.h"              // L4（PB2-28）：探测脚本适用性断言（VB2-25）
 #include "ai/deepseek_web_client.h"       // L4（PB2-28④）：会话失效识别断言（VB2-27）
 #include "utils/image_decode.h"           // M7-04/05：图片格式嗅探 + 解码 + 失败文案断言
+#include "utils/asset_store.h"            // P7a-04：统一资源目录（令牌 / 归档 / 解析）断言
 
 #include <fstream>
 #include <sstream>
@@ -224,6 +225,49 @@ bool test_config_roundtrip()
                 aiwrite::Config{}.timeout.connect_ms);
 
     std::filesystem::remove(file, ec);
+
+    // ---- P7a-12/13（UI A 档）：默认布局常显 + 老配置显式 false 尊重原值 ----
+    {
+        const std::filesystem::path defaults_file =
+            std::filesystem::temp_directory_path() / "aiwrite_config_defaults.toml";
+        std::error_code ec3;
+        std::filesystem::remove(defaults_file, ec3);
+
+        // ① 键**不存在** → 用新默认（节点库 / 参数面板**显示**，P7a-12）
+        aiwrite::Config fresh;
+        (void)aiwrite::load_config(defaults_file, fresh);
+        const bool default_visible = fresh.ui.show_node_library && fresh.ui.show_property_panel;
+        std::printf("   %-6s P7a-12 默认布局：节点库=%s / 参数面板=%s（新默认应为 true）\n",
+                    default_visible ? "PASS" : "FAIL",
+                    fresh.ui.show_node_library ? "true" : "false",
+                    fresh.ui.show_property_panel ? "true" : "false");
+
+        // ② 显式 false → **尊重原值**（P7a-13：按「键是否存在」判定）
+        {
+            std::ofstream out(defaults_file, std::ios::binary | std::ios::trunc);
+            out << "config_version = 1\n\n[ui]\nshow_node_library = false\n"
+                   "show_property_panel = false\n";
+        }
+        aiwrite::Config explicit_off;
+        (void)aiwrite::load_config(defaults_file, explicit_off);
+        const bool respected =
+            !explicit_off.ui.show_node_library && !explicit_off.ui.show_property_panel;
+        std::printf("   %-6s P7a-13 老配置显式 false：被尊重（未被新默认覆盖）=%s\n",
+                    respected ? "PASS" : "FAIL", respected ? "是" : "否");
+
+        // ③ 只写其中一个键 → 另一个走新默认（字段级独立）
+        {
+            std::ofstream out(defaults_file, std::ios::binary | std::ios::trunc);
+            out << "config_version = 1\n\n[ui]\nshow_node_library = false\n";
+        }
+        aiwrite::Config partial;
+        (void)aiwrite::load_config(defaults_file, partial);
+        const bool field_level = !partial.ui.show_node_library && partial.ui.show_property_panel;
+        std::printf("   %-6s P7a-13 字段级独立：显式 false 保持 / 缺失键走新默认=%s\n",
+                    field_level ? "PASS" : "FAIL", field_level ? "是" : "否");
+
+        std::filesystem::remove(defaults_file, ec3);
+    }
 
     // ---- M_patchB L1（PB2-06）：多 provider 实例参数 + 旧单节迁移 + 备份 ----
     bool multi_ok = false;
@@ -1877,6 +1921,7 @@ int execution_selftest()
         fs::create_directories(vlm_root, ec);
         const fs::path png_a      = vlm_root / "样例图.PNG";  // 大写扩展名：顺带验 MIME 大小写
         const fs::path png_b      = vlm_root / "第二张.png";
+        const fs::path png_c      = vlm_root / "第三张.png";  // P7a-03：三图请求体夹具
         const fs::path empty_file = vlm_root / "空图.png";
 
         // Python 生成的合法 1×1 PNG（黑 / 红）——十六进制转字节写盘，保证断言可复现
@@ -1890,6 +1935,12 @@ int execution_selftest()
             "DE0000000C4944415478DA63F8CFC0000003010100F70341430000000049454E"
             "44AE426082"
 ;
+        // P7a-03：第三张（1×1 蓝）—— 与前两张**字节级不同**，便于断言「三张图各自独立」
+        const std::string png_c_hex =
+            "89504E470D0A1A0A0000000D4948445200000001000000010802000000907753"
+            "DE0000000C49444154789C636060F80F00010301000889C2EC0000000049454E"
+            "44AE426082"
+;
         const auto write_hex = [](const std::filesystem::path& path,
                                   const std::string& hex) {
             std::ofstream out(path, std::ios::binary);
@@ -1900,11 +1951,14 @@ int execution_selftest()
         };
         write_hex(png_a, png_a_hex);
         write_hex(png_b, png_b_hex);
+        write_hex(png_c, png_c_hex);
         {
             std::ofstream empty(empty_file, std::ios::binary);
         }
         expect(check, fs::exists(png_a) && fs::file_size(png_a) > 0 && fs::exists(png_b),
                "M5-02 夹具：两张 1×1 PNG 已写入临时目录");
+        expect(check, fs::exists(png_c) && fs::file_size(png_c) > 0,
+               "P7a-03 夹具：第三张 1×1 PNG（蓝）已写入临时目录");
 
         // ---- 1) MIME 推断（大小写不敏感；未知扩展名回退 image/png）----
         expect_eq(check, aiwrite::ai::image_mime_from_path("a.PNG"), "image/png",
@@ -2057,6 +2111,403 @@ int execution_selftest()
                    body["model"] == "glm-4v-flash" && body["stream"] == false &&
                        body["temperature"] == 1.0 && !body.contains("seed"),
                    "M5-02 请求体：model / stream=false / 采样参数 / 无 seed 时不发 seed");
+        }
+
+        // ---- 4b) P7a-03：**三张图**请求体（content 数组含 3 个 image_url）----
+        {
+            aiwrite::ai::OfficialChatRequest request;
+            request.model  = "glm-4v-flash";
+            request.prompt = "三张图分别是什么颜色？";
+            request.images = {png_a.string(), png_b.string(), png_c.string()};
+
+            const nlohmann::json  body    = aiwrite::ai::build_request_body(request);
+            const nlohmann::json& content = body["messages"].back()["content"];
+
+            int image_blocks = 0;
+            for (const nlohmann::json& item : content) {
+                if (item.value("type", std::string()) == "image_url") {
+                    ++image_blocks;
+                }
+            }
+            expect(check, content.is_array() && content.size() == 4 && image_blocks == 3,
+                   "P7a-03 请求体：3 张图 → content 含 3 个 image_url（+1 文本块）",
+                   "size=" + std::to_string(content.size()) +
+                       " image_url=" + std::to_string(image_blocks));
+            expect_eq(check, content[3]["image_url"]["url"].get<std::string>(),
+                      std::string("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC"),
+                      "P7a-03 请求体：第 3 张按输入顺序编码为 data URL（与参考实现一致）");
+        }
+
+        // ---- 4c) P7a-01：image 端口变长（3 张图输入同一条端口）----
+        {
+            engine::Graph     graph;
+            const std::string img1 = add_node(check, graph, "ImageInput", "P7a 图片输入 1");
+            const std::string img2 = add_node(check, graph, "ImageInput", "P7a 图片输入 2");
+            const std::string img3 = add_node(check, graph, "ImageInput", "P7a 图片输入 3");
+            const std::string text = add_node(check, graph, "TextInput", "P7a 提示词");
+            const std::string vlm  = add_node(check, graph, "VLMGenerate", "P7a 图片理解");
+            set_param(graph, img1, "path", png_a.string());
+            set_param(graph, img2, "path", png_b.string());
+            set_param(graph, img3, "path", png_c.string());
+            set_param(graph, text, "text", "三张图分别是什么颜色？");
+            graph.edges.push_back(make_edge("i1", img1, "image", vlm, "image"));
+            graph.edges.push_back(make_edge("i2", img2, "image", vlm, "image"));
+            graph.edges.push_back(make_edge("i3", img3, "image", vlm, "image"));
+            graph.edges.push_back(make_edge("i4", text, "text", vlm, "prompt"));
+
+            const engine::Node* vlm_node = graph.findNode(vlm);
+            const engine::Port* image_port =
+                vlm_node != nullptr ? vlm_node->findPort("image", engine::PortDirection::Input)
+                                    : nullptr;
+            expect(check, image_port != nullptr && image_port->is_variadic,
+                   "P7a-01 端口：VLMGenerate.image 已声明为变长（is_variadic）");
+            expect(check, graph.inputConnectionCount(vlm, "image") == 3,
+                   "P7a-01 连线：3 个「图片输入」可同时连入 image（不被替换）",
+                   std::to_string(graph.inputConnectionCount(vlm, "image")));
+
+            std::vector<std::string> load_errors;
+            expect(check, engine::validateWorkflow(graph, &load_errors),
+                   "P7a-01 校验：变长 image 端口不再报「输入端口被重复占用」",
+                   load_errors.empty() ? std::string() : load_errors.front());
+
+            std::vector<std::string> run_errors;
+            std::vector<std::string> run_warnings;
+            expect(check, engine::validateBeforeRun(graph, &run_errors, &run_warnings),
+                   "P7a-01 运行前校验：三个图片输入 + 提示词全部就绪",
+                   run_errors.empty() ? std::string() : run_errors.front());
+        }
+
+        // ---- 4d) P7a-02：多选路径串（解析 / 拼接 / 参数校验）----
+        {
+            const std::vector<std::string> list =
+                aiwrite::paths::split_path_list("A.png\r\n  B.png  \nA.png\n\nC.png");
+            expect(check,
+                   list.size() == 3 && list[0] == "A.png" && list[1] == "B.png" &&
+                       list[2] == "C.png",
+                   "P7a-02 多值解析：CRLF / 首尾空白 / 空行 / 重复项 → 保序去重",
+                   std::to_string(list.size()));
+            expect_eq(check, aiwrite::paths::join_path_list(list), std::string("A.png\nB.png\nC.png"),
+                      "P7a-02 多值拼接：每行一个路径");
+            expect(check, aiwrite::paths::split_path_list("   \n\t\n").empty(),
+                   "P7a-02 多值解析：全空白 → 空列表");
+            expect(check, aiwrite::paths::split_path_list(png_a.string()).size() == 1,
+                   "P7a-02 单值解析：无换行 → 长度 1（**旧工作流语义不变**，I19）");
+
+            engine::Graph     param_graph;
+            const std::string image_id =
+                add_node(check, param_graph, "ImageInput", "P7a 多选参数校验");
+            engine::Node*  image      = param_graph.findNode(image_id);
+            engine::Param* path_param = image != nullptr ? image->findParam("path") : nullptr;
+            expect(check, path_param != nullptr, "P7a-02 参数校验：ImageInput.path 存在");
+            if (path_param != nullptr) {
+                std::string       reason;
+                const std::string three = aiwrite::paths::join_path_list(
+                    {png_a.string(), png_b.string(), png_c.string()});
+                path_param->value = three;
+                expect(check, engine::Graph::validateParam(*path_param, &reason),
+                       "P7a-02 参数校验：三张图全部存在 → 通过", reason);
+
+                path_param->value = three + "\n" + (vlm_root / "缺失.png").string();
+                const bool failed = !engine::Graph::validateParam(*path_param, &reason);
+                expect(check,
+                       failed && reason.find("缺失.png") != std::string::npos &&
+                           reason.find("共 4 项") != std::string::npos &&
+                           reason.find("1 项不可用") != std::string::npos,
+                       "P7a-02 参数校验：缺 1 张 → 列出缺失路径 + 项数（可操作文案）", reason);
+            }
+        }
+
+        // ---- 5b) P7a-08：编码缓存（同图重跑不重复编码）----
+        {
+            aiwrite::ai::reset_image_encode_cache();
+            std::string       error;
+            const std::string first = aiwrite::ai::encode_image_data_url(png_a.string(), 0, &error);
+            const std::string again = aiwrite::ai::encode_image_data_url(png_a.string(), 0, &error);
+            expect(check, !first.empty() && first == again,
+                   "P7a-08 缓存：同一张图两次编码 → 结果一致且非空");
+            expect(check, aiwrite::ai::image_encode_count() == 1,
+                   "P7a-08 缓存：同图编码两次 → 实际只编码 1 次",
+                   std::to_string(aiwrite::ai::image_encode_count()));
+
+            (void)aiwrite::ai::encode_image_data_url(png_b.string(), 0, &error);
+            expect(check, aiwrite::ai::image_encode_count() == 2,
+                   "P7a-08 缓存：换一张图 → 编码计数 +1");
+
+            { // 内容/大小变化 → 缓存键变化 → 重编码（不会吃到过期内容）
+                std::ofstream appended(png_b, std::ios::binary | std::ios::app);
+                appended.write("x", 1);
+            }
+            (void)aiwrite::ai::encode_image_data_url(png_b.string(), 0, &error);
+            expect(check, aiwrite::ai::image_encode_count() == 3,
+                   "P7a-08 缓存：文件变化（大小 / 时间不同）→ 重新编码");
+
+            aiwrite::ai::reset_image_encode_cache();
+            expect(check, aiwrite::ai::image_encode_count() == 0,
+                   "P7a-08 缓存：reset 后计数归零（自检用例彼此隔离）");
+        }
+
+        // ---- 5c) P7a-09 / P7a-11：三类可操作诊断 + 内容策略分类 ----
+        {
+            std::string       error;
+            const std::string oversize =
+                aiwrite::ai::encode_image_data_url(png_a.string(), 4, &error);
+            expect(check,
+                   oversize.empty() && error.find("**体积**") != std::string::npos &&
+                       error.find("字节") != std::string::npos &&
+                       error.find("image_max_bytes") != std::string::npos,
+                   "P7a-09 体积类：直接拒绝 + 实际/上限/引导齐全（含字节数与配置项名）", error);
+
+            error.clear();
+            expect(check,
+                   aiwrite::ai::encode_image_data_url(empty_file.string(), 0, &error).empty() &&
+                       error.find("**格式**") != std::string::npos,
+                   "P7a-11 格式类：空文件 → 标「格式」并给换图引导", error);
+
+            error.clear();
+            expect(check,
+                   aiwrite::ai::encode_image_data_url((vlm_root / "无此图.png").string(), 0, &error)
+                           .empty() &&
+                       error.find("**路径**") != std::string::npos,
+                   "P7a-11 路径类：文件不存在 → 标「路径」", error);
+
+            const std::string policy = aiwrite::ai::classify_http_error(
+                400, R"({"error":{"message":"content_policy_violation"}})");
+            const std::string param_error =
+                aiwrite::ai::classify_http_error(400, R"({"error":{"message":"invalid model"}})");
+            expect(check,
+                   policy.find("**内容策略**") != std::string::npos &&
+                       param_error.find("请求不合法") != std::string::npos && policy != param_error,
+                   "P7a-11 内容策略类：400 + 策略关键词 → 与「参数不合法」明确区分", param_error);
+            expect(check,
+                   aiwrite::ai::classify_http_error(401, "{}").find("API Key") != std::string::npos &&
+                       aiwrite::ai::classify_http_error(429, "{}").find("限流") != std::string::npos &&
+                       aiwrite::ai::classify_http_error(503, "{}").find("服务端") != std::string::npos,
+                   "PB-05 回归：401 / 429 / 503 分类文案不变");
+            expect_eq(check, aiwrite::ai::human_bytes(4096), std::string("4.0 KB"),
+                      "P7a-10 体积文本：< 1 MB → KB（小图不再显示成 0.00 MB）");
+            expect_eq(check, aiwrite::ai::human_bytes(2u * 1024u * 1024u), std::string("2.0 MB"),
+                      "P7a-10 体积文本：≥ 1 MB → MB");
+        }
+
+        // ---- 6) P7a-04/05/06/07：统一资源目录（内容寻址 + 令牌 + 兼容 + 缺失文案）----
+        {
+            std::string       error;
+            const std::string token_a = aiwrite::asset::import_file(png_a.string(), &error);
+            expect(check,
+                   aiwrite::asset::is_token(token_a) &&
+                       token_a.rfind(aiwrite::asset::kTokenPrefix, 0) == 0 &&
+                       token_a.size() == std::string(aiwrite::asset::kTokenPrefix).size() + 64,
+                   "P7a-04 归档：导入图片 → 资源令牌（aiwrite-asset: + 64 位摘要）", token_a);
+            expect(check,
+                   !aiwrite::asset::is_token("aiwrite-asset:xyz") &&
+                       !aiwrite::asset::is_token(png_a.string()) &&
+                       !aiwrite::asset::is_token(std::string()),
+                   "P7a-04 判定：非法摘要 / 普通路径 / 空串都不是令牌");
+
+            const auto count_assets = []() {
+                std::size_t count = 0;
+                std::error_code ec;
+                const std::filesystem::path root = aiwrite::asset::images_root();
+                if (std::filesystem::exists(root, ec)) {
+                    for (const std::filesystem::directory_entry& entry :
+                         std::filesystem::directory_iterator(root, ec)) {
+                        if (entry.is_regular_file(ec)) {
+                            ++count;
+                        }
+                    }
+                }
+                return count;
+            };
+            const std::size_t before = count_assets();
+            const std::string token_a2 = aiwrite::asset::import_file(png_a.string(), &error);
+            expect(check, token_a2 == token_a && count_assets() == before,
+                   "P7a-04 去重：同内容再导入 → 同一令牌且资源目录文件数不变",
+                   std::to_string(before) + " → " + std::to_string(count_assets()));
+
+            const std::string token_b = aiwrite::asset::import_file(png_b.string(), &error);
+            expect(check, !token_b.empty() && token_b != token_a,
+                   "P7a-04 归档：不同内容 → 不同令牌");
+
+            bool              missing = false;
+            const std::string local_a = aiwrite::asset::to_local_path(token_a, &missing, &error);
+            expect(check,
+                   !missing && !local_a.empty() && std::filesystem::exists(local_a) &&
+                       local_a.find("assets") != std::string::npos,
+                   "P7a-04 解析：令牌 → 资源目录内的真实文件", local_a);
+            expect(check, aiwrite::asset::to_local_path(png_c.string()) == png_c.string(),
+                   "P7a-06 兼容：旧绝对路径**原样返回**（不变量 I19）");
+            expect(check,
+                   aiwrite::asset::needs_migration(png_c.string()) &&
+                       !aiwrite::asset::needs_migration(token_a),
+                   "P7a-06 判定：外部路径需迁移、资源令牌不需要");
+            expect(check,
+                   aiwrite::asset::migration_hint(png_c.string()).find("迁移到资源目录") !=
+                       std::string::npos,
+                   "P7a-06 文案：迁移提示指向「迁移到资源目录」");
+
+            // 内容优先的规范扩展名（内容 WebP 却叫 .png → 归档成 .webp）
+            std::string disguised_token;
+            {
+                const fs::path disguised = vlm_root / "伪装.png";
+                {
+                    std::ofstream              out(disguised, std::ios::binary);
+                    const unsigned char        head[] = {'R',  'I',  'F',  'F',  0x1E, 0x00, 0x00, 0x00,
+                                                         'W',  'E',  'B',  'P',  'V',  'P',  '8',  ' ',
+                                                         0x12, 0x00, 0x00, 0x00};
+                    out.write(reinterpret_cast<const char*>(head), sizeof(head));
+                }
+                disguised_token = aiwrite::asset::import_file(disguised.string(), &error);
+                expect(check,
+                       !disguised_token.empty() &&
+                           aiwrite::asset::to_local_path(disguised_token).find(".webp") !=
+                               std::string::npos,
+                       "P7a-04 扩展名：内容优先（WebP 存成 .png → 归档为 .webp）",
+                       aiwrite::asset::to_local_path(disguised_token));
+            }
+
+            // 归档失败路径
+            std::string import_error;
+            expect(check,
+                   aiwrite::asset::import_file((vlm_root / "不存在.png").string(), &import_error)
+                           .empty() &&
+                       !import_error.empty(),
+                   "P7a-04 归档失败：文件不存在 → 空令牌 + 可读错误", import_error);
+
+            // 清理：删掉本块导入的资源（自检**不在用户资源目录留垃圾**）
+            for (const std::string& created : {token_a, token_b, disguised_token}) {
+                const std::string created_path = aiwrite::asset::to_local_path(created);
+                if (!created_path.empty()) {
+                    std::error_code cleanup_code;
+                    std::filesystem::remove(created_path, cleanup_code);
+                }
+            }
+        }
+
+        // ---- 7) P7a-05/06/07：令牌进工作流的往返 / 旧路径兼容 / 缺失文案 ----
+        {
+            std::string       error;
+            const std::string token      = aiwrite::asset::import_file(png_b.string(), &error);
+            const fs::path    asset_file = aiwrite::asset::to_local_path(token);
+            expect(check, !asset_file.empty() && std::filesystem::exists(asset_file),
+                   "P7a-05 准备：资源已归档", asset_file.string());
+
+            // P7a-05：令牌写进工作流 → 保存 → 读回 → 运行（换目录 / 换机语义）
+            {
+                engine::Graph     graph;
+                const std::string img = add_node(check, graph, "ImageInput", "P7a 令牌工作流");
+                set_param(graph, img, "path", token);
+                const fs::path workflow_file = vlm_root / "p7a_asset_roundtrip.json";
+
+                std::string save_error;
+                expect(check, engine::save_workflow(graph, workflow_file, &save_error),
+                       "P7a-05 保存：含资源令牌的工作流可落盘", save_error);
+
+                engine::Graph loaded;
+                std::string   load_error;
+                const bool    loaded_ok = engine::load_workflow(workflow_file, loaded, &load_error);
+                expect(check, loaded_ok, "P7a-05 加载：工作流可读回", load_error);
+                const engine::Node* loaded_node = loaded.findNode(img);
+                expect(check,
+                       loaded_node != nullptr && loaded_node->findParam("path") != nullptr &&
+                           loaded_node->findParam("path")->text() == token,
+                       "P7a-05 往返：文件里存的是**令牌**（不是绝对路径）→ 换机仍有效");
+
+                Executor                 executor;
+                std::vector<std::string> console_lines;
+                executor.setConsoleHandler(
+                    [&console_lines](const std::string& text) { console_lines.push_back(text); });
+                std::string start_error;
+                const bool  started = executor.start(loaded, &start_error);
+                expect(check, started, "P7a-05 运行：start 通过", start_error);
+                if (started) {
+                    executor.runToCompletion(&loaded, 64);
+                    const engine::Node* after = loaded.findNode(img);
+                    expect(check, after != nullptr && after->state == engine::NodeState::Done,
+                           "P7a-05 运行：ImageInput 完成（令牌已解析为资源路径）");
+                    bool resolved_seen = false;
+                    for (const std::string& line : console_lines) {
+                        if (line.find(aiwrite::asset::images_root().string()) != std::string::npos) {
+                            resolved_seen = true;
+                        }
+                    }
+                    expect(check, resolved_seen, "P7a-05 运行：Console 打印解析后的资源路径");
+                }
+            }
+
+            // P7a-06：旧绝对路径 → 照旧可运行 + Console 给迁移提示（**不静默改写**文件）
+            {
+                engine::Graph     graph;
+                const std::string img = add_node(check, graph, "ImageInput", "P7a 旧绝对路径");
+                set_param(graph, img, "path", png_c.string());
+
+                Executor                 executor;
+                std::vector<std::string> console_lines;
+                executor.setConsoleHandler(
+                    [&console_lines](const std::string& text) { console_lines.push_back(text); });
+                std::string start_error;
+                const bool  started = executor.start(graph, &start_error);
+                expect(check, started, "P7a-06 兼容：旧绝对路径不阻断运行", start_error);
+                if (started) {
+                    executor.runToCompletion(&graph, 64);
+                    const engine::Node* after = graph.findNode(img);
+                    expect(check, after != nullptr && after->state == engine::NodeState::Done,
+                           "P7a-06 兼容：旧绝对路径照旧可运行（不变量 I19）");
+                    bool hint_seen = false;
+                    for (const std::string& line : console_lines) {
+                        if (line.find("迁移到资源目录") != std::string::npos) {
+                            hint_seen = true;
+                        }
+                    }
+                    expect(check, hint_seen, "P7a-06 提示：Console 出现「迁移到资源目录」引导");
+                }
+            }
+
+            // P7a-07：资源被删除 → 文案可操作 + 校验失败；重新归档可自愈
+            {
+                std::error_code remove_code;
+                std::filesystem::remove(asset_file, remove_code);
+
+                bool              gone_missing = false;
+                std::string       gone_error;
+                const std::string gone =
+                    aiwrite::asset::to_local_path(token, &gone_missing, &gone_error);
+                expect(check,
+                       gone_missing && gone.empty() &&
+                           gone_error.find("图片资源缺失") != std::string::npos &&
+                           gone_error.find(aiwrite::asset::images_root().string()) !=
+                               std::string::npos &&
+                           gone_error.find("重新选择") != std::string::npos,
+                       "P7a-07 缺失文案：含「资源目录完整路径 + 预期文件 + 下一步」", gone_error);
+
+                engine::Graph     graph;
+                const std::string img        = add_node(check, graph, "ImageInput", "P7a 已删资源校验");
+                engine::Node*     image      = graph.findNode(img);
+                engine::Param*    path_param = image != nullptr ? image->findParam("path") : nullptr;
+                if (path_param != nullptr) {
+                    std::string reason;
+                    path_param->value = token;
+                    expect(check,
+                           !engine::Graph::validateParam(*path_param, &reason) &&
+                               reason.find("图片资源缺失") != std::string::npos,
+                           "P7a-07 校验：令牌指向的**已删除**资源 → 校验失败且文案可操作", reason);
+
+                    // 反向：重新归档同一张图 → 令牌不变（内容寻址）→ 校验恢复通过
+                    std::string       reimport_error;
+                    const std::string again =
+                        aiwrite::asset::import_file(png_b.string(), &reimport_error);
+                    expect(check, again == token,
+                           "P7a-04 幂等：重新归档同一内容 → 令牌不变（内容寻址可自愈）");
+                    expect(check, engine::Graph::validateParam(*path_param, &reason),
+                           "P7a-07 自愈：资源重新归档后校验恢复通过", reason);
+                }
+            }
+
+            // 清理：删掉本次自检导入的资源（不在用户资源目录留垃圾）
+            const std::string cleanup_path = aiwrite::asset::to_local_path(token);
+            if (!cleanup_path.empty()) {
+                std::error_code cleanup_code;
+                std::filesystem::remove(cleanup_path, cleanup_code);
+            }
         }
 
         // ---- 5) 纯文本回归：content 必须是字符串（PB-05 行为不变）----

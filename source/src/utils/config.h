@@ -17,8 +17,10 @@ struct Config {
     };
 
     struct Ui {
-        bool show_node_library   = false;
-        bool show_property_panel = false;
+        // P7a-12（UI A 档）：**新用户首屏即可见**节点库 + 参数面板（旧默认 false → true）
+        //  * 老配置兼容（P7a-13）：`read_value` 只在键**存在**时覆盖 → 显式写了 false 的用户保持 false
+        bool show_node_library   = true;
+        bool show_property_panel = true;
         bool show_console        = true;
         bool show_output_window  = false;
         int  console_height      = 120;

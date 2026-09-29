@@ -1,0 +1,60 @@
+{
+  "profile": "C:\\Users\\Administrator\\.brain-ai\\pydoll-profile",
+  "url_before_nav": "about:blank",
+  "step2_before_nav": [],
+  "step4_storage_all": [
+    "ATTACH_probe",
+    "HEAL_ext",
+    "NID",
+    "PERS_baseline",
+    "PERS_prefs_restore",
+    "PERS_restore_switch",
+    "PERS_switch_and_prefs",
+    "SCOPE_probe",
+    "SEARCH_SAMESITE",
+    "S_close_wait",
+    "W30",
+    "W60",
+    "__Secure-STRP",
+    "m7b_http",
+    "m7b_js",
+    "m7b_plain"
+  ],
+  "step5_network_with_url": [
+    "ATTACH_probe",
+    "HEAL_ext",
+    "PERS_baseline",
+    "PERS_prefs_restore",
+    "PERS_restore_switch",
+    "PERS_switch_and_prefs",
+    "SCOPE_probe",
+    "S_close_wait",
+    "W30",
+    "W60",
+    "m7b_http",
+    "m7b_js",
+    "m7b_plain"
+  ],
+  "url_after_nav": "http://127.0.0.1:50651/page?mode=cookies",
+  "step3_after_nav": [
+    "ATTACH_probe",
+    "HEAL_ext",
+    "PERS_baseline",
+    "PERS_prefs_restore",
+    "PERS_restore_switch",
+    "PERS_switch_and_prefs",
+    "SCOPE_probe",
+    "S_close_wait",
+    "W30",
+    "W60",
+    "m7b_http",
+    "m7b_js",
+    "m7b_plain"
+  ],
+  "findings": {
+    "empty_on_about_blank": true,
+    "nonempty_after_nav": true,
+    "storage_returns_whole_db": true
+  },
+  "strays_after": []
+}

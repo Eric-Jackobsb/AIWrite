@@ -251,10 +251,11 @@ void registerAllNodes()
         definition.display_name = "图片输入";
         definition.title        = "图片输入";
         definition.category     = NodeCategory::Input;
-        definition.description  = "输出图片路径，执行时校验文件存在";
+        definition.description  = "输出图片路径（支持多张，每行一个），执行时逐张校验文件存在";
         definition.outputs      = {output_port("image", "图片", PortType::Image)};
         definition.params       = {file_param("path", "图片路径", /*required*/ true,
-                                              "支持 png / jpg / jpeg / bmp / webp")};
+                                              "支持 png / jpg / jpeg / bmp / webp；多张图每行一个路径"
+                                              "（可用「多选…」一次加入，P7a-02）")};
         registry.registerNode(std::move(definition));
     }
 
@@ -383,9 +384,10 @@ void registerAllNodes()
         definition.display_name = "图片理解";
         definition.title        = "图片理解";
         definition.category     = NodeCategory::Inference;
-        definition.description  = "读取 prompt + 图片 + provider，由视觉模型生成文字";
+        definition.description  = "读取 prompt + 图片（单张或多张）+ provider，由视觉模型生成文字";
         definition.inputs       = {input_port("prompt", "提示词", PortType::Text),
-                                   input_port("image", "图片", PortType::Image),
+                                   // P7a-01：图片端口改**变长** —— 多张图按边顺序全部送入（I19 兼容单张）
+                                   input_port("image", "图片", PortType::Image, /*variadic*/ true),
                                    input_port("provider", "提供商", PortType::Provider,
                                               false, /*optional*/ true)};
         definition.outputs      = {output_port("text", "文本", PortType::Text)};

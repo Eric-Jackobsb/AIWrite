@@ -21,6 +21,7 @@ struct TextureInfo {
     unsigned int texture = 0; // GL 纹理 id（0 = 失败）
     int          width   = 0;
     int          height  = 0;
+    std::string  format;      // P7a-16：内容嗅探到的格式名（"PNG" / "WebP"…；未知或失败时为空）
     std::string  error;       // 失败原因（成功时为空）
 };
 

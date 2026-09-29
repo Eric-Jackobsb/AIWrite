@@ -5,12 +5,15 @@
 
 #include "ai/deepseek_official_provider.h"
 #include "utils/credential.h"
+#include "utils/asset_store.h"         // P7a-04：资源令牌解析（统一资源目录）
+#include "utils/paths.h"               // P7a-01/02：image 端口多值 + 多选路径解析
 #include "ai/deepseek_web_client.h"
 #include "ai/dom_web_client.h"         // L3（PB2-13）：通用 DOM 站点适配器
 #include "utils/log.h"
 #include "web/session_store.h"
 #include "web/webview_host.h"
 
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -31,6 +34,36 @@ std::string text_of(const json& value)
         return {};
     }
     return value.dump();
+}
+
+// P7a-01：图片输入值统一展平为路径列表
+//  * 形态可能为：单值字符串 / 多值数组（多条边） / 嵌套数组（多选图片输入 → 变长端口）
+//  * 递归展平、忽略空值；顺序 = 边的插入序（外层）× 多选顺序（内层）
+std::vector<std::string> collect_image_paths(const json& value)
+{
+    std::vector<std::string> paths;
+    if (value.is_array()) {
+        for (const json& item : value) {
+            const std::vector<std::string> nested = collect_image_paths(item);
+            paths.insert(paths.end(), nested.begin(), nested.end());
+        }
+        return paths;
+    }
+    const std::string path = text_of(value);
+    if (!path.empty()) {
+        // P7a-04：防御 —— 上游若直接给出资源令牌（正常路径由「图片输入」已解析），这里也解析一次
+        if (aiwrite::asset::is_token(path)) {
+            bool             missing = false;
+            std::string      error;
+            const std::string local = aiwrite::asset::to_local_path(path, &missing, &error);
+            if (!missing && !local.empty()) {
+                paths.push_back(local);
+                return paths;
+            }
+        }
+        paths.push_back(path);
+    }
+    return paths;
 }
 
 // 支持 \n \t \r \\ 转义（分隔符 / 模板参数的习惯写法）
@@ -175,16 +208,64 @@ json execute_text_input(const json& /*inputs*/, const json& params,
 }
 
 // --- N-02 图片输入 -----------------------------------------------------------
+//  P7a-02：`path` 支持**多值**（每行一个路径，见 `paths::split_path_list`）
+//   * 单张 → 输出字符串（**旧行为不变**，I19 兼容）
+//   * 多张 → 输出字符串数组，经变长 `image` 端口交给「图片理解」
 json execute_image_input(const json& /*inputs*/, const json& params,
                          engine::ExecutionContext& ctx)
 {
-    const std::string path = params.value("path", std::string());
-    std::error_code   ec;
-    if (path.empty() || !std::filesystem::exists(std::filesystem::path(path), ec)) {
-        throw engine::NodeError("图片文件不存在: " + path);
+    const std::string              raw  = params.value("path", std::string());
+    const std::vector<std::string> list = aiwrite::paths::split_path_list(raw);
+    if (list.empty()) {
+        throw engine::NodeError("图片路径为空：请在参数面板「图片路径」选择图片"
+                                "（可多选，每行一个；P7a-02）");
     }
-    ctx.console("[图片输入] " + path);
-    return path;
+
+    // P7a-04/06/07：令牌 → 资源目录里的真实路径；**旧绝对路径原样放行**（I19）并给迁移提示
+    std::vector<std::string> images;
+    std::vector<std::string> problems;
+    std::vector<std::string> legacy;
+    images.reserve(list.size());
+    for (const std::string& value : list) {
+        if (aiwrite::asset::needs_migration(value)) {
+            legacy.push_back(value);
+        }
+        bool             missing = false;
+        std::string      error;
+        const std::string local = aiwrite::asset::to_local_path(value, &missing, &error);
+        if (missing || local.empty()) {
+            problems.push_back(error.empty() ? ("图片不可用: " + value) : error);
+            continue;
+        }
+        std::error_code ec;
+        if (!std::filesystem::exists(std::filesystem::path(local), ec)) {
+            problems.push_back("图片文件不存在: " + local + "（来自 " + value + "；请重新选择图片）");
+            continue;
+        }
+        images.push_back(local);
+    }
+
+    if (!problems.empty()) {
+        std::string text = "图片不可用（" + std::to_string(problems.size()) + " 项）：";
+        for (std::size_t index = 0; index < problems.size(); ++index) {
+            if (index != 0) {
+                text += "；";
+            }
+            text += problems[index];
+        }
+        throw engine::NodeError(text);
+    }
+    if (!legacy.empty()) {
+        ctx.console(aiwrite::asset::migration_hint(legacy.front()));
+    }
+
+    if (images.size() == 1) {
+        ctx.console("[图片输入] " + images.front());
+        return images.front();
+    }
+    ctx.console("[图片输入] " + std::to_string(images.size()) + " 张：" +
+                aiwrite::paths::join_path_list(images));
+    return images;
 }
 
 // --- N-03 提示词模板 ---------------------------------------------------------
@@ -546,23 +627,10 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
         throw engine::NodeError("图片理解：提示词为空（请连接「提示词模板」或「文本输入」到 prompt）");
     }
 
-    // 图片来自 image 输入：可为单值（ImageInput）或数组（多图场景）
+    // 图片来自 image 输入：P7a-01 端口已变长 → 单值 / 数组 / 嵌套数组统一展平
     std::vector<std::string> images;
     if (const auto it = inputs.find("image"); it != inputs.end()) {
-        if (it->is_array()) {
-            for (const json& item : *it) {
-                const std::string path = text_of(item);
-                if (!path.empty()) {
-                    images.push_back(path);
-                }
-            }
-        }
-        else {
-            const std::string path = text_of(*it);
-            if (!path.empty()) {
-                images.push_back(path);
-            }
-        }
+        images = collect_image_paths(*it);
     }
     if (images.empty()) {
         throw engine::NodeError("图片理解：未连接图片（请把「图片输入」节点的 image 连到本节点 image 端口）");
@@ -641,6 +709,18 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
                 " 张，提示词 " + std::to_string(prompt.size()) + " 字节" +
                 (system_prompt.empty() ? "" : "（含系统提示词）"));
     const ai::OfficialChatResult result = ai::official_chat(official);
+    // P7a-10：编码后体积与耗时（**失败路径也打印** —— 便于判断是否被体积/格式挡住）
+    if (result.encoded_bytes > 0) {
+        char buffer[256] = {};
+        std::snprintf(buffer, sizeof(buffer),
+                      "[图片理解] 编码：%zu 张 → base64 后 %s（原始约 %s，≈1.33×），耗时 %.0f ms%s",
+                      images.size(), ai::human_bytes(result.encoded_bytes).c_str(),
+                      ai::human_bytes(static_cast<std::size_t>(
+                          static_cast<double>(result.encoded_bytes) / 1.33)).c_str(),
+                      result.encode_ms,
+                      result.encode_ms < 1.0 ? "（命中编码缓存，P7a-08）" : "");
+        ctx.console(buffer);
+    }
     if (!result.ok || result.text.empty()) {
         throw engine::NodeError("图片理解失败：" +
                                 (result.error.empty() ? std::string("未取到文本") : result.error));

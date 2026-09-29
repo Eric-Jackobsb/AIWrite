@@ -221,6 +221,7 @@ add_library(aiwrite_core STATIC
     src/utils/output_archive.cpp
     src/utils/diagnostics.cpp
     src/utils/image_decode.cpp     # M7-04：图片格式嗅探 + stb/WIC 解码（texture_cache 与自检共用）
+    src/utils/asset_store.cpp      # P7a-04：统一资源目录（内容寻址归档 + 令牌解析）
     src/engine/graph.cpp
     src/engine/node_registry.cpp
     src/engine/undo_stack.cpp

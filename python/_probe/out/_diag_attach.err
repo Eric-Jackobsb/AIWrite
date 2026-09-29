@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "F:\Python\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\asyncio\base_events.py", line 684, in run_until_complete
+    return future.result()
+       

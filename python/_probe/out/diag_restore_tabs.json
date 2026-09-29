@@ -1,0 +1,32 @@
+{
+  "root": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\m7b09_restore",
+  "marker": "m7b_restore_marker",
+  "without_switch": {
+    "label": "without_switch",
+    "extra_args": [],
+    "tabs_before": 1,
+    "tabs_after": 1,
+    "urls_after": [
+      "chrome://new-tab-page/"
+    ],
+    "marker_restored": false
+  },
+  "with_switch": {
+    "label": "with_switch",
+    "extra_args": [
+      "--restore-last-session"
+    ],
+    "tabs_before": 1,
+    "tabs_after": 2,
+    "urls_after": [
+      "http://127.0.0.1:52570/page?mode=m7b_restore_marker_2",
+      "http://127.0.0.1:52570/page?mode=m7b_restore_marker"
+    ],
+    "marker_restored": true
+  },
+  "findings": {
+    "baseline_restores_tabs": false,
+    "switch_restores_tabs": true,
+    "switch_has_tab_side_effect": true
+  }
+}

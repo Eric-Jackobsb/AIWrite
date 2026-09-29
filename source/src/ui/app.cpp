@@ -224,6 +224,43 @@ std::string provider_mode_text(const EditorState& state)
     return "推理模式: 未配置（缺少提供商配置节点）";
 }
 
+// P7a-18：状态栏「提供商」文本（生效条目的显示名 + 模型；取第一个「提供商配置」节点）
+std::string provider_summary_text(const EditorState& state)
+{
+    for (const engine::Node& node : state.graph.nodes) {
+        if (node.type != "ProviderConfig") {
+            continue;
+        }
+        const engine::EffectiveProvider effective = engine::resolve_self_provider(node);
+        if (!effective.resolved || effective.display.empty()) {
+            return "提供商: 未选择";
+        }
+        return "提供商: " + effective.display + "（" + effective.provider + "）· 模型 " +
+               effective.model;
+    }
+    return "提供商: 未配置";
+}
+
+// P7a-18：状态栏「最后耗时」（最慢节点 = 关键路径近似；另给累计）
+std::string last_run_duration_text(const EditorState& state)
+{
+    const engine::RunSnapshot& snapshot = state.run_snapshot_view();
+    if (snapshot.nodes.empty()) {
+        return {};
+    }
+    double longest = 0.0;
+    double total   = 0.0;
+    for (const engine::RunNodeView& view : snapshot.nodes) {
+        if (view.duration_ms > longest) {
+            longest = view.duration_ms;
+        }
+        total += view.duration_ms;
+    }
+    return "耗时 " + std::to_string(static_cast<long long>(longest)) + " ms（累计 " +
+           std::to_string(static_cast<long long>(total)) + " ms / " +
+           std::to_string(static_cast<int>(snapshot.nodes.size())) + " 节点）";
+}
+
 // 工作流信息面板（环境 + 当前工作流统计；数据来自 EditorState）
 void draw_info_panel(const char* title, bool* open)
 {
@@ -734,7 +771,15 @@ int run(const AppOptions& options)
                         static_cast<int>(state.graph.edges.size()),
                         static_cast<int>(state.selected_nodes.size()), io.Framerate);
             ImGui::SameLine();
+            // P7a-18：状态栏四项 —— 提供商 / 模式（含站点）/ 最后耗时（+ 节点统计）
+            ImGui::TextDisabled("  %s", provider_summary_text(state).c_str());
+            ImGui::SameLine();
             ImGui::TextDisabled("  %s", provider_mode_text(state).c_str());
+            const std::string duration_text = last_run_duration_text(state);
+            if (!duration_text.empty()) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("  %s", duration_text.c_str());
+            }
             const std::string run_text = state.run_status_text();
             if (!run_text.empty()) {
                 ImGui::SameLine();

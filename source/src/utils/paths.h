@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 // 路径工具：统一管理 ~/.brain-ai 数据目录（设计文档 11.1 节）
 namespace aiwrite::paths {
@@ -23,6 +24,8 @@ const std::filesystem::path& app_log_file();      // ~/.brain-ai/logs/app.log
 const std::filesystem::path& workflow_log_file(); // ~/.brain-ai/logs/workflow.log
 const std::filesystem::path& recent_file();       // ~/.brain-ai/recent.json
 const std::filesystem::path& webview2_profile();  // ~/.brain-ai/webview2
+// P7a-04：统一资源目录（图片归档根）—— 工作流只存令牌，文件全部收在这里
+const std::filesystem::path& assets_images_dir(); // ~/.brain-ai/assets/images
 
 // 可执行文件所在目录
 const std::filesystem::path& exe_dir();
@@ -35,5 +38,14 @@ std::filesystem::path user_providers_file();      // ~/.brain-ai/providers.json�
 
 // 创建全部数据目录；返回失败个数（0 = 全部就绪）
 int ensure_data_dirs();
+
+// ---- 多值路径串（P7a-02 / M7：图片输入支持多选）----
+//  * 分隔符 = **换行**（Windows 路径的合法字符不含 \n，因此不需要转义）
+//  * 去空行 / 去首尾空白（含 \r，兼容 CRLF）/ 保序 / **去重**（同一路径只保留首次出现）
+//  * 单值输入（无换行）→ 长度为 1 的列表 = **旧工作流语义不变**
+std::vector<std::string> split_path_list(const std::string& value);
+
+// 路径列表 → 多值路径串（每行一个；空列表返回空串）
+std::string join_path_list(const std::vector<std::string>& paths);
 
 } // namespace aiwrite::paths

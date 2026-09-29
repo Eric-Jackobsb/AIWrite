@@ -67,6 +67,11 @@ struct OfficialChatResult {
     std::string error;
     std::string raw_head;
     double      elapsed_ms = 0.0;
+    // M7 / P7a-10：多模态编码指标（供 Console 打印「编码后体积与耗时」）
+    //  * encoded_bytes = 全部 data URL 的**字符数**（≈ 原始字节 × 1.33）
+    //  * encode_ms     = 本轮图片读取 + base64 的耗时（缓存命中时接近 0）
+    std::size_t encoded_bytes = 0;
+    double      encode_ms     = 0.0;
 };
 
 // ---- 纯函数（离线断言用）----
@@ -83,6 +88,12 @@ std::vector<std::pair<std::string, std::string>> build_auth_headers(const Provid
 // M_patchB L1 / PB2-04：把 {model} 占位替换为实际模型名
 std::string    resolve_chat_path(const std::string& chat_path, const std::string& model);
 
+// M7 / P7a-11：HTTP 错误分类（**公开纯函数** → 可离线断言「参数 / 内容策略 / 鉴权 / 限流 / 服务端」文案）
+std::string    classify_http_error(int status, const std::string& body);
+
+// M7 / P7a-10：字节数 → 便于阅读的体积文本（< 1 MB 用 KB，否则用 MB；1 位小数）
+std::string    human_bytes(std::size_t bytes);
+
 // M7-05：内容（魔数）→ MIME；认不出来返回空串
 std::string    image_mime_from_bytes(const unsigned char* data, std::size_t size);
 // M5-02 / M7-05：路径 → MIME（**内容优先**，扩展名回退；未知扩展名仍是 image/png）
@@ -98,5 +109,12 @@ nlohmann::json build_request_body(const OfficialChatRequest& request,
 
 // 实际调用（阻塞）
 OfficialChatResult official_chat(const OfficialChatRequest& request);
+
+// ---- M7 / P7a-08：图片编码缓存与计数（自检用）----
+//  * 缓存键 = **路径 + 修改时间 + 文件大小**（文件一变就重编码，不会用到过期内容）
+//  * `image_encode_count()` = 本进程内**真正执行 base64 编码**的张数（缓存命中不计数）
+//  * 缓存有上限（超出即整体清空）—— 避免大图 data URL 长期占内存
+std::size_t image_encode_count();
+void        reset_image_encode_cache();
 
 } // namespace aiwrite::ai

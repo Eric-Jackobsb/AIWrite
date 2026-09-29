@@ -1,0 +1,37 @@
+{
+  "profile": "C:\\Users\\Administrator\\.brain-ai\\pydoll-profile",
+  "strays_before": [],
+  "cold": {
+    "label": "cold",
+    "delay_s": 6.0,
+    "direct_pid": 12376,
+    "devtools_ok": true,
+    "browser": "Chrome/156.0.8072.0",
+    "attach_cookie_names": [],
+    "profile_path": "Profile Path\tC:\\Users\\Administrator\\.brain-ai\\pydoll-profile\\Default",
+    "command_line": "Command Line\t\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --user-data-dir=\"C:\\Users\\Administrator\\.brain-ai\\pydoll-profile\" --remote-debugging-port=9335 --no-first-run --no-default-browser-check --flag-switches-begin --flag-switches-end about:blank",
+    "command_line_has_our_profile": true,
+    "cleanup_exit_code": null,
+    "strays_after": []
+  },
+  "race": {
+    "label": "race",
+    "delay_s": 0.0,
+    "direct_pid": 25664,
+    "devtools_ok": true,
+    "browser": "Chrome/156.0.8072.0",
+    "attach_cookie_names": [],
+    "profile_path": "Profile Path\tC:\\Users\\Administrator\\.brain-ai\\pydoll-profile\\Default",
+    "command_line": "Command Line\t\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --user-data-dir=\"C:\\Users\\Administrator\\.brain-ai\\pydoll-profile\" --remote-debugging-port=9335 --no-first-run --no-default-browser-check --flag-switches-begin --flag-switches-end about:blank",
+    "command_line_has_our_profile": true,
+    "cleanup_exit_code": null,
+    "strays_after": []
+  },
+  "findings": {
+    "cold_attach_uses_our_profile": true,
+    "cold_attach_cookie_count": 0,
+    "race_attach_uses_our_profile": true,
+    "race_attach_cookie_count": 0,
+    "profile_swap_reproduced": false
+  }
+}

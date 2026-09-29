@@ -33,7 +33,8 @@ AIwrite/
 ```
 
 数据目录（运行程序时自动创建）：`C:\Users\<用户>\.brain-ai\`
-`outputs/`、`workflows/`、`snapshots/`、`logs/app.log`、`config.toml`、`imgui.ini`、`node_editor.json`、`webview2/`
+`outputs/`、`workflows/`、`snapshots/`、`logs/app.log`、`config.toml`、`imgui.ini`、`node_editor.json`、
+`assets/images/`（**统一资源目录** —— P7a-04 起的图片归档根）、`providers.d/`、`webview2/`（遗留）
 
 ---
 
@@ -122,7 +123,8 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 > 计划全文见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §8.4 / `M7B-30`。
 
 > 面板可见性由 `~/.brain-ai/config.toml` 的 `[ui]` 段控制（`show_node_library` / `show_property_panel` /
-> `show_console`，设计 §7.2 默认隐藏）；在菜单「视图」里勾选后会自动写回配置，下次启动生效。
+> `show_console`）；**默认显示节点库与参数面板**（`P7a-12`，2026-09-28 起；**显式写了 `false` 的老配置仍保持隐藏** —— `P7a-13`，
+> 按「键是否存在」判定）；在菜单「视图」里勾选后会自动写回配置，下次启动生效。
 > `webview2_login --selftest` 结果写入 `~/.brain-ai/logs/app.log`（`[V-03]` 行），控制台输出脱敏 Cookie 清单
 > （名称 + 前4后4 + 属性）；Cookie 仅内存、不落盘（设计 §8.4）。
 > 若手工强杀该工具，可能留下 `msedgewebview2.exe` 子进程：用
@@ -228,8 +230,10 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
    **variadic 多值 + 资源引用**（`P7-a`）时，**必须向后兼容**旧工作流文件：
    旧绝对路径可加载、可运行，并给**迁移提示**（可一键迁移到统一资源目录）。
 
-**统一资源目录（计划）**：`~/.brain-ai/assets/images/<sha1>.<ext>`（内容寻址，天然去重）；
-工作流里存资源引用而非绝对路径 —— 细则与开口项见 [../docs/actionPlan/M7.md](../docs/actionPlan/M7.md) §17 `Q1`。
+**统一资源目录（✅ P7a-04 已落地，2026-09-28）**：`~/.brain-ai/assets/images/<摘要>.<ext>`（**内容寻址**，天然去重；
+摘要 = **SHA3-256**，复用 `utils/crypto.h`）；工作流里存**令牌** `aiwrite-asset:<摘要>` 而非绝对路径（`utils/asset_store.*`）。
+**向后兼容**（不变量 `I19`）：旧绝对路径照旧可加载 / 可运行 → Console 给迁移提示，参数面板「**迁移到资源目录**」一键归档
+（失败项保留原值，**不静默改写用户文件**）。细则见 [../docs/actionPlan/M7.md](../docs/actionPlan/M7.md) §11.1（`P7a-04`~`P7a-07`）。
 
 ---
 
@@ -251,6 +255,11 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 1. **`I21`（不静默降级）**：Python / 浏览器 / 守护进程 / 登录态任一缺失 → **报错 + 可操作引导 + 退出码 1/2**；
    **绝不换通道、绝不换身份、绝不假装成功**（明确禁止「回落 WebView2」与「改用另一套登录态」两种行为）。
 2. **`I22`（流式降级必须显式）**：CDP 增量不可用 → 退回 DOM 轮询，但 UI 与日志**必须标注「非流式（轮询）」**。
+3. **`I23`（登录态持久化 · 2026-09-28 前置验证后新增）**：退出必须**先 `Browser.close` 并等进程退出**
+   （超时才强杀），**禁止「close 后立刻 kill」**；持久 Cookie 的存续不得依赖单一机制（干净退出 + **DPAPI 加密快照**双保险）；
+   快照**不得明文落盘 / 不得外传**；恢复失败必须**显式提示**。配套决议 **`MB-D0-8`**（四层：L1 干净退出 /
+   L2 加密快照 / L3 启动自愈 / L4 异常退出可见），断言 `VB2-38` / `VB2-39`，见
+   [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §2 / §5 / §9。
 
 **将退役 / 改写的实现（计划 · 见 `M7B-30` / `M7B-31` / `M7B-37`）**：
 
@@ -322,6 +331,33 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
   必须按**根因**修，修后 Debug / Release 一致通过。
 - 排查结论写进 `CHANGELOG.md` 与本手册；影响架构的写进 `docs/actionPlan/M7.md`（含判据与不变量）。
 
+### 6.2 一次性探针脚本的纪律（`M7B` 前置验证教训 · 2026-09-28）
+
+`M7B` 的前置技术验证用**一次性脚本**（`python/_probe/`，不进主管道）在真实浏览器里取证。
+本轮**两条错误结论**（「页面 hook 未打通」「M7B-05 全 FAIL」）都不是机制问题，而是**探针自身**读错：
+
+1. **读回必须自证**：任何"机制不可用 / 全 FAIL"的结论，**先排除探针**。写法：
+   在目标读数**之前**先执行一次已知常量（例：`execute_script('return "probe-ok"')`）并断言其返回值。
+   本项目踩到的具体坑：Pydoll `execute_script` 的返回是**两层 `result`**
+   （`{'id':N,'result':{'result':{'type','value'}}}`）—— 只解一层会**静默拿到空串**，
+   于是"页面没反应"与"我读错了"无法区分。
+2. **判定逻辑要与语义对齐**：例：Cookie **按域名隔离、端口不参与**（`127.0.0.1:A` 与 `127.0.0.1:B` 同域），
+   因此「注销 A 后 B 是否完好」**不能按 Cookie 名比对**（两域同名），必须按**各自视角**判定（A 视角为空 + B 视角完整）。
+3. **读数有作用域**：`tab.get_cookies()`（库实现：无 `browser_context_id` 时走 `Network.getCookies` **不带 urls**）
+   **只回「当前页面 URL」的 Cookie** —— 停在 `about:blank` 时**必然读空**。要读**全库**用 `Storage.getCookies`；
+   要按站点读用 `Network.getCookies(urls=[...])`。本轮的"attach 只读到 0 条"就是这一条
+   （脚本 `python/_probe/_diag_cookie_scope.py` 四步实证：空 / 导航后 13 条 / 全库 16 条 / 按 URL 13 条）。
+4. **探针必须 `try/finally` 收尾**：崩在 `start()` 之前会**遗留孤儿浏览器实例占住 profile**，
+   使**下一次 `start()` 直接 `FailedToStartBrowser`**（本轮遇到两次，现象像"机制坏了"，实为自己留的残骸）。
+   收尾时清点/清理**归属该 profile** 的进程（`python/_probe/m7b09_common.py` 的 `stray_browsers()` / `kill_strays()`）。
+5. **一因多果要逐个排除**：同一现象（"读到空"）先列假设（**不同上下文 / 不同 profile / 读时机 / 作用域**），
+   再用**可证伪的证据**逐一筛 —— 例如用 `chrome://version` 的 `Profile Path` 反证"profile 被换"，
+   用裸 `Storage.getCookies` 反证"上下文/时机"。**不要在第一层解释上收工**。
+
+> 相关：`M7B` 关闭时序与登录态持久化的四轮实测（**干净退出只保住持久 Cookie**；会期 Cookie 需 L2 加密快照回灌；
+> 有既有实例时只能 attach、**禁止强杀**）见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §5
+> （`M7B-09` 结论块）与 §13。
+
 ---
 
 ## 7. 源码文件速览
@@ -346,5 +382,6 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 | `src/utils/crypto.cpp` | SHA3-256（OpenSSL EVP，供 PoW 与自检使用） |
 | `src/utils/file_dialog.cpp` | 原生文件/目录对话框（nativefiledialog-extended，`NFD::Init/Quit` 配对） |
 | `src/utils/image_decode.cpp` | **图片格式嗅探 + 解码（M7 · 冻结区）**：魔数嗅探（内容优先）/ stb 与 WIC 双后端 / WIC 能力枚举 / 可操作错误文案 |
+| `src/utils/asset_store.cpp` | **统一资源目录（P7a-04）**：内容寻址归档 `<SHA3-256>.<ext>`（同内容一份）/ 令牌 `aiwrite-asset:<摘要>` 解析 / 缺失文案（`~/.brain-ai/assets/images/`） |
 | `tools/api_probe.cpp` | V-04/V-05/V-06 命令行验证工具 + `--graph-selftest` 图模型自检 + `--exec-selftest` 执行器自检 |
 | `tools/webview2_login.cpp` | V-03 WebView2 登录 + Cookie 提取（仅内存，脱敏打印）—— ⚠️ **计划删除**（`M7B-30`，改 `pydoll_login`） |

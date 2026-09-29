@@ -1,0 +1,76 @@
+----------------------------------------
+----------------------------------------
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 49491)
+Exception occurred during processing of request from ('127.0.0.1', 53024)
+Exception occurred during processing of request from ('127.0.0.1', 50444)
+Traceback (most recent call last):
+Traceback (most recent call last):
+Traceback (most recent call last):
+Exception occurred during processing of request from ('127.0.0.1', 56146)
+  File "F:\Python\Lib\socketserver.py", line 692, in process_request_thread
+    self.finish_request(request, client_address)
+  File "F:\Python\Lib\socketserver.py", line 692, in process_request_thread
+    self.finish_request(request, client_address)
+Traceback (most recent call last):
+  File "F:\Python\Lib\socketserver.py", line 692, in process_request_thread
+    self.finish_request(request, client_address)
+  File "F:\Python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "F:\Python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "F:\Python\Lib\socketserver.py", line 692, in process_request_thread
+    self.finish_request(request, client_address)
+  File "F:\Python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "F:\Python\Lib\socketserver.py", line 761, in __init__
+    self.handle()
+  File "F:\Python\Lib\socketserver.py", line 761, in __init__
+    self.handle()
+  File "F:\Python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "F:\Python\Lib\socketserver.py", line 761, in __init__
+    self.handle()
+  File "F:\Python\Lib\http\server.py", line 438, in handle
+    self.handle_one_request()
+  File "F:\Python\Lib\http\server.py", line 438, in handle
+    self.handle_one_request()
+  File "F:\Python\Lib\socketserver.py", line 761, in __init__
+    self.handle()
+  File "F:\Python\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+  File "F:\Python\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+  File "F:\Python\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\socket.py", line 707, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\socket.py", line 707, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\Python\Lib\socket.py", line 707, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+----------------------------------------
+  File "F:\Python\Lib\socket.py", line 707, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+----------------------------------------

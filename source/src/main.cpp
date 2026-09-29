@@ -842,8 +842,12 @@ int vlm_selftest(const std::string& image_path, const std::string& api_base,
 
     // ---- ① 离线：图片编码 + 请求体构造 ----
     std::string       encode_error;
+    const auto        encode_started = std::chrono::steady_clock::now();
     const std::string data_url =
         aiwrite::ai::encode_image_data_url(image_path, request.image_max_bytes, &encode_error);
+    const double      encode_ms =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - encode_started)
+            .count();
     if (data_url.empty()) {
         std::printf("[图片理解自检] FAIL：图片编码失败：%s\n", encode_error.c_str());
         return 1;
@@ -860,6 +864,12 @@ int vlm_selftest(const std::string& image_path, const std::string& api_base,
     std::printf("[图片理解自检] 模型：%s\n", model.c_str());
     std::printf("[图片理解自检] 图片：%s（data URL %zu 字符）\n", image_path.c_str(),
                 data_url.size());
+    // P7a-10：编码后体积与耗时（base64 字符 ≈ 原始 × 1.33）—— 离线即可核对，不必真发请求
+    std::printf("[图片理解自检] 编码后体积：%s（base64 字符 %zu，原始约 %s），耗时 %.0f ms\n",
+                aiwrite::ai::human_bytes(data_url.size()).c_str(), data_url.size(),
+                aiwrite::ai::human_bytes(static_cast<std::size_t>(
+                    static_cast<double>(data_url.size()) / 1.33)).c_str(),
+                encode_ms);
     if (!body_ok) {
         std::printf("[图片理解自检] FAIL：请求体不是预期的多模态结构（text + image_url）\n");
         return 1;

@@ -1,6 +1,8 @@
 #include "engine/graph.h"
 
 #include "engine/node_registry.h"
+#include "utils/asset_store.h" // P7a-04：File 参数的资源令牌解析
+#include "utils/paths.h"       // P7a-02：File 参数的多值路径解析
 
 #include <algorithm>
 #include <cctype>
@@ -10,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace aiwrite::engine {
 namespace {
@@ -563,11 +566,40 @@ bool Graph::validateParam(const Param& param, std::string* error)
         break;
     }
     case ParamType::File: {
-        std::error_code ec;
-        const std::filesystem::path file_path = param.text();
-        if (!std::filesystem::exists(file_path, ec) ||
-            !std::filesystem::is_regular_file(file_path, ec)) {
-            return fail("文件不存在: " + param.text());
+        // P7a-02：多值（每行一个）；P7a-04：**资源令牌也合法** → 逐项解析 / 校验
+        const std::vector<std::string> values = paths::split_path_list(param.text());
+        std::vector<std::string>       problems;
+        for (const std::string& value : values) {
+            if (asset::is_token(value)) {
+                bool        missing = false;
+                std::string asset_error;
+                (void)asset::to_local_path(value, &missing, &asset_error); // P7a-07：文案已可操作
+                if (missing) {
+                    problems.push_back(asset_error);
+                }
+                continue;
+            }
+            std::error_code             ec;
+            const std::filesystem::path file_path = value;
+            if (!std::filesystem::exists(file_path, ec) ||
+                !std::filesystem::is_regular_file(file_path, ec)) {
+                problems.push_back("文件不存在: " + value);
+            }
+        }
+        if (!problems.empty()) {
+            std::string text;
+            for (const std::string& problem : problems) {
+                if (!text.empty()) {
+                    text += "；";
+                }
+                text += problem;
+            }
+            // P7a-02：多值时补一句「共 N 项 / M 项不可用」（保留可操作性）
+            if (values.size() > 1) {
+                text += "（共 " + std::to_string(values.size()) + " 项，其中 " +
+                        std::to_string(problems.size()) + " 项不可用）";
+            }
+            return fail(text);
         }
         break;
     }

@@ -1,0 +1,104 @@
+{
+  "profile": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\m7b09_snap",
+  "step1_written": [
+    {
+      "name": "SS_sess",
+      "session": true,
+      "http_only": false,
+      "expires": -1
+    },
+    {
+      "name": "SS_persist",
+      "session": false,
+      "http_only": false,
+      "expires": 1790696342.136951
+    },
+    {
+      "name": "SS_http_sess",
+      "session": true,
+      "http_only": true,
+      "expires": -1
+    }
+  ],
+  "step2_snapshot_count": 3,
+  "exit": {
+    "mode": "close_wait",
+    "exit_code": 0,
+    "waited_s": 0.12,
+    "strays_after": []
+  },
+  "step3_after_restart": [
+    {
+      "name": "SS_persist",
+      "session": false,
+      "http_only": false,
+      "expires": 1790696342.136951
+    }
+  ],
+  "step3_survivors": [
+    "SS_persist"
+  ],
+  "step4_restore_params": [
+    {
+      "name": "SS_sess",
+      "value": "1",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "secure": false,
+      "httpOnly": false
+    },
+    {
+      "name": "SS_persist",
+      "value": "1",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "secure": false,
+      "httpOnly": false,
+      "expires": 1790696342.136951
+    },
+    {
+      "name": "SS_http_sess",
+      "value": "1",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "secure": false,
+      "httpOnly": true
+    }
+  ],
+  "step4_restore_error": null,
+  "step4_after_restore": [
+    {
+      "name": "SS_persist",
+      "session": false,
+      "http_only": false,
+      "expires": 1790696342.136951
+    },
+    {
+      "name": "SS_sess",
+      "session": true,
+      "http_only": false,
+      "expires": -1
+    },
+    {
+      "name": "SS_http_sess",
+      "session": true,
+      "http_only": true,
+      "expires": -1
+    }
+  ],
+  "step5_server_eyes": "{\"cookie_header\":\"SS_persist=1; m7b_js=3; SS_sess=1; SS_http_sess=1\"}",
+  "exit2": {
+    "mode": "close_wait",
+    "exit_code": 0,
+    "waited_s": 0.11,
+    "strays_after": []
+  },
+  "findings": {
+    "session_dropped_after_clean_exit": true,
+    "persistent_survived_clean_exit": true,
+    "restore_brought_back_all": true,
+    "session_flag_preserved": true,
+    "http_only_preserved": true,
+    "server_recognizes_restored": true
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "profile": {
+    "path": "C:\\Users\\Administrator\\.brain-ai\\pydoll-profile",
+    "exists": true,
+    "file_count": 1064,
+    "cookie_db": [
+      "Cookies",
+      "Cookies-journal"
+    ]
+  },
+  "pass1": {
+    "label": "pass1-写入",
+    "error": "",
+    "mode": "write",
+    "cdp": [
+      {
+        "name": "m7b_http",
+        "value_len": 7,
+        "httpOnly": true,
+        "secure": false,
+        "session": false,
+        "domain": "127.0.0.1",
+        "path": "/"
+      },
+      {
+        "name": "m7b_js",
+        "value_len": 1,
+        "httpOnly": false,
+        "secure": false,
+        "session": false,
+        "domain": "127.0.0.1",
+        "path": "/"
+      },
+      {
+        "name": "m7b_js_session",
+        "value_len": 5,
+        "httpOnly": false,
+        "secure": false,
+        "session": true,
+        "domain": "127.0.0.1",
+        "path": "/"
+      },
+      {
+        "name": "m7b_plain",
+        "value_len": 6,
+        "httpOnly": false,
+        "secure": false,
+        "session": false,
+        "domain": "127.0.0.1",
+        "path": "/"
+      }
+    ],
+    "cdp_count": 4,
+    "document_cookie_names": [
+      "m7b_js",
+      "m7b_js_session",
+      "m7b_plain"
+    ],
+    "document_cookie_raw_len": 48
+  },
+  "pass2": {
+    "label": "pass2-重启",
+    "error": "",
+    "mode": "read",
+    "cdp": [
+      {
+        "name": "m7b_http",
+        "value_len": 7,
+        "httpOnly": true,
+        "secure": false,
+        "session": false,
+        "domain": "127.0.0.1",
+        "path": "/"
+      },
+      {
+        "name": "m7b_js",
+        "value_len": 1,
+        "httpOnly": false,
+        "secure": false,
+        "session": false,
+        "domain": "127.0.0.1",
+        "path": "/"
+      },
+      {
+        "name": "m7b_plain",
+        "value_len": 6,
+        "httpOnly": false,
+        "secure": false,
+        "session": false,
+        "domain": "127.0.0.1",
+        "path": "/"
+      }
+    ],
+    "cdp_count": 3,
+    "document_cookie_names": [
+      "m7b_js",
+      "m7b_plain"
+    ],
+    "document_cookie_raw_len": 26
+  },
+  "verdict": {
+    "cdp_sees_httponly": true,
+    "document_cookie_hides_httponly": true,
+    "persistent_survives_restart": true,
+    "session_cookie_dropped_on_restart": true
+  }
+}

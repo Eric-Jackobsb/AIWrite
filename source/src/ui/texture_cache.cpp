@@ -109,6 +109,11 @@ TextureInfo texture_for(const std::string& path)
     }
 
     TextureInfo info;
+    // P7a-16：顺手按内容嗅探格式（只读文件头）→ 供节点卡片 / 输出面板显示**格式徽标**
+    if (const utils::ImageMagic magic = utils::sniffImage(path);
+        magic.format != utils::ImageFormat::Unknown) {
+        info.format = utils::imageFormatName(magic.format);
+    }
     // M7-04：解码统一走 utils::image_decode（stb 优先 / WIC 兜底；错误文案可直接显示）
     const utils::DecodedImage decoded = utils::decodeImageRgba8(path);
     if (!decoded.error.empty()) {

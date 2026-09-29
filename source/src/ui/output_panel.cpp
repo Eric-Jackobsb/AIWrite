@@ -59,6 +59,10 @@ std::string node_header(const engine::RunNodeView& info)
     return header;
 }
 
+// P7a-19：缩略图放大 —— 点击后弹出大图（单例状态；避免多节点调用时弹窗 ID 冲突）
+std::string g_preview_path;
+bool        g_preview_requested = false;
+
 // M5-03：渲染节点结果里的图片（缩略图 + 打开所在文件夹）
 //  * 纹理按「路径 + 修改时间 + 大小」缓存（`ui/texture_cache`），重复运行不重复解码
 //  * image_height > 0 时限制最大显示高度（保持宽高比）
@@ -85,6 +89,14 @@ void draw_result_images(const engine::RunNodeView& info, float image_height)
             }
             ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<std::intptr_t>(texture.texture)),
                          ImVec2(width, height));
+            // P7a-19：点击缩略图 → 记录并请求打开大图（弹窗在 draw_output_panel 末尾统一绘制）
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("点击放大（P7a-19）");
+            }
+            if (ImGui::IsItemClicked()) {
+                g_preview_path      = path;
+                g_preview_requested = true;
+            }
         }
         else {
             ImGui::PushStyleColor(ImGuiCol_Text, kColorError);
@@ -98,6 +110,56 @@ void draw_result_images(const engine::RunNodeView& info, float image_height)
         ImGui::TextDisabled("%s（%d×%d）", path.c_str(), texture.width, texture.height);
         ImGui::PopID();
     }
+}
+
+// P7a-19：大图弹窗（点击缩略图后由 draw_output_panel 末尾统一调用一次）
+//  * 不吞并 PD-07（输出面板历史 / 搜索）—— 本弹窗只是**只读放大**
+void draw_image_preview_modal()
+{
+    if (g_preview_requested) {
+        ImGui::OpenPopup("##image_preview");
+        g_preview_requested = false;
+    }
+    if (!ImGui::BeginPopupModal("##image_preview", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        return;
+    }
+
+    const TextureInfo texture = texture_for(g_preview_path);
+    ImGui::TextUnformatted(g_preview_path.c_str());
+    if (texture.texture != 0) {
+        const ImVec2 viewport = ImGui::GetMainViewport()->Size;
+        float        width    = static_cast<float>(texture.width);
+        float        height   = static_cast<float>(texture.height);
+        if (width > 0.0f && height > 0.0f) {
+            float scale = 1.0f;
+            if (width > viewport.x * 0.8f) {
+                scale = viewport.x * 0.8f / width;
+            }
+            if (height * scale > viewport.y * 0.7f) {
+                scale = viewport.y * 0.7f / height;
+            }
+            width *= scale;
+            height *= scale;
+        }
+        ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<std::intptr_t>(texture.texture)),
+                     ImVec2(width, height));
+        ImGui::TextDisabled("%d×%d · %s", texture.width, texture.height,
+                            texture.format.empty() ? "未知格式" : texture.format.c_str());
+    }
+    else {
+        ImGui::PushStyleColor(ImGuiCol_Text, kColorError);
+        ImGui::TextWrapped("图片不可用：%s", texture.error.c_str());
+        ImGui::PopStyleColor();
+    }
+
+    if (ImGui::Button("打开所在文件夹", ImVec2(140.0f, 0.0f))) {
+        utils::open_in_explorer(g_preview_path);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("关闭", ImVec2(100.0f, 0.0f))) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 } // namespace
@@ -362,6 +424,9 @@ void draw_output_panel(const char* title, bool* open, EditorState& state)
         }
         ImGui::PopID();
     }
+
+    // P7a-19：大图弹窗（每帧最多一次，避免多节点重复 ID）
+    draw_image_preview_modal();
 
     ImGui::End();
 }

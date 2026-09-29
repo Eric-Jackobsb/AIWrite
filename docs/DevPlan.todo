@@ -188,8 +188,8 @@
                 "children": [],
                 "todo": {
                   "id": 176,
-                  "content": "DBG-M7-02 图片资源失效与旧工作流路径：可操作文案 + 一键迁移（相对引用解析失败 / 文件被删 / 旧绝对路径） ｜ §11.1 P7a-07",
-                  "done": false,
+                  "content": "DBG-M7-02 图片资源失效与旧工作流路径：可操作文案 + 一键迁移（相对引用解析失败 / 文件被删 / 旧绝对路径） ｜ §11.1 P7a-07 ｜ ✅ 已落地（2026-09-28）：缺失文案含资源目录完整路径 + 预期文件 + 下一步；重新归档可自愈；参数面板「迁移到资源目录」；断言 P7a-07×4",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
                 }
@@ -771,8 +771,8 @@
                 "children": [],
                 "todo": {
                   "id": 178,
-                  "content": "FEA-M7-04 图片端口 `image` 改 variadic（多图）：执行器收集多条边 + ImageInput 多选；旧工作流兼容（I19） ｜ §11.1 P7a-01~03",
-                  "done": false,
+                  "content": "FEA-M7-04 图片端口 `image` 改 variadic（多图）：执行器收集多条边 + ImageInput 多选；旧工作流兼容（I19） ｜ §11.1 P7a-01~03 ｜ ✅ 已落地（2026-09-28）：只改端口声明（变长机制引擎已有）；多选走 NFD OpenDialogMultiple + 换行分隔路径；断言 P7a-01×4 / P7a-02×6 / P7a-03×2",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
                 }
@@ -782,8 +782,8 @@
                 "children": [],
                 "todo": {
                   "id": 179,
-                  "content": "FEA-M7-05 统一资源目录（~/.brain-ai/assets/images/）+ 工作流按资源引用：选图即归档、旧绝对路径提示迁移 ｜ §11.1 P7a-04~06",
-                  "done": false,
+                  "content": "FEA-M7-05 统一资源目录（~/.brain-ai/assets/images/）+ 工作流按资源引用：选图即归档、旧绝对路径提示迁移 ｜ §11.1 P7a-04~06 ｜ ✅ 已落地（2026-09-28）：新增 utils/asset_store.{h,cpp}（内容寻址 <SHA3-256>.<ext>）+ 令牌 aiwrite-asset:<摘要>；实测无需改 workflow_io；断言 P7a-04×9 / P7a-05×6 / P7a-06×5",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
                 }
@@ -793,8 +793,8 @@
                 "children": [],
                 "todo": {
                   "id": 180,
-                  "content": "FEA-M7-06 official 图片收口：超限直接拒（不自动缩）+ 打印 base64 后体积与耗时 + 体积/格式/内容策略三类文案 ｜ §11.2 P7a-09~11",
-                  "done": false,
+                  "content": "FEA-M7-06 official 图片收口：超限直接拒（不自动缩）+ 打印 base64 后体积与耗时 + 体积/格式/内容策略三类文案 ｜ §11.2 P7a-09~11 ｜ ✅ 已落地（2026-09-28）：编码缓存（加锁 / 上限 32）+ encoded_bytes/encode_ms + human_bytes（KB/MB 自适应）+ 错误标签（路径/格式/体积）+ 400「内容策略」判定；断言 P7a-09×1 / P7a-10×2 / P7a-11×4",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
                 }
@@ -804,8 +804,8 @@
                 "children": [],
                 "todo": {
                   "id": 181,
-                  "content": "FEA-M7-07 UI A 档：默认布局常显（节点库+参数面板）/ 空状态引导 / 参数分组 / 图片卡片（缩略图+尺寸+格式）/ 错误条定位 / 状态栏 / 缩略图放大 ｜ §11.3 P7a-12~19",
-                  "done": false,
+                  "content": "FEA-M7-07 UI A 档：默认布局常显（节点库+参数面板）/ 空状态引导 / 参数分组 / 图片卡片（缩略图+尺寸+格式）/ 错误条定位 / 状态栏 / 缩略图放大 ｜ §11.3 P7a-12~19 ｜ ✅ 已落地（2026-09-28）并经人工验收：默认布局 + 老配置显式 false 尊重（断言 ×3）；⚠️ GUI 项无自动化断言，已做启动冒烟",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
                 }
@@ -1266,8 +1266,8 @@
                 "children": [],
                 "todo": {
                   "id": 183,
-                  "content": "TST-M7-03 同图重跑不重复编码计数器断言（编码缓存命中）｜ §11.1 P7a-08",
-                  "done": false,
+                  "content": "TST-M7-03 同图重跑不重复编码计数器断言（编码缓存命中）｜ §11.1 P7a-08 ｜ ✅ 已落地（2026-09-28）：缓存键 = 路径+mtime+大小（加锁、上限 32）；断言 5 条（含文件变化重编码 / reset 归零）",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
                 }
@@ -1535,11 +1535,22 @@
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
                 }
+              },
+              {
+                "key": 196,
+                "children": [],
+                "todo": {
+                  "id": 196,
+                  "content": "DOC-M7-03 P7-a 文档同步（2026-09-28 收口）：M7.md §11 全 ✅ + §14 基线回填（exec 251→310/0）· CHANGELOG 加 P7-a 落地块（含行为变化与偏差登记）· 使用说明 §2/§4/§10.10 · ai_writer_nodes §7.1/§7.2/§20.2 · source/README（源文件表 / 数据目录 / 统一资源目录）· DevPlan 状态 · ✅ 已收口",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M7.md"
+                }
               }
             ],
             "todo": {
               "id": 172,
-              "content": "M7（2 项）",
+              "content": "M7（3 项）",
               "done": false,
               "level": "secondary"
             }
@@ -2088,7 +2099,7 @@
             "children": [],
             "todo": {
               "id": 191,
-              "content": "TST-M7B-01 前置技术验证 8 项：Pydoll 起真实浏览器 + CDP 读 Cookie / 命名管道双向 / **CDP 增量三路线实测** / asyncio 共存 / 页面驱动与 DataTransfer 注入 / **DeepSeek 网页版选择器实测** / 会话失效证据来源 / 单 profile 多站点 + 按 origin 注销 ｜ M7B.md §5 M7B-01~08（未过则停留）",
+              "content": "TST-M7B-01 前置技术验证（已过 5/9 · 2026-09-28：M7B-01/03/05/08/09；余 M7B-02/04 命名管道双向 IPC（C++ 工具链冒烟已通）、M7B-06/07 需真站点人工登录；另增 M7B-06b）：Pydoll 起真实浏览器 + CDP 读 Cookie / 命名管道双向 / **CDP 增量三路线实测** / asyncio 共存 / 页面驱动与 DataTransfer 注入 / **DeepSeek 网页版选择器实测** / 会话失效证据来源 / 单 profile 多站点 + 按 origin 注销 / **关闭时序与会话持久化（M7B-09 · MB-D0-8）** ｜ M7B.md §5 M7B-01~09 + M7B-06b（未全过则停留）",
               "done": false,
               "level": "default",
               "fileLink": "docs/actionPlan/M7B.md"
@@ -2100,6 +2111,17 @@
             "todo": {
               "id": 192,
               "content": "FEA-M7B-02 撤除 WebView2：删 webview_host / webview2_login / vcpkg+CMake 依赖 / paths::webview2_profile（17 文件 ≈184 处）+ 死码清理（保留 delta_text_of / web_session_failure_hint 复用）｜ M7B.md §6 批 5–6（先建后拆，批 5 才删）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M7B.md"
+            }
+          },
+          {
+            "key": 197,
+            "children": [],
+            "todo": {
+              "id": 197,
+              "content": "FEA-M7B-03 登录态持久化四层（MB-D0-8 · 由 M7B-09 四轮实测支撑）：L1 干净退出（Browser.close → 等进程退出，默认 5s，禁用 stop()）/ L2 DPAPI 加密 Cookie 快照（刷新间隔 < 10s + 登录成功即写 + 优雅退出前再写，启动回灌）/ L3 启动自愈（profile 被占 → 善意 attach connect(ws) 或如实告知，禁止强杀）/ L4 异常退出可见（埋点 + 一键重登/恢复）｜ M7B.md §5 M7B-09 / §9.1 I23 / §13",
               "done": false,
               "level": "default",
               "fileLink": "docs/actionPlan/M7B.md"
@@ -2197,7 +2219,6 @@
       18,
       17,
       22,
-      28,
       165
     ],
     "add_mode": "bottom",
@@ -2210,6 +2231,6 @@
     "simpleMode": false,
     "lang": "en",
     "desc": "**当前基线（2026-09-27）**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS（V-11/V-12 随 PB-09）\n- graph_selftest: 110 通过 / 0 失败\n- exec_selftest: 251 通过 / 0 失败（执行器 + 运行信息 + 归档 + 配置表 / L4 断言）\n- provider_selftest: 50 通过 / 0 失败（--provider-dump 21 条：official 9 / web 12）\n- run_selftest: PASS（离线 3/5 为预期）· run_selftest_web: PASS（5/5；官网侧会话失效见 PB2-25）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n- docs_links: python vcpkg-cache/check_links.py → broken 0\n\n**M7（2026-09-27 落地）**\\n- 图片格式按内容嗅探（不看扩展名）+ 本地解码 stb/WIC 双后端 + 可操作报错；诊断：`api_probe --image-decode <路径>`\\n- 删图片输出节点（N-09）：节点 9→8\\n- **冻结区（I17）**：不得把合成/截断/未识别格式数据交给 WIC（曾致 CRT 断言崩溃，退出码 3）；见 source/README.md §4.2 / §6.1\\n\\n**M7 第二轮 P7（2026-09-27 会议决议 D1–D9 · 计划中，未开工）**\\n- P7-a（v0.5.2）：图片端口 variadic 多图（I19）+ 统一资源目录 + official 收口（超限拒 / 体积与耗时 / 错误分类）+ UI A 档\\n- P7-b（v0.5.3 待确认）：网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件（先做 P7b-01~05 前置验证，未过则回滚）\\n- 新增不变量 I18（无上传证据不得自动发送）/ I19（image 端口语义向后兼容）；开口项 Q1–Q8 见 M7.md §17\\n\\n**M7 第三轮 M7B（2026-09-28 立项 · 计划中未开工）**\n- 网页通道整体迁 Pydoll：WebView2 退场（source/ 内 17 文件 ≈184 处）+ 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态（~/.brain-ai/pydoll-profile）\n- 作废不变量 I2（不再承诺无参 CLI 逐字不变）→ 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2 / 保留字 --provider auto）/ I21（不静默降级）/ I22（流式降级标记非流式）；I15 → I15′（证据源改 CDP Cookie）；I16 升级为全局\n- 破坏性变更（计划）：--web-chat / --login-selftest 需 --provider；--web-probe 废弃；老用户需重新登录一次\n- 任务：前置验证 M7B-01~08 + 6 批 M7B-10~M7B-41（先建后拆，批 5 才删 WebView2）；基线 --exec-selftest 先降后升（删 VB2-17 前半 / VB2-25①③④，新增 VB2-28~VB2-36）\n- 计划全文：docs/actionPlan/M7B.md（WebView2 接触面 17 文件 ≈184 处清单见其 §1.3）｜ **阶段 0 已完成（2026-09-28）**：批 0 基线复测（exec 251/0 · graph 110/0 · provider 50/0 · run-selftest(--web) PASS · 断链 265/0）+ Pydoll 2.27.0 环境就绪（.venv 冒烟通过）+ 回滚锚点 pre-m7b 已推送；**仍未开工**\n\n**主要风险 / 待办**\n- 会话失效（40002/401/40003）缺界面引导（PB-07 / PB2-25）\n- 11 条内置站点仍缺 answer_selector（需人工登录一次 + 发一条消息 → PB2-29）\n- 流式数据源受 httplib 限制（PB-03/08 暂停 · D-31 待拍板）\n- 未接配置字段仍无效果（PD-03 / FEA-M6-01）\n- 补丁系列剩余项统一见 docs/actionPlan/M_patchAB_rest.md",
-    "version": "1790579236015"
+    "version": "1790614496988"
   }
 }
