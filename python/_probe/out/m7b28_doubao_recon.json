@@ -1,0 +1,103 @@
+{
+  "site": "doubao-web",
+  "site_url": "https://www.doubao.com/chat/",
+  "argv": [
+    "--recon",
+    "--hover-composer"
+  ],
+  "started": "2026-09-29 20:33:03",
+  "recon": {
+    "readback_self_proof": "probe-ok",
+    "url": "https://www.doubao.com/chat/",
+    "title": "豆包 - 字节跳动旗下 AI 智能助手",
+    "body_len": 291,
+    "scan_ok": true,
+    "scan_error": "",
+    "entry_kind": "paste_only",
+    "file_inputs": [],
+    "drop_zones": [],
+    "editors": [
+      {
+        "selector": "div.tiptap.ProseMirror",
+        "tag": "div",
+        "visible": true,
+        "cls": "tiptap ProseMirror",
+        "aria": "",
+        "title": "",
+        "ph": "",
+        "text": "",
+        "contenteditable": true
+      }
+    ],
+    "attach_hints": [],
+    "cookie_names_js_visible": [
+      "hook_slardar_session_id",
+      "i18next",
+      "dbx-web-theme",
+      "conversation_list_v2_group_mode",
+      "flow_cur_user_sec_id",
+      "flow_user_country",
+      "s_v_web_id",
+      "passport_csrf_token",
+      "passport_csrf_token_default",
+      "biz_trace_id"
+    ],
+    "storage_keys": [
+      "default_reply_mode_web_model_item_key_value",
+      "client_brand_info",
+      "__tea_sdk_ab_version_497858",
+      "client_device_info",
+      "mode_select_value",
+      "__tea_cache_refer_497858",
+      "flow-web-cookie-banner-store",
+      "client_cloud_config",
+      "i18nextLng",
+      "__tea_cache_first_497858",
+      "default_reply_mode_web_value",
+      "text.00d51bf0012811ee97fd5fdb0b0365a9.web.zh",
+      "__tea_cache_tokens_497858",
+      "SLARDARflow_web",
+      "samantha_web_web_id",
+      "dbx-web-theme",
+      "version.00d51bf0012811ee97fd5fdb0b0365a9.web.zh",
+      "flow_user_country"
+    ],
+    "hover": {
+      "selector": "div.tiptap.ProseMirror",
+      "center": {
+        "ok": true,
+        "x": 533,
+        "y": 418,
+        "w": 434,
+        "h": 24
+      },
+      "note": "仅移动鼠标（不点击）以触发工具条渲染"
+    },
+    "selector_hits": {
+      "div.tiptap.ProseMirror": 1,
+      "[class*=\"message\"]": 0,
+      "[class*=\"answer\"]": 0,
+      "[class*=\"reply\"]": 0,
+      "[class*=\"markdown\"]": 0
+    }
+  },
+  "shutdown": {
+    "mode": "close_wait",
+    "exit_code": 0,
+    "waited_s": 0.2,
+    "strays_after": []
+  },
+  "verdict": {
+    "B1_readback_self_proof_ok": true,
+    "B1_scan_ok": true,
+    "B1_entry_kind_determined": true,
+    "B1_has_file_input": false,
+    "B1_composer_found": true,
+    "B0_login_detected": null,
+    "B0_d30_diff_nonempty": false,
+    "B0_relaunch_still_logged_in": null,
+    "B2_injected_ok": null,
+    "B2_upload_request_seen": null,
+    "B3_sent": null
+  }
+}

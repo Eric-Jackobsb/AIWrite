@@ -247,11 +247,57 @@ void ensure_context()
     log::info("[画布] 已关闭画布键盘快捷键（仅保留鼠标操作）");
 }
 
-// 节点内容宽度：输入端口行左对齐、输出端口行右对齐，都以它为基准（保证节点宽度一致）
-constexpr float kNodeContentWidth = 215.0f;
+// 节点宽度：**由「输入/输出标签实测最宽」决定，且全画布所有节点共用同一个值**
+//   · 宽度 = max(所有节点里最宽的一行端口标签, 下限 `kNodeContentWidthMin`) —— 见 `update_content_width()`
+//   · 因此节点的左边界（输入圆点）与右边界（输出圆点）在**所有节点上对齐**，且**与文本长度无关**
+//   · 配套约束：节点内**任何文本都必须收口**（单行 `elide_to_width` / 多行 `wrap_to_width`），
+//     否则长标题 / 长参数 / 长错误文案会把节点撑宽，端口边界随之漂移（同一画布上节点宽度不一致）
+constexpr float kNodeContentWidthMin = 160.0f;              // 内容区下限（保证标题行 / 参数预览可读）
+float           g_content_width      = kNodeContentWidthMin; // 每帧由 update_content_width() 重算
 constexpr float kPinRadius        = 5.0f;
 constexpr float kPinDotSize       = kPinRadius * 2.0f;
 constexpr float kPinTextGap       = 6.0f;
+constexpr float kNodeTitleIndent  = 15.0f; // 标题行左侧占位（分类色条 + 状态圆点）
+constexpr float kLabelGap         = 4.0f;  // 同一行内文本片段之间的间隙
+constexpr int   kNodeSummaryLines = 6;     // 节点卡片上多行文本（运行结果 / 必失败原因）最多几行
+
+// 只裁剪、**不加**省略号：返回不超过 max_width 像素的最长前缀（不切断 UTF-8 多字节序列）。
+std::string clip_to_width(const std::string& text, float max_width)
+{
+    if (text.empty()) {
+        return std::string();
+    }
+    if (ImGui::CalcTextSize(text.c_str()).x <= max_width) {
+        return text;
+    }
+    std::string out = text;
+    while (!out.empty()) {
+        std::size_t cut = out.size() - 1; // 回退一个 UTF-8 字符（绝不切断多字节序列）
+        while (cut > 0 && (static_cast<unsigned char>(out[cut]) & 0xC0u) == 0x80u) {
+            --cut;
+        }
+        out.erase(cut);
+        if (ImGui::CalcTextSize(out.c_str()).x <= max_width) {
+            return out;
+        }
+    }
+    return std::string();
+}
+
+// 单行省略 = clip 到「max_width − 省略号宽度」再补 …（**保证结果 ≤ max_width**）。
+// 按**像素**而非字符数裁剪 → 中英混排 / 全角半角 / 数字串都不会把节点撑宽。
+std::string elide_to_width(const std::string& text, float max_width)
+{
+    const std::string ellipsis   = "…";
+    const float       ellipsis_w = ImGui::CalcTextSize(ellipsis.c_str()).x;
+    if (max_width <= ellipsis_w) {
+        return ellipsis; // 连省略号都放不下
+    }
+    if (ImGui::CalcTextSize(text.c_str()).x <= max_width) {
+        return text; // 放得下 → 原样返回（零开销路径）
+    }
+    return clip_to_width(text, max_width - ellipsis_w) + ellipsis;
+}
 
 // ------------------------------------------------------------- 端口绘制 -----
 // 设计 §14.7：**输入端口在节点左侧、输出端口在节点右侧**
@@ -288,18 +334,23 @@ void draw_pin(const Node& node, const Port& port, int index)
         draw_dot(dot_pos);
 
         ImGui::SameLine(0.0f, kPinTextGap);
-        ImGui::TextUnformatted(port.display_name.c_str());
+        // 端口名按「内容宽度 − 圆点 − 间隙」收口（宽度由端口标签自适应，见 update_content_width）
+        ImGui::TextUnformatted(
+            elide_to_width(port.display_name, g_content_width - kPinDotSize - kPinTextGap)
+                .c_str());
     }
     else {
-        // ---- 右列：名称 + 圆点（先用占位 Dummy 把内容推到右边缘）----
-        const float text_width = ImGui::CalcTextSize(port.display_name.c_str()).x;
-        const float spacer     = kNodeContentWidth - kPinDotSize - kPinTextGap - text_width;
+        // ---- 右列：名称 + 圆点（名称先按可用宽度收口，再用占位 Dummy 推到右边界）----
+        const std::string shown_name =
+            elide_to_width(port.display_name, g_content_width - kPinDotSize - kPinTextGap);
+        const float text_width = ImGui::CalcTextSize(shown_name.c_str()).x;
+        const float spacer     = g_content_width - kPinDotSize - kPinTextGap - text_width;
         if (spacer > 0.0f) {
             ImGui::Dummy(ImVec2(spacer, line_height));
             ImGui::SameLine(0.0f, 0.0f);
         }
 
-        ImGui::TextUnformatted(port.display_name.c_str());
+        ImGui::TextUnformatted(shown_name.c_str());
 
         ImGui::SameLine(0.0f, kPinTextGap);
         const ImVec2 dot_pos = ImGui::GetCursorScreenPos();
@@ -308,6 +359,100 @@ void draw_pin(const Node& node, const Port& port, int index)
     }
 
     ed::EndPin();
+}
+
+// 折行（多行文本用）：按**像素**把文本切成若干行 —— **不依赖 ImGui 的自动换行**（它对中文这种
+// 「无空格长词」的行为不可靠），所以中文也能在任意字符间断行；每行 ≤ max_width，
+// 超过 max_lines 行或字符预算时在末行补 …（节点卡片是摘要，完整正文在输出面板）。
+std::string wrap_to_width(const std::string& text, float max_width, int max_lines)
+{
+    constexpr std::size_t kCharBudget = 2000; // 性能兜底：超长正文只折前 2000 字节
+    const std::string     source = (text.size() > kCharBudget) ? text.substr(0, kCharBudget) : text;
+    const bool            budget_cut = source.size() != text.size();
+
+    std::vector<std::string> lines;
+    std::string              line;
+    std::size_t              i = 0;
+    while (i < source.size()) {
+        std::size_t next = i + 1; // 取一个完整 UTF-8 字符（绝不切断多字节序列）
+        while (next < source.size() &&
+               (static_cast<unsigned char>(source[next]) & 0xC0u) == 0x80u) {
+            ++next;
+        }
+        const std::string ch = source.substr(i, next - i);
+        i = next;
+
+        if (ch == "\n") { // 原文自带换行 → 直接断行
+            lines.push_back(line);
+            line.clear();
+            continue;
+        }
+        if (!line.empty() && ImGui::CalcTextSize((line + ch).c_str()).x > max_width) {
+            lines.push_back(line); // 放不下 → 在此字符前断行
+            line = ch;
+            continue;
+        }
+        line += ch;
+    }
+    if (!line.empty()) {
+        lines.push_back(line);
+    }
+
+    const bool line_cut = max_lines > 0 && static_cast<int>(lines.size()) > max_lines;
+    if (line_cut) {
+        lines.resize(static_cast<std::size_t>(max_lines));
+    }
+
+    // 收口保证①：任何一行都必须 ≤ max_width（修掉「单字符就超宽」「删行后末行过长」两种情形）
+    for (std::string& item : lines) {
+        if (ImGui::CalcTextSize(item.c_str()).x > max_width) {
+            item = clip_to_width(item, max_width);
+        }
+    }
+
+    // 收口保证②：要补 … 时，先给末行让出「省略号的宽度」（否则末行会超宽 —— 自检抓到过 220 > 215）
+    const bool mark = line_cut || budget_cut;
+    if (mark) {
+        const float marker_w = ImGui::CalcTextSize("…").x;
+        if (lines.empty()) {
+            lines.emplace_back();
+        }
+        lines.back() = clip_to_width(lines.back(), max_width - marker_w);
+    }
+
+    std::string out;
+    for (std::size_t index = 0; index < lines.size(); ++index) {
+        if (index != 0) {
+            out += "\n";
+        }
+        out += lines[index];
+    }
+    if (mark) {
+        out += "…";
+    }
+    return out;
+}
+
+// 一行端口标签占用的宽度（左列 = [圆点][间隙][名称]，右列同宽）
+float port_row_width(const Port& port)
+{
+    return kPinDotSize + kPinTextGap + ImGui::CalcTextSize(port.display_name.c_str()).x;
+}
+
+// 按当前图重算「全画布共用的内容区宽度」：取所有节点里**最宽的一行端口标签**（下限 kNodeContentWidthMin）。
+// 每帧重算（代价 = 节点数 × 端口数 次 CalcTextSize，可忽略）→ 换工作流 / 增删节点即时生效。
+void update_content_width(const Graph& graph)
+{
+    float width = kNodeContentWidthMin;
+    for (const Node& node : graph.nodes) {
+        for (const Port& port : node.inputs) {
+            width = (std::max)(width, port_row_width(port));
+        }
+        for (const Port& port : node.outputs) {
+            width = (std::max)(width, port_row_width(port));
+        }
+    }
+    g_content_width = width;
 }
 
 // ------------------------------------------------------------- 节点绘制 -----
@@ -464,12 +609,22 @@ void draw_node_body(const Node& node)
         }
         ImGui::Dummy(ImVec2(13.0f, height));
         ImGui::SameLine(0.0f, 2.0f);
-        ImGui::TextUnformatted(node.title.c_str());
-        ImGui::SameLine();
-        ImGui::TextDisabled("(%s)", node.id.c_str());
+        // 宽度约束：标题 + (id) 合计必须落在内容宽度内（超出按像素省略，不撑宽节点）
+        const float       title_avail = g_content_width - kNodeTitleIndent;
+        const std::string id_text     = "(" + node.id + ")";
+        const float       id_w        = ImGui::CalcTextSize(id_text.c_str()).x;
+        const std::string shown_title =
+            elide_to_width(node.title, title_avail - id_w - kLabelGap);
+        ImGui::TextUnformatted(shown_title.c_str());
+        ImGui::SameLine(0.0f, kLabelGap);
+        const float id_room =
+            title_avail - ImGui::CalcTextSize(shown_title.c_str()).x - kLabelGap;
+        ImGui::TextDisabled("%s", elide_to_width(id_text, id_room).c_str());
     }
 
-    ImGui::Dummy(ImVec2(kNodeContentWidth, 1.0f));
+    // 宽度（**唯一**的宽度来源）：这一行占位把内容区宽度钉死为 g_content_width（全画布共用值），
+    // 配合节点内所有文本的收口（elide / wrap）→ 画布上**所有节点等宽**。
+    ImGui::Dummy(ImVec2(g_content_width, 1.0f));
     ImGui::Separator();
 
     // ---- 输入端口（左列）----
@@ -500,8 +655,10 @@ void draw_node_body(const Node& node)
             if (value.size() > 18) {
                 value = value.substr(0, 18) + "…";
             }
-            ImGui::TextDisabled("%s: %s", param.display_name.c_str(),
-                                value.empty() ? "(空)" : value.c_str());
+            // 宽度约束：整行（参数名 + 值）按像素收口，避免长参数名撑宽节点
+            const std::string line =
+                param.display_name + ": " + (value.empty() ? std::string("(空)") : value);
+            ImGui::TextDisabled("%s", elide_to_width(line, g_content_width).c_str());
             ++shown;
         }
     }
@@ -513,8 +670,8 @@ void draw_node_body(const Node& node)
         if (texture.texture != 0) {
             float width  = static_cast<float>(texture.width);
             float height = static_cast<float>(texture.height);
-            if (width > kNodeContentWidth && width > 0.0f) {
-                const float shrink = kNodeContentWidth / width;
+            if (width > g_content_width && width > 0.0f) {
+                const float shrink = g_content_width / width;
                 width *= shrink;
                 height *= shrink;
             }
@@ -525,8 +682,11 @@ void draw_node_body(const Node& node)
                                 texture.format.empty() ? "未知格式" : texture.format.c_str());
         }
         else {
-            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "图片预览失败：%s",
-                               texture.error.empty() ? "未知原因" : texture.error.c_str());
+            // 宽度约束：解码失败文案可能很长（含魔数 / 扩展名建议）→ 按像素收口
+            const std::string reason =
+                "图片预览失败：" + (texture.error.empty() ? std::string("未知原因") : texture.error);
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s",
+                               elide_to_width(reason, g_content_width).c_str());
         }
     }
 
@@ -538,19 +698,18 @@ void draw_node_body(const Node& node)
 
         ImGui::Separator();
         if (node.type == "LLMGenerate") {
-            if (effective.from_edge) {
-                ImGui::TextDisabled("生效 %s ← %s", effective.mode.c_str(),
-                                    effective.source_node.c_str());
-            }
-            else {
-                ImGui::TextDisabled("生效 %s（节点自身）", effective.mode.c_str());
-            }
+            // 固定宽度约束：来源节点标题长度不可控 → 按像素收口
+            const std::string line =
+                effective.from_edge
+                    ? ("生效 " + effective.mode + " ← " + effective.source_node)
+                    : ("生效 " + effective.mode + "（节点自身）");
+            ImGui::TextDisabled("%s", elide_to_width(line, g_content_width).c_str());
         }
         if (!reason.empty()) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeContentWidth);
-            ImGui::TextUnformatted((reason + "：必定失败").c_str());
-            ImGui::PopTextWrapPos();
+            // 自绘折行（每行 ≤ 内容宽度），不靠 ImGui 自动换行 → 长文案不撑宽节点
+            ImGui::TextUnformatted(
+                wrap_to_width(reason + "：必定失败", g_content_width, kNodeSummaryLines).c_str());
             ImGui::PopStyleColor();
         }
     }
@@ -575,9 +734,9 @@ void draw_node_body(const Node& node)
         else {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.31f, 0.75f, 0.42f, 1.0f));
         }
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeContentWidth);
-        ImGui::TextUnformatted(result_view.text.c_str());
-        ImGui::PopTextWrapPos();
+        // 自绘折行（每行 ≤ 内容宽度）+ 只显示前 kNodeSummaryLines 行 → 长正文不撑宽节点
+        ImGui::TextUnformatted(
+            wrap_to_width(result_view.text, g_content_width, kNodeSummaryLines).c_str());
         ImGui::PopStyleColor();
     }
 
@@ -804,6 +963,109 @@ void show_add_node_menu(EditorState& state, const ImVec2& spawn)
     }
 }
 
+// ------------------------------------------------- 宽度自检（不变量）----
+// 画布上**所有节点必须等宽**：宽度 = g_content_width + 节点内边距（g_content_width 由「输入/输出
+// 标签实测最宽」算出、全画布共用）。任何文本项漏了收口、或新加了无界控件，都会在这里被抓到。
+// 尺寸 / 节点数一变就写一条 INFO（可直接拿去核对），破坏不变量时写 WARN（限流 2 秒一条）。
+std::string px_text(float value)
+{
+    char buffer[32];
+    std::snprintf(buffer, sizeof(buffer), "%.0f", static_cast<double>(value));
+    return std::string(buffer);
+}
+
+void check_uniform_node_width(const Graph& graph)
+{
+    static int         frame          = 0;
+    static std::string last_signature; // 上一次采样到的「尺寸指纹」
+    static double      last_warn_time = 0.0;
+    if (++frame < 3) {
+        return; // 前两帧节点尺寸尚未结算（新建 / 刚加载图）
+    }
+
+    float       min_w = 0.0f;
+    float       max_w = 0.0f;
+    std::string min_id;
+    std::string max_id;
+    int         counted = 0;
+    for (const Node& node : graph.nodes) {
+        const ImVec2 size = ed::GetNodeSize(node_handle(node.id));
+        if (size.x <= 0.0f) {
+            continue; // 编辑器本帧才认识该节点 → 尺寸还没结算
+        }
+        ++counted;
+        if (min_w == 0.0f || size.x < min_w) {
+            min_w  = size.x;
+            min_id = node.id;
+        }
+        if (size.x > max_w) {
+            max_w  = size.x;
+            max_id = node.id;
+        }
+    }
+    if (counted < 2) {
+        return;
+    }
+
+    const bool        uniform = (max_w - min_w) < 0.5f;
+    const std::string signature =
+        std::to_string(counted) + "/" + px_text(min_w) + "/" + px_text(max_w);
+    if (signature != last_signature) {
+        last_signature = signature; // 尺寸/节点数一变就重新采样并留证（换工作流也能被记录）
+        log::info("[画布] 节点宽度自检：" + std::to_string(counted) + " 个节点，宽 " + px_text(min_w) +
+                  " ~ " + px_text(max_w) + " px（内容区 " + px_text(g_content_width) +
+                  " px · 按输入/输出标签自适应；最窄 " + min_id + " / 最宽 " + max_id + "）→ " +
+                  (uniform ? "全部等宽 ✅" : "宽度不一致 ❌"));
+    }
+    if (!uniform) { // 破坏不变量：限流告警（最多 2 秒一条）
+        const double now = ImGui::GetTime();
+        if (now - last_warn_time > 2.0) {
+            last_warn_time = now;
+            log::warn("[画布] 节点宽度不一致（「固定宽度」不变量被破坏）：最窄 " + min_id + " = " +
+                      px_text(min_w) + " px，最宽 " + max_id + " = " + px_text(max_w) +
+                      " px —— 检查是否有文本未走 elide_to_width()/wrap_to_width() 收口");
+        }
+    }
+}
+
+// 折行自检（一次性 · 首次绘制时跑一遍）：用「超长无空格串 / 纯中文 / 中英混排 / 自带换行」四类样例
+// 验证 wrap_to_width 的每条输出行都放得下 —— 这是「节点宽度固定」的构造性证据（不依赖人工造数据）。
+void log_wrap_selftest()
+{
+    static bool done = false;
+    if (done) {
+        return;
+    }
+    done = true;
+
+    const std::vector<std::string> samples = {
+        std::string(400, 'x'), // 超长无空格拉丁串（英文单词不会自动断行的经典反例）
+        "这是一段没有任何空格的超长中文文本，用来验证中文也能在任意字符处断行，而不会把节点撑宽。",
+        "中文English混排12345，测试mixed-width文本的折行边界是否正确。",
+        "第一行\n第二行很长很长很长很长很长很长很长很长很长很长很长很长很长很长\n第三行",
+    };
+
+    float worst = 0.0f;
+    for (const std::string& sample : samples) {
+        const std::string wrapped = wrap_to_width(sample, g_content_width, kNodeSummaryLines);
+        std::size_t       begin   = 0;
+        while (true) {
+            const std::size_t end  = wrapped.find('\n', begin);
+            const std::string line = (end == std::string::npos)
+                                         ? wrapped.substr(begin)
+                                         : wrapped.substr(begin, end - begin);
+            worst                  = (std::max)(worst, ImGui::CalcTextSize(line.c_str()).x);
+            if (end == std::string::npos) {
+                break;
+            }
+            begin = end + 1;
+        }
+    }
+    log::info("[画布] 折行自检：" + std::to_string(samples.size()) + " 个样例，最长行 " + px_text(worst) +
+              " px（上限 " + px_text(g_content_width) + " px）→ " +
+              (worst <= g_content_width + 0.5f ? "全部收口 ✅" : "有行超宽 ❌"));
+}
+
 } // namespace
 
 void draw_node_canvas(const char* title, CanvasOptions& options)
@@ -852,9 +1114,13 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
     for (const Node& node : state.graph.nodes) {
         ed::SetNodePosition(node_handle(node.id), ImVec2(node.x, node.y));
     }
+    // 宽度自适应：按当前图的「输入/输出标签实测最宽」算出**全画布共用的内容区宽度**（每帧重算，代价可忽略）
+    update_content_width(state.graph);
     for (const Node& node : state.graph.nodes) {
         draw_node_body(node);
     }
+    log_wrap_selftest();                   // 折行自检（一次性：每条输出行都必须放得下）
+    check_uniform_node_width(state.graph); // 固定宽度自检（不变量：全部节点等宽）
     for (const Edge& edge : state.graph.edges) {
         const Node* from = state.graph.findNode(edge.from_node);
         const Node* to   = state.graph.findNode(edge.to_node);

@@ -1,0 +1,211 @@
+{
+  "description": "文本输入 → 提示词模板 → 文本生成 → 文本输出（提供商配置接入文本生成的 provider 输入）",
+  "edges": [
+    {
+      "from": {
+        "node": "n2",
+        "port": "text"
+      },
+      "id": "e8",
+      "to": {
+        "node": "n3",
+        "port": "prompt"
+      }
+    },
+    {
+      "from": {
+        "node": "n3",
+        "port": "text"
+      },
+      "id": "e2",
+      "to": {
+        "node": "n4",
+        "port": "text"
+      }
+    },
+    {
+      "from": {
+        "node": "n5",
+        "port": "provider"
+      },
+      "id": "e3",
+      "to": {
+        "node": "n3",
+        "port": "provider"
+      }
+    },
+    {
+      "from": {
+        "node": "n7",
+        "port": "provider"
+      },
+      "id": "e4",
+      "to": {
+        "node": "n8",
+        "port": "provider"
+      }
+    },
+    {
+      "from": {
+        "node": "n6",
+        "port": "image"
+      },
+      "id": "e5",
+      "to": {
+        "node": "n8",
+        "port": "image"
+      }
+    },
+    {
+      "from": {
+        "node": "n1",
+        "port": "text"
+      },
+      "id": "e6",
+      "to": {
+        "node": "n8",
+        "port": "prompt"
+      }
+    },
+    {
+      "from": {
+        "node": "n8",
+        "port": "text"
+      },
+      "id": "e7",
+      "to": {
+        "node": "n2",
+        "port": "vars"
+      }
+    }
+  ],
+  "name": "默认工作流",
+  "nodes": [
+    {
+      "id": "n1",
+      "params": {
+        "text": "从前有座山，山里有座庙。"
+      },
+      "position": {
+        "x": -769.0,
+        "y": -128.0
+      },
+      "title": "文本输入",
+      "type": "TextInput"
+    },
+    {
+      "id": "n2",
+      "params": {
+        "template": "请根据以下内容续写：\n{vars}"
+      },
+      "position": {
+        "x": -120.0,
+        "y": -40.0
+      },
+      "title": "提示词模板",
+      "type": "PromptTemplate"
+    },
+    {
+      "id": "n3",
+      "params": {
+        "max_tokens": 2048,
+        "mode": "web",
+        "model": "deepseek-chat",
+        "seed": 0,
+        "stream": true,
+        "system_prompt": "",
+        "temperature": 0.7,
+        "top_p": 1.0
+      },
+      "position": {
+        "x": 220.0,
+        "y": -40.0
+      },
+      "title": "文本生成",
+      "type": "LLMGenerate"
+    },
+    {
+      "id": "n4",
+      "params": {
+        "auto_export": false,
+        "export_dir": "",
+        "file_name": "",
+        "label": "输出"
+      },
+      "position": {
+        "x": 560.0,
+        "y": -40.0
+      },
+      "title": "文本输出",
+      "type": "TextOutput"
+    },
+    {
+      "id": "n5",
+      "params": {
+        "api_base": "",
+        "api_key_ref": "",
+        "mode": "official",
+        "model": "deepseek-chat",
+        "model_custom": "",
+        "provider": "deepseek"
+      },
+      "position": {
+        "x": 220.0,
+        "y": 260.0
+      },
+      "title": "提供商配置",
+      "type": "ProviderConfig"
+    },
+    {
+      "id": "n6",
+      "params": {
+        "path": "F:\\ims.png"
+      },
+      "position": {
+        "x": -1073.0,
+        "y": -64.0
+      },
+      "title": "图片输入",
+      "type": "ImageInput"
+    },
+    {
+      "id": "n7",
+      "params": {
+        "api_base": "",
+        "api_key_ref": "",
+        "mode": "web",
+        "model": "deepseek-chat",
+        "model_custom": "",
+        "provider": "doubao-web"
+      },
+      "position": {
+        "x": -1025.0,
+        "y": 352.0
+      },
+      "title": "提供商配置",
+      "type": "ProviderConfig"
+    },
+    {
+      "id": "n8",
+      "params": {
+        "max_tokens": 2048,
+        "stream": true,
+        "system_prompt": "",
+        "temperature": 0.7,
+        "top_p": 1.0
+      },
+      "position": {
+        "x": -586.0,
+        "y": 184.0
+      },
+      "title": "图片理解",
+      "type": "VLMGenerate"
+    }
+  ],
+  "version": "1.0",
+  "viewport": {
+    "x": 0.0,
+    "y": 0.0,
+    "zoom": 1.0
+  }
+}

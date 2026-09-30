@@ -820,11 +820,22 @@
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
                 }
+              },
+              {
+                "key": 198,
+                "children": [],
+                "todo": {
+                  "id": 198,
+                  "content": "FEA-M7-09 DeepSeek 官方 API 视觉能力跟进（外部事实已变）：`deepseek` 条目补 `deepseek-flash`（V4.1-Flash 原生多模态，2026-09-10）+ `capabilities.vision` / `vision_model_default` + 改掉过时 notes「官方 API 无视觉模型」 ｜ §3 M7-10 ｜ 🟡 部分：✅ 2026-09-29 用户实测通过（DeepSeek 官方 API 视觉）；余能力表声明（本次未改 providers.json）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M7.md"
+                }
               }
             ],
             "todo": {
               "id": 165,
-              "content": "M7（8 项）",
+              "content": "M7（9 项）",
               "done": false,
               "level": "secondary"
             }
@@ -1304,11 +1315,22 @@
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
                 }
+              },
+              {
+                "key": 199,
+                "children": [],
+                "todo": {
+                  "id": 199,
+                  "content": "TST-M7-07 方案 B′：网页版图片理解只读侦察（豆包 doubao-web）—— 上传入口 4 类判定（file_input / drop_zone / paste_only / none）+ 三项选择器真实命中 + 登录前后 Cookie 名差集（喂 D-30）+ 纯图无字视觉性质判别 ｜ §12.1 P7b-05b ｜ 🟡 计划中（2026-09-29 立项）· 探针 python/_probe/m7b28_doubao_recon.py",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M7.md"
+                }
               }
             ],
             "todo": {
               "id": 169,
-              "content": "M7（6 项）",
+              "content": "M7（7 项）",
               "done": false,
               "level": "secondary"
             }
@@ -2230,7 +2252,7 @@
     "showEndTime": false,
     "simpleMode": false,
     "lang": "en",
-    "desc": "**当前基线（2026-09-27）**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS（V-11/V-12 随 PB-09）\n- graph_selftest: 110 通过 / 0 失败\n- exec_selftest: 251 通过 / 0 失败（执行器 + 运行信息 + 归档 + 配置表 / L4 断言）\n- provider_selftest: 50 通过 / 0 失败（--provider-dump 21 条：official 9 / web 12）\n- run_selftest: PASS（离线 3/5 为预期）· run_selftest_web: PASS（5/5；官网侧会话失效见 PB2-25）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n- docs_links: python vcpkg-cache/check_links.py → broken 0\n\n**M7（2026-09-27 落地）**\\n- 图片格式按内容嗅探（不看扩展名）+ 本地解码 stb/WIC 双后端 + 可操作报错；诊断：`api_probe --image-decode <路径>`\\n- 删图片输出节点（N-09）：节点 9→8\\n- **冻结区（I17）**：不得把合成/截断/未识别格式数据交给 WIC（曾致 CRT 断言崩溃，退出码 3）；见 source/README.md §4.2 / §6.1\\n\\n**M7 第二轮 P7（2026-09-27 会议决议 D1–D9 · 计划中，未开工）**\\n- P7-a（v0.5.2）：图片端口 variadic 多图（I19）+ 统一资源目录 + official 收口（超限拒 / 体积与耗时 / 错误分类）+ UI A 档\\n- P7-b（v0.5.3 待确认）：网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件（先做 P7b-01~05 前置验证，未过则回滚）\\n- 新增不变量 I18（无上传证据不得自动发送）/ I19（image 端口语义向后兼容）；开口项 Q1–Q8 见 M7.md §17\\n\\n**M7 第三轮 M7B（2026-09-28 立项 · 计划中未开工）**\n- 网页通道整体迁 Pydoll：WebView2 退场（source/ 内 17 文件 ≈184 处）+ 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态（~/.brain-ai/pydoll-profile）\n- 作废不变量 I2（不再承诺无参 CLI 逐字不变）→ 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2 / 保留字 --provider auto）/ I21（不静默降级）/ I22（流式降级标记非流式）；I15 → I15′（证据源改 CDP Cookie）；I16 升级为全局\n- 破坏性变更（计划）：--web-chat / --login-selftest 需 --provider；--web-probe 废弃；老用户需重新登录一次\n- 任务：前置验证 M7B-01~08 + 6 批 M7B-10~M7B-41（先建后拆，批 5 才删 WebView2）；基线 --exec-selftest 先降后升（删 VB2-17 前半 / VB2-25①③④，新增 VB2-28~VB2-36）\n- 计划全文：docs/actionPlan/M7B.md（WebView2 接触面 17 文件 ≈184 处清单见其 §1.3）｜ **阶段 0 已完成（2026-09-28）**：批 0 基线复测（exec 251/0 · graph 110/0 · provider 50/0 · run-selftest(--web) PASS · 断链 265/0）+ Pydoll 2.27.0 环境就绪（.venv 冒烟通过）+ 回滚锚点 pre-m7b 已推送；**仍未开工**\n\n**主要风险 / 待办**\n- 会话失效（40002/401/40003）缺界面引导（PB-07 / PB2-25）\n- 11 条内置站点仍缺 answer_selector（需人工登录一次 + 发一条消息 → PB2-29）\n- 流式数据源受 httplib 限制（PB-03/08 暂停 · D-31 待拍板）\n- 未接配置字段仍无效果（PD-03 / FEA-M6-01）\n- 补丁系列剩余项统一见 docs/actionPlan/M_patchAB_rest.md",
+    "desc": "**当前基线（2026-09-27）**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS（V-11/V-12 随 PB-09）\n- graph_selftest: 110 通过 / 0 失败\n- exec_selftest: 251 通过 / 0 失败（执行器 + 运行信息 + 归档 + 配置表 / L4 断言）\n- provider_selftest: 50 通过 / 0 失败（--provider-dump 21 条：official 9 / web 12）\n- run_selftest: PASS（离线 3/5 为预期）· run_selftest_web: PASS（5/5；官网侧会话失效见 PB2-25）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n- docs_links: python vcpkg-cache/check_links.py → broken 0\n\n**M7（2026-09-27 落地）**\\n- 图片格式按内容嗅探（不看扩展名）+ 本地解码 stb/WIC 双后端 + 可操作报错；诊断：`api_probe --image-decode <路径>`\\n- 删图片输出节点（N-09）：节点 9→8\\n- **冻结区（I17）**：不得把合成/截断/未识别格式数据交给 WIC（曾致 CRT 断言崩溃，退出码 3）；见 source/README.md §4.2 / §6.1\\n\\n**M7 第二轮 P7（2026-09-27 会议决议 D1–D9 · 计划中，未开工）**\\n- P7-a（v0.5.2）：图片端口 variadic 多图（I19）+ 统一资源目录 + official 收口（超限拒 / 体积与耗时 / 错误分类）+ UI A 档\\n- P7-b（v0.5.3 待确认）：网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件（先做 P7b-01~05 前置验证，未过则回滚；方案 B′ 2026-09-29：网页版图片理解首个目标站 = 豆包 doubao-web，P7b-05b 只读侦察先行（上传入口 4 类 + 纯图无字视觉判别），审核通过后才动管道 M7B-02/04）\\n- 新增不变量 I18（无上传证据不得自动发送）/ I19（image 端口语义向后兼容）；开口项 Q1–Q8 见 M7.md §17\\n\\n**M7 第三轮 M7B（2026-09-28 立项 · 计划中未开工）**\n- 网页通道整体迁 Pydoll：WebView2 退场（source/ 内 17 文件 ≈184 处）+ 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态（~/.brain-ai/pydoll-profile）\n- 作废不变量 I2（不再承诺无参 CLI 逐字不变）→ 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2 / 保留字 --provider auto）/ I21（不静默降级）/ I22（流式降级标记非流式）；I15 → I15′（证据源改 CDP Cookie）；I16 升级为全局\n- 破坏性变更（计划）：--web-chat / --login-selftest 需 --provider；--web-probe 废弃；老用户需重新登录一次\n- 任务：前置验证 M7B-01~08 + 6 批 M7B-10~M7B-41（先建后拆，批 5 才删 WebView2）；基线 --exec-selftest 先降后升（删 VB2-17 前半 / VB2-25①③④，新增 VB2-28~VB2-36）\n- 计划全文：docs/actionPlan/M7B.md（WebView2 接触面 17 文件 ≈184 处清单见其 §1.3）｜ **阶段 0 已完成（2026-09-28）**：批 0 基线复测（exec 251/0 · graph 110/0 · provider 50/0 · run-selftest(--web) PASS · 断链 265/0）+ Pydoll 2.27.0 环境就绪（.venv 冒烟通过）+ 回滚锚点 pre-m7b 已推送；**仍未开工**\n\n**主要风险 / 待办**\n- 会话失效（40002/401/40003）缺界面引导（PB-07 / PB2-25）\n- 11 条内置站点仍缺 answer_selector（需人工登录一次 + 发一条消息 → PB2-29）\n- 流式数据源受 httplib 限制（PB-03/08 暂停 · D-31 待拍板）\n- 未接配置字段仍无效果（PD-03 / FEA-M6-01）\n- 补丁系列剩余项统一见 docs/actionPlan/M_patchAB_rest.md",
     "version": "1790614496988"
   }
 }

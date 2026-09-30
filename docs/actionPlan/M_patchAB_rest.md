@@ -242,7 +242,7 @@
 ## §5 交互打磨与配置接线（原 Patch D · `D1`）
 
 > 依据：[Archive/actionPlan/M_patchA.md](../Archive/actionPlan/M_patchA.md) §6.1（任务）/ §6.2（`VD-01…VD-08`）/ §6.3（风险）。
-> 已完成 ✅（归档留存）：`PD-02` 复制/粘贴重做、`PD-04` 窗口几何持久化、`PD-05` 参数面板增强、`PD-06②` 重新生成（新 seed）。
+> 已完成 ✅（归档留存）：`PD-02` 复制/粘贴重做、`PD-04` 窗口几何持久化、`PD-05` 参数面板增强、`PD-06②` 重新生成（新 seed）；**节点宽度按「输入/输出标签实测最宽」自适应（全画布同值 · 长文本按像素省略/折行）2026-09-29**（`ui/node_canvas.cpp`，见 `CHANGELOG` 与 `ai_writer_nodes.md` §14.2）。
 
 | 编号 | 要点 | 落点 | 验证 |
 |---|---|---|---|
@@ -474,7 +474,7 @@
 | `tongyi-web` | 通义千问 → **千问**（阿里网页版） | ⚠️ `https://www.qianwen.com/` | ✅（**已修正重定向**） | ⬜ | ⬜ | 旧域 `tongyi.com/qianwen` → `qianwen.com` |
 | `qwen-web` | Qwen（国际站网页版） | `https://chat.qwen.ai/` | ✅ | ⬜ | 🟡 **输入框 ✅** / 回答 ⬜ | `textarea[placeholder="Ask Qwen"]` + 发送按钮已回填 |
 | `chatglm-web` | 智谱清言（ChatGLM 网页版） | `https://chatglm.cn/main/alltoolsdetail` | ⚠️ 可达但被 **WAF** 挡 | ⬜ | ⬜ | 需人工过验证 + 登录后才能取选择器 |
-| `doubao-web` | 豆包（字节网页版） | `https://www.doubao.com/chat/` | ✅ | ⬜ | ⬜ | **未登录不渲染输入框** |
+| `doubao-web` | 豆包（字节网页版） | `https://www.doubao.com/chat/` | ✅ | ⬜ | ⬜ | **未登录不渲染输入框**；**网页版图片理解首个目标站（方案 B′ · 2026-09-29）** —— 侦察先行（`P7b-05b`：人工登录一次取齐三项 + 上传入口侦察 + 视觉性质判别），「可生成」列保持 ⬜（**不填假值**） |
 | `yuanbao-web` | 腾讯元宝 | `https://yuanbao.tencent.com/` | ✅ | ⬜ | 🟡 **输入框 ✅** / 回答 ⬜ | `div.ql-editor.ql-blank`（Quill）已回填 |
 | `ernie-web` | 文心一言 → **百度文心助手** | ⚠️ `https://wenxin.baidu.com/` | ✅（**已修正重定向**） | ⬜ | 🟡 **输入框 ✅** / 回答 ⬜ | `#chat-textarea` 已回填；站点现名「百度文心助手」 |
 | `spark-web` | 讯飞星火 | `https://xinghuo.xfyun.cn/` | ✅ | ⬜ | ⬜ | **未登录不渲染输入框** |
@@ -507,7 +507,7 @@
 | **`D-27`** | 「**已登录**」的判据（L4） | ① 该 origin Cookie 非空 ② 条目 `cookie_names` 命中 ③ 页面可达 / 用户确认 | ✅ **已按 ①∪② 实现**（v13 `PB2-27`：`web_session_state()` 纯函数，**不看** `userToken`） |
 | **`D-28`** | 通用站点是否显示 `userToken` | ① 保留，但**仅当条目配了 `token_expr`** 才显示 ② 彻底移除该行 | ✅ **已按 ① 实现**（v13） |
 | **`D-29`** | L4 归口 | ① `PB2-24` 并入 L4 本批；`PB2-25` 一并 ② 保持分散 | ✅ **已按 ① 收编**到本文（`B2-e2`） |
-| **`D-30`** | **登录态判据收紧**（v15 实测：**未登录页面已有匿名 Cookie** → 「Cookie 非空 = 已登录」会**误报**） | ① **`cookie_names` 命中优先**，Cookie 非空降级为「**未校验**」 ② 保持现状（Cookie 非空 = 已登录，接受误报） | 🔴 **待你拍板（建议 ①）**；落地要点：逐站用 `--web-dom-dump` 观测「登录前后 Cookie 名差集」补 `cookie_names` |
+| **`D-30`** | **登录态判据收紧**（v15 实测：**未登录页面已有匿名 Cookie** → 「Cookie 非空 = 已登录」会**误报**） | ① **`cookie_names` 命中优先**，Cookie 非空降级为「**未校验**」 ② 保持现状（Cookie 非空 = 已登录，接受误报） | 🔴 **待你拍板（建议 ①）**；落地要点：逐站用 `--web-dom-dump` 观测「登录前后 Cookie 名差集」补 `cookie_names`。**证据计划（2026-09-29）**：豆包一行随 `M7.md` 新增的 `P7b-05b`（`python/_probe/m7b28_doubao_recon.py` 的 **B0 段**）一并取证 → 供拍板 |
 | **`D-31`** | **流式方案**（§2.5） | ① 升级/替换 httplib ② 网页版改「POST + GET 轮询正文」（需先探 A′ 端点）③ 明确不做、文案改「分段落定」 | 🟡 **待拍板（建议 ③ + 补 `VB-03` 离线断言）** |
 | **`D-32`** | `PB2-29` 逐站回填的**范围** | ① 只做国内 7 站（Kimi / 通义 / Qwen / 豆包 / 元宝 / 文心 / 星火）② 连境外 3 站（ChatGPT / Claude / Gemini，本机可直连） | 🟡 **待拍板（建议 ① 先做，② 可选）** |
 
@@ -520,6 +520,7 @@
 | 日期 | 版本 | 变更 |
 |---|---|---|
 | 2026-09-27 | **v1** | **建立本文（文档拆分）**：① 收编 `M_patchA`（Patch B 残项 / 原 Patch C / 原 Patch D / PM）与 `M_patchB`（L2 的 `PB2-04…12`、`PB2-07` 界面按钮、`PB2-25`、`PB2-29`/`PB2-30②`、`PB2-24`）的**全部未完成项**；② 刷新回归基线（构建 0/0 · `--exec-selftest` **237/0** · `--provider-selftest` 50/0 · `--graph-selftest` 111/0 · 文档断链 0）；③ 附录 B/C/D/E 复制为**现行版本**并在附录 E 就地维护「可登录 / 可生成」两列；④ 承接决策 `D-25`…`D-30` 并新增 `D-31`（流式方案）/ `D-32`（逐站范围）；⑤ 同批把 `M_patchA.md` / `M_patchB.md` **归档**到 [../Archive/actionPlan/](../Archive/actionPlan/)（已归档部分见其顶部横幅）。 |
+| 2026-09-29 | **v2** | **方案 B′ 口径同步（只改文档 · 零代码改动）**：① §9 **`D-30`** 补**证据计划** —— 豆包「登录前后 Cookie 名差集」随 `M7.md` 新增的 `P7b-05b`（`python/_probe/m7b28_doubao_recon.py` B0 段）一并取证；② **附录 E** `doubao-web` 行补注「**网页版图片理解首个目标站（方案 B′ · 2026-09-29）**、`P7b-05b` 侦察先行」，**「可生成」列保持 ⬜**（不填假值）；③ 背景：`M7.md` 新增决策 `D10`（首个目标站 = `doubao-web`；`deepseek-web` 保持文字主线）+ 前置验证 `P7b-05b` + 任务 `M7-10`（DeepSeek 官方 API 视觉跟进），站点多模态能力公开证据核查见 [../网页版协议实测记录.md](../网页版协议实测记录.md) §8。**未改任何产品代码与配置表** |
 
 
 

@@ -23,6 +23,24 @@
 
 ## [Unreleased] — M7（图片收口 + 节点精简）+ M5 核心切片（M5-C）已落地；**M7 第二轮 P7-a 已落地（v0.5.2）**；M7 第三轮 `M7B` 立项（网页通道整体迁 Pydoll）
 
+**📄 文档同步：方案 B′ 定案 + 站点多模态（图片）能力外部核查（2026-09-29 · 零代码改动）**
+
+- **方案 B′ 定案（用户拍板）**：网页版**图片理解**的**首个目标站 = `doubao-web`（豆包）** —— 理由：条目**已存在**（`source/assets/providers.json` 的 `doubao-web`，`adapter=dom`、直连已实测 ✅）→ 换站**零新增条目 / 零自检改动**；豆包属字节多模态系，「目的地具备视觉理解」这条前提**更可能成立**；**不动 `M7B` 批 4 主线**（`deepseek-web` 继续做文字链路迁移 `M7B-06`/`M7B-26`）。
+- **顺序闸门（新）**：先做**只读侦察**（`P7b-05b` → 新增一次性探针 `python/_probe/m7b28_doubao_recon.py`，**不进主管道**）→ 结论**经用户审核通过后**才启动 **C++↔Python 命名管道本体**（`M7B-02`/`04` = 方案 A）。B 的结论同时定 `P7b-10` 的注入路线（**`expect_file_chooser` 优先**，仅当站点无 `file input` 时才退 `DataTransfer`）与 `P7b-05` 的证据形态。
+- **外部事实核查（修正两条旧假设）**：① **DeepSeek 官方 API 已支持真视觉** —— 2026-08-21 实验模型 → **2026-09-10 `deepseek-flash`（DeepSeek-V4.1-Flash：native multimodal visual understanding，Pricing 页 Vision ✓；`deepseek-v4-pro` 仍 ✗）**；官方 Vision 指南 = 「describe pictures / read text from screenshots / analyze charts」→ **真视觉，非 OCR-only**。**仓库 `deepseek` 条目未跟上**（`vision=false`、无 `deepseek-flash`、`notes` 仍写「官方 API 无视觉模型」）→ 登记 **`M7-10`**（⬜ 待办；**本次未改 `providers.json`**）；临时**零代码通道** = GUI「模型（自定义）」填 `deepseek-flash`（表外模型放行 · **未实测**，故不写入手册）。② **DeepSeek 网页版**：官方最后一次点名 Web 是 2026-08-13 的 **V4-Pro GA（Vision ✗）**，且 V4.1-Flash 公告**只提 API** → **推断「无真视觉理解」**（推断，非结论）；是否有上传入口**待实测**。③ **豆包网页版**：公开资料**未声明**图片理解 → **待实测**；证据出来前**不得**改其 `capabilities.vision`（`I18`）。
+- **判定方法写死**：上传入口 4 类（`file_input` / `drop_zone` / `paste_only` / `none`）；视觉性质用「**纯图无字**」判别（能描述图形 / 颜色 / 构图 = 真视觉；只复述文字或答「看不到图片」= OCR / 非视觉）。
+- **文档落点**：[actionPlan/M7.md](actionPlan/M7.md)（决策 `D10` · 任务 `M7-10` · 前置验证 `P7b-05b` · §16 顺序 · §12.1 外部核查注）· [actionPlan/M7B.md](actionPlan/M7B.md)（§10 `doubao-web` 单列 + 新表 + `v10`）· [网页版协议实测记录.md](网页版协议实测记录.md)（**新增 §8**）· [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)（`D-30` 证据计划 + 附录 E + `v2`）· [README.md](README.md)（进度行 + 最近更新）· `DevPlan.todo`（新增 2 条）· [roadmap.md](roadmap.md) · [ai_writer_nodes.md](ai_writer_nodes.md) · [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md)。
+- **验证**：文档断链自检 `python vcpkg-cache/check_links.py` → **broken 0**；`source/` 与 `source/assets/providers.json` **零改动**。
+- **✅ 追加（同日 · 用户实测通过）**：**DeepSeek 官方 API 视觉能力已实测通过** —— 上述「零代码临时通道」不再是"未实测"而是**已验证可用**；据此 `M7.md` 的 `M7-09` 改 🟡 部分（DeepSeek 视觉路径已过）、`M7-10` 改 🟡 部分（**只剩 `providers.json` 能力表声明 + 文档同步**）。口径见 [actionPlan/M7.md](actionPlan/M7.md) §3 与 [网页版协议实测记录.md](网页版协议实测记录.md) §8.1/§8.5。**证据（日志物证）**：`~/.brain-ai/logs/app.log` **2026-09-29 01:03** —— `[图片理解] 模型=deepseek-flash / 图片 1 张` → `完成：HTTP 200，输出 759 字节（6256 ms）`；下游 `n3`（文本生成）同模型出 747 字节，正文与图中场景一致（**真视觉理解**，非 OCR 复述）。
+
+**📐 UI 修复：节点宽度改为「按输入/输出标签实测最宽自适应」（全画布同值，不再随字符长度变化）（2026-09-29）**
+
+- **问题**：节点宽度此前是**内容驱动** —— ① 标题行（`标题 + (id)`）、参数预览行、`生效 …` 行、图片解码失败文案是**无收口的单行文本**；② 运行结果 / 必失败原因走 `PushTextWrapPos`（**依赖 ImGui 自动换行**，对中文这类"无空格长词"不可靠，且**截断补 `…` 时末行会超出上限** —— 自检实测抓到 **220 > 215 px**）。两者都会把节点撑宽 → 同一画布上节点宽度不一致，输入/输出端口边界随之漂移。
+- **改动**（`source/src/ui/node_canvas.cpp`）：① 新增 **`clip_to_width()` / `elide_to_width()`**（按**像素**而非字符裁剪，回退时保证不切断 UTF-8 多字节序列；`elide` = `clip` 到「上限 − 省略号宽」再补 `…`，**结果恒 ≤ 上限**）；② 新增 **`wrap_to_width()`**：**自绘折行**（不依赖 ImGui 自动换行），中文/英文/混排都按像素断行，最多 `kNodeSummaryLines = 6` 行、字符预算 2000 字节，超出在末行补 `…`；③ **所有文本项统一收口**到「全画布共用的内容宽度 `g_content_width`」（= 按输入/输出标签实测最宽的**同一个值**）：标题 + `(id)`（`kNodeTitleIndent = 15px` / `kLabelGap = 4px`）、输入端口名、输出端口名（先收口再算 `spacer` → **输出圆点恒贴右边界**，不再退化成左对齐）、参数预览整行、`生效 …` 行、图片预览失败文案、运行结果 / 必失败原因（折行 + 6 行上限）；④ **宽度自适应**：新增 `port_row_width()` / `update_content_width()`，**每帧按当前图**取「所有节点里最宽的一行端口标签」并施加下限 `kNodeContentWidthMin = 160px` → **全画布共用同一个值**；标题行下 `Dummy(g_content_width, 1.0f)` 是**唯一**的宽度来源；⑤ **新增两处自检**（写 `app.log`）：**折行自检**（首次绘制：超长无空格串 / 纯中文 / 中英混排 / 自带换行 四类样例，最长行必须 ≤ 上限）与**节点宽度自检**（`ed::GetNodeSize` 采样，尺寸一变就记录；不一致时限流 WARN）。
+- **效果**：画布上**所有节点等宽**（实测 **180 px** = 内容区 **160 px** —— 当前各节点端口标签均短于下限、故下限生效 + 2×10 内边距）；宽度**只由端口标签决定**，与标题 / 参数 / 运行结果的文本长度无关。
+- **验证（`~/.brain-ai/logs/app.log` · 2026-09-29 20:06）**：`[画布] 折行自检：4 个样例，最长行 157 px（上限 160 px）→ 全部收口 ✅` · `[画布] 节点宽度自检：5 个节点，宽 180 ~ 180 px（内容区 160 px · 按输入/输出标签自适应）→ 全部等宽 ✅`（同一进程退出码 0、无 ImGui 断言；此前一轮自检抓到过 **220 > 215 px** 的末行溢出 bug，已由 `clip_to_width` 收口修掉）。
+- **文档同步**：[ai_writer_nodes.md](ai_writer_nodes.md) §14.2 节点尺寸（**最小 200 / 最大 400 → 按输入/输出标签自适应、全画布同值** + 文本收口 / 自检规则）· [节点编辑器使用说明.md](节点编辑器使用说明.md) §人工验证清单 2b · [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §5「已完成」行。
+
 **✅ M7 第二轮 P7-a 落地（v0.5.2 · 2026-09-28）—— 图片多图 + 统一资源目录 + official 收口 + UI A 档（`P7a-01`~`P7a-19` 全部完成）**
 
 - **图片内部运行**：`image` 端口改 **变长**（`P7a-01` —— 只改端点声明，变长收集 / 校验机制引擎早已通用）→ 多个「图片输入」

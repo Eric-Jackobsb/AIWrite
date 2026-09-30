@@ -546,7 +546,8 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | `qwen-web` | `dom` | ✅ `textarea[placeholder="Ask Qwen"]` | ✅ `click` | ❌ 空 | 同上 |
 | `yuanbao-web` | `dom` | ✅ `div.ql-editor.ql-blank` | ✅ `key:Enter` | ❌ 空 | 同上 |
 | `ernie-web` | `dom` | ✅ `#chat-textarea` | ✅ `key:Enter` | ❌ 空 | 同上（**建议首个验证站**：`M7B-06`） |
-| `tongyi-web` / `chatglm-web` / `doubao-web` / `spark-web` / `chatgpt-web` / `claude-web` / `gemini-web` | `dom` | ❌ 空（登录型条目） | ❌ | ❌ | 人工登录后 `--web-dom-dump --provider <id>` **一次取齐三项**（`M7B-28`） |
+| `doubao-web` | `dom` | ❌ 空（未登录不渲染输入框） | ❌ | ❌ | **网页版图片理解首个目标站（方案 B′ · 2026-09-29 · `M7.md` `D10`）**：人工登录后一次取齐三项 **+ 上传入口侦察 + 视觉性质判别**（`python/_probe/m7b28_doubao_recon.py`，见 `M7.md` `P7b-05b`） |
+| `tongyi-web` / `chatglm-web` / `spark-web` / `chatgpt-web` / `claude-web` / `gemini-web` | `dom` | ❌ 空（登录型条目） | ❌ | ❌ | 人工登录后 `--web-dom-dump --provider <id>` **一次取齐三项**（`M7B-28`） |
 | **全部 11 条 dom** | — | — | — | — | `cookie_names` 回填（配合 `D-30`「`cookie_names` 优先」）+ `answer_selector` 回填（`M7B-29`，承接 `PB2-29`） |
 
 **登录 Cookie 存活口径（`M7B-06b` 回填 · `MB-D0-8` L1 的端到端验收）**
@@ -558,6 +559,9 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | 条目 | 登录 Cookie 名 | 有 `expires`? | `httpOnly`? | 干净退出 + 重启后仍登录? | 实测日期 |
 |---|---|---|---|---|---|
 | （12 条逐行回填） | | | | | |
+| `doubao-web` | ⬜（`P7b-05b` B0 段） | ⬜ | ⬜ | ⬜ | ⬜ |
+
+> **豆包一行（2026-09-29 计划）**：随 `M7.md` `P7b-05b` 的 **B0 段**（人工登录一次）一并回填 —— 登录前 / 后 Cookie 快照 + 登录 Cookie 名 / `expires` / `httpOnly` / 「干净退出 + 重启后仍登录」。其**「登录前后 Cookie 名差集」同时作为 `D-30`（`cookie_names` 优先）的豆包证据**。
 
 **回填记录格式**（每站一行，写入 §15 变更记录）：
 
@@ -565,6 +569,13 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 <id>：input=<命中选择器> · send=<键/点击> · answer=<选择器> · done_when=<判据> · cookie_names=<名单>
       实测日期 / 浏览器版本 / 备注（如「需先关掉新手引导」）
 ```
+
+**网页版图片理解侦察记录**（`P7b-05b` 执行时逐行追加；判定口径见 `M7.md` §12.1 —— 上传入口 4 类 + **纯图无字**视觉性质判别）：
+
+| 条目 | 上传入口形态 | 注入路线 | 网络回执 | 视觉性质 | 实测日期 |
+|---|---|---|---|---|---|
+| `doubao-web` | ⬜ `file_input` / `drop_zone` / `paste_only` / `none` | ⬜ `expect_file_chooser` / `DataTransfer` | ⬜ | ⬜ 真视觉 / OCR / 无入口 | ⬜ |
+| （待填） | | | | | |
 
 ---
 
@@ -621,6 +632,8 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | 9 | `docs/节点编辑器使用说明.md` | WebView2 → Pydoll 章节改写 + 命令表按 §8.4 更新 |
 | 10 | `source/README.md` | WebView2 说明改写 + §4.2 登记 `I2` 解冻与 `I20` / `I21` / `I22` |
 | 11 | `docs/actionPlan/M_patchAB_rest.md` | `PB2-25` / `PB2-28` / `PB2-29` 与本文的归口交叉引用 |
+
+> **2026-09-29 追加（方案 B′ · 只改文档）**：`M7.md` 另增 **`M7-10`**（DeepSeek 官方 API 视觉跟进）/ **`P7b-05b`**（网页版图片理解只读侦察，目标站 = 豆包）/ **`D10`**（首个目标站决议），以及 [网页版协议实测记录.md](../网页版协议实测记录.md) **§8**（站点多模态能力公开证据核查）与 `roadmap.md` / `ai_writer_nodes.md` / `milestone_plan.md` / `DevPlan.todo` 的口径同步 —— 随 `M7B-40` 一并复核。
 
 ---
 
@@ -721,6 +734,7 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | 2026-09-28 | v7 | **`M7B-09` 前置验证通过（`MB-D0-8` L1~L4 四层全部得到实测支撑）** —— V-a~V-d 四轮 + 4 项补充诊断：① **V-a**：`close_wait`（`Browser.close` → 等进程退出）**0.22 s** 即保住 Cookie；强杀与库默认 `stop()` 丢，强杀残留 `Cookies-journal`；写 Cookie 后**≥30 s** 再强杀仍存活 ⇒ **10–30 s 延迟提交窗口**；② **V-b**：快照往返 7/7（`httpOnly` 保持、站点认账）；③ **V-c**：外部关窗（等价点 X）**0.2 s** 干净退出且 Cookie 保住、`stop()` 抛 **`BrowserNotRunning`（须吞）**；残留实例占 profile 时 **同端口 = 静默附着到既有实例 / 随机端口 = `FailedToStartBrowser`**，`browser.connect(ws)` **attach 可行**；④ **V-d**：**每 case 全新 profile** 对照 ⇒ 干净退出后**会期 Cookie 必掉**（持久 Cookie 保留），**`--restore-last-session` 是其唯一有效保活手段**但**会重开上次标签页**（副作用，实测 2 个 marker 页被恢复）、`session.restore_on_startup=1` 写 `Preferences` **无效**；⑤ **补充诊断**：`_diag_cookie_scope` 证 `tab.get_cookies()` **是当前页作用域**（停在 `about:blank` 必读空；全库须 `Storage.getCookies`）· `_diag_snapshot_session` **端到端证明 L2 回灌能救回会期 Cookie**（`session`/`httpOnly` 保持 + 服务端 `/eyes` 认账）· `_diag_restore_tabs` 证开关副作用 · `_diag_profile_identity` 用 `chrome://version` 排除"profile 被换"假设。落盘文档改动：§5 `M7B-09` 行改为**已过**并新增四轮结论块（含**探针收尾纪律**：崩溃会留孤儿占 profile → 下次 `start()` 直接失败）；§5 实施要点 **+⑨⑩⑪**（读数作用域 / profile 被占两形态 / `--restore-last-session` 默认禁用）；§9.1 **`I23⑤`**；§13 新增**启动与登录态两条"不做"**；§14.2 **`MB-Q6` 结案**（默认不启用 prefs，会期 Cookie 交 L2）；`source/README.md` §6.2 **+3 条探针纪律**；`docs/CHANGELOG.md` 前置验证进度更新。**仍只改文档 + 一次性探针：产品代码零改动** |
 | 2026-09-28 | v8 | **`M7B-09` 补一条收口（L2 快照节奏）**：由 V-a 的提交窗口数字（**10–30 s**）推出实现要求 —— 快照刷新间隔 **< 10 s** + 两个事件触发点（**登录成功即写** / **优雅退出前再写**），否则崩溃/断电时快照会旧一个窗口。同时固化工程纪律：`m7b09_common.shutdown()` 增加**残留自检与清理**（`strays_after` / `strays_killed`），探针一律 `try/finally` 收尾 —— 本轮两次因孤儿实例占住 profile 导致下一次 `start()` 直接 `FailedToStartBrowser`。**仍只改文档 + 一次性探针** |
 | 2026-09-28 | v9 | **文档进度同步（8 个文件 · 只改文档）** —— 前置验证已跑到 **5/9**，但「进度条类」文档仍停在「已立项 · 计划中未开工」，逐处对齐：① `M7B.md` 顶部状态行、§5 标题与进度摘要、`M7B-02` 补「**C++ 工具链冒烟已通**，剩管道双向 IPC 本体」、`M7B-04` 标 🟡 部分；② `CHANGELOG` 前置验证块新增「⏳ 待过 4 项 + 1 项加强」；③ `docs/README.md` 当前进度行、`milestone_plan.md` 状态列与前置口径（`M7B-01`–`08` → `M7B-01`–`09` + `M7B-06b`）；④ `roadmap.md` 轨道 C + **`RQ-6` 由「未实测」改为已实测收口**（`MB-Q1` 结案）；⑤ `ai_writer_nodes.md` §18 两行（**顺带修掉 P7-a 行仍写「计划中」的过期状态**）；⑥ `DevPlan.todo` `TST-M7B-01` 补进度 + **新增 `FEA-M7B-03`（`MB-D0-8` 四层登录态持久化）**；⑦ `M7.md` §12.1（`P7b-01`/`P7b-04` 标已过、`P7b-03` 标部分）+ §12 上方「外部调研」注更正；⑧ `节点编辑器使用说明.md` §10.2 前置验证补状态；⑨ **反向核对再补 3 处**（`M7B.md` §12 三级回滚口径、`CHANGELOG` 立项块任务口径、`ai_writer_nodes.md` §18 P7-b 行状态）。**验证**：文档断链 **276 checked / 0 broken**、`DevPlan.todo` JSON 合法且节点 **196 → 197**、过期措辞反向核对：`⬜ 计划中` 行 **0 命中**、旧「未过则停留」编号 **0 命中**（唯一保留命中 = 本行对旧措辞的引用）、`source/` **产品代码零改动**（其变更均属 P7-a 变更集） |
+| 2026-09-29 | v10 | **方案 B′ 定案（网页版图片理解目标站改豆包）+ 站点多模态能力外部核查（只改文档 · 零产品代码）** —— ① **目标站**：网页版图片理解首个目标站 = **`doubao-web`**（`M7.md` 新增决策 `D10`；理由：条目已存在 + 字节多模态系 + 不动批 4 主线），**`deepseek-web` 保持文字链路主线**（`M7B-06`/`M7B-26` 不变）；② **顺序闸门**：先 `P7b-05b` 只读侦察（`python/_probe/m7b28_doubao_recon.py`）→ 结论**用户审核通过后**才启动 `M7B-02`/`04` 管道本体（`M7.md` §16 已插入该顺序）；③ `M7.md` 新增 **`P7b-05b`**（上传入口 4 类判定 + 三项选择器真实命中 + `D-30` 证据 + **纯图无字**视觉性质判别）与 **`M7-10`**（DeepSeek 官方 API 视觉跟进）；④ **外部核查**：DeepSeek **API 已原生多模态**（2026-09-10 `deepseek-flash` = V4.1-Flash，Vision ✓；`deepseek-v4-pro` ✗）→ 仓库表过时；DeepSeek **网页版**推断无视觉（Web 跑 V4-Pro GA 且 ✗ + 公告只提 API）；**豆包待实测** → 新增 [网页版协议实测记录.md](../网页版协议实测记录.md) **§8**；⑤ §10 表把 `doubao-web` **单列**（从合并行拆出）+ 新增「**网页版图片理解侦察记录**」表 + 「登录 Cookie 存活口径」表补豆包一行（`P7b-05b` B0 段回填）；⑥ `M7.md` `P7b-10` 主路线改写为 **`expect_file_chooser`**（`M7B-05` 已实测两条注入路径均成功）→ 仅当无 `file input` 时才退 `DataTransfer`；⑦ 同步 `M_patchAB_rest.md`（`D-30` 证据计划 + 附录 E 豆包行）/`docs/README.md`/`CHANGELOG.md`/`DevPlan.todo`/`roadmap.md`/`ai_writer_nodes.md`/`milestone_plan.md`。**验证**：文档断链自检 **broken 0**、`source/` **零改动**、`source/assets/providers.json` **未改** |
 
 **站点选择器回填记录**（格式见 §10；`M7B-06` / `M7B-27` / `M7B-28` / `M7B-29` 执行时逐行追加）：
 
