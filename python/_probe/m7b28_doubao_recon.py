@@ -8,7 +8,7 @@
   * 决策 `M7.md` §9 `D10`：首个目标站 = `doubao-web`；`deepseek-web` 保持文字主线
 
 四段（可单独跑；**默认只跑 B1 只读侦察**）：
-  B0 `--login`   开有头窗口 → **你手动登录** → 自动检测登录成功 → Cookie 前后快照 → 优雅退出 → 重启复读
+  B0 `--login`   开有头窗口 → **你手动登录** → **DOM 正证据**判定（头像 / 昵称 / 用户菜单 / 退出登录，连续 2 次命中）→ Cookie 前后快照（**站点域过滤**）→ 优雅退出 → 重启复读
   B1 `--recon`   只读侦察：上传入口 4 类判定（`file_input`/`drop_zone`/`paste_only`/`none`）+ 选择器候选
   B2 `--inject`  注入 1 张图（**不发送**）+ CDP `Network` 网络回执取证
   B3 `--send`    发送一轮问答（**默认关**；`I18`：无「注入成功」证据不得发送）→ 判别 **真视觉 / OCR**
@@ -20,6 +20,9 @@
   * **只读 JS**：不写值、不点击、不发请求（口径对齐 `dom_web_client.cpp` 的 `kProbeScript`）
   * **不绕过风控 / 验证码 / 指纹**（`VB2-37`）；**不注入站点内部端点**（`I16`）
   * 优雅退出保登录态；`try/finally` + 残留自检（`M7B-09`）；Cookie 只落名字/标志位
+  * **换机兜底**：无 Chrome 时用 **Edge**（`common.browser_class()`，对应 `M7B-14` 的
+    「Chrome 缺失 → Edge 兜底」）；实际用的浏览器 / Python / pydoll 版本写进 JSON 的 `env` 字段
+    （**环境物证**，换机可追溯）
 """
 import argparse
 import asyncio
@@ -30,15 +33,35 @@ import sys
 import tempfile
 import time
 
-from pydoll.browser.chromium import Chrome
-
-import m7b09_common as common
+import m7b09_common as common  # 浏览器类由 common.browser_class() 选（无 Chrome → Edge，`M7B-14`）
 
 SITE_ID = 'doubao-web'
 SITE_URL = 'https://www.doubao.com/chat/'
+# 站点 Cookie 域过滤：`D-30` / 登录 Cookie 存活口径**只认站点自己的域**。
+# ⚠️ 2026-10-02 实测：`Storage.getCookies` 返回**整个 profile** 的 Cookie，Edge 首启会在
+#    `msn.cn` / `ntp.msn.cn` 种下 10 条（`MUID` / `_EDGE_S` / `__rubyUX` / `USRLOC` …）⇒ 不过滤
+#    会让差集变成「一堆与站点无关的新名」，直接把登录判定带偏（首次 B0 误报的帮凶之一）。
+SITE_COOKIE_DOMAIN = '.doubao.com'
+# 真实站点阶段的窗口尺寸：**默认视口只有 859×450**，豆包在这种尺寸下**附件工具条不渲染**
+# （2026-10-02 实测：登录态 `input` 总数 0、无附件按钮、`attach_hints` 空 ⇒ 注入无路可走；
+# 不是站点没有入口，而是**我们没给它画出来的地方**）⇒ 显式放大窗口再侦察。
+SITE_WINDOW_ARGS = ('--window-size=1440,1000',)
+# DOM 正证据需**连续 2 次**命中才判定登录成功（避免站点重渲染瞬间的抖动）
+LOGIN_STABLE_POLLS = 2
+# **鉴权 Cookie 实测白名单**（2026-10-02 23:59 从已登录 profile 只读诊断读出）。
+# 为什么需要它：豆包在默认窗口（实测 859×450）下**没有可见的头像 / 昵称节点** —— 只读诊断
+# `aw_login_diag.json` 里可见 `img` 仅 **1 个**（16×16 图标）、`avatarish` 只命中一个底栏 `div`
+# ⇒ **纯 DOM 判据会漏检**（B0 复证实测：用户已登录，DOM 仍报「无」）。
+# 而登录态实测多出整套**鉴权名**，且**匿名态（8 条 / B1 的 10 条）一个都不含** —— 见 §10 误报纠错记录。
+AUTH_COOKIE_NAMES = frozenset({
+    'sessionid', 'sessionid_ss', 'sid_guard', 'sid_tt', 'sid_ucp_v1', 'ssid_ucp_v1',
+    'uid_tt', 'uid_tt_ss', 'session_tlb_tag', 'odin_tt', 'x-tt-multi-sids',
+    'passport_auth_status', 'passport_auth_status_ss', 'passport_mfa_token'})
+# 至少 **2 个不同**鉴权名才算命中（单个可能是残留 / 站点预置）
+AUTH_COOKIE_MIN = 2
 EVIDENCE = common.OUT / 'm7b28_doubao_recon.json'
 FIXTURE_DIR = common.OUT / 'drive_files'
-IMAGE_FIXTURE = FIXTURE_DIR / 'm7b28-doubao.png'
+IMAGE_FIXTURE = FIXTURE_DIR / 'm7b28-doubao-256x256.png'
 # 网络回执里判定「这一条是上传请求」的 URL 特征（只用于筛选，不改请求）
 UPLOAD_HINTS = ('upload', 'file', 'attach', 'image', 'media', 'photo', 'album', 'tos-', 'vod')
 
@@ -196,6 +219,102 @@ ATTACH_PROBE_JS = r"""
 """
 
 
+# ------------------------------------------- 登录态 DOM 正证据 JS（B0 判据）----
+# ⚠️ 为什么要有这段（2026-10-02 实测纠正）：B0 原判据 = 「Cookie 名差集非空」+「输入框出现」，
+#    结果在**无人操作**的 9s 内自报「登录成功」—— 差集被 **Edge 自家的 `msn.cn` Cookie** 触发，
+#    而 `flow_cur_user_sec_id` / `flow_user_country` 在**匿名态**也会被站点种下；输入框更是未登录就渲染
+#    （B1 已证）。⇒ 判据改为「**登录后才可能出现**的 DOM 正证据」：头像 / 昵称 / 用户菜单 / 退出登录。
+#    只读：只枚举可见元素与属性，**不写值 / 不点击 / 不发请求**。
+LOGIN_JS = r"""
+  const out = { ok: false, url: location.href, title: document.title || '',
+                login_entry: [], logout_entry: [], avatar: [], nickname: [],
+                user_menu: [], candidates: [] };
+  const visible = (el) => {
+    try {
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      return r.width > 1 && r.height > 1 && s.visibility !== 'hidden' && s.display !== 'none';
+    } catch (e) { return false; }
+  };
+  const cls = (el) => {
+    try {
+      const c = el.className;
+      if (c === undefined || c === null) { return ''; }
+      if (typeof c === 'string') { return c; }
+      return String(c.baseVal || '');
+    } catch (e) { return ''; }
+  };
+  const tag = (el) => {
+    const t = el.tagName ? el.tagName.toLowerCase() : '?';
+    const c = cls(el).split(/\s+/).filter(Boolean).slice(0, 3).join('.');
+    return c ? t + '.' + c : t;
+  };
+  try {
+    // 1) 「登录 / 注册」入口 —— **只作诊断**（登录态下可能仍存在，故不参与判定）
+    document.querySelectorAll('button,a,[role="button"],[class*="login"],[class*="Login"]')
+      .forEach(el => {
+        if (!visible(el)) { return; }
+        const t = String(el.innerText || '').trim();
+        if (t && t.length <= 8 && /登录|登陆|注册/.test(t) && !/退出/.test(t)) {
+          out.login_entry.push({ tag: tag(el), text: t });
+        }
+      });
+    // 2) 「退出登录」—— 登录后才出现的正证据（限定容器，避免全页 innerText 的代价）
+    document.querySelectorAll('[class*="menu"],[class*="dropdown"],[class*="popover"],[class*="tooltip"],[class*="setting"]')
+      .forEach(el => {
+        if (!visible(el) || out.logout_entry.length > 8) { return; }
+        const t = String(el.textContent || '').trim();
+        if (t && t.length <= 60 && /退出登录|退出账号|注销/.test(t)) {
+          out.logout_entry.push({ tag: tag(el), text: t.slice(0, 20) });
+        }
+      });
+    // 3) 头像：可见 img（src 非空）且自身 / 近祖先的 class|alt|aria-label 命中关键字
+    document.querySelectorAll('img').forEach(el => {
+      if (!visible(el)) { return; }
+      const src = String(el.getAttribute('src') || '');
+      if (!src) { return; }
+      let node = el, hit = '', depth = 0;
+      while (node && depth < 4) {
+        let bag = cls(node) + ' ';
+        try {
+          bag += String(node.getAttribute('alt') || '') + ' '
+               + String(node.getAttribute('aria-label') || '');
+        } catch (e) { }
+        if (/avatar|portrait|head-?img|头像/i.test(bag)) { hit = bag.slice(0, 60); break; }
+        node = node.parentElement; depth++;
+      }
+      if (hit) { out.avatar.push({ tag: tag(el), src_len: src.length, hit: hit }); }
+    });
+    // 4) 昵称：可见、文本 1~24 字、class 命中 nickname / user-name / userName
+    document.querySelectorAll('[class*="nickname"],[class*="nickName"],[class*="user-name"],[class*="userName"]')
+      .forEach(el => {
+        if (!visible(el)) { return; }
+        const t = String(el.innerText || '').trim();
+        if (t && t.length <= 24) { out.nickname.push({ tag: tag(el), text: t }); }
+      });
+    // 5) 用户 / 账号菜单入口：aria-label 或 title 命中关键字
+    document.querySelectorAll('[aria-label],[title]').forEach(el => {
+      if (!visible(el)) { return; }
+      const bag = (String(el.getAttribute('aria-label') || '') + ' '
+                   + String(el.getAttribute('title') || '')).trim();
+      if (/个人中心|账号|我的|profile|account/i.test(bag)) {
+        out.user_menu.push({ tag: tag(el), text: bag.slice(0, 40) });
+      }
+    });
+    // 6) 兜底候选（供人工核；**只落 class 名单，不落文本**，避免误采用户隐私）
+    const seen = {};
+    document.querySelectorAll('[class]').forEach(el => {
+      if (!visible(el) || Object.keys(seen).length >= 40) { return; }
+      const c = cls(el).toLowerCase();
+      if (/user|account|profile|avatar|login/.test(c) && !seen[c]) { seen[c] = 1; }
+    });
+    out.candidates = Object.keys(seen);
+    out.ok = true;
+  } catch (e) { out.error = String((e && e.message) || e); }
+  return JSON.stringify(out);
+"""
+
+
 # ------------------------------------------------------------------- 工具函数 --
 def js_json(reply) -> dict:
     """两层 `result` 解包（复用 `common.js_text`）→ JSON 对象；解析失败返回空字典。"""
@@ -209,19 +328,73 @@ def js_json(reply) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-async def cookie_snapshot(tab) -> list[dict]:
-    """**全库** Cookie（`Storage.getCookies`，不带 urls）。
+async def cookie_snapshot(tab, domain_suffix: str | None = None) -> list[dict]:
+    """Cookie 快照（`Storage.getCookies`，不带 urls）。
 
     ⚠️ `tab.get_cookies()` 是**当前页作用域**（停在 about:blank 必读空）—— `M7B-09` V-d 实测结论。
+    ⚠️ `domain_suffix` 用来**只取站点自己的域**：不传 = 整个 profile（含 Edge 的 `msn.cn` 噪声）。
     """
     reply = await tab._execute_command(  # noqa: SLF001
         {'method': 'Storage.getCookies', 'params': {}})
     cookies = reply.get('result', {}).get('cookies', []) if isinstance(reply, dict) else []
-    return common.norm(cookies)
+    rows = common.norm(cookies)
+    if domain_suffix:
+        rows = [c for c in rows if str(c.get('domain') or '').lower().endswith(domain_suffix)]
+    return rows
 
 
 async def scan(tab) -> dict:
     return js_json(await tab.execute_script(SCAN_JS))
+
+
+async def login_scan(tab) -> dict:
+    """登录态 **DOM 正证据**扫描（只读，见 `LOGIN_JS`）。"""
+    return js_json(await tab.execute_script(LOGIN_JS))
+
+
+def site_cookies(rows) -> list[dict]:
+    """只保留**站点自己域**的 Cookie（`SITE_COOKIE_DOMAIN` 结尾）—— `D-30` 的干净输入。"""
+    return [c for c in (rows or [])
+            if str(c.get('domain') or '').lower().endswith(SITE_COOKIE_DOMAIN)]
+
+
+def dom_login_state(dom: dict) -> dict:
+    """DOM 登录判据（**正证据**）：头像 / 昵称 / 用户菜单 / 退出登录 任一命中 ⇒ 已登录。
+
+    为什么不能用「Cookie 差集非空」：2026-10-02 首次 B0 在**无人操作**的 9s 内自报登录成功 ——
+    差集命中的是 `flow_cur_user_sec_id` / `flow_user_country`（**匿名态**也会被站点种下），
+    且其中还混着 Edge 自家的 `msn.cn` Cookie。⇒ 只认「**登录后才可能出现**」的 DOM 信号；
+    「登录 / 注册」入口只作诊断字段（登录态下它可能仍存在，故不参与判定）。
+    """
+    positive = {'avatar': len(dom.get('avatar') or []),
+                'nickname': len(dom.get('nickname') or []),
+                'user_menu': len(dom.get('user_menu') or []),
+                'logout': len(dom.get('logout_entry') or [])}
+    return {'logged_in': any(positive.values()),
+            'hits': {key: value for key, value in positive.items() if value},
+            'login_entry_count': len(dom.get('login_entry') or []),
+            'scan_ok': bool(dom.get('ok'))}
+
+
+def auth_cookie_hits(rows) -> list[str]:
+    """站点域 Cookie 名 ∩ `AUTH_COOKIE_NAMES`（**实测白名单**，见常量注释）。"""
+    return sorted({str(c.get('name')) for c in (rows or [])} & AUTH_COOKIE_NAMES)
+
+
+def login_state(rows, dom: dict) -> dict:
+    """B0 登录判据（**两腿并联**，任一成立即算已登录）：
+
+    ① **DOM 正证据**（`dom_login_state`）—— 语义最硬，但**豆包默认视口下不可见**（会漏检）；
+    ② **鉴权 Cookie 白名单**（`auth_cookie_hits` ≥ `AUTH_COOKIE_MIN`）—— 2026-10-02 实测：
+       登录后多出 `sessionid` / `sid_guard` / `uid_tt` / `passport_auth_status` … 整套鉴权名，
+       而**匿名态一个都不含** ⇒ 比原来「差集非空」紧得多（差集对着的是 Edge 自家 Cookie 噪声）。
+    ⚠️ 白名单是**站点版本相关**的实测归纳（非规范）：站点改版若失效，先看诊断脚本转储再改名单。
+    """
+    dom_state = dom_login_state(dom)
+    hits = auth_cookie_hits(rows)
+    auth_ok = len(hits) >= AUTH_COOKIE_MIN
+    return {'logged_in': bool(dom_state['logged_in'] or auth_ok),
+            'dom': dom_state, 'auth_cookie_hits': hits, 'auth_cookie_ok': auth_ok}
 
 
 async def attach_probe(tab, name: str) -> dict:
@@ -243,7 +416,10 @@ def classify(scan_data: dict) -> str:
         return 'file_input'
     if scan_data.get('drop_zones'):
         return 'drop_zone'
-    if any(item.get('contenteditable') for item in (scan_data.get('editors') or [])):
+    # ⚠️ 2026-10-02 纠错：登录后 composer 是 **`textarea`**（未登录才是 ProseMirror `div`）——
+    # 原来只认 `contenteditable`，撞上 textarea 会误判成 `none`（B2 实测）。
+    if any(item.get('contenteditable') or str(item.get('tag') or '').lower() == 'textarea'
+           for item in (scan_data.get('editors') or [])):
         return 'paste_only'
     return 'none'
 
@@ -273,74 +449,143 @@ async def open_site(browser):
 
 
 def make_fixture() -> pathlib.Path:
-    """纯图无字夹具（B3 判别「真视觉 vs OCR」用）：1×1 纯红 PNG，**不含任何文字**。"""
+    """纯图无字夹具（B3 判别「真视觉 vs OCR」用）：**256×256 纯红方块** PNG，不含任何文字。
+
+    ⚠️ 2026-10-02 纠错：原先用 **1×1** 纯红 PNG，豆包答「**完全纯白色**……没有任何图案」——
+    **颜色判错**，怀疑 1×1 是**退化输入**（图像管线 / 视觉编码器把它当空白）⇒ 换成 256×256
+    明确色块（同为空/无字，但尺寸与色值都能被明确判别），文件名带尺寸以免复用旧夹具。
+    """
     FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
     if not IMAGE_FIXTURE.exists():
         IMAGE_FIXTURE.write_bytes(base64.b64decode(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=='))
+            'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAACAElEQVR42u3TQQ0AAAgDsSmZf1GI4Y0G'
+            'mlTBJZdp4a1IgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAA'
+            'MAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAADKACBgADgAHAAGAAMAAY'
+            'AAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAY'
+            'AAwABgADgAHAAGAAMAAYAAwABgADgAEwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAG'
+            'AAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADIAB'
+            'VMAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOA'
+            'AcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwAAYAA4ABwABgADAAGAAMAAYAA4ABwABg'
+            'ADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABg'
+            'ADAAGAAMANcCsfoQaa+PEUQAAAAASUVORK5CYII='))
     return IMAGE_FIXTURE
 
 
 # ------------------------------------------------------------------- B0 登录 --
 async def phase_login(args, report: dict) -> None:
-    """B0：headful 开窗 → **用户手动登录** → 前后快照（`D-30` 证据）→ 优雅退出 → 重启复读。"""
+    """B0：headful 开窗 → **用户手动登录** → **DOM 正证据**判定 → 快照（`D-30` 证据）→ 优雅退出 → 重启复读。
+
+    ⚠️ 判据是 **DOM 正证据**（头像 / 昵称 / 用户菜单 / 退出登录，需连续 `LOGIN_STABLE_POLLS` 次命中），
+    **不是**「Cookie 差集非空」—— 后者在 2026-10-02 首次 B0 造成**误报**（见 `dom_login_state` 注释）。
+    Cookie 只作 `D-30` 证据，且**按站点域过滤**（`SITE_COOKIE_DOMAIN`）。
+    """
     for attempt in (1, 2):
         label = '登录' if attempt == 1 else '重启复读'
-        browser = Chrome(options=common.options(headless=False))
+        browser = common.browser_class()(
+            options=common.options(headless=False, extra_args=SITE_WINDOW_ARGS))
         try:
             tab = await open_site(browser)
             proof = await common.assert_read_path(tab)  # 读回自证（否则一切读数不可信）
             print(f'[B0/{label}] 读回自证 = {proof or "（失败）"}')
             if attempt == 1:
                 scan_before = await scan(tab)
-                rows_before = await cookie_snapshot(tab)
+                all_before = await cookie_snapshot(tab)
+                rows_before = site_cookies(all_before)
+                dom_before = await login_scan(tab)
+                state_before = login_state(rows_before, dom_before)
                 report['login'] = {
                     'readback_self_proof': proof,
                     'url': scan_before.get('url'), 'title': scan_before.get('title'),
+                    'cookie_domain_filter': SITE_COOKIE_DOMAIN,
                     'cookie_rows_before': rows_before,
                     'cookie_names_before': names_of(rows_before),
+                    'cookie_rows_all_before': all_before,
+                    'cookie_all_names_before': names_of(all_before),
+                    'dom_before': dom_before, 'dom_state_before': state_before,
+                    'auth_cookie_hits_before': state_before['auth_cookie_hits'],
+                    'already_logged_in_at_start': state_before['logged_in'],
                     'composer_before': len(scan_before.get('editors') or []),
                     'login_timeout_s': args.login_timeout,
+                    'criterion': ('两腿并联（任一成立）—— ① DOM 正证据 avatar/nickname/user_menu/logout；'
+                                  f'② 鉴权 Cookie 白名单 ≥ {AUTH_COOKIE_MIN} 个；均需连续 '
+                                  f'{LOGIN_STABLE_POLLS} 次命中'),
                 }
-                print(f'[B0/登录] 登录前：Cookie {len(rows_before)} 条 {names_of(rows_before)}；'
-                      f'输入框候选 {report["login"]["composer_before"]} 个')
+                print(f'[B0/登录] 登录前：站点 Cookie {len(rows_before)} 条 '
+                      f'{names_of(rows_before)}（全库 {len(all_before)} 条）；'
+                      f'输入框候选 {report["login"]["composer_before"]} 个；'
+                      f'DOM 正证据 {state_before["dom"]["hits"] or "无"} / '
+                      f'鉴权 Cookie {state_before["auth_cookie_hits"]} / '
+                      f'登录入口 {state_before["dom"]["login_entry_count"]} 个 → '
+                      f'起始已登录 = {state_before["logged_in"]}')
                 print('[B0/登录] 请在窗口里手动登录（不代填密码、不绕验证码）……')
                 started = time.monotonic()
                 logged = False
+                stable = 0
+                last: dict = {}
                 while time.monotonic() - started < args.login_timeout:
                     await asyncio.sleep(3.0)
-                    now = await scan(tab)
-                    rows = await cookie_snapshot(tab)
+                    dom = await login_scan(tab)
+                    rows = site_cookies(await cookie_snapshot(tab))
+                    state = login_state(rows, dom)
+                    stable = stable + 1 if state['logged_in'] else 0
+                    last = {'dom': dom, 'state': state}
                     fresh = sorted(set(names_of(rows)) - set(names_of(rows_before)))
-                    composer = len(now.get('editors') or [])
-                    print(f'[B0/登录] {int(time.monotonic() - started):4d}s：Cookie {len(rows)} 条'
-                          f'（新增 {fresh}）/ 输入框 {composer} 个')
-                    if fresh and composer > 0:
+                    now = await scan(tab)
+                    print(f'[B0/登录] {int(time.monotonic() - started):4d}s：DOM 正证据 '
+                          f'{state["dom"]["hits"] or "无"} / 鉴权 Cookie '
+                          f'{len(state["auth_cookie_hits"])} 个{state["auth_cookie_hits"][:3]}'
+                          f'（连续命中 {stable}）/ 登录入口 {state["dom"]["login_entry_count"]} 个 / '
+                          f'站点 Cookie {len(rows)} 条（新增 {len(fresh)}）/ '
+                          f'输入框 {len(now.get("editors") or [])} 个')
+                    if stable >= LOGIN_STABLE_POLLS:  # 正证据连续命中 → 判定已登录
                         logged = True
                         report['login'].update({
+                            'dom_after': dom, 'dom_state_after': state,
                             'cookie_rows_after': rows, 'cookie_names_after': names_of(rows),
-                            'new_cookie_names': fresh, 'composer_after': composer,
+                            'new_cookie_names': fresh,
+                            'composer_after': len(now.get('editors') or []),
                             'login_wait_s': int(time.monotonic() - started)})
-                        print(f'[B0/登录] ✅ 检测到登录成功（新增 Cookie {fresh}）')
+                        print(f'[B0/登录] ✅ 登录判据连续 {stable} 次命中（DOM '
+                              f'{state["dom"]["hits"] or "无"} / 鉴权 Cookie '
+                              f'{state["auth_cookie_hits"]}）→ 判定已登录（等 '
+                              f'{int(time.monotonic() - started)}s）')
                         break
                 report['login']['logged_in_detected'] = logged
                 if not logged:
-                    report['login']['note'] = (f'{args.login_timeout}s 内未检测到登录成功：'
-                                               'Cookie 名未新增或输入框未出现')
+                    report['login']['dom_last'] = last
+                    rows_tail = site_cookies(await cookie_snapshot(tab))
+                    report['login'].update({
+                        'cookie_rows_after': rows_tail,
+                        'cookie_names_after': names_of(rows_tail),
+                        'new_cookie_names': sorted(set(names_of(rows_tail))
+                                                   - set(names_of(rows_before)))})
+                    report['login']['note'] = (
+                        f'{args.login_timeout}s 内 DOM 未出现登录正证据（头像 / 昵称 / 用户菜单 / '
+                        '退出登录）⇒ 判定为**未登录**（**不**采信 Cookie 差集）')
                     print(f'[B0/登录] ⚠️ {report["login"]["note"]}')
+                    print(f'[B0/登录] （留证）此时站点 Cookie 新增 '
+                          f'{report["login"]["new_cookie_names"]} —— 与登录无关，不计入判定')
             else:
-                rows = await cookie_snapshot(tab)
+                all_rows = await cookie_snapshot(tab)
+                rows = site_cookies(all_rows)
+                dom = await login_scan(tab)
+                state = login_state(rows, dom)
                 now = await scan(tab)
                 fresh = set(report.get('login', {}).get('new_cookie_names') or [])
                 still = sorted(fresh & set(names_of(rows)))
                 report['relaunch'] = {
-                    'readback_self_proof': proof, 'cookie_count': len(rows),
-                    'cookie_names': names_of(rows), 'new_names_still_present': still,
+                    'readback_self_proof': proof, 'cookie_domain_filter': SITE_COOKIE_DOMAIN,
+                    'cookie_count': len(rows), 'cookie_names': names_of(rows),
+                    'cookie_count_all': len(all_rows), 'new_names_still_present': still,
                     'composer_count': len(now.get('editors') or []),
-                    'still_logged_in': bool(still) and bool(now.get('editors')),
+                    'dom': dom, 'dom_state': state['dom'],
+                    'auth_cookie_hits': state['auth_cookie_hits'],
+                    'still_logged_in': bool(state['logged_in']),
                     'storage_keys': (now.get('storage_keys') or [])[:20],
                 }
-                print(f'[B0/重启复读] Cookie {len(rows)} 条 / 新增名仍在 {still} / '
+                print(f'[B0/重启复读] DOM 正证据 {state["dom"]["hits"] or "无"} / 鉴权 Cookie '
+                      f'{len(state["auth_cookie_hits"])} 个 / '
+                      f'站点 Cookie {len(rows)} 条（全库 {len(all_rows)} / 新增名仍在 {still}）/ '
                       f'输入框 {report["relaunch"]["composer_count"]} 个 → '
                       f'仍登录 = {report["relaunch"]["still_logged_in"]}')
         finally:
@@ -349,7 +594,7 @@ async def phase_login(args, report: dict) -> None:
             print(f'[B0/{label}] 退出：模式 {info.get("mode")} / 等 {info.get("waited_s")}s / '
                   f'退出码 {info.get("exit_code")} / 残留 {len(info.get("strays_after") or [])}')
 
-    # 登录 Cookie 存活口径（`M7B.md` §10 表用）+ `D-30` 差集（喂「cookie_names 优先」判据）
+    # Cookie 存活口径（`M7B.md` §10 表用，**只算站点域**）+ `D-30` 差集（喂「cookie_names 优先」判据）
     login = report.get('login') or {}
     report['cookie_ttl'] = [
         {'name': c.get('name'), 'session': c.get('session'), 'expires': c.get('expires'),
@@ -357,10 +602,13 @@ async def phase_login(args, report: dict) -> None:
         for c in (login.get('cookie_rows_after') or [])
     ]
     report['d30_cookie_names_diff'] = {
+        'domain_filter': SITE_COOKIE_DOMAIN,
         'before': login.get('cookie_names_before') or [],
         'after': login.get('cookie_names_after') or [],
         'new': login.get('new_cookie_names') or [],
-        'note': '登录后新增的 Cookie 名 = 候选 cookie_names（D-30 的豆包证据）',
+        'note': ('登录后新增的**站点域** Cookie 名 = 候选 cookie_names（D-30 的豆包证据）；'
+                 '已按域过滤，Edge 自家的 `msn.cn` / `ntp.msn.cn` **不计入**；'
+                 '⚠️ 差集非空**不等于**已登录（匿名态也会种 `flow_cur_user_sec_id` 等）'),
     }
 
 
@@ -379,6 +627,11 @@ async def phase_recon(tab, hover: bool = False) -> dict:
         if editor_pre:
             center = js_json(await tab.execute_script(composer_center_js(editor_pre)))
             if center.get('ok'):
+                # 先**聚焦** composer（只调 `focus()`：不点击、不写值）—— 部分站点要 focus 才渲染附件工具条
+                await tab.execute_script(
+                    'const el = document.querySelector(' + json.dumps(editor_pre) + ');'
+                    'if (el && el.focus) { el.focus(); } return "focus-ok";')
+                await asyncio.sleep(0.3)
                 await tab.mouse.move(int(center.get('x', 0)), int(center.get('y', 0)))
                 await asyncio.sleep(0.5)
                 await tab.mouse.move(int(center.get('x', 0)) + 10, int(center.get('y', 0)) - 8)
@@ -496,14 +749,21 @@ async def phase_inject(tab, recon: dict, args) -> dict:
     logs = await tab.get_network_logs()
     new_logs = logs[mark:]
     uploads = []
+    urls_heuristic = []          # 只按 URL 子串命中的**候选**（含静态资源，仅供人工核）
     for entry in new_logs:
         request = (entry.get('params') or {}).get('request') or {}
         url = str(request.get('url') or '')
         if any(hint in url.lower() for hint in UPLOAD_HINTS):
-            uploads.append({
+            row = {
                 'url': url[:200], 'method': request.get('method') or '',
                 'has_post_data': bool(request.get('postData')),
-                'resource_type': (entry.get('params') or {}).get('type')})
+                'resource_type': (entry.get('params') or {}).get('type')}
+            urls_heuristic.append(row)
+            # ⚠️ 2026-10-02 纠错：原来只按 URL 子串就记成「上传请求」⇒ 把 `…attachment-action-host.css`
+            # / 图标 `Image` 之类的 **GET 静态资源**当成上传回执（B2 实测假阳性）。
+            # 现在**必须**是 POST 或带 postData 才算「真上传回执」。
+            if row['method'].upper() == 'POST' or row['has_post_data']:
+                uploads.append(row)
     after = await attach_probe(tab, image.name)
     if target_file:
         injected_files = common.js_text(await tab.execute_script(
@@ -513,6 +773,9 @@ async def phase_inject(tab, recon: dict, args) -> dict:
                (int(after.get('attach_nodes') or 0) - int(before.get('attach_nodes') or 0)) > 0)
     return {'entry_kind': kind, 'mode': mode, 'image': str(image), 'image_bytes': size,
             'steps': steps, 'network_new_total': len(new_logs), 'upload_requests': uploads,
+            'upload_urls_heuristic': urls_heuristic[:20],
+            'upload_evidence_note': ('`upload_requests` = **POST / 带 postData** 的真上传回执；'
+                                     '`upload_urls_heuristic` = 仅 URL 子串命中的候选（含静态资源）'),
             'attach_before': before, 'attach_after': after, 'file_input_files': injected_files,
             'injected_ok': page_ok, 'capture_s': args.capture_s}
 
@@ -541,11 +804,18 @@ async def phase_send(tab, recon: dict, inject: dict, args) -> dict:
     await tab.execute_script('document.querySelector(' + json.dumps(editor) + ').focus();')
     await tab.keyboard.type_text(args.prompt)  # humanize 逐字（M7B-05 实测 154 ms/字符）
     baseline = common.js_text(await tab.execute_script('return String(document.body.innerText.length);'))
+    # ⚠️ 2026-10-02 实测：**发送按钮常在输入框有内容之后才渲染**（侦察那一刻的 DOM 里没有）
+    # ⇒ 输入完**再扫一次**，命中就点击，否则退到 Enter。
+    if not send_target:
+        await asyncio.sleep(0.8)
+        after = await scan(tab)
+        send_target = pick_send_target({'attach_hints': after.get('attach_hints') or []})
+        out['send_target_after_typing'] = send_target
     if send_target:
         await tab.execute_script('document.querySelector(' + json.dumps(send_target) + ').click();',
                                  user_gesture=True)
     else:
-        await tab.keyboard.press('Enter')  # 兜底：Enter 发送
+        out['enter_press'] = await common.press_key(tab, 'Enter')  # 兜底：Enter 发送
     out.update({'editor': editor, 'send_target': send_target or 'Enter(键盘)',
                 'prompt': args.prompt, 'baseline_len': baseline})
 
@@ -584,23 +854,31 @@ def verdict_of(report: dict) -> dict:
                                     ('file_input', 'drop_zone', 'paste_only', 'none'),
         'B1_has_file_input': recon.get('entry_kind') == 'file_input',
         'B1_composer_found': bool(recon.get('editors')),
-        'B0_login_detected': login.get('logged_in_detected'),
+        'B0_login_detected': login.get('logged_in_detected'),  # 判据 = DOM 正证据 或 鉴权 Cookie 白名单
+        'B0_login_dom_positive': bool(((login.get('dom_state_after') or {}).get('dom') or {}).get('hits')),
+        'B0_login_auth_cookie_ok': bool((login.get('dom_state_after') or {}).get('auth_cookie_ok')),
+        'B0_login_entry_present': bool(((login.get('dom_state_after') or {}).get('dom')
+                                        or {}).get('login_entry_count')),
         'B0_d30_diff_nonempty': bool((report.get('d30_cookie_names_diff') or {}).get('new')),
         'B0_relaunch_still_logged_in': (report.get('relaunch') or {}).get('still_logged_in'),
         'B2_injected_ok': inject.get('injected_ok'),
         'B2_upload_request_seen': bool(inject.get('upload_requests')) if inject else None,
         'B3_sent': send.get('sent') if send else None,
+        'env_browser_kind': (report.get('env') or {}).get('browser_kind') in ('chrome', 'edge'),
     }
 
 
 # ------------------------------------------------------------------- 主流程 --
 async def run(args) -> dict:
     report: dict = {'site': SITE_ID, 'site_url': SITE_URL, 'argv': sys.argv[1:],
+                    'env': common.env_proof(),  # 环境物证（换机可追溯）
                     'started': time.strftime('%Y-%m-%d %H:%M:%S')}
+    print(f'[环境] {report["env"]}')
     if args.login:
         await phase_login(args, report)  # B0（自带开窗与收尾）
     if args.recon or args.inject or args.send:
-        browser = Chrome(options=common.options(headless=False))
+        browser = common.browser_class()(
+            options=common.options(headless=False, extra_args=SITE_WINDOW_ARGS))
         try:
             tab = await open_site(browser)
             report['recon'] = await phase_recon(tab, hover=args.hover_composer)  # B1
@@ -625,8 +903,9 @@ async def selftest() -> int:
     # 自检用**独立临时 profile**：避免与真站点侦察/主程序共用一个 profile（单 profile 不能并发，
     # 并发时后启动者会 `Browser failed to start within timeout` —— 本探针实测踩到过）。
     temp_profile = pathlib.Path(tempfile.gettempdir()) / 'm7b28-selftest-profile'
+    print(f'[自检] 环境：{common.env_proof()}')
     with LocalServer() as server:
-        browser = Chrome(options=common.options(headless=True, profile=temp_profile))
+        browser = common.browser_class()(options=common.options(headless=True, profile=temp_profile))
         try:
             tab = await browser.start()
             await tab.go_to(f'http://127.0.0.1:{server.port}/page?mode=drive')

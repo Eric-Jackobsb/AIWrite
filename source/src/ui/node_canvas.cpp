@@ -46,6 +46,19 @@ bool               g_first_frame         = true;
 bool               g_drag_in_progress    = false; // 一次拖拽只压一次快照
 bool               g_delete_in_progress  = false; // 一次删除批次只压一次快照
 
+// --------------------------------------------- 画布按键绑定（imgui-node-editor）---
+// imgui-node-editor v0.9.3 的 Config 默认值（third_party/.../imgui_node_editor.h:120-123）：
+//   DragButtonIndex = 0（左键拖节点）· SelectButtonIndex = 0（左键框选）
+//   NavigateButtonIndex = 1（右键平移）· ContextMenuButtonIndex = 1（右键菜单）
+// 本项目**不改 third_party 源码**，只在「Alt 按住」期间用公开 API `ed::GetConfig()`
+// 临时改写绑定：平移键 → 左键；拖节点 / 框选 → 中键位（2，本项目用不到中键）。
+// 于是 Alt+左键拖拽**只平移**，不会顺手移动节点或拉出框选矩形；Alt 一松开立即还原。
+constexpr int kNodeEditorDragButton   = ImGuiMouseButton_Left;   // 0：左键拖拽节点
+constexpr int kNodeEditorSelectButton = ImGuiMouseButton_Left;   // 0：左键框选
+constexpr int kNodeEditorNavButton    = ImGuiMouseButton_Right;  // 1：右键平移画布
+constexpr int kAltPanParkedButton     = ImGuiMouseButton_Middle; // 2：Alt 期间「拖节点/框选」的停机位
+bool          g_alt_pan_active        = false;                   // 当前是否处于 Alt 平移模式（日志/提示用）
+
 // 颜色（分类 / 端口类型 / 节点状态）统一由 ui/theme.h 提供（设计 §14.3 / §4.5 / §4.6）
 
 // ------------------------------------------------- 稳定手柄映射（id ↔ handle）---
@@ -1066,6 +1079,42 @@ void log_wrap_selftest()
               (worst <= g_content_width + 0.5f ? "全部收口 ✅" : "有行超宽 ❌"));
 }
 
+// --------------------------------- Alt + 左键拖拽平移（新增：无中键 / 笔记本可用）----
+// 原理：imgui-node-editor 的平移动作每帧读 `Config::NavigateButtonIndex`
+//       （imgui_node_editor.cpp:3326 `ImGui::IsMouseDragging(...NavigateButtonIndex...)`），
+//       所以**在 ed::Begin() 之前**改写它，本帧的平移键就换了。
+// 实现：`ed::GetConfig()`（imgui_node_editor.h:285）返回的是编辑器内部**真实**的 Config
+//       对象（api.cpp:77 → EditorContext::GetConfig()），不是临时副本；其底层
+//       `Detail::Config` 并非 const，因此这里只做「Alt 按下临时改写 → 松开还原」，
+//       既不碰 third_party 源码，也不改变 Alt 未按下时的任何既有行为。
+// 返回：本次是否处于 Alt 平移模式（供调用方做界面提示）。
+bool update_alt_left_pan()
+{
+    const bool alt = ImGui::GetIO().KeyAlt;
+
+    ed::Config& config = const_cast<ed::Config&>(ed::GetConfig(g_context));
+
+    const int want_nav    = alt ? ImGuiMouseButton_Left : kNodeEditorNavButton;
+    const int want_drag   = alt ? kAltPanParkedButton   : kNodeEditorDragButton;
+    const int want_select = alt ? kAltPanParkedButton   : kNodeEditorSelectButton;
+
+    // 已经是目标状态 → 直接返回（幂等：反复进入本函数不会重复写日志）
+    if (config.NavigateButtonIndex == want_nav && config.DragButtonIndex == want_drag &&
+        config.SelectButtonIndex == want_select) {
+        g_alt_pan_active = alt;
+        return alt;
+    }
+
+    config.NavigateButtonIndex = want_nav;
+    config.DragButtonIndex     = want_drag;
+    config.SelectButtonIndex   = want_select;
+    g_alt_pan_active           = alt;
+
+    log::info(alt ? "[画布] 进入 Alt 平移模式：Alt+左键拖拽平移（右键平移 / 左键拖节点·框选暂挂起）"
+                  : "[画布] 退出 Alt 平移模式：恢复右键平移、左键拖节点 / 框选");
+    return alt;
+}
+
 } // namespace
 
 void draw_node_canvas(const char* title, CanvasOptions& options)
@@ -1082,9 +1131,20 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         return;
     }
 
+    // 新增：Alt+左键拖拽平移（Alt 未按下时完全维持原有绑定，见 update_alt_left_pan）。
+    // 放在提示行之前 → 提示能立刻反映本帧的平移模式。
+    g_alt_pan_active = update_alt_left_pan();
+
     ImGui::TextDisabled("输入端口在节点左侧、输出端口在右侧 ｜ 拖左侧圆点连线，类型不符会变红被拒");
     ImGui::SameLine();
     ImGui::TextDisabled("｜ 右键：画布新建 / 节点复制·删除 / 连线删除 ｜ 左键点连线可选中，再点工具栏「删除选中」");
+    if (g_alt_pan_active) {
+        ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f),
+                           "Alt 平移模式：按住左键拖拽即可平移画布（松开 Alt 即恢复拖动节点/框选）");
+    } else {
+        ImGui::TextDisabled(
+            "Alt + 左键拖拽：平移画布（无中键鼠标 / 笔记本也可用）｜ 滚轮：以鼠标为中心缩放 0.1x~4.0x");
+    }
     ImGui::Separator();
 
     ed::SetCurrentEditor(g_context);

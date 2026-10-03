@@ -1,0 +1,28 @@
+# AIWrite · Python 侧依赖清单（M7B 网页通道 · Pydoll）
+# ──────────────────────────────────────────────────────────────────────────
+# 生成：`python\.venv\Scripts\python.exe -m pip freeze`（2026-10-02 · 换机环境重建）
+# 解释器：Python **3.12.10**（Python Install Manager 并行安装，`PrependPath=0` → 不动全局 PATH）
+# 依据：`docs/actionPlan/M7B.md` §11.1 环境登记；`.venv` 由 `.gitignore` 忽略，本文件**入库**
+# 安装：`py -3.12 -m venv python\.venv` →
+#       `python\.venv\Scripts\python.exe -m pip install -r python\requirements.txt`
+#
+# ⚠️ **钉版理由**：`pydoll-python==2.27.0` 与旧机（2026-09-2x）9 个探针物证**同构**，
+#    探针/主管道依赖 5 处私有 API；`3.0.0`（2026-09-29 发布）是**破坏性大版本**，
+#    升级前必须先跑 `python\_probe\m7b28_doubao_recon.py --selftest` 复核（`M7B-12`）。
+aiofiles==25.1.0
+aiohappyeyeballs==2.7.1
+aiohttp==3.14.3
+aiosignal==1.4.0
+annotated-types==0.8.0
+attrs==26.1.0
+frozenlist==1.8.0
+idna==3.20
+multidict==6.9.1
+propcache==0.5.4
+pydantic==2.13.5
+pydantic_core==2.46.5
+pydoll-python==2.27.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+websockets==16.1.1
+yarl==1.25.1

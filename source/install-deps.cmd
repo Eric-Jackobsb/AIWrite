@@ -1,11 +1,11 @@
 @echo off
 rem ============================================================================
-rem  install-deps.cmd —— 一次性预装 vcpkg 依赖（全部写到 F: 盘，避免占用 C 盘）
+rem  install-deps.cmd —— 一次性预装 vcpkg 依赖（缓存/安装树写在仓库根目录，避免污染 C:\dev\vcpkg）
 rem
 rem  说明：
-rem    * vcpkg 工具复用 C:\dev\vcpkg（2024-04-23 版）
+rem    * vcpkg 工具复用 C:\dev\vcpkg（本地 clone；依赖版本由 vcpkg.json 的 builtin-baseline 决定）
 rem    * --x-install-root / --x-buildtrees-root / --x-packages-root / --downloads-root
-rem      全部重定向到 F:\GameDao\Tools\AIwrite\ 下
+rem      全部重定向到 %AIWRITE_ROOT%\ 下（vcpkg-cache\ / vcpkg-installed\）
 rem    * 之后 CMake 配置时命中二进制缓存，不会在 C:\dev\vcpkg 下重新编译
 rem ============================================================================
 setlocal
@@ -16,6 +16,17 @@ set "VCPKG_ROOT=C:\dev\vcpkg"
 set "VCPKG_DOWNLOADS=%AIWRITE_ROOT%\vcpkg-cache\downloads"
 set "VCPKG_DEFAULT_BINARY_CACHE=%AIWRITE_ROOT%\vcpkg-cache\binary"
 set "VCPKG_DEFAULT_TRIPLET=x64-windows"
+
+rem ---------------------------------------------------------------------------
+rem  目录预建：全新 clone 时这些目录并不存在，而 vcpkg 会校验
+rem  VCPKG_DEFAULT_BINARY_CACHE 必须是已存在的目录（否则直接报错退出）。
+rem  dev.ps1 会建同样这几个目录，但 install-deps.cmd 是独立入口，必须自建。
+rem ---------------------------------------------------------------------------
+if not exist "%VCPKG_DOWNLOADS%" mkdir "%VCPKG_DOWNLOADS%"
+if not exist "%VCPKG_DEFAULT_BINARY_CACHE%" mkdir "%VCPKG_DEFAULT_BINARY_CACHE%"
+if not exist "%AIWRITE_ROOT%\vcpkg-cache\buildtrees" mkdir "%AIWRITE_ROOT%\vcpkg-cache\buildtrees"
+if not exist "%AIWRITE_ROOT%\vcpkg-cache\packages" mkdir "%AIWRITE_ROOT%\vcpkg-cache\packages"
+if not exist "%AIWRITE_ROOT%\vcpkg-installed" mkdir "%AIWRITE_ROOT%\vcpkg-installed"
 
 rem ---------------------------------------------------------------------------
 rem  CMake 版本策略（避免 "Compatibility with CMake < 3.5 has been removed"）：
@@ -43,9 +54,22 @@ if not exist "%AIWRITE_ROOT%\third_party\cmake-3.31.6\bin\cmake.exe" (
   echo [install-deps]       解决办法见上面的注释（triplet 注入 CMAKE_POLICY_VERSION_MINIMUM）。
 )
 
-echo [install-deps] 导入 MSVC 环境...
-call "D:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Auxiliary\Build\vcvars64.bat" >nul
-if errorlevel 1 echo [install-deps] 警告: vcvars64 失败，继续尝试
+echo [install-deps] 定位 MSVC 环境（vswhere 动态查找，不写死 VS 版本/盘符）...
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+if not exist "%VSWHERE%" set "VSWHERE=%ProgramFiles%\Microsoft Visual Studio\Installer\vswhere.exe"
+set "VSTMP=%TEMP%\aiwrite_vswhere.txt"
+if exist "%VSTMP%" del "%VSTMP%" >nul
+set "VSROOT="
+if exist "%VSWHERE%" "%VSWHERE%" -latest -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath > "%VSTMP%"
+if exist "%VSTMP%" for /f "usebackq delims=" %%i in ("%VSTMP%") do set "VSROOT=%%i"
+if not defined VSROOT set "VSROOT=C:\Program Files\Microsoft Visual Studio\18\Community"
+set "VCVARS=%VSROOT%\VC\Auxiliary\Build\vcvars64.bat"
+echo [install-deps] MSVC: %VCVARS%
+if exist "%VCVARS%" (
+  call "%VCVARS%" >nul
+) else (
+  echo [install-deps] 警告: 未找到 vcvars64.bat，继续尝试（端口构建可能失败）
+)
 
 echo [install-deps] 开始安装 manifest 依赖 (x64-windows) ...
 "%VCPKG_ROOT%\vcpkg.exe" install ^

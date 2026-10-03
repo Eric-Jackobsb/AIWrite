@@ -2,6 +2,11 @@
 //  AIwrite 主程序入口（M1：技术验证 + 项目骨架）
 //  GUI 程序（/SUBSYSTEM:WINDOWS + mainCRTStartup），启动时初始化日志与配置目录
 // =============================================================================
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>   // M7B 批 1 step 2：--pipe-selftest（CreateProcessW / WaitForSingleObject）
+
 #include "ui/app.h"
 #include "ui/editor_state.h"
 #include "ui/output_panel.h"
@@ -16,11 +21,13 @@
 #include "utils/log.h"
 #include "utils/paths.h"
 #include "web/webview_host.h"
+#include "web/pipe_client.h"      // M7B 批 1 step 2：命名管道客户端（--pipe-selftest / M7B-02）
 #include "web/session_store.h"   // M_patchB：--provider-selftest 的网页版登录态检查
 
 #include <cstdio>
 #include <cstdlib>
 #include <chrono>
+#include <atomic>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -71,6 +78,11 @@ void print_usage()
     std::printf("                   网页版条目 → 只检查登录态与端点一致性（不发送内容）\n");
     std::printf("                   退出码 0=通过 / 1=失败 / 2=缺 Key 或未登录（离线部分已通过）\n");
     std::printf("  --provider-dump  打印生效的 Provider 配置表（含来源与覆盖链）\n");
+    std::printf("  --pipe-selftest [--timeout <秒>]\n");
+    std::printf("                   M7B-02 命名管道冒烟：起 Python 守护进程（brain_ai_browser --serve）\n");
+    std::printf("                   → hello → 校验 ready{proto, python, browser} → shutdown\n");
+    std::printf("                   退出码 0=通过 / 1=失败 / 2=环境缺失（找不到 Python 或包目录）\n");
+
     std::printf("  --help           显示本帮助\n");
 }
 
@@ -775,6 +787,232 @@ int web_chat_selftest(const std::string& prompt)
     return pass ? 0 : 1;
 }
 
+// ============================================================================
+//  --pipe-selftest：M7B-02 命名管道冒烟（**1 命令 + 1 事件**）
+//
+//  * 起 Python 守护进程（`brain_ai_browser --serve --once`）→ 连管道 → `hello`
+//    → 校验 `ready{proto, python, browser}` → `shutdown` → 收 `stage{close}`
+//    → **等进程退出**（`I23①` 口径：等进程退出，不强杀）
+//  * 退出码：0=通过 / 1=失败 / 2=环境缺失（找不到 Python 解释器或包目录）
+//  * 本函数末尾的「必要时强杀」只是**自检收尾**；生产路径**禁止**以强杀当启动/关闭手段
+//    （§13 / `MB-D0-8` L3）
+// ============================================================================
+int pipe_selftest(int timeout_ms)
+{
+    namespace fs = std::filesystem;
+    const auto   to_wide = [](const std::string& text) -> std::wstring {
+        if (text.empty()) {
+            return {};
+        }
+        const int size = ::MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
+                                               static_cast<int>(text.size()), nullptr, 0);
+        if (size <= 0) {
+            return {};
+        }
+        std::wstring wide(static_cast<std::size_t>(size), L'\0');
+        ::MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()),
+                              wide.data(), size);
+        return wide;
+    };
+    const auto text_field = [](const nlohmann::json& object, const char* key) -> std::string {
+        if (object.is_object() && object.contains(key) && object[key].is_string()) {
+            return object[key].get<std::string>();
+        }
+        return "?";
+    };
+
+    // ---- ① 包目录：<仓库根>/python（开发期）→ <exe>/python（部署期，M7B-11 拷贝）----
+    std::vector<fs::path> package_candidates;
+#ifdef AIWRITE_SOURCE_DIR
+    // AIWRITE_SOURCE_DIR = <仓库根>/source ⇒ 上一级即仓库根（python/ 在仓库根下）
+    package_candidates.emplace_back(fs::path(AIWRITE_SOURCE_DIR).parent_path() / "python");
+#endif
+    package_candidates.emplace_back(aiwrite::paths::exe_dir() / "python");
+    fs::path package_dir;
+    for (const fs::path& candidate : package_candidates) {
+        if (fs::exists(candidate / "brain_ai_browser" / "__main__.py")) {
+            package_dir = candidate;
+            break;
+        }
+    }
+    if (package_dir.empty()) {
+        std::printf("[管道自检] 环境缺失（退出码 2）：找不到 brain_ai_browser 包目录\n");
+        for (const fs::path& candidate : package_candidates) {
+            std::printf("   候选：%s\n", candidate.string().c_str());
+        }
+        return 2;
+    }
+
+    // ---- ② 解释器：`.venv` 优先 → 退回 PATH 上的 python.exe ----
+    fs::path python_exe;
+    const fs::path venv_candidates[] = {package_dir / ".venv" / "Scripts" / "python.exe",
+                                        aiwrite::paths::exe_dir() / "python" / ".venv" /
+                                            "Scripts" / "python.exe"};
+    for (const fs::path& candidate : venv_candidates) {
+        if (fs::exists(candidate)) {
+            python_exe = candidate;
+            break;
+        }
+    }
+    const std::string python_text =
+        python_exe.empty() ? std::string("python.exe") : python_exe.string();
+
+    // ---- ③ 起守护进程（stdout/stderr → <日志目录>/pipe_selftest_daemon.log）----
+    const std::string pipe_name =
+        std::string("aiwrite-browser-selftest-") + std::to_string(::GetCurrentProcessId());
+    const fs::path log_path = aiwrite::paths::logs_dir() / "pipe_selftest_daemon.log";
+
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength        = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    HANDLE log_handle = ::CreateFileW(to_wide(log_path.string()).c_str(), GENERIC_WRITE,
+                                      FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, CREATE_ALWAYS,
+                                      FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (log_handle == INVALID_HANDLE_VALUE) {
+        std::printf("[管道自检] 环境缺失（退出码 2）：无法创建守护进程日志 %s\n",
+                    log_path.string().c_str());
+        return 2;
+    }
+    // 子进程 stdin 指向 NUL（自检不喂输入；避免部分 Python 构建对空句柄敏感）
+    HANDLE nul_handle =
+        ::CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ, &sa, OPEN_EXISTING, 0, nullptr);
+
+    std::wstring command = L"\"" + to_wide(python_text) +
+                           L"\" -m brain_ai_browser --serve --once --pipe-name " +
+                           to_wide(pipe_name) + L" --idle-timeout 20";
+    STARTUPINFOW si{};
+    si.cb          = sizeof(si);
+    si.dwFlags     = STARTF_USESTDHANDLES;
+    si.hStdInput   = nul_handle;
+    si.hStdOutput  = log_handle;
+    si.hStdError   = log_handle;
+    PROCESS_INFORMATION pi{};
+    const std::wstring  work_dir = to_wide(package_dir.string());
+
+    const BOOL spawned = ::CreateProcessW(nullptr, command.data(), nullptr, nullptr, TRUE,
+                                          CREATE_NO_WINDOW, nullptr,
+                                          work_dir.empty() ? nullptr : work_dir.c_str(), &si, &pi);
+    const DWORD spawn_error = spawned ? 0 : ::GetLastError();
+    ::CloseHandle(log_handle);
+    if (nul_handle != INVALID_HANDLE_VALUE) {
+        ::CloseHandle(nul_handle);
+    }
+    if (spawned == 0) {
+        std::printf("[管道自检] %s：无法启动守护进程（%lu，解释器 %s）\n",
+                    spawn_error == ERROR_FILE_NOT_FOUND ? "环境缺失（退出码 2）" : "FAIL",
+                    static_cast<unsigned long>(spawn_error), python_text.c_str());
+        std::printf("   提示：在 %s 下建虚拟环境（python -m venv .venv && .venv\\Scripts\\pip "
+                    "install -r requirements.txt）\n",
+                    package_dir.string().c_str());
+        return spawn_error == ERROR_FILE_NOT_FOUND ? 2 : 1;
+    }
+    ::CloseHandle(pi.hThread);
+
+    // 自检收尾（**非生产口径**）：先等进程退出，超时才强杀
+    const auto reap_child = [&pi](int wait_ms) -> int {
+        if (::WaitForSingleObject(pi.hProcess, static_cast<DWORD>(wait_ms)) == WAIT_TIMEOUT) {
+            std::printf("[管道自检] 守护进程未在 %d ms 内退出 → 自检收尾强杀"
+                        "（生产路径禁止此手段，见 §13）\n",
+                        wait_ms);
+            ::TerminateProcess(pi.hProcess, 1);
+            ::WaitForSingleObject(pi.hProcess, 3000);
+        }
+        DWORD code = 0;
+        ::GetExitCodeProcess(pi.hProcess, &code);
+        ::CloseHandle(pi.hProcess);
+        return static_cast<int>(code);
+    };
+    // 失败诊断：打印守护进程日志尾部（stdout/stderr 都重定向到这里）
+    const auto dump_log_tail = [&log_path](int lines) {
+        std::ifstream stream(log_path, std::ios::binary);
+        if (!stream) {
+            return;
+        }
+        std::vector<std::string> tail;
+        std::string              line;
+        while (std::getline(stream, line)) {
+            tail.push_back(std::move(line));
+            if (tail.size() > static_cast<std::size_t>(lines)) {
+                tail.erase(tail.begin());
+            }
+        }
+        std::printf("---- 守护进程日志尾部（%s）----\n", log_path.string().c_str());
+        for (const std::string& text : tail) {
+            std::printf("  %s\n", text.c_str());
+        }
+    };
+
+    // ---- ④ 连管道 → 1 命令（hello）→ 1 事件（ready）----
+    std::atomic<bool> closing_seen{false};
+    aiwrite::web::PipeClient client;
+    client.on_event([&closing_seen](const aiwrite::web::channel::Frame& frame) {
+        std::printf("[事件] %-10s id=%-3s %s\n", frame.name.c_str(), frame.id.c_str(),
+                    frame.payload_json.c_str());
+        if (frame.kind == "evt" && frame.name == "stage" &&
+            frame.payload_json.find("\"close\"") != std::string::npos) {
+            closing_seen.store(true);
+        }
+    });
+
+    std::string error;
+    if (!client.connect(pipe_name, timeout_ms, &error)) {
+        std::printf("[管道自检] FAIL 连接守护进程失败：%s\n", error.c_str());
+        client.close();
+        const int code = reap_child(3000);
+        std::printf("[管道自检] 守护进程退出码 = %d\n", code);
+        dump_log_tail(15);
+        return 1;
+    }
+    std::printf("[管道自检] 已连接 %s\n", pipe_name.c_str());
+
+    nlohmann::json ready;
+    const bool     hello_ok = client.call("hello", nlohmann::json::object(), &ready, 5000, &error);
+    const std::string proto_text =
+        (ready.is_object() && ready.contains("proto") && ready["proto"].is_number_integer())
+            ? std::to_string(ready["proto"].get<int>())
+            : std::string("?");
+    if (hello_ok) {
+        std::printf("[管道自检] ready：proto=%s python=%s browser=%s\n", proto_text.c_str(),
+                    text_field(ready, "python").c_str(), text_field(ready, "browser").c_str());
+    } else {
+        std::printf("[管道自检] FAIL hello 失败：%s\n", error.c_str());
+    }
+    const bool ready_ok = hello_ok && ready.is_object() && ready.contains("proto") &&
+                          ready["proto"].is_number_integer() &&
+                          ready["proto"].get<int>() == aiwrite::web::channel::kProtoVersion &&
+                          !text_field(ready, "python").empty() &&
+                          text_field(ready, "python") != "?" &&
+                          !text_field(ready, "browser").empty() &&
+                          text_field(ready, "browser") != "?";
+
+    // ---- ⑤ shutdown → 等 stage{close} 事件（Python → C++ 事件通道）----
+    nlohmann::json shutdown_fields = nlohmann::json::object();
+    shutdown_fields["grace_ms"]    = 500;
+    const bool shutdown_ok = client.send_command("shutdown", shutdown_fields, &error);
+    if (!shutdown_ok) {
+        std::printf("[管道自检] FAIL shutdown 发送失败：%s\n", error.c_str());
+    }
+    for (int i = 0; i < 150 && !closing_seen.load(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    const bool event_ok = closing_seen.load();
+
+    // ---- ⑥ 收尾：关通道 → 等守护进程退出（I23①：等进程退出，不强杀）----
+    client.close();
+    const int  daemon_code = reap_child(timeout_ms);
+    const bool pass        = ready_ok && shutdown_ok && event_ok && daemon_code == 0;
+
+    std::printf("[管道自检] %s（hello→ready=%s / 事件 stage{close}=%s / 守护进程退出码=%d / "
+                "丢弃非法帧=%llu）\n",
+                pass ? "PASS" : "FAIL", ready_ok ? "是" : "否", event_ok ? "是" : "否", daemon_code,
+                static_cast<unsigned long long>(client.dropped_frames()));
+    std::printf("[管道自检] 守护进程日志：%s\n", log_path.string().c_str());
+    if (!pass) {
+        dump_log_tail(15);
+    }
+    return pass ? 0 : 1;
+}
+
 // --web-session-selftest：回归「窗口已打开但内存无凭证」真 bug（2026-09-26）
 //  步骤 1：按**用户手动路径**开登录窗口（probe_after_load=false → 内存里不会有 userToken）
 //  步骤 2：调 web::ensure_session() —— 修复前：只“等” → 25s 超时失败（运行时报「未取得网页版凭证」）
@@ -1093,6 +1331,7 @@ int main(int argc, char** argv)
     bool web_session_selftest_flag = false;
     bool dom_adapter_selftest_flag = false; // L3（PB2-15）：选择器探测 / 诊断
     bool dom_dump_flag             = false; // L4（PB2-29 / v15）：选择器候选枚举
+    bool pipe_selftest_flag        = false; // M7B 批 1 step 2（M7B-02）：命名管道冒烟
     std::string web_chat_prompt;
     bool        vlm_selftest_flag = false;                              // M5-02 图片理解自检
     std::string vlm_image;                                              // --image
@@ -1111,6 +1350,9 @@ int main(int argc, char** argv)
         }
         else if (arg == "--login-selftest") {
             login_selftest = true;
+        }
+        else if (arg == "--pipe-selftest") {
+            pipe_selftest_flag = true;
         }
         else if (arg == "--cred-list") {
             const std::vector<aiwrite::utils::CredentialInfo> items =
@@ -1247,6 +1489,15 @@ int main(int argc, char** argv)
     }
     aiwrite::log::info("数据目录: " + aiwrite::paths::data_root().string());
 
+    // M7B 批 1 step 2（M7B-02）：命名管道冒烟（起 Python 守护进程 → hello → ready → shutdown）
+    if (pipe_selftest_flag) {
+        // --timeout 的口径是**秒**（与 --login-selftest 一致）→ 本函数用毫秒
+        const int code = pipe_selftest(selftest_timeout * 1000);
+        aiwrite::log::info("AIwrite 管道自检退出，返回码 " + std::to_string(code));
+        aiwrite::log::shutdown();
+        return code;
+    }
+
     // 网页版会话自动引导回归（窗口已开但内存无凭证 → ensure_session 应自动补探测）
     if (web_session_selftest_flag) {
         const int session_code = web_session_selftest();
@@ -1329,7 +1580,7 @@ int main(int argc, char** argv)
 #ifdef AIWRITE_SOURCE_DIR
         if (image.empty()) {
             image = (std::filesystem::path(AIWRITE_SOURCE_DIR) / "assets" / "images" /
-                     "sample.png")
+                     "flamingo.png")
                         .string();
         }
 #endif

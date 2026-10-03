@@ -831,11 +831,22 @@
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
                 }
+              },
+              {
+                "key": 200,
+                "children": [],
+                "todo": {
+                  "id": 200,
+                  "content": "FEA-M7-10 网页版图片理解解禁与分派（P7b-16 · 2026-10-02 新增）：VLMGenerate + 生效 mode=web 不再一律 throw，改按 P7b-10~12 链路走网页通道；三处落点必须同批（nodes/local_nodes.cpp:639-645 的 throw → 分派 / engine/provider_resolve.h:91 注释口径 / ui/property_panel.cpp:1082 「网页版已接线」提示扩到图片理解）｜ §12.2 P7b-16 ｜ ⬜ 未开工：前置 = P7b-05b 全段（B0/B2/B3）+ 方案 A 通道（M7B-02/04）+ D11 契约（web.attach / vision 未声明显式确认）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M7.md"
+                }
               }
             ],
             "todo": {
               "id": 165,
-              "content": "M7（9 项）",
+              "content": "M7（10 项）",
               "done": false,
               "level": "secondary"
             }
@@ -1321,7 +1332,18 @@
                 "children": [],
                 "todo": {
                   "id": 199,
-                  "content": "TST-M7-07 方案 B′：网页版图片理解只读侦察（豆包 doubao-web）—— 上传入口 4 类判定（file_input / drop_zone / paste_only / none）+ 三项选择器真实命中 + 登录前后 Cookie 名差集（喂 D-30）+ 纯图无字视觉性质判别 ｜ §12.1 P7b-05b ｜ 🟡 计划中（2026-09-29 立项）· 探针 python/_probe/m7b28_doubao_recon.py",
+                  "content": "TST-M7-07 方案 B′：网页版图片理解只读侦察（豆包 doubao-web）｜ §12.1 P7b-05b ｜ 🟡 B1 段已实测（2026-09-29）：入口 = paste_only（无 file input / 无拖拽区）→ 注入定 DataTransfer；composer = div.tiptap.ProseMirror（未登录即渲染，命中 1）；未登录 10 条匿名 Cookie；answer 候选全 0；B0（登录 Cookie 差集）/ B2（注入 + 网络回执）/ B3（纯图无字）待人工登录 ｜ 物证 python/_probe/out/m7b28_doubao_recon.json",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M7.md"
+                }
+              },
+              {
+                "key": 201,
+                "children": [],
+                "todo": {
+                  "id": 201,
+                  "content": "TST-M7-08 网页版图片链路离线断言：attach 形态路由（none→拒绝 / paste_only→DataTransfer / file_input→chooser）+ vision 未声明的显式确认 + 协议 no_upload_evidence 拦截（I18）+ 按 M7B.md §6.1 词表校验 v/kind/id 与未知命令 ｜ §12.2 P7b-16 · M7B.md §6.1 ｜ ⬜ 未开工",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M7.md"
@@ -1330,7 +1352,7 @@
             ],
             "todo": {
               "id": 169,
-              "content": "M7（7 项）",
+              "content": "M7（8 项）",
               "done": false,
               "level": "secondary"
             }

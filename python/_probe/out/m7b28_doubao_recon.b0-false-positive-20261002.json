@@ -1,0 +1,679 @@
+{
+  "site": "doubao-web",
+  "site_url": "https://www.doubao.com/chat/",
+  "argv": [
+    "--login"
+  ],
+  "env": {
+    "python": "3.12.10",
+    "pydoll": "2.27.0",
+    "browser_kind": "edge",
+    "browser_exe": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "browser_version": "154.0.4258.48"
+  },
+  "started": "2026-10-02 23:22:33",
+  "login": {
+    "readback_self_proof": "probe-ok",
+    "url": "https://www.doubao.com/chat/",
+    "title": "豆包 - 字节跳动旗下 AI 智能助手",
+    "cookie_rows_before": [
+      {
+        "name": "App-User",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1791559357.769936,
+        "same_site": "None"
+      },
+      {
+        "name": "MUID",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": false,
+        "secure": true,
+        "session": false,
+        "expires": 1824650557.77055,
+        "same_site": "None"
+      },
+      {
+        "name": "MUIDB",
+        "domain": "ntp.msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": false,
+        "expires": 1824650557.770774,
+        "same_site": null
+      },
+      {
+        "name": "MicrosoftApplicationsTelemetryDeviceId",
+        "domain": "ntp.msn.cn",
+        "path": "/",
+        "http_only": false,
+        "secure": true,
+        "session": false,
+        "expires": 1822490563.089899,
+        "same_site": "None"
+      },
+      {
+        "name": "USRLOC",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1825514557.770341,
+        "same_site": "None"
+      },
+      {
+        "name": "_C_Auth",
+        "domain": "ntp.msn.cn",
+        "path": "/edge",
+        "http_only": false,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "_C_ETH",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "_EDGE_S",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "_EDGE_V",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": false,
+        "expires": 1824650557.771062,
+        "same_site": null
+      },
+      {
+        "name": "__rubyUX",
+        "domain": "ntp.msn.cn",
+        "path": "/edge",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1796138563,
+        "same_site": null
+      },
+      {
+        "name": "bd_sso_hi3jfd",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1822490573.733829,
+        "same_site": "None"
+      },
+      {
+        "name": "conversation_list_v2_group_mode",
+        "domain": "www.doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822490569.06634,
+        "same_site": "Lax"
+      },
+      {
+        "name": "dbx-web-theme",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1825514568,
+        "same_site": null
+      },
+      {
+        "name": "hook_slardar_session_id",
+        "domain": "www.doubao.com",
+        "path": "/chat",
+        "http_only": false,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "i18next",
+        "domain": "www.doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822490568,
+        "same_site": "Strict"
+      },
+      {
+        "name": "ttwid",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1822058563.927591,
+        "same_site": "None"
+      }
+    ],
+    "cookie_names_before": [
+      "App-User",
+      "MUID",
+      "MUIDB",
+      "MicrosoftApplicationsTelemetryDeviceId",
+      "USRLOC",
+      "_C_Auth",
+      "_C_ETH",
+      "_EDGE_S",
+      "_EDGE_V",
+      "__rubyUX",
+      "bd_sso_hi3jfd",
+      "conversation_list_v2_group_mode",
+      "dbx-web-theme",
+      "hook_slardar_session_id",
+      "i18next",
+      "ttwid"
+    ],
+    "composer_before": 0,
+    "login_timeout_s": 600,
+    "cookie_rows_after": [
+      {
+        "name": "App-User",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1791559357.769936,
+        "same_site": "None"
+      },
+      {
+        "name": "MUID",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": false,
+        "secure": true,
+        "session": false,
+        "expires": 1824650557.77055,
+        "same_site": "None"
+      },
+      {
+        "name": "MUIDB",
+        "domain": "ntp.msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": false,
+        "expires": 1824650557.770774,
+        "same_site": null
+      },
+      {
+        "name": "MicrosoftApplicationsTelemetryDeviceId",
+        "domain": "ntp.msn.cn",
+        "path": "/",
+        "http_only": false,
+        "secure": true,
+        "session": false,
+        "expires": 1822490563.089899,
+        "same_site": "None"
+      },
+      {
+        "name": "USRLOC",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1825514557.770341,
+        "same_site": "None"
+      },
+      {
+        "name": "_C_Auth",
+        "domain": "ntp.msn.cn",
+        "path": "/edge",
+        "http_only": false,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "_C_ETH",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "_EDGE_S",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "_EDGE_V",
+        "domain": ".msn.cn",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": false,
+        "expires": 1824650557.771062,
+        "same_site": null
+      },
+      {
+        "name": "__rubyUX",
+        "domain": "ntp.msn.cn",
+        "path": "/edge",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1796138563,
+        "same_site": null
+      },
+      {
+        "name": "bd_sso_hi3jfd",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1822490582.543373,
+        "same_site": "None"
+      },
+      {
+        "name": "conversation_list_v2_group_mode",
+        "domain": "www.doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822490569.06634,
+        "same_site": "Lax"
+      },
+      {
+        "name": "dbx-web-theme",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1825514568,
+        "same_site": null
+      },
+      {
+        "name": "flow_cur_user_sec_id",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1793546580,
+        "same_site": null
+      },
+      {
+        "name": "flow_user_country",
+        "domain": ".www.doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822490580,
+        "same_site": null
+      },
+      {
+        "name": "hook_slardar_session_id",
+        "domain": "www.doubao.com",
+        "path": "/chat",
+        "http_only": false,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "i18next",
+        "domain": "www.doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822490568,
+        "same_site": "Strict"
+      },
+      {
+        "name": "ttwid",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1822058563.927591,
+        "same_site": "None"
+      }
+    ],
+    "cookie_names_after": [
+      "App-User",
+      "MUID",
+      "MUIDB",
+      "MicrosoftApplicationsTelemetryDeviceId",
+      "USRLOC",
+      "_C_Auth",
+      "_C_ETH",
+      "_EDGE_S",
+      "_EDGE_V",
+      "__rubyUX",
+      "bd_sso_hi3jfd",
+      "conversation_list_v2_group_mode",
+      "dbx-web-theme",
+      "flow_cur_user_sec_id",
+      "flow_user_country",
+      "hook_slardar_session_id",
+      "i18next",
+      "ttwid"
+    ],
+    "new_cookie_names": [
+      "flow_cur_user_sec_id",
+      "flow_user_country"
+    ],
+    "composer_after": 1,
+    "login_wait_s": 12,
+    "logged_in_detected": true
+  },
+  "shutdown_login": {
+    "mode": "close_wait",
+    "exit_code": 0,
+    "waited_s": 0.0,
+    "strays_after": []
+  },
+  "relaunch": {
+    "readback_self_proof": "probe-ok",
+    "cookie_count": 31,
+    "cookie_names": [
+      "ANONCHK",
+      "App-User",
+      "MR",
+      "MUID",
+      "MUIDB",
+      "MicrosoftApplicationsTelemetryDeviceId",
+      "SM",
+      "SRM_B",
+      "USRLOC",
+      "_C_Auth",
+      "_EDGE_S",
+      "_EDGE_V",
+      "__rubyUX",
+      "ai_session",
+      "bd_sso_hi3jfd",
+      "conversation_list_v2_group_mode",
+      "dbx-web-theme",
+      "flow_cur_user_sec_id",
+      "flow_user_country",
+      "hook_slardar_session_id",
+      "i18next",
+      "msnup",
+      "pglt-edgeChromium-dhp",
+      "ttwid"
+    ],
+    "new_names_still_present": [
+      "flow_cur_user_sec_id",
+      "flow_user_country"
+    ],
+    "composer_count": 1,
+    "still_logged_in": true,
+    "storage_keys": [
+      "__msuuid__",
+      "__tea_sdk_ab_version_497858",
+      "__tea_cache_refer_497858",
+      "flow-web-cookie-banner-store",
+      "i18nextLng",
+      "__tea_cache_first_497858",
+      "text.00d51bf0012811ee97fd5fdb0b0365a9.web.zh",
+      "__tea_cache_tokens_497858",
+      "SLARDARflow_web",
+      "samantha_web_web_id",
+      "dbx-web-theme",
+      "version.00d51bf0012811ee97fd5fdb0b0365a9.web.zh",
+      "flow_user_country"
+    ]
+  },
+  "shutdown_relaunch": {
+    "mode": "close_wait",
+    "exit_code": 0,
+    "waited_s": 0.0,
+    "strays_after": []
+  },
+  "cookie_ttl": [
+    {
+      "name": "App-User",
+      "session": false,
+      "expires": 1791559357.769936,
+      "http_only": true,
+      "secure": true,
+      "domain": ".msn.cn"
+    },
+    {
+      "name": "MUID",
+      "session": false,
+      "expires": 1824650557.77055,
+      "http_only": false,
+      "secure": true,
+      "domain": ".msn.cn"
+    },
+    {
+      "name": "MUIDB",
+      "session": false,
+      "expires": 1824650557.770774,
+      "http_only": true,
+      "secure": false,
+      "domain": "ntp.msn.cn"
+    },
+    {
+      "name": "MicrosoftApplicationsTelemetryDeviceId",
+      "session": false,
+      "expires": 1822490563.089899,
+      "http_only": false,
+      "secure": true,
+      "domain": "ntp.msn.cn"
+    },
+    {
+      "name": "USRLOC",
+      "session": false,
+      "expires": 1825514557.770341,
+      "http_only": true,
+      "secure": true,
+      "domain": ".msn.cn"
+    },
+    {
+      "name": "_C_Auth",
+      "session": true,
+      "expires": -1,
+      "http_only": false,
+      "secure": false,
+      "domain": "ntp.msn.cn"
+    },
+    {
+      "name": "_C_ETH",
+      "session": true,
+      "expires": -1,
+      "http_only": true,
+      "secure": true,
+      "domain": ".msn.cn"
+    },
+    {
+      "name": "_EDGE_S",
+      "session": true,
+      "expires": -1,
+      "http_only": true,
+      "secure": false,
+      "domain": ".msn.cn"
+    },
+    {
+      "name": "_EDGE_V",
+      "session": false,
+      "expires": 1824650557.771062,
+      "http_only": true,
+      "secure": false,
+      "domain": ".msn.cn"
+    },
+    {
+      "name": "__rubyUX",
+      "session": false,
+      "expires": 1796138563,
+      "http_only": false,
+      "secure": false,
+      "domain": "ntp.msn.cn"
+    },
+    {
+      "name": "bd_sso_hi3jfd",
+      "session": false,
+      "expires": 1822490582.543373,
+      "http_only": true,
+      "secure": true,
+      "domain": ".doubao.com"
+    },
+    {
+      "name": "conversation_list_v2_group_mode",
+      "session": false,
+      "expires": 1822490569.06634,
+      "http_only": false,
+      "secure": false,
+      "domain": "www.doubao.com"
+    },
+    {
+      "name": "dbx-web-theme",
+      "session": false,
+      "expires": 1825514568,
+      "http_only": false,
+      "secure": false,
+      "domain": ".doubao.com"
+    },
+    {
+      "name": "flow_cur_user_sec_id",
+      "session": false,
+      "expires": 1793546580,
+      "http_only": false,
+      "secure": false,
+      "domain": ".doubao.com"
+    },
+    {
+      "name": "flow_user_country",
+      "session": false,
+      "expires": 1822490580,
+      "http_only": false,
+      "secure": false,
+      "domain": ".www.doubao.com"
+    },
+    {
+      "name": "hook_slardar_session_id",
+      "session": true,
+      "expires": -1,
+      "http_only": false,
+      "secure": false,
+      "domain": "www.doubao.com"
+    },
+    {
+      "name": "i18next",
+      "session": false,
+      "expires": 1822490568,
+      "http_only": false,
+      "secure": false,
+      "domain": "www.doubao.com"
+    },
+    {
+      "name": "ttwid",
+      "session": false,
+      "expires": 1822058563.927591,
+      "http_only": true,
+      "secure": true,
+      "domain": ".doubao.com"
+    }
+  ],
+  "d30_cookie_names_diff": {
+    "before": [
+      "App-User",
+      "MUID",
+      "MUIDB",
+      "MicrosoftApplicationsTelemetryDeviceId",
+      "USRLOC",
+      "_C_Auth",
+      "_C_ETH",
+      "_EDGE_S",
+      "_EDGE_V",
+      "__rubyUX",
+      "bd_sso_hi3jfd",
+      "conversation_list_v2_group_mode",
+      "dbx-web-theme",
+      "hook_slardar_session_id",
+      "i18next",
+      "ttwid"
+    ],
+    "after": [
+      "App-User",
+      "MUID",
+      "MUIDB",
+      "MicrosoftApplicationsTelemetryDeviceId",
+      "USRLOC",
+      "_C_Auth",
+      "_C_ETH",
+      "_EDGE_S",
+      "_EDGE_V",
+      "__rubyUX",
+      "bd_sso_hi3jfd",
+      "conversation_list_v2_group_mode",
+      "dbx-web-theme",
+      "flow_cur_user_sec_id",
+      "flow_user_country",
+      "hook_slardar_session_id",
+      "i18next",
+      "ttwid"
+    ],
+    "new": [
+      "flow_cur_user_sec_id",
+      "flow_user_country"
+    ],
+    "note": "登录后新增的 Cookie 名 = 候选 cookie_names（D-30 的豆包证据）"
+  },
+  "verdict": {
+    "B1_readback_self_proof_ok": false,
+    "B1_scan_ok": false,
+    "B1_entry_kind_determined": false,
+    "B1_has_file_input": false,
+    "B1_composer_found": false,
+    "B0_login_detected": true,
+    "B0_d30_diff_nonempty": true,
+    "B0_relaunch_still_logged_in": true,
+    "B2_injected_ok": null,
+    "B2_upload_request_seen": null,
+    "B3_sent": null,
+    "env_browser_kind": true
+  }
+}

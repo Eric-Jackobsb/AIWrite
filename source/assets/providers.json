@@ -335,7 +335,7 @@
         "window_title": "AIwrite · 豆包网页版登录（登录后关闭窗口）"
       },
       "verified": false,
-      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`https://www.doubao.com/chat/` 加载正常（标题「豆包 - 字节跳动旗下 AI 智能助手」）；页面 4 条匿名 Cookie + localStorage 有 `conversation_list_v2_group_mode`。⚠️ **未登录不渲染输入框**（0 个可见候选）→ 需登录后再取选择器",
+      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`https://www.doubao.com/chat/` 加载正常（标题「豆包 - 字节跳动旗下 AI 智能助手」）；页面 4 条匿名 Cookie + localStorage 有 `conversation_list_v2_group_mode`。🔁 **订正（2026-09-29 B1 只读侦察 · 物证 `python/_probe/out/m7b28_doubao_recon.json`）**：① **未登录即渲染输入框**（`div.tiptap.ProseMirror`，`contenteditable: true`、`visible: true`、命中 1；原「未登录不渲染输入框（0 个可见候选）」**作废**）；② 未登录匿名 Cookie 实为 **10 条**（`hook_slardar_session_id` / `passport_csrf_token` / `flow_cur_user_sec_id` / `s_v_web_id` 等，**仅名字入库**）⇒ 再次印证决策 `D-30`「Cookie 非空 = 已登录」必然误报；③ ~~**上传入口 = `paste_only`**（无 `input[type=file]`、无拖拽区）⇒ `P7b-10` 的 `expect_file_chooser` 主路线**在本站不可用**，须走 `DataTransfer` 构造 File + 合成 `paste`~~ ⇒ ⚠️ **已更正（2026-10-02 · B0/B1/B2/B3 四段实测）**：`paste_only` 是**小视口（默认 859×450）假象** —— 登录态 + **大视口（1440×1000）**实测入口 = **`file_input`**（`input.hidden` = 隐藏 file input）⇒ 主路线 = **`DOM.setFileInputFiles` / `expect_file_chooser`**（**B2 双证据已 PASS**：文件真进 `input.files` + 4 条 POST 回执 `prepare_upload` → TOS `upload/v1/…png` → `CommitImageUpload`），`DataTransfer` **降为备选**；⚠️ 启动浏览器**必须显式设窗口尺寸**（否则入口根本不在 DOM）。④ **B3「纯图无字」实测 = 真视觉**（256×256 纯红方块 → 答「一整块均匀、饱和度很高的**正红色**…没有任何图案、文字、物体」；⚠️ 同一夹具 **1×1** 尺寸会退化成「完全纯白色」）⇒ 不再缺证据；`web.attach` 落值仍**不填** —— 取值形态属 `D11` 契约，与探针结论分开拍板。⚠️ `capabilities.vision` **仍保持 `false`**：真视觉证据**已到手**，但改它属**产品能力声明**（牵连 `P7b-16` 三处落点 + `D11②` 显式确认口径）⇒ **待拍板后同批落**（`I18` 既不无证据宣称，也不越权宣称）",
       "docs_url": ""
     },
     {

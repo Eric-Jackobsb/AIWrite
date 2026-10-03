@@ -237,6 +237,8 @@ src/engine/provider_resolve.cpp
     src/ai/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）
     src/nodes/local_nodes.cpp
     src/nodes/register_executors.cpp
+    src/web/channel_frames.cpp  # M7B 批 1：管道协议 v1 帧（纯函数；VB2-29 / VB2-32）
+    src/web/pipe_client.cpp     # M7B 批 1 step 2：命名管道客户端（M7B-02；读线程 + id 配对）
     src/web/session_store.cpp
     src/web/webview_host.cpp)   # 网页版登录 + 会话 + 协议探测 + 页面内 PoW 求解
 target_include_directories(aiwrite_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")

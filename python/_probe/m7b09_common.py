@@ -12,6 +12,7 @@ import asyncio
 import json
 import pathlib
 import subprocess
+import sys
 import time
 
 from pydoll.browser.chromium import Chrome
@@ -33,6 +34,61 @@ def options(headless: bool = True, prefs: dict | None = None,
         opts.browser_preferences = prefs
     opts.start_timeout = 60
     return opts
+
+
+# ------------------------------------------------------- 浏览器选择（换机兜底） --
+# 本机（2026-10-02 换机）**无 Chrome，只有 Edge** ⇒ `M7B-14` 的「Chrome 缺失 → Edge 兜底」
+# 首次实跑。口径：**先探测标准安装路径**（不查注册表 / 不猜商店版），命中谁用谁；
+# 两者都无 → 仍返回 `Chrome`（让库自己报启动失败，探针把真实错误留证）。
+CHROME_PATHS = (pathlib.Path(r'C:\Program Files\Google\Chrome\Application\chrome.exe'),
+                pathlib.Path(r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'))
+EDGE_PATHS = (pathlib.Path(r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'),
+              pathlib.Path(r'C:\Program Files\Microsoft\Edge\Application\msedge.exe'))
+
+
+def browser_kind() -> str:
+    """`'chrome'` / `'edge'` / `'unknown'`（只按标准安装路径判定）。"""
+    if any(path.exists() for path in CHROME_PATHS):
+        return 'chrome'
+    if any(path.exists() for path in EDGE_PATHS):
+        return 'edge'
+    return 'unknown'
+
+
+def browser_exe() -> pathlib.Path | None:
+    for path in CHROME_PATHS + EDGE_PATHS:
+        if path.exists():
+            return path
+    return None
+
+
+def browser_class():
+    """返回 pydoll 浏览器类（`pydoll.browser.chromium` 同模块导出 `Chrome` / `Edge`）。"""
+    from pydoll.browser.chromium import Chrome, Edge
+    return Edge if browser_kind() == 'edge' else Chrome
+
+
+def env_proof() -> dict:
+    """**环境物证**（换机可追溯）：Python / pydoll / 浏览器类 / 浏览器 exe 及其版本。"""
+    import importlib.metadata as metadata
+
+    exe = browser_exe()
+    info = {'python': '.'.join(str(part) for part in sys.version_info[:3]),
+            'pydoll': 'unknown', 'browser_kind': browser_kind(),
+            'browser_exe': str(exe) if exe else '', 'browser_version': ''}
+    try:
+        info['pydoll'] = metadata.version('pydoll-python')
+    except Exception:  # noqa: BLE001 —— 未装 pydoll 时不让物证收集炸掉自检
+        pass
+    if exe:
+        try:
+            info['browser_version'] = subprocess.run(
+                ['powershell', '-NoProfile', '-Command',
+                 f"(Get-Item '{exe}').VersionInfo.ProductVersion"],
+                capture_output=True, text=True, timeout=20, check=False).stdout.strip()
+        except Exception:  # noqa: BLE001
+            pass
+    return info
 
 
 def exit_state(profile: pathlib.Path | None = None) -> dict:
@@ -115,6 +171,22 @@ async def assert_read_path(tab) -> str:
     """读回自证：返回 'probe-ok' 才算"通道能读回"（否则一切读数都不可信）。"""
     reply = await tab.execute_script('return "probe-ok";')
     return js_text(reply)
+
+
+async def press_key(tab, key_name: str) -> dict:
+    """按一次功能键（如 `Enter`）。
+
+    ⚠️ `pydoll 2.27.0` 的 `keyboard.press()` 要 **`Key` 枚举**（`pydoll.constants.Key`）；
+    传字符串会按元组解包 ⇒ `ValueError: too many values to unpack (expected 2)`
+    （2026-10-02 B3 实测踩到）。此处统一转换，并把解析结果留证。
+    """
+    from pydoll.constants import Key
+
+    key = getattr(Key, str(key_name).upper(), None)
+    if key is None:
+        raise ValueError(f'pydoll Key 无成员：{key_name!r}')
+    await tab.keyboard.press(key)
+    return {'key': str(key_name), 'resolved': str(key)}
 
 
 def norm(cookies) -> list[dict]:

@@ -40,6 +40,7 @@
 #include "ai/provider_spec.h"              // M_patchB L1：Provider 配置表断言
 #include "ai/dom_web_client.h"             // L3（PB2-13/15）：DOM 适配器纯函数断言（VB2-22）
 #include "web/webview_host.h"              // L4（PB2-28）：探测脚本适用性断言（VB2-25）
+#include "web/channel_frames.h"           // M7B 批 1：管道协议 v1 帧（VB2-29 / VB2-32 · §6.1）
 #include "ai/deepseek_web_client.h"       // L4（PB2-28④）：会话失效识别断言（VB2-27）
 #include "utils/image_decode.h"           // M7-04/05：图片格式嗅探 + 解码 + 失败文案断言
 #include "utils/asset_store.h"            // P7a-04：统一资源目录（令牌 / 归档 / 解析）断言
@@ -2687,6 +2688,37 @@ int execution_selftest()
                            "M5-04 示例：E-02 为 5 节点 4 连线",
                            std::to_string(graph.nodes.size()) + " 节点 / " +
                                std::to_string(graph.edges.size()) + " 连线");
+                    // 2026-10-03（换机实测）：示例里的图片路径曾是**某台机器的绝对路径**
+                    //   （`F:/GameDao/.../sample.png`）⇒ 换机后本断言直接挂，且换机用户打开示例
+                    //   必报「文件不存在」。故拆成两步：
+                    //   ① **新增**可移植性断言：示例不得写死盘符 / 反斜杠绝对路径；
+                    //   ② 校验前把图片路径**代入本机示例图** —— 相对路径 / 资源令牌无法跨机解析
+                    //      （`graph.cpp` 的 File 参数校验对非令牌值只做 `exists(原值)`），
+                    //      若不代入，会把「示例可移植」误判成「示例损坏」。
+                    std::string example_image;
+                    for (const engine::Node& node : graph.nodes) {
+                        if (node.type == "ImageInput") {
+                            if (const engine::Param* path_param = node.findParam("path")) {
+                                example_image = path_param->text();
+                            }
+                        }
+                    }
+                    expect(check,
+                           !example_image.empty() && example_image.find(':') == std::string::npos &&
+                               example_image.find('\\') == std::string::npos,
+                           "M5-04 示例：E-02 的图片路径**可移植**（仓库相对路径，非某台机器的绝对路径）",
+                           example_image);
+
+#ifdef AIWRITE_SOURCE_DIR
+                    const std::filesystem::path local_example_image =
+                        std::filesystem::path(AIWRITE_SOURCE_DIR) / "assets" / "images" /
+                        "flamingo.png";
+                    for (const engine::Node& node : graph.nodes) {
+                        if (node.type == "ImageInput") {
+                            set_param(graph, node.id, "path", local_example_image.string());
+                        }
+                    }
+#endif
                     engine::ValidationMessages errors;
                     const bool               valid = engine::validateWorkflow(graph, &errors);
                     expect(check, valid, "M5-04 示例：E-02 加载校验通过（端口/参数/无环）",
@@ -3243,6 +3275,120 @@ int execution_selftest()
                        hint_2.find("ds_session_id") == std::string::npos,
                    "VB2-27⑤ 失效提示文案不含厂商专有物（userToken / ds_session_id；I15 口径）");
         }
+
+        // ---- VB2-29 / VB2-32（新增 · M7B 批 1）：管道协议 v1 离线桩（纯函数，不依赖真实 Python）----
+        //  * 词表唯一来源 = M7B.md §6.1；Python 侧同构断言见 `python -m brain_ai_browser --selftest`
+        //  * 纪律：非法行**只**能被丢弃 + 回 err{bad_frame}，**不得**让守护进程 / UI 线程崩
+        {
+            using namespace aiwrite::web::channel;
+
+            // ① 合法命令帧：v / kind / id / name 解析正确（§6.1 帧格式）
+            const Frame hello = parse_frame(make_command("hello", "7"));
+            expect(check,
+                   !hello.bad && hello.v == kProtoVersion && hello.kind == "cmd" &&
+                       hello.id == "7" && hello.name == "hello",
+                   "VB2-29① 合法命令帧：v / kind=cmd / id / name 解析正确（§6.1）",
+                   hello.bad ? hello.reason : hello.payload_json);
+
+            // ② 非法行：JSON 坏 / 缺 v / 缺 kind / kind 非法 / v 不识别 / 空行 → 判非法
+            const Frame bad_json = parse_frame("{not json");
+            const Frame bad_no_v = parse_frame("{\"kind\":\"cmd\",\"id\":\"1\",\"name\":\"hello\"}");
+            const Frame bad_kind = parse_frame("{\"v\":1,\"id\":\"1\",\"name\":\"hello\"}");
+            const Frame bad_kind2 = parse_frame("{\"v\":1,\"kind\":\"oops\",\"id\":\"1\"}");
+            const Frame bad_ver =
+                parse_frame("{\"v\":99,\"kind\":\"cmd\",\"id\":\"1\",\"name\":\"hello\"}");
+            const Frame bad_blank = parse_frame("   ");
+            expect(check,
+                   bad_json.bad && bad_no_v.bad && bad_kind.bad && bad_kind2.bad && bad_ver.bad &&
+                       bad_blank.bad && !bad_json.reason.empty() && !bad_ver.reason.empty(),
+                   "VB2-29② 非法行（JSON 坏 / 缺 v / 缺 kind / kind 非法 / v 不识别 / 空行）→ 判非法",
+                   bad_ver.reason);
+
+            // ③ 未知命令 / 缺必需字段 → **可操作原因**（不静默执行）
+            const Frame unknown = parse_frame(make_command("fly_to_moon", "8"));
+            const Frame missing = parse_frame(make_command("open_tab", "9"));
+            std::string unknown_reason;
+            std::string missing_reason;
+            const bool  unknown_ok = !validate_command(unknown, &unknown_reason);
+            const bool  missing_ok = !validate_command(missing, &missing_reason);
+            expect(check,
+                   unknown_ok && unknown_reason.find("未知命令") != std::string::npos &&
+                       missing_ok && missing_reason.find("缺少字段") != std::string::npos,
+                   "VB2-29③ 未知命令 / 缺必需字段 → 明确原因（词表 7 命令 + 必需字段）",
+                   unknown_reason + " | " + missing_reason);
+
+            // ④ 词表完整：7 命令 / 6 事件（与 §6.1 表逐条一致）
+            expect(check,
+                   known_commands().size() == 7 && known_events().size() == 6 &&
+                       is_known_command("upload_image") && is_known_command("send_prompt") &&
+                       is_known_command("shutdown") && !is_known_command("hello_world"),
+                   "VB2-29④ 词表完整：7 命令 / 6 事件（§6.1 表）",
+                   std::to_string(known_commands().size()) + " / " +
+                       std::to_string(known_events().size()));
+
+            // ⑤ 非法帧回包 err{bad_frame} 且 id 与请求配对（请求-响应可追溯）
+            const Frame err_frame =
+                parse_frame(make_error(error_code_bad_frame(), "7", "非法帧已丢弃"));
+            expect(check,
+                   !err_frame.bad && err_frame.kind == "err" && err_frame.id == "7" &&
+                       err_frame.name == error_code_bad_frame(),
+                   "VB2-29⑤ 非法帧回包 err{bad_frame} 且 id 与请求配对",
+                   err_frame.payload_json);
+
+            // ⑥ 容量上限写死：单帧 ≤ 64 KiB / images ≤ 8（图片传路径，不传 base64）
+            const Frame too_many = parse_frame(make_command(
+                "upload_image", "10",
+                "{\"provider\":\"doubao-web\",\"images\":[\"C:/a.png\",\"C:/b.png\",\"C:/c.png\","
+                "\"C:/d.png\",\"C:/e.png\",\"C:/f.png\",\"C:/g.png\",\"C:/h.png\",\"C:/i.png\"]}"));
+            std::string over_reason;
+            const bool  over_ok = !validate_command(too_many, &over_reason);
+            expect(check,
+                   frame_within_limit(std::string(kMaxFrameBytes, 'x')) &&
+                       !frame_within_limit(std::string(kMaxFrameBytes + 1, 'x')) && over_ok &&
+                       over_reason.find("上限") != std::string::npos,
+                   "VB2-29⑥ 容量上限：单帧 ≤ 64 KiB / images ≤ 8（不传 base64）",
+                   over_reason);
+
+            // ⑦ attach 取值受词表约束（M7.md D11：auto | file_input | drop_zone | paste_only | none）
+            const Frame bad_attach = parse_frame(make_command(
+                "upload_image", "11",
+                "{\"provider\":\"doubao-web\",\"images\":[\"C:/a.png\"],\"attach\":\"magic\"}"));
+            const Frame ok_attach = parse_frame(make_command(
+                "upload_image", "12",
+                "{\"provider\":\"doubao-web\",\"images\":[\"C:/a.png\"],\"attach\":\"file_input\"}"));
+            std::string bad_attach_reason;
+            expect(check,
+                   !validate_command(bad_attach, &bad_attach_reason) &&
+                       bad_attach_reason.find("attach") != std::string::npos &&
+                       validate_command(ok_attach, nullptr),
+                   "VB2-29⑦ attach 取值受词表约束（D11：auto | file_input | drop_zone | paste_only | none）",
+                   bad_attach_reason);
+
+            // ---- VB2-32：CDP 帧 → 增量文本（纯函数；复用既有 `text` / `delta.text` 两形态）----
+            bool              flag_a  = false;
+            bool              flag_b  = false;
+            bool              flag_no = false;
+            const std::string delta_a = delta_text_of_frame("{\"seq\":1,\"text\":\"你\"}", &flag_a);
+            const std::string delta_b = delta_text_of_frame("{\"delta\":{\"text\":\"好\"}}", &flag_b);
+            const std::string delta_n = delta_text_of_frame("{\"foo\":1}", &flag_no);
+            expect(check,
+                   delta_a == "你" && delta_b == "好" && delta_n.empty() && !flag_a && !flag_b,
+                   "VB2-32① CDP 增量帧 → 文本（`text` 直取 / `delta.text` 嵌套；两形态复用）",
+                   delta_a + delta_b);
+
+            // I22：无增量 → 必须**显式**标注「非流式（轮询）」（不静默改变行为）
+            bool              flag_empty = false;
+            const std::string delta_e    = delta_text_of_frame("", &flag_empty);
+            const Frame       stage_evt =
+                parse_frame(make_event("stage", "-", "{\"stage\":\"answer\",\"ok\":true}"));
+            expect(check,
+                   flag_no && flag_empty && delta_e.empty() && !stage_evt.bad &&
+                       stage_evt.kind == "evt" && stage_evt.name == "stage",
+                   "VB2-32②/I22 无增量 → 置「非流式（轮询）」标记（I22 显式降级）",
+                   stage_evt.bad ? stage_evt.reason : stage_evt.payload_json);
+
+        }
+
     }
 
 

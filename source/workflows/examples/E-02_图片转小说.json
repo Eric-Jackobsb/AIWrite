@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "name": "E-02 图片转小说",
-  "description": "图片输入 → 图片理解(VLM) → 文本输出。运行前请在「提供商配置」填写视觉模型的 API 地址、模型名与 API Key（示例为智谱 GLM）。图片路径请按需替换为你自己的图片（示例路径指向仓库内的示例图）。",
+  "description": "图片输入 → 图片理解(VLM) → 文本输出。运行前请在「提供商配置」填写视觉模型的 API 地址、模型名与 API Key（示例为智谱 GLM）。图片路径请按需替换为你自己的图片（示例用仓库内相对路径 assets/images/flamingo.png：换机 / 换目录后不会失效；载入后可在参数面板重新选择，或点「迁移到资源目录」存为资源令牌）。",
   "nodes": [
     {
       "id": "n1",
@@ -9,7 +9,7 @@
       "title": "图片输入",
       "position": { "x": -640.0, "y": -220.0 },
       "params": {
-        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/sample.png"
+        "path": "assets/images/flamingo.png"
       }
     },
     {
