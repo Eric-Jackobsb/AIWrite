@@ -8,6 +8,8 @@
                                                      # Pydoll 驱动 + `M7B-04` 合测（**会弹真实浏览器窗口**）
     python -m brain_ai_browser --daemon-selftest [--headless] [--timeout <秒>]
                                                      # 守护进程：`VB2-38` 离线 + `M7B-11` 端到端（**会弹窗**）
+    python -m brain_ai_browser --session-selftest [--headless] [--timeout <秒>]
+                                                     # L2 快照：`VB2-39` 离线 + 真机「存 → 弃 → 回灌」（**会弹窗**）
     python -m brain_ai_browser --serve [--pipe-name <名>] [--once] [--idle-timeout <秒>] [--headless]
                                                      # 守护进程主循环（`daemon.py`；C++ 的 `--pipe-selftest` 起它）
 
@@ -22,7 +24,11 @@
     * `--driver-selftest` / `--daemon-selftest` 均含**离线组**（不碰浏览器）与**真机组**；
       依赖缺失时真机组**显式 SKIP**（不静默、不假装通过 —— `I21` 同族）。
     * **`VB2-38` 已在 Python 侧生效**（`daemon.close_verdict` 纯逻辑 + 端到端关闭协议）；
-      **C++ 侧关闭协议同步（`stage` 带请求 id = 完成回包）与 `VB2-39`（L2 快照）待 step 5~6**。
+    * **`VB2-39`（L2 快照 · `session.py`）已在 Python 侧生效**：DPAPI 加密落
+      `~/.brain-ai/session/cookies.dat`（**无 DPAPI ⇒ 不快照、绝不写明文**），三个触发点
+      （定时 5 s / 登录即写 / `shutdown` **关闭前**再写）+ 启动**回灌**（失败发
+      `error{not_logged_in}` **显式提示**，`I23④`）；**C++ 侧 `pydoll_channel` / `session_snapshot` /
+      `PipeClient` 判据同步与诊断换代（`--pydoll-login`）待 step 6**。
     * `ready.browser` 由 `browsers.detect_browser()` 判定（先 Chrome 后 Edge）；依赖缺失时
       `hello` 会**追加一条 `error` 事件帧**携带可操作引导（`M7B-13` / `M7B-14`）。
 """
@@ -36,6 +42,7 @@ import pathlib
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -49,6 +56,7 @@ from . import pipe
 from . import protocol as P
 from . import redact
 from . import runtime
+from . import session
 
 
 
@@ -698,12 +706,16 @@ def _daemon_online(counter: "_Counter", *, headless: bool, timeout_s: float) -> 
     since = _log_line_count()
     before_strays = _stray_browsers()
     cwd = str(pathlib.Path(__file__).resolve().parents[1])
+    # L2（step 5）：子进程的快照**强制落临时目录** ⇒ 自检绝不碰真实 `~/.brain-ai/session/`
+    session_temp = tempfile.mkdtemp(prefix="m7b-daemon-session-")
+    child_env = dict(os.environ, **{session.ENV_SESSION_DIR: session_temp})
     client = None
     process = None
     try:
         with out_log.open("w", encoding="utf-8") as out_handle, \
                 err_log.open("w", encoding="utf-8") as err_handle:
-            process = subprocess.Popen(args, cwd=cwd, stdout=out_handle, stderr=err_handle)
+            process = subprocess.Popen(args, cwd=cwd, stdout=out_handle, stderr=err_handle,
+                                       env=child_env)
             client = pipe.connect_pipe(name, 30_000)              # 等守护进程建管道
             print("[守护进程] 子进程已起（pid=%d）· 管道 %s" % (process.pid, name), flush=True)
 
@@ -789,6 +801,14 @@ def _daemon_online(counter: "_Counter", *, headless: bool, timeout_s: float) -> 
             counter.check("Traceback" not in err_text,
                           "M7B-11⑬ 守护进程 stderr **无回溯**（BrowserNotRunning 被吞，不外泄异常）",
                           err_text)
+            snapshot_events = (_log_records("snapshot_skipped", since)
+                               + _log_records("snapshot_saved", since))
+            counter.check(bool(snapshot_events),
+                          "M7B-11⑭ L2 快照触发点端到端走通：`shutdown` **关闭前**落盘必经"
+                          "（末条 = %s；`about:blank` 无该域 Cookie ⇒ 如实 `snapshot_skipped`，"
+                          "证明这段**不是死码**）"
+                          % (snapshot_events[-1].get("event") if snapshot_events else "无记录"),
+                          str(snapshot_events[-1] if snapshot_events else None))
     finally:
         if client is not None:
             try:
@@ -816,8 +836,248 @@ def _daemon_selftest(counter: "_Counter", *, headless: bool, timeout_s: float) -
     _daemon_online(counter, headless=headless, timeout_s=timeout_s)
 
 
+# ============================================================================
+#  L2 快照自检（`VB2-39`；批 1 step 5 —— `MB-D0-8` L2）
+# ============================================================================
+
+def _session_probe_store(temp: Any, host: str) -> "session.SnapshotStore":
+    """造一个**隔离**的快照存储（临时目录 ⇒ 绝不碰真实 `~/.brain-ai/session/`）。"""
+    store = session.SnapshotStore(pathlib.Path(temp) / session.SNAPSHOT_NAME)
+    store.add_scope(host)
+    return store
+
+
+def _session_seed_cookies(host: str) -> List[Dict[str, Any]]:
+    """合成「登录态」（名 / 值都带**哨兵串** ⇒ 明文扫描有稳定判据）；含会期 + 持久各一条。"""
+    stamp = str(os.getpid())
+    return [
+        {"name": "aiwrite_selftest_sid", "value": "SIDVALUE" + stamp, "domain": host,
+         "path": "/", "secure": True, "httpOnly": True, "sameSite": "Lax", "size": 21},
+        {"name": "aiwrite_selftest_doc", "value": "DOCVALUE" + stamp, "domain": "." + host,
+         "path": "/", "expires": time.time() + 3600},
+    ]
+
+
+def _session_offline_checks(counter: "_Counter", temp: Any) -> None:
+    """组 A（离线）：`VB2-39①②④⑤` + 纯函数判据；**DPAPI 不可用 → 显式 SKIP**（不是 FAIL）。"""
+    print("[L2 快照] 组 A：DPAPI / 明文扫描 / 损坏不崩 / 纯函数（离线，不碰浏览器）")
+    if not session.dpapi_available():
+        print("   ----  组 A：SKIP —— 本机无 DPAPI（非 Windows / crypt32 不可用）")
+        print("   ----  说明：L2 快照**不降级为明文**；这不是失败，但也**不假装通过**（I23③）")
+        return
+
+    host = "session-selftest.invalid"
+    store = _session_probe_store(temp, host)
+    seeded = _session_seed_cookies(host)
+
+    # ---- ① DPAPI 往返 ----
+    probe_plain = ("probe-" + os.urandom(8).hex()).encode("utf-8")
+    blob = session.protect(probe_plain)
+    counter.check(blob != probe_plain and session.unprotect(blob) == probe_plain,
+                  "VB2-39① DPAPI 往返：CryptProtectData → CryptUnprotectData 字节一致"
+                  "（CRYPTPROTECT_UI_FORBIDDEN ⇒ 无 UI 提示、可无人值守）",
+                  "密文 %d 字节" % len(blob))
+
+    # ---- ② 快照文件字节零明文（名 + 值 + 域）----
+    saved = store.save(seeded, reason="selftest")
+    blob_file = store.path.read_bytes() if store.exists() else b""
+    secrets = ([row["name"] for row in seeded] + [row["value"] for row in seeded]
+               + [host, "." + host])
+    hits = session.scan_plaintext(blob_file, secrets)
+    counter.check(bool(saved.get("ok")) and saved.get("changed") and not hits,
+                  "VB2-39② 快照落盘 = DPAPI 密文：文件字节内 **Cookie 名 / 值 / 域零明文**"
+                  "（扫 %d 个哨兵串：" % len(secrets) + "命中 %d）" % len(hits),
+                  "命中：%s · 文件 %d 字节" % (hits, len(blob_file)))
+    print("[L2 快照] 快照文件：%s（%d 字节 · 载荷 %d 条）"
+          % (store.path, len(blob_file), saved.get("count")))
+    print("[L2 快照] 明文扫描哨兵：%s" % ", ".join(secrets[:4]))
+
+    # ---- ③ 纯函数：作用域（**父域方向**）/ 会期语义 / 白名单 / 过期 / 空作用域 ----
+    parent_cookie = {"name": "p1", "value": "v1", "domain": ".example.com", "path": "/"}
+    child_cookie = {"name": "c1", "value": "v2", "domain": "chat.example.com", "path": "/"}
+    other_cookie = {"name": "o1", "value": "v3", "domain": "other.example.org", "path": "/"}
+    domain_ok = (session.belongs_to(".example.com", "chat.example.com")
+                 and not session.belongs_to("chat.example.com", "other.example.com")
+                 and session.host_of("https://chat.example.com:443/a?b=1") == "chat.example.com")
+    picked = session.scoped([parent_cookie, child_cookie, other_cookie], ["chat.example.com"])
+    counter.check(domain_ok and [row["name"] for row in picked] == ["p1", "c1"],
+                  "VB2-39③ 作用域判定：**父域 Cookie 必须命中**（`.example.com` ⊃ `chat.example.com`）"
+                  "+ 邻居域不串味（`driver.cookies_for_domain` 的后缀语义方向与之相反，别混用）",
+                  "picked=%s" % [row["name"] for row in picked])
+
+    session_only = {"name": "s1", "value": "v", "domain": "a.example", "path": "/", "expires": -1}
+    persist_only = {"name": "s2", "value": "v", "domain": "a.example", "path": "/",
+                    "expires": time.time() + 3600, "size": 7}
+    params = {row["name"]: row for row in session.to_cdp_params([session_only, persist_only])}
+    counter.check("expires" not in params["s1"] and "expires" in params["s2"]
+                  and not ({"size", "session"} & set(params["s1"])),
+                  "VB2-39③ 回灌参数：会期 Cookie **不带 expires**（不偷偷升级为持久）"
+                  "+ 只读字段（size / session）被白名单剔除（探针 V-b 实测：多带会被 CDP 拒）",
+                  "params=%s" % sorted(params["s1"]))
+    counter.check(session.usable_cookies({"cookies": [session_only, persist_only]},
+                                        now=time.time() + 7200)[0]["name"] == "s1"
+                  and session.scoped(seeded, []) == [],
+                  "VB2-39③ 过期条目被过滤（`now` 推到 +2 h：只剩**会期**的 `s1`，"
+                  "未过期的 `s2` 在这时点已过期）+ **空作用域 ⇒ 不写快照**"
+                  "（`MB-Q11`：隐私最小、宁缺勿滥）", "")
+
+    # ---- ④ 日志零明文（**值**不进日志；名字 / 域保留可诊断 —— step 4 口径）----
+    since = _log_line_count()
+    store.save(seeded, reason="log-probe", force=True)
+    added = max(1, _log_line_count() - since)
+    tail_text = "\n".join(redact.tail(added))
+    values_only = [row["value"] for row in seeded]
+    log_hits = session.scan_plaintext(tail_text.encode("utf-8"), values_only)
+    counter.check(not log_hits,
+                  "VB2-39④ 日志零明文：`snapshot_saved` 只记名字 / 计数 / 域 ⇒ **Cookie 值不进日志**",
+                  "命中：%s · 尾部 %d 行" % (log_hits, added))
+
+    # ---- ⑤ 损坏 / 篡改 / 版本不识 / 明文冒充 → 不崩 + 如实 reason（不回退明文）----
+    raw = store.path.read_bytes()
+    mid = bytearray(raw)
+    mid[len(raw) // 2] ^= 0xFF
+    tail = bytearray(raw)
+    tail[-1] ^= 0xFF
+    future = session.protect(json.dumps(
+        dict(session.snapshot_payload(seeded, hosts=[host]), v=99)).encode("utf-8"))
+    cases: Tuple[Tuple[str, bytes, str], ...] = (
+        ("篡改中段", bytes(mid), "corrupt"),
+        ("篡改末尾", bytes(tail), "corrupt"),
+        ("截断一半", raw[:max(1, len(raw) // 2)], "corrupt"),
+        ("明文 JSON 冒充密文", b'{"v":1,"cookies":[]}', "corrupt"),
+        ("空文件", b"", "corrupt"),
+        ("版本不识（v=99）", future, "version_unknown"),
+    )
+    bad: List[str] = []
+    for index, (label, payload, want) in enumerate(cases):
+        probe = session.SnapshotStore(pathlib.Path(temp) / ("broken-%d.dat" % index))
+        probe.path.write_bytes(payload)
+        loaded = probe.load()
+        if loaded["ok"] or loaded["reason"] != want:
+            bad.append("%s ⇒ ok=%s reason=%s（期望 %s）"
+                       % (label, loaded["ok"], loaded["reason"], want))
+    counter.check(not bad,
+                  "VB2-39⑤ 损坏 / 篡改 / 截断 / 版本不识 / 明文冒充 / 空文件 → **不崩 + 如实 reason**"
+                  "（一律当「没有」处理，**绝不回退明文**；%d 例）" % len(cases),
+                  "；".join(bad))
+
+
+async def _session_online(counter: "_Counter", *, headless: bool, timeout_s: float) -> None:
+    """组 B（真机）：注入合成登录态 → **存 → 清空 → 回灌** → 干净退出 + 残留 0。
+
+    目标域用 **RFC 2606 保留域名**（`session-selftest.invalid`）⇒ **零外网请求、零副作用**；
+    回灌只进浏览器 Cookie 库（`Storage.setCookies`），不发起任何网络请求。
+    """
+    temp = pathlib.Path(tempfile.mkdtemp(prefix="m7b-session-online-"))
+    host = "session-selftest.invalid"
+    store = _session_probe_store(temp, host)
+    seeded = _session_seed_cookies(host)
+    before = _stray_browsers()
+    drv: Optional["driver.BrowserDriver"] = None
+    print("[L2 快照] 组 B：真机往返（临时目录 %s · 域 %s）" % (temp, host))
+    try:
+        drv = await driver.start(headless=headless, start_timeout=timeout_s)
+
+        written = await drv.set_cookies(session.to_cdp_params(seeded))
+        in_library = await drv.cookies_all()
+        names_now = sorted({str(row.get("name")) for row in in_library})
+        counter.check(written == len(seeded) and "aiwrite_selftest_sid" in names_now,
+                      "VB2-39⑥ 注入合成登录态：`Storage.setCookies` 写 %d 条 → **浏览器级** "
+                      "`Storage.getCookies` 读回（全 origin；未导航也成立）" % written,
+                      "库内名字=%s" % names_now)
+
+        saved = store.save(in_library, reason="online")
+        blob = store.path.read_bytes() if store.exists() else b""
+        secrets = [row["name"] for row in seeded] + [row["value"] for row in seeded]
+        hits = session.scan_plaintext(blob, secrets)
+        counter.check(bool(saved.get("ok")) and saved.get("count") == len(seeded)
+                      and store.exists() and not hits,
+                      "VB2-39⑦ 存快照：%s 条 → DPAPI 密文落盘（%d 字节）+ 文件内**零明文**"
+                      % (saved.get("count"), len(blob)),
+                      "命中=%s · 证据=%s" % (hits, saved))
+
+        await drv.delete_all_cookies()
+        cleared = await drv.cookies_for_domain(host)
+        counter.check(cleared == [],
+                      "VB2-39⑧ 注销：`Storage.clearCookies` → 库内该域 Cookie **清零**"
+                      "（先清空，「回灌」才有意义）", "剩余=%d" % len(cleared))
+
+        loaded = store.load()
+        restored = await drv.set_cookies(session.to_cdp_params(loaded["cookies"]))
+        after = await drv.cookies_for_domain(host)
+        after_names = sorted({str(row.get("name")) for row in after})
+        http_only = {str(row.get("name")): bool(row.get("httpOnly")) for row in after}
+        counter.check(bool(loaded.get("ok")) and restored == len(seeded)
+                      and after_names == sorted({str(row["name"]) for row in seeded})
+                      and http_only.get("aiwrite_selftest_sid") is True,
+                      "VB2-39⑨ 回灌：解密 → `Storage.setCookies` 写回 %d 条；名字齐 + "
+                      "**httpOnly 保持**（真·登录态，不是降级副本）" % restored,
+                      "库内=%s · http_only=%s" % (after_names, http_only))
+
+        # ⚠️ 实测（2026-10-03）：**close 之前刚写过 Cookie** 时，Chrome 退出可能 > 5 s（要 flush
+        # cookie 库）⇒ 判据改用**生产同款** `daemon.close_verdict`（超时 + warn + 未强杀 =
+        # 可恢复状态 ⇒ 通过），而不是「必须 5 s 内退出」。等待放宽到 10 s 只为减少噪音，判据不放水。
+        closed = await drv.close_wait(max(10.0, driver.DEFAULT_CLOSE_WAIT_S))
+        verdict_ok, verdict_reason = daemon.close_verdict({
+            "close_requested": True,
+            "browser_not_running": False,
+            "waited_s": closed.get("waited_s"),
+            "warning": closed.get("warning", ""),
+            "fallback_kill": bool(closed.get("fallback_kill")),
+        })
+        counter.check(verdict_ok and closed.get("exit_code") in (0, None),
+                      "VB2-39⑩ 关闭协议（`I23①` / `VB2-38` **同款判据** `close_verdict`）：%s"
+                      "（waited_s=%s · exit_code=%s · warn=%s）"
+                      % (verdict_reason, closed.get("waited_s"), closed.get("exit_code"),
+                         "有（>5 s，如实留痕）" if closed.get("warning") else "无"),
+                      str(closed))
+        counter.check(store.exists(),
+                      "VB2-39⑪ 快照留盘：退出后文件仍在（`%s`）⇒ 「下次启动可回灌」成立"
+                      % store.path.name, str(store.path))
+        after_strays = _stray_browsers()
+        counter.check(len(after_strays) <= len(before),
+                      "VB2-39⑫ 收尾无残留（本 profile 进程：前 %d → 后 %d；只读探测，**不杀**）"
+                      % (len(before), len(after_strays)), str(after_strays)[:200])
+    finally:
+        if drv is not None and drv.alive():
+            leftover = await drv.close_wait(driver.DEFAULT_CLOSE_WAIT_S)
+            print("[L2 快照] 兜底关闭（异常路径）：%s" % (leftover,))
+
+
+def _session_selftest(counter: "_Counter", *, headless: bool, timeout_s: float) -> None:
+    """step 5 自检：组 A（`VB2-39①~⑤` · 离线）+ 组 B（真机「存 → 弃 → 回灌」· 需 pydoll + 浏览器）。"""
+    real_file = session.SESSION_DIR / session.SNAPSHOT_NAME
+    real_before = real_file.read_bytes() if real_file.is_file() else None
+    temp = pathlib.Path(tempfile.mkdtemp(prefix="m7b-session-selftest-"))
+    os.environ[session.ENV_SESSION_DIR] = str(temp)     # 双保险：任何「默认路径」都落临时目录
+    try:
+        _session_offline_checks(counter, temp)
+
+        info = runtime.check_runtime()
+        if not info["ok"]:
+            print("   ----  组 B（真机）：SKIP —— 运行时依赖缺失：%s"
+                  % (info["hint"] or "pydoll 不可用"))
+            print("   ----  说明：组 B 需要 pydoll；**这不是失败**，但也**不假装通过**（`I21` 同族）")
+        elif browsers.detect_browser()[1] is None:
+            print("   ----  组 B（真机）：SKIP —— 本机无 Chrome / Edge：%s"
+                  % runtime.NO_BROWSER_HINT)
+        else:
+            print("[L2 快照] 组 B：真机（**会弹真实浏览器窗口**；headless=%s；预计 ~15 s）"
+                  % headless)
+            if headless:
+                print("   ----  ⚠️ headless 仅自检提速；生产口径是 **有头窗口**（合规 §13）")
+            asyncio.run(_session_online(counter, headless=headless, timeout_s=timeout_s))
+    finally:
+        os.environ.pop(session.ENV_SESSION_DIR, None)
+    real_after = real_file.read_bytes() if real_file.is_file() else None
+    counter.check(real_before == real_after,
+                  "VB2-39⑬ 自检**不污染真实快照**：`" + str(real_file)
+                  + "` 自检前后字节一致（组 A / 组 B 全在临时目录里跑）", "")
+
+
 _SELFTEST_FLAGS: Tuple[str, ...] = ("--selftest", "--stub-selftest", "--pipe-selftest",
-                                    "--driver-selftest", "--daemon-selftest")
+                                    "--driver-selftest", "--daemon-selftest",
+                                    "--session-selftest")
 
 
 def main(argv: List[str]) -> int:
@@ -880,14 +1140,16 @@ def main(argv: List[str]) -> int:
             return 2
         return _serve(pipe_name or pipe.daemon_pipe_name(), once, idle_timeout_s, headless)
 
-    if "--driver-selftest" not in flags and "--daemon-selftest" not in flags and (headless or timeout_given):
-        print("--headless / --timeout 仅用于 --driver-selftest / --daemon-selftest（不静默忽略）",
-              file=sys.stderr)
+    browser_selftests = ("--driver-selftest", "--daemon-selftest", "--session-selftest")
+    if not any(flag in flags for flag in browser_selftests) and (headless or timeout_given):
+        print("--headless / --timeout 仅用于 --driver-selftest / --daemon-selftest / "
+              "--session-selftest（不静默忽略）", file=sys.stderr)
         return 2
 
     if not flags:
         print("未指定模式：需 --selftest / --stub-selftest / --pipe-selftest / "
-              "--driver-selftest / --daemon-selftest / --serve", file=sys.stderr)
+              "--driver-selftest / --daemon-selftest / --session-selftest / --serve",
+              file=sys.stderr)
         print(__doc__, file=sys.stderr)
         return 2
 
@@ -902,11 +1164,12 @@ def main(argv: List[str]) -> int:
         _driver_selftest(counter, headless=headless, timeout_s=driver_timeout_s)
     if "--daemon-selftest" in flags:
         _daemon_selftest(counter, headless=headless, timeout_s=driver_timeout_s)
+    if "--session-selftest" in flags:
+        _session_selftest(counter, headless=headless, timeout_s=driver_timeout_s)
     if stub:
-        print("   ----  桩边界：`upload_image` / `send_prompt` / `read_answer` 仍未实现"
-              "（批 3 / step 5）；C++ 侧关闭协议同步与接线待 step 5~6；"
-              "`session.py`（L2 快照）未落地 ⇒ **`VB2-39` 尚未生效**"
-              "（`VB2-38` 已在 Python 侧生效）")
+        print("   ----  桩边界：`upload_image` / `send_prompt` / `read_answer` 仍未实现（批 3）；"
+              "C++ 侧关闭协议同步 / `pydoll_channel` 接线 / 诊断换代待 step 6；"
+              "`session.py`（L2 快照 · `VB2-39`）**已在 Python 侧生效**（`--session-selftest`）")
     print("=== 自检结果: %d 通过 / %d 失败 ===" % (counter.passed, counter.failed))
     return 0 if counter.failed == 0 else 1
 

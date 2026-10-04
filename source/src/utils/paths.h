@@ -23,7 +23,13 @@ const std::filesystem::path& config_file();       // ~/.brain-ai/config.toml
 const std::filesystem::path& app_log_file();      // ~/.brain-ai/logs/app.log
 const std::filesystem::path& workflow_log_file(); // ~/.brain-ai/logs/workflow.log
 const std::filesystem::path& recent_file();       // ~/.brain-ai/recent.json
-const std::filesystem::path& webview2_profile();  // ~/.brain-ai/webview2
+const std::filesystem::path& webview2_profile();  // ~/.brain-ai/webview2（批 5 退役）
+// M7B：Pydoll **单 profile**（`M7B-01` 实测落点；与 Python `browsers.PROFILE` 同值）
+const std::filesystem::path& pydoll_profile();    // ~/.brain-ai/pydoll-profile
+// MB-D0-8 L2：登录态加密快照目录（**≠ `snapshots_dir()`** —— 那个是工作流执行快照）
+//  * 快照本体（DPAPI 密文）由 Python `session.py` 读写；C++ 侧只用它做「路径 / 状态展示」
+//  * **不**加入 `ensure_data_dirs()`（不留空目录误导；由 Python 侧按需创建）
+const std::filesystem::path& session_snapshot_dir(); // ~/.brain-ai/session
 // P7a-04：统一资源目录（图片归档根）—— 工作流只存令牌，文件全部收在这里
 const std::filesystem::path& assets_images_dir(); // ~/.brain-ai/assets/images
 

@@ -414,8 +414,11 @@ void PipeClient::dispatch(const channel::Frame& frame)
                    &ignored);
         return;
     }
-    if (frame.kind == "evt" && is_progress_event(frame.name)) {
-        // 进度事件（delta / stage）：喂回调，**不完成**配对调用（M7B-21 起 delta 逐字呈现）
+    //  ⚠️ `MB-Q10` 口径（step 4 实测 · 2026-10-03 step 6 同步）：`stage` 帧**带请求 id** 时是
+    //  该命令的**完成回包**（`open_tab` 回的就是 `stage{open, ok}`）；只有 `id == "-"` 的才是
+    //  **纯进度事件**。若把带 id 的 `stage` 也当进度事件吞掉，`call("open_tab", …)` 会等到超时。
+    if (frame.kind == "evt" && is_progress_event(frame.name) && frame.id == kEventId) {
+        // 纯进度事件（`id="-"`）：喂回调，**不完成**配对调用（`M7B-21` 起 `delta` 逐字呈现）
         const EventCallback callback = current_callback();
         if (callback) {
             callback(frame);

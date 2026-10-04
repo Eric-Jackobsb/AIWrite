@@ -34,8 +34,8 @@ __all__ = [
 # ---- 可操作引导（含动作 + 安装物；`M7B-14` 的最终文案归 step 4 定稿）----
 PYTHON_HINT = ("未检测到可用的 Python 运行时：请安装 Python 3.12（推荐）后重开 AIwrite；"
                "网页通道依赖本机 Python，不会自动下载安装")
-PYDOLL_HINT = ("本机 Python 缺少依赖 pydoll：请在 python\\.venv 下执行 "
-               "`python -m pip install -r python\\requirements.txt`（钉版 pydoll-python==2.27.0）")
+PYDOLL_HINT = ("本机 Python 缺少依赖 pydoll：请在 source\\python\\.venv 下执行 "
+               "`python -m pip install -r source\\python\\requirements.txt`（钉版 pydoll-python==2.27.0）")
 NO_BROWSER_HINT = ("未检测到本机浏览器：请安装 Chrome（推荐）或 Edge 后重开 AIwrite；"
                    "AIwrite 不会自动下载浏览器，也不会改用官方 API 顶替网页版")
 

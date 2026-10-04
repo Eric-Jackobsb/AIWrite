@@ -207,6 +207,27 @@ function(aiwrite_copy_assets target)
 endfunction()
 
 # -----------------------------------------------------------------------------
+# aiwrite_copy_python：把 Python 侧守护进程包拷到输出目录（M7B 批 2 · §6.2 · 风险 P6）
+#   * 源 = <仓库根>/source/python/brain_ai_browser（**排除 `.venv`** —— 那是本机环境、不入产物）
+#   * 目标 = <exe>/python/brain_ai_browser（`pydoll_channel.cpp` 的包目录候选之一）
+#   * `file(GLOB CONFIGURE_DEPENDS)`：新增 / 删除 `.py` 时自动重配（避免漏拷）
+# -----------------------------------------------------------------------------
+function(aiwrite_copy_python target)
+    set(_src "${CMAKE_CURRENT_SOURCE_DIR}/python/brain_ai_browser")
+    set(_dst "$<TARGET_FILE_DIR:${target}>/python/brain_ai_browser")
+    file(GLOB _py_files CONFIGURE_DEPENDS "${_src}/*.py")
+    if(NOT _py_files)
+        message(WARNING "copy_python: 未找到 ${_src}/*.py（跳过）—— 开发态请确认 source/python 就位")
+        return()
+    endif()
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_dst}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_py_files} "${_dst}"
+        COMMENT "copy_python: brain_ai_browser/*.py -> $<TARGET_FILE_DIR:${target}>/python"
+        VERBATIM)
+endfunction()
+
+# -----------------------------------------------------------------------------
 # aiwrite_core：公共基础设施（路径 / 日志 / 配置 / 加密）
 # 后续 M2 起把 engine / nodes / ai 也并入本库
 # -----------------------------------------------------------------------------
@@ -237,10 +258,12 @@ src/engine/provider_resolve.cpp
     src/ai/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）
     src/nodes/local_nodes.cpp
     src/nodes/register_executors.cpp
-    src/web/channel_frames.cpp  # M7B 批 1：管道协议 v1 帧（纯函数；VB2-29 / VB2-32）
-    src/web/pipe_client.cpp     # M7B 批 1 step 2：命名管道客户端（M7B-02；读线程 + id 配对）
+    src/web/channel_frames.cpp   # M7B 批 1：管道协议 v1 帧（纯函数；VB2-29 / VB2-32）
+    src/web/pipe_client.cpp      # M7B 批 1 step 2：命名管道客户端（M7B-02；读线程 + id 配对）
+    src/web/pydoll_channel.cpp   # M7B 批 2：新通道（Pydoll 守护进程）—— 本批**不接线**（只 --pydoll-login / --pydoll-selftest）
+    src/web/session_snapshot.cpp # M7B 批 2：L2 快照只读视图（MB-D0-8；**只碰元数据**，不读内容）
     src/web/session_store.cpp
-    src/web/webview_host.cpp)   # 网页版登录 + 会话 + 协议探测 + 页面内 PoW 求解
+    src/web/webview_host.cpp)    # 网页版登录 + 会话 + 协议探测 + 页面内 PoW 求解
 target_include_directories(aiwrite_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(aiwrite_core
     PUBLIC aiwrite_build_options
@@ -312,6 +335,7 @@ endif()
 aiwrite_copy_runtime_dlls(aiwrite)
 aiwrite_sync_vcpkg_bin(aiwrite)
 aiwrite_copy_assets(aiwrite)   # M_patchB L1 / PB2-02：providers.json → <exe>/assets
+aiwrite_copy_python(aiwrite)   # M7B 批 2：brain_ai_browser/*.py → <exe>/python/brain_ai_browser
 
 # -----------------------------------------------------------------------------
 # api_probe：M1 技术验证命令行工具（V-04 HTTP / V-05 SHA3 / V-06 DeepSeek API）
@@ -329,6 +353,7 @@ target_compile_definitions(api_probe PRIVATE AIWRITE_SOURCE_DIR="${CMAKE_CURRENT
 aiwrite_copy_runtime_dlls(api_probe)
 aiwrite_sync_vcpkg_bin(api_probe)
 aiwrite_copy_assets(api_probe) # 自检也要读表（与 aiwrite 同一份资产）
+aiwrite_copy_python(api_probe) # M7B 批 2：同上（自检也要能起新通道守护进程）
 
 # -----------------------------------------------------------------------------
 # webview2_login：M1 技术验证命令行工具（V-03 WebView2 登录 + Cookie 提取）

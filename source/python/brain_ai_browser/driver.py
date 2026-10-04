@@ -2,11 +2,12 @@
 
 本步范围（只这几项，其余如实留给后续步）
     `start` · `tab_for` / `new_tab` · `cookies_all` · `cookies_for_domain` ·
+    `set_cookies` / `delete_all_cookies`（step 5：L2 快照**回灌**用）·
     `execute_script` · `close_wait`。
     ⬜ 未含：`attach_if_running`（step 4）· `type_humanized` / `press_key` /
     `set_file_input_files` / `expect_file_chooser` / `stream_deltas`（批 3）。
 
-复用的已实测机制（`python/_probe/m7b01..m7b09`，**不再重新试错**）
+复用的已实测机制（`source/python/_probe/m7b01..m7b09`，**不再重新试错**）
     * headful 起真浏览器 + 单 profile `~/.brain-ai/pydoll-profile`；
     * `--no-first-run` / `--no-default-browser-check` **由库自己加**（重加会抛
       `ArgumentAlreadyExistsInOptions`）⇒ 我们只加 `--user-data-dir` 与 `--window-size`；
@@ -200,15 +201,38 @@ class BrowserDriver:
         """执行 JS 并返回**解包后的业务值**（两层 `result` 由 `unwrap_result` 收敛）。"""
         return unwrap_result(await self._tab.execute_script(script))
 
-    # ---- Cookie（`Storage.getCookies` · 浏览器级 · 全 origin · 含 HttpOnly）----
+    # ---- Cookie（**浏览器级** `Storage.getCookies` · 全 origin · 含 HttpOnly）----
     async def cookies_all(self) -> List[Dict[str, Any]]:
-        """全库 Cookie（**原始字段**；值**不进协议** —— §6.1 只传名单 / 标志位）。"""
-        cookies = await self._tab.get_cookies()
+        """**全库** Cookie（浏览器级 `Storage.getCookies`）。
+
+        ⚠️ 必须走 `self._browser.get_cookies()`（`M7B-17` 口径）：`Tab.get_cookies()` 在无
+        `browser_context_id` 时走 **`Network.getCookies`（页级）** —— 只返回**当前页可见**的
+        Cookie、依赖当前页停在哪（`about:blank` 上读不到站点 Cookie）。页级读会**漏掉父域
+        登录 Cookie**（最典型的登录态形态）。原始字段照回；值**不进协议**（§6.1 只传名单 / 标志位）。
+        """
+        cookies = await self._browser.get_cookies()
         return [dict(cookie) for cookie in (cookies or []) if isinstance(cookie, dict)]
 
     async def cookies_for_domain(self, suffix: str) -> List[Dict[str, Any]]:
         """按域过滤（`P3`）。"""
         return cookies_for_domain(await self.cookies_all(), suffix)
+
+    async def set_cookies(self, params: Optional[Iterable[Dict[str, Any]]]) -> int:
+        """回灌 Cookie（浏览器级 `Storage.setCookies`）；返回**尝试写入**的条数。
+
+        `params` 由 `session.to_cdp_params()` 生成（**字段白名单** + 会期语义）；
+        空列表 → 直接返回 0（不发命令）。
+        """
+        rows = [dict(item) for item in (params or []) if isinstance(item, dict)]
+        if not rows:
+            return 0
+        await self._browser.set_cookies(rows)
+        return len(rows)
+
+    async def delete_all_cookies(self) -> None:
+        """清空本 profile 的 Cookie（浏览器级 `Storage.clearCookies`）—— 自检「注销→回灌」用；
+        站点级登出（`logout_site`）归 step 6 接线。"""
+        await self._browser.delete_all_cookies()
 
     # ---- 关闭（`I23①` / `MB-D0-8` L1）----
     async def close_wait(self, timeout_s: float = DEFAULT_CLOSE_WAIT_S) -> Dict[str, Any]:

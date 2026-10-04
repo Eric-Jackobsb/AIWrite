@@ -4,7 +4,7 @@
 //  管道协议 v1 帧（`docs/actionPlan/M7B.md` §6.1）—— C++ 侧**纯函数**实现
 //
 //  * 无 IO、无第三方状态 ⇒ 可**离线断言**（`VB2-29` / `VB2-32`）
-//  * 词表**唯一来源** = §6.1；Python 侧同构实现见 `python/brain_ai_browser/protocol.py`
+//  * 词表**唯一来源** = §6.1；Python 侧同构实现见 `source/python/brain_ai_browser/protocol.py`
 //  * 帧 = UTF-8 JSON 一行一帧；必带 `v` / `id` / `kind`（cmd | evt | err）
 //  * **非法行**（JSON 不合法 / 缺 `v` 或 `kind` / `v` 不识别 / 超上限）：`parse_frame` 置
 //    `bad = true` —— 调用方须**丢弃 + 记日志 + 回 `err {bad_frame}`**，

@@ -22,6 +22,7 @@
 #include "utils/paths.h"
 #include "web/webview_host.h"
 #include "web/pipe_client.h"      // M7B 批 1 step 2：命名管道客户端（--pipe-selftest / M7B-02）
+#include "web/pydoll_channel.h"   // M7B 批 2：新通道（--pydoll-login / --pydoll-selftest）
 #include "web/session_store.h"   // M_patchB：--provider-selftest 的网页版登录态检查
 
 #include <cstdio>
@@ -82,6 +83,13 @@ void print_usage()
     std::printf("                   M7B-02 命名管道冒烟：起 Python 守护进程（brain_ai_browser --serve）\n");
     std::printf("                   → hello → 校验 ready{proto, python, browser} → shutdown\n");
     std::printf("                   退出码 0=通过 / 1=失败 / 2=环境缺失（找不到 Python 或包目录）\n");
+    std::printf("  --pydoll-selftest [--timeout <秒>]\n");
+    std::printf("                   M7B 新通道自检（批 2）：起守护进程 → hello → shutdown（**不开浏览器**）\n");
+    std::printf("                   退出码 0=通过 / 1=失败 / 2=依赖缺失（无 Python / 无包目录）\n");
+    std::printf("  --pydoll-login <id> [--timeout <秒>]\n");
+    std::printf("                   M7B 新通道冒烟（批 2）：起**有头**浏览器打开条目站点，\n");
+    std::printf("                   等**人工登录**（不代填密码 · §13）→ 判据 = 条目 cookie_names 命中 → 关窗\n");
+    std::printf("                   退出码 0=登录成功 / 1=超时或失败 / 2=参数或依赖问题\n");
 
     std::printf("  --help           显示本帮助\n");
 }
@@ -821,11 +829,12 @@ int pipe_selftest(int timeout_ms)
         return "?";
     };
 
-    // ---- ① 包目录：<仓库根>/python（开发期）→ <exe>/python（部署期，M7B-11 拷贝）----
+    // ---- ① 包目录：<仓库根>/source/python（开发期）→ <exe>/python（部署期，M7B-11 拷贝）----
     std::vector<fs::path> package_candidates;
 #ifdef AIWRITE_SOURCE_DIR
-    // AIWRITE_SOURCE_DIR = <仓库根>/source ⇒ 上一级即仓库根（python/ 在仓库根下）
-    package_candidates.emplace_back(fs::path(AIWRITE_SOURCE_DIR).parent_path() / "python");
+    // AIWRITE_SOURCE_DIR = <仓库根>/source ⇒ Python 包就在其下（`source/python/`）。
+    // 2026-10-03 目录迁移（运行代码归源码树 / 运行期数据仍在 ~/.brain-ai）：原为 <仓库根>/python。
+    package_candidates.emplace_back(fs::path(AIWRITE_SOURCE_DIR) / "python");
 #endif
     package_candidates.emplace_back(aiwrite::paths::exe_dir() / "python");
     fs::path package_dir;
@@ -1332,6 +1341,8 @@ int main(int argc, char** argv)
     bool dom_adapter_selftest_flag = false; // L3（PB2-15）：选择器探测 / 诊断
     bool dom_dump_flag             = false; // L4（PB2-29 / v15）：选择器候选枚举
     bool pipe_selftest_flag        = false; // M7B 批 1 step 2（M7B-02）：命名管道冒烟
+    bool        pydoll_selftest_flag = false; // M7B 批 2：新通道自检（**不开浏览器**）
+    std::string pydoll_login_id;              // M7B 批 2：--pydoll-login <id>（非空 = 走新通道登录）
     std::string web_chat_prompt;
     bool        vlm_selftest_flag = false;                              // M5-02 图片理解自检
     std::string vlm_image;                                              // --image
@@ -1353,6 +1364,16 @@ int main(int argc, char** argv)
         }
         else if (arg == "--pipe-selftest") {
             pipe_selftest_flag = true;
+        }
+        else if (arg == "--pydoll-selftest") {
+            pydoll_selftest_flag = true;
+        }
+        else if (arg == "--pydoll-login") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --pydoll-login 缺少取值（provider id）\n");
+                return 2;
+            }
+            pydoll_login_id = argv[++i];
         }
         else if (arg == "--cred-list") {
             const std::vector<aiwrite::utils::CredentialInfo> items =
@@ -1494,6 +1515,20 @@ int main(int argc, char** argv)
         // --timeout 的口径是**秒**（与 --login-selftest 一致）→ 本函数用毫秒
         const int code = pipe_selftest(selftest_timeout * 1000);
         aiwrite::log::info("AIwrite 管道自检退出，返回码 " + std::to_string(code));
+        aiwrite::log::shutdown();
+        return code;
+    }
+
+    // M7B 批 2（§6.2 · M7B-19 门槛）：新通道（Pydoll 守护进程）—— 自检 / 冒烟
+    if (pydoll_selftest_flag) {
+        const int code = aiwrite::web::channel::selftest(30'000);
+        aiwrite::log::info("AIwrite 新通道自检退出，返回码 " + std::to_string(code));
+        aiwrite::log::shutdown();
+        return code;
+    }
+    if (!pydoll_login_id.empty()) {
+        const int code = aiwrite::web::channel::pydoll_login(pydoll_login_id, selftest_timeout);
+        aiwrite::log::info("AIwrite 新通道登录退出，返回码 " + std::to_string(code));
         aiwrite::log::shutdown();
         return code;
     }

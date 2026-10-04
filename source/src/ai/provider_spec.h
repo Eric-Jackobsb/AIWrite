@@ -75,6 +75,9 @@ struct ProviderWebSpec {            // 网页版站点描述（kind=web）
     std::string done_selector;
     int         answer_poll_ms   = 500;
     int         answer_max_polls = 120;
+    // M7B（`B12-C2`）：上传入口形态 `auto | file_input | drop_zone | paste_only | none` ——
+    //  **本批只解析、不消费**（运行期取值归 M7B 批 3 `P7b-10`）；缺省空串 = 未声明
+    std::string attach;
 };
 
 // ---- M_patchB L4（PB2-27 / 决策 D-27 / 不变量 I15）：**站点无关**的「已登录」判定 ----

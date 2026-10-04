@@ -4,8 +4,12 @@
 //  网页版会话存储（设计 §8.5）
 //
 //  * Cookie 只存在于内存，程序退出即销毁（不写盘、不进日志）
-//  * 由 WebView2 登录窗口（web/webview_host）在提取后写入，UI 线程每帧读快照
-//  * 线程安全：WebView2 回调线程写，UI 线程读
+//  * 写入方：**旧** = WebView2 登录窗口（`web/webview_host`）；**新（M7B）** = **CDP Cookie 快照**
+//    （守护进程 `login_state` → `web/channel`；`I15′`：判据 = 浏览器级 `Storage.getCookies`
+//    **全 origin 名单，去 `userToken`**）。生产路径切换归批 3（`M7B-20`）—— 批 1–4 **只加不替换**（`B12-C1`）
+//  * **持久化不在本组件**：加密快照落盘归 L2 独立组件 `web/session_snapshot`（`MB-D0-8`）——
+//    **不喂** `SessionStore`（本类仍「只读暴露 + 仅内存」）
+//  * 线程安全：写入方线程写，UI 线程读
 // ============================================================================
 
 #include <cstddef>

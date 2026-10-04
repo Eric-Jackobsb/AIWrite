@@ -41,6 +41,8 @@
 #include "ai/dom_web_client.h"             // L3（PB2-13/15）：DOM 适配器纯函数断言（VB2-22）
 #include "web/webview_host.h"              // L4（PB2-28）：探测脚本适用性断言（VB2-25）
 #include "web/channel_frames.h"           // M7B 批 1：管道协议 v1 帧（VB2-29 / VB2-32 · §6.1）
+#include "web/session_snapshot.h"        // M7B 批 2：L2 快照只读视图（VB2-39⑥ · MB-D0-8）
+#include "web/pydoll_channel.h"          // M7B 批 2：新通道如实报错断言（VB2-40④⑤ · I21）
 #include "ai/deepseek_web_client.h"       // L4（PB2-28④）：会话失效识别断言（VB2-27）
 #include "utils/image_decode.h"           // M7-04/05：图片格式嗅探 + 解码 + 失败文案断言
 #include "utils/asset_store.h"            // P7a-04：统一资源目录（令牌 / 归档 / 解析）断言
@@ -3389,6 +3391,72 @@ int execution_selftest()
 
         }
 
+    }
+
+
+    // ---- M7B 批 2（step 6）新增：站点描述搬迁 / 快照只读视图 / 新通道如实报错（纯逻辑，不启进程）----
+    {
+        using aiwrite::web::SiteRef;
+
+        // ① `site_ref.h` 是**零语义搬迁**（守 I2）：无参默认请求与旧常量逐字一致
+        const aiwrite::web::LoginRequest legacy = aiwrite::web::interactive_login_request();
+        expect(check,
+               legacy.url == std::string(aiwrite::web::kDefaultSiteLoginUrl) &&
+                   legacy.window_title == std::string(aiwrite::web::kDefaultSiteWindowTitle) &&
+                   legacy.probe_after_load,
+               "VB2-40① `site_ref.h` 搬迁零语义：无参 `interactive_login_request()` 与旧常量逐字一致（守 I2）");
+
+        // ② `attach`（B12-C2）：条目 `web.attach` → `SiteRef.attach`（**只携带、运行期不消费**）
+        aiwrite::ai::ProviderWebSpec web_spec;
+        web_spec.login_url = "https://example.invalid/";
+        web_spec.attach    = "file_input";
+        const SiteRef carried = aiwrite::web::login_request_of(web_spec, "demo-vb240",
+                                                               /*for_probe=*/false,
+                                                               /*offscreen=*/false);
+        expect(check, carried.attach == "file_input" && carried.url == "https://example.invalid/",
+               "VB2-40② `login_request_of()` 携带 `web.attach`（B12-C2：本批只解析、不消费）");
+
+        // ③ 快照 C++ 只读视图（`VB2-39` 的 C++ 半）：只碰元数据；`summary()` **零明文**
+        std::error_code             dir_ec;
+        const std::filesystem::path probe_dir =
+            std::filesystem::temp_directory_path(dir_ec) / "aiwrite-vb240";
+        const std::filesystem::path probe_file = probe_dir / "cookies.dat";
+        std::filesystem::create_directories(probe_dir, dir_ec);
+        {
+            std::ofstream out(probe_file, std::ios::binary | std::ios::trunc);
+            out << "SENTINEL-CLEARTEXT-should-never-appear";
+        }
+        const aiwrite::web::SnapshotInfo probe_info = aiwrite::web::inspect_snapshot_at(probe_file);
+        const std::string                probe_text = aiwrite::web::snapshot_summary(probe_info);
+        expect(check,
+               probe_info.exists && probe_info.bytes > 0 && !probe_info.modified_at.empty() &&
+                   probe_text.find("SENTINEL-CLEARTEXT") == std::string::npos,
+               "VB2-39⑥ 快照 C++ 只读视图：`inspect()` 只碰元数据（存在 / 字节 / 时间）+ "
+               "`summary()` **零明文**（**不读内容**）");
+        std::filesystem::remove_all(probe_dir, dir_ec);
+
+        // ④ 跨语言常量（与 Python `session.py` 同值 —— 改一处必须改两处）
+        expect(check,
+               std::string(aiwrite::web::kSnapshotFileName) == "cookies.dat" &&
+                   aiwrite::web::kSnapshotRefreshPeriod <= 10.0 &&
+                   aiwrite::web::kSnapshotMaxBytes == 1024u * 1024u,
+               "VB2-40③ 快照常量与 Python 同值：`cookies.dat` / 刷新 ≤ 10 s / 1 MiB 上限");
+
+        // ⑤ 新通道**如实报错**（`I21`：不假装成功、不回落旧通道）
+        std::string logout_error;
+        const bool  logout_ok = aiwrite::web::channel::logout_site(carried, 1000, &logout_error);
+        std::string script_error;
+        const bool  script_ok = aiwrite::web::channel::run_script(carried, "return 1;", 1000,
+                                                                  nullptr, &script_error);
+        expect(check,
+               !logout_ok && logout_error.find("尚未实现") != std::string::npos && !script_ok &&
+                   script_error.find("尚未实现") != std::string::npos,
+               "VB2-40④ 新通道未落地项**如实报错**（`logout_site` / `run_script` → false + 可操作原因）");
+
+        std::string session_error;
+        const bool  session_ok = aiwrite::web::channel::ensure_session(carried, 200, &session_error);
+        expect(check, !session_ok && session_error.find("未接线") != std::string::npos,
+               "VB2-40⑤ `ensure_session` 无守护进程时给**可操作原因**（不静默降级、不回落旧通道）");
     }
 
 

@@ -229,7 +229,8 @@ const std::set<std::string>& allowed_web_fields()
     static const std::set<std::string> fields = {
         "adapter",     "login_url",       "window_title",   "endpoints",  "probe_paths",
         "cookie_names", "token_expr",     "input_selector", "send",       "answer_selector",
-        "done_when",   "answer_poll_ms",  "answer_max_polls"};
+        "done_when",   "answer_poll_ms",  "answer_max_polls",
+        "attach"};  // M7B（B12-C2）：先放开白名单（**解析但运行期不消费**）—— 取值归批 3
     return fields;
 }
 
@@ -797,6 +798,7 @@ void parse_web(const json& entry, ProviderSpec* out, const std::string& where,
     read_string(web, "token_expr", &out->web.token_expr, type_ok);
     read_string(web, "input_selector", &out->web.input_selector, type_ok);
     read_string(web, "answer_selector", &out->web.answer_selector, type_ok);
+    read_string(web, "attach", &out->web.attach, type_ok);  // M7B（B12-C2）：只解析、不消费
     read_string_array(web, "probe_paths", &out->web.probe_paths, type_ok);
     read_string_array(web, "cookie_names", &out->web.cookie_names, type_ok);
     bool ok = true;

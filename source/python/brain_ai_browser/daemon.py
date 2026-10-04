@@ -18,6 +18,11 @@
       → **超时才兜底强杀，且必须留 warn**（`VB2-38` / `I23①`）；判定走 `close_verdict()` 纯函数；
     * 词表内**尚未实现**的命令（`upload_image` / `send_prompt` / `read_answer`）→ 如实回
       `err{daemon_down, hint=尚未实现}` 并**保持存活**（词表缺「未实现」码 = 开口项 **`MB-Q7`**）；
+    * **L2 登录态快照**（`MB-D0-8` L2 · step 5 · `VB2-39`）：`open_tab` / `login_state` 起浏览器后
+      **回灌一次**（每浏览器会话一次；失败 → 追加 `error{not_logged_in}` 事件**显式提示**，`I23④`，
+      但**不影响本次命令回包**）；`login_state` 判到 `logged_in` → **登录即写**；
+      `shutdown` 在 `Browser.close` **之前**再写一次；空闲 / 命令间隙每 5 s **定时刷新**
+      （`_snapshot_tick` —— 与命令跑在**同一任务**里 ⇒ 不存在并发访问 CDP 的时序问题）；
     * ⚠️ **`login_state` 的回包名是 `login`** —— 该事件名**不在** §6.1 表 2 的事件词表里（当步迭代仅校验
       命令词表）；已登记为开口项 **`MB-Q9`**，本批**不动词表**，按 §6.2 命令边界表实现。
 """
@@ -40,6 +45,7 @@ from . import pipe
 from . import protocol as P
 from . import redact
 from . import runtime
+from . import session
 
 __all__ = ["DEFAULT_IDLE_TIMEOUT_S", "ready_payload", "dependency_problem",
            "close_verdict", "BrowserAccess", "Daemon", "serve",
@@ -122,11 +128,16 @@ class BrowserAccess:
     """
 
     def __init__(self, *, headless: bool = False,
-                 start_timeout: float = driver.DEFAULT_START_TIMEOUT_S) -> None:
+                 start_timeout: float = driver.DEFAULT_START_TIMEOUT_S,
+                 snapshot: Optional["session.SnapshotStore"] = None) -> None:
         self.headless = bool(headless)
         self.start_timeout = float(start_timeout)
         self.session_starts = 0     # 启动次数（自愈 = 第 2 次起）
         self.self_heals = 0         # 吞掉「浏览器已死」并重启的次数
+        self.snapshot = snapshot    # L2 快照（`None` = 关闭该功能：不读也不写）
+        self.snapshot_saves = 0     # L2 实际写盘次数（内容有变化才算）
+        self.snapshot_restores = 0  # L2 成功回灌次数（每个浏览器会话一次）
+        self._restored_at = 0       # 回灌时的 `session_starts`（幂等记账）
         self._driver: Optional[driver.BrowserDriver] = None
 
     # ---- 状态 ----
@@ -177,6 +188,57 @@ class BrowserAccess:
     def note_command_error(self, code: str, hint: str) -> None:
         redact.log_event("command_error", "命令失败（可操作错误已回给调用方）",
                          level="warn", code=code, hint=hint)
+
+    # ---- L2 快照（`MB-D0-8` L2 · step 5 · `VB2-39`）----
+    async def save_snapshot(self, *, reason: str, provider: str = "") -> Dict[str, Any]:
+        """读**全库** Cookie（浏览器级）→ 作用域过滤 → DPAPI 加密落盘；失败**只记日志**。
+
+        三个触发点口径一致：**定时刷新**（`refresh`）/ **登录即写**（`login`）/
+        **`shutdown` 关闭前再写**（`shutdown`）——「关闭前」必须在 `Browser.close` **之前**，
+        否则 CDP 已断、读不到 Cookie。
+        """
+        store = self.snapshot
+        if store is None:
+            return {"ok": False, "reason": "disabled"}
+        if self._driver is None or not self._driver.alive():
+            return {"ok": False, "reason": "no_session"}
+        try:
+            cookies = await self._driver.cookies_all()
+        except Exception as exc:  # noqa: BLE001 —— 读 Cookie 失败**不得**阻断命令 / 收尾
+            redact.log_event("snapshot_read_failed", "L2 快照读取 Cookie 失败：%s" % exc,
+                             level="warn", reason=reason)
+            return {"ok": False, "reason": "read_failed"}
+        result = store.save(cookies, reason=reason, provider=provider)
+        if result.get("changed"):
+            self.snapshot_saves += 1
+        return result
+
+    async def restore_snapshot(self) -> Optional[Tuple[int, str]]:
+        """把 L2 快照**回灌**进当前浏览器会话；返回 `(写入条数, reason)` 或 `None`。
+
+        * **每个浏览器会话只回灌一次**（自愈重启后会再灌 —— 新进程的 Cookie 库是空的）；
+        * **不抛异常**：失败原因如实交给调用方，由它**显式提示**（`I23④`）；
+        * `reason="absent"` = 首次运行（**正常**，不是故障）；`None` = 本次无需处理（已灌过 / 功能关闭）。
+        """
+        if self.snapshot is None or self._driver is None:
+            return None
+        if self._restored_at >= self.session_starts:
+            return None                                   # 本会话已回灌（幂等）
+        self._restored_at = self.session_starts
+        loaded = self.snapshot.load()
+        if not loaded["ok"]:
+            return 0, str(loaded.get("reason") or "unknown")
+        params = session.to_cdp_params(loaded["cookies"])
+        try:
+            written = await self._driver.set_cookies(params)
+        except Exception as exc:  # noqa: BLE001 —— 回灌失败不能阻断启动
+            redact.log_event("snapshot_restore_failed", "L2 快照回灌失败：%s" % exc,
+                             level="warn", count=len(params))
+            return 0, "set_cookies_failed"
+        self.snapshot_restores += 1
+        redact.log_event("snapshot_restored", "L2 快照已回灌（值不入日志）",
+                         restored=written, **session.summarize(loaded["payload"]))
+        return written, "restored"
 
     # ---- 关闭（`VB2-38`）----
     async def close(self, grace_ms: int = P.SHUTDOWN_GRACE_MS) -> Dict[str, Any]:
@@ -234,16 +296,26 @@ MISSING_URL_HINT = ("缺少 url：条目 `web.login_url` 由 C++ 侧解析后下
 NOT_IMPLEMENTED_HINT = ("命令 %s 尚未实现（批 3 / step 5 落地）；词表暂缺「命令未实现」错误码 →"
                         " 现借 `daemon_down`（开口项 `MB-Q7`）")
 
+# `I23④`：快照存在却恢复不了 → **必须显式提示**（不得静默降级成「没登录过」）
+RESTORE_FAILED_HINT = ("登录态快照无法恢复（%s）→ 请重新登录一次；"
+                       "下次干净退出后会重新写入快照")
+
 _GONE_EXCEPTIONS: Optional[Tuple[type, ...]] = None
 
 
 def gone_exceptions() -> Tuple[type, ...]:
-    """「浏览器已不在运行 / 连接已断」类异常（惰性取自 pydoll；取不到 → 空元组）。"""
+    """「浏览器已不在运行 / 连接已断」类异常（惰性取自 pydoll；取不到 → 只剩内建那条）。
+
+    ⚠️ **必含内建 `ConnectionError`**（`ConnectionRefusedError` / `ConnectionResetError` /
+    `ConnectionAbortedError`）：浏览器被杀后，下一次 CDP 命令可能先撞到「连接被拒绝」而不是
+    pydoll 的 `BrowserNotRunning`（2026-10-03 step 5 实测：`[WinError 1225] 远程计算机拒绝网络连接`）
+    ⇒ 漏掉这条就会**丢失自愈**、命令直接失败（`M7B-11` 行为被破坏）。
+    """
     global _GONE_EXCEPTIONS
     if _GONE_EXCEPTIONS is None:
         names = ("BrowserNotRunning", "ConnectionException", "ConnectionFailed",
                  "ReconnectionFailed", "WebSocketConnectionClosed")
-        found: list = []
+        found: list = [ConnectionError]            # 内建（不依赖 pydoll）
         try:
             import pydoll.exceptions as exceptions  # 惰性：离线环境也能 import 本模块
             for name in names:
@@ -295,7 +367,16 @@ async def handle_frame(frame: P.Frame, *, write: WriteLine,
         if browser is None:
             redact.log_event("shutdown", "本次连接未启动浏览器 → 直接收尾（无需关闭协议）")
         else:
-            await browser.close(grace_ms)
+            # L2（`I23②`）：**关闭前再写一次快照** —— 必须早于 `Browser.close`
+            #（close 之后 CDP 已断，读不到 Cookie）。失败只记日志，不改变关闭协议结果。
+            snapshot = await browser.save_snapshot(reason="shutdown")
+            evidence = await browser.close(grace_ms)
+            redact.log_event("shutdown_snapshot", "关闭前 L2 快照落盘结果",
+                             snapshot_ok=bool(snapshot.get("ok")),
+                             snapshot_reason=snapshot.get("reason"),
+                             snapshot_count=snapshot.get("count"),
+                             close_requested=bool(evidence.get("close_requested")),
+                             waited_s=evidence.get("waited_s"))
         return False
 
     if frame.name == "open_tab":
@@ -331,6 +412,28 @@ async def _ensure_browser(browser: Optional["BrowserAccess"], write: WriteLine,
         return None
 
 
+async def _ensure_browser_restored(browser: Optional["BrowserAccess"], write: WriteLine,
+                                   frame: P.Frame) -> Optional[driver.BrowserDriver]:
+    """`_ensure_browser` + **L2 回灌**（每个浏览器会话一次）+ 恢复失败的**显式提示**（`I23④`）。
+
+    恢复失败**不影响本次命令的成败**：额外发一条 `error` 事件帧（`id="-"`）携带可操作引导，
+    命令本身照常执行（用户可能手动重登）。
+    """
+    driver_now = await _ensure_browser(browser, write, frame)
+    if driver_now is None or browser is None:
+        return None
+    outcome = await browser.restore_snapshot()
+    if outcome is None:
+        return driver_now                       # 已灌过 / 功能关闭
+    written, reason = outcome
+    if written > 0 or reason == "absent":
+        return driver_now                       # 成功，或首次运行（**正常**，不吓用户）
+    hint = RESTORE_FAILED_HINT % reason
+    browser.note_command_error("not_logged_in", hint)
+    await write(P.encode_error("not_logged_in", P.EVENT_ID, hint))
+    return driver_now
+
+
 async def _run_browser_op(browser: "BrowserAccess", op: Callable[[], Any]) -> Any:
     """跑一次浏览器操作；命中「浏览器已不在运行」→ **吞掉 + 自愈 + 重试一次**（`M7B-11`）。
 
@@ -347,7 +450,7 @@ async def _run_browser_op(browser: "BrowserAccess", op: Callable[[], Any]) -> An
 async def _cmd_open_tab(frame: P.Frame, write: WriteLine,
                         browser: Optional["BrowserAccess"]) -> bool:
     """`open_tab`：导航到调用方给的 url（**无站点回落**，`I14`）+ `stage{open}`。"""
-    if await _ensure_browser(browser, write, frame) is None:
+    if await _ensure_browser_restored(browser, write, frame) is None:
         return True
     assert browser is not None                       # `_ensure_browser` 已保证
     url = str(frame.field("url") or "")
@@ -367,6 +470,9 @@ async def _cmd_open_tab(frame: P.Frame, write: WriteLine,
     await write(P.encode_event("stage", frame.id, stage="open", ok=ok))
     if ok:
         redact.log_event("open_tab", "已导航到目标页", provider=provider, url=url)
+        if browser.snapshot is not None:
+            # L2 作用域：只记**调用方给的 url 的 host**（`I14`：Python 侧不读条目表、不自造站点）
+            browser.snapshot.add_scope(url)
         return True
     hint = "打开标签页失败：%s（可重试；若浏览器已被关，命令会自动重启浏览器）" % detail
     browser.note_command_error("no_browser", hint)
@@ -382,7 +488,7 @@ async def _cmd_login_state(frame: P.Frame, write: WriteLine,
     `logged_in` / `not_logged_in`；**未给 → `unknown`**（观测值照回，判定交调用方 —— `I14`：
     站点知识只在条目，Python 侧不自造）。
     """
-    if await _ensure_browser(browser, write, frame) is None:
+    if await _ensure_browser_restored(browser, write, frame) is None:
         return True
     assert browser is not None
     provider = str(frame.field("provider") or "")
@@ -402,6 +508,9 @@ async def _cmd_login_state(frame: P.Frame, write: WriteLine,
         state = "logged_in" if all(name in names for name in expected) else "not_logged_in"
     else:
         state = "unknown"
+    if state == "logged_in":
+        # L2（`MB-Q5` 第二个触发点）：**登录即写** —— 刚判到登录就落盘，避免「登完就断电」
+        await browser.save_snapshot(reason="login", provider=provider)
     await write(P.encode_event("login", frame.id, state=state, cookie_names=names,
                                has_expires=any(not row.get("session") for row in rows),
                                http_only=any(bool(row.get("http_only")) for row in rows)))
@@ -521,7 +630,11 @@ class Daemon:
         self.pipe_name = pipe.normalize_pipe_name(pipe_name)
         self.idle_timeout_s = float(idle_timeout_s)
         self.once = bool(once)
-        self.browser = BrowserAccess(headless=headless, start_timeout=start_timeout)
+        # L2 快照（`MB-D0-8` L2）：缺省落 `~/.brain-ai/session/cookies.dat`；
+        # `BRAIN_AI_SESSION_DIR` 可重定向 ⇒ 自检**绝不污染真实快照**（见 `session.session_dir()`）
+        self.browser = BrowserAccess(headless=headless, start_timeout=start_timeout,
+                                     snapshot=session.SnapshotStore())
+        self._last_snapshot_at = 0.0    # 定时刷新节流（与命令**同一任务**，不并发访问 CDP）
         self.served = 0
         self.frame_errors = 0                     # 丢弃的非法帧数（诊断）
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -613,6 +726,21 @@ class Daemon:
             await asyncio.to_thread(connection.write_line, line)
         return write
 
+    async def _snapshot_tick(self) -> None:
+        """L2 定时刷新（`MB-Q5`：5 s < 10 s 上限）；节流 → 浏览器活着 → 有作用域，才真读。
+
+        * **空作用域**（本次会话还没 `open_tab` 过）⇒ **不写**（隐私最小 · `MB-Q11`）；
+        * 读 Cookie / 写盘失败**只记日志**，绝不打断主循环（`I21` 同族：不静默，但也不致命）。
+        """
+        now = time.monotonic()
+        if now - self._last_snapshot_at < session.REFRESH_INTERVAL_S:
+            return
+        self._last_snapshot_at = now
+        store = self.browser.snapshot
+        if store is None or not self.browser.alive or not store.scope:
+            return
+        await self.browser.save_snapshot(reason="refresh")
+
     async def _heartbeat_loop(self) -> None:
         """L4 心跳 + 崩溃检测（`M7B-11`：心跳可检测、浏览器死了看得见）。"""
         while True:
@@ -647,13 +775,21 @@ class Daemon:
         exit_code = 0
         try:
             while True:
-                kind, connection, payload = await self._queue.get()
+                try:
+                    # `MB-Q5`：L2 定时刷新走「队列空闲超时」—— 刷新在**主循环同一任务**里做，
+                    # 不起后台 CDP 任务 ⇒ 不存在「命令与快照并发访问 CDP」的时序问题。
+                    kind, connection, payload = await asyncio.wait_for(
+                        self._queue.get(), timeout=session.REFRESH_INTERVAL_S)
+                except asyncio.TimeoutError:
+                    await self._snapshot_tick()
+                    continue
                 if kind == "frame":
                     if not await handle_frame(payload, write=self._write(connection),
                                               browser=self.browser):
                         self._exit_reason = "shutdown"
                         break
                     self.served += 1
+                    await self._snapshot_tick()
                     continue
                 if kind == "connected":
                     continue
@@ -698,15 +834,23 @@ class Daemon:
         clean = self._exit_reason in ("shutdown", "closed", "idle")
         write_state("exited_clean" if clean else "exited_abnormal", reason=self._exit_reason,
                     served=self.served, frame_errors=self.frame_errors,
-                    session_starts=self.browser.session_starts, self_heals=self.browser.self_heals)
+                    session_starts=self.browser.session_starts, self_heals=self.browser.self_heals,
+                    snapshot_saves=self.browser.snapshot_saves,
+                    snapshot_restores=self.browser.snapshot_restores,
+                    snapshot_reason=(self.browser.snapshot.last_reason
+                                     if self.browser.snapshot is not None else "disabled"))
         redact.log_event("daemon_exit", "守护进程退出（%s）" % self._exit_reason,
                          level="info" if clean else "warn", reason=self._exit_reason,
                          served=self.served, frame_errors=self.frame_errors,
                          session_starts=self.browser.session_starts,
-                         self_heals=self.browser.self_heals)
-        print("[守护进程] 退出（合法帧 %d · 丢弃非法帧 %d · 浏览器启动 %d 次 · 自愈 %d 次）"
+                         self_heals=self.browser.self_heals,
+                         snapshot_saves=self.browser.snapshot_saves,
+                         snapshot_restores=self.browser.snapshot_restores)
+        print("[守护进程] 退出（合法帧 %d · 丢弃非法帧 %d · 浏览器启动 %d 次 · 自愈 %d 次 · "
+              "L2 快照写 %d / 灌 %d）"
               % (self.served, self.frame_errors, self.browser.session_starts,
-                 self.browser.self_heals), flush=True)
+                 self.browser.self_heals, self.browser.snapshot_saves,
+                 self.browser.snapshot_restores), flush=True)
 
     def _close_pipe(self) -> None:
         """关管道与连接（让监听线程从阻塞读里出来；幂等）。"""

@@ -4,7 +4,7 @@
 //  命名管道客户端（C++ ↔ Python 守护进程）—— M7B-02（批 1 · step 2）
 //
 //  * 方向：**C++ = 客户端**（`CreateFileW`）；Python 守护进程 = 服务器
-//    （`python/brain_ai_browser/pipe.py` 的 `PipeServer` / `CreateNamedPipeW`）
+//    （`source/python/brain_ai_browser/pipe.py` 的 `PipeServer` / `CreateNamedPipeW`）
 //  * 线程模型（`M7.md` `Q4`）：`connect()` 后起**读线程**；`call()` 阻塞的是**调用线程**
 //    —— 契约：**不得在 UI 线程调 `call()` / `send_command()`**（长任务由执行器工作线程调用）
 //  * 分帧：UTF-8 JSON 一行一帧，帧结构复用 `web/channel_frames.h`（§6.1）

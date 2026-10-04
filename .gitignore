@@ -78,15 +78,17 @@ Desktop.ini
 *.brain-ai.json
 
 # ------------------------------------------- Python 运行时（Pydoll · M7B）----
-# 说明：`python/` 是**源码目录**（守护进程 / 管道 / Pydoll 封装），必须入库；
+# 说明：`source/python/` 是**源码目录**（守护进程 / 管道 / Pydoll 封装），必须入库；
 #       这里只忽略虚拟环境与字节码等可再生成物。
+#       2026-10-03 目录迁移：运行代码 `python/` → `source/python/`（归源码树）；
+#       运行期数据仍在 `%USERPROFILE%\.brain-ai`（见上「运行期数据」段，不入库）。
 /.venv/
 venv/
-/python/.venv/
+/source/python/.venv/
 __pycache__/
 *.py[cod]
 *.pyd
 pip-wheel-metadata/
-/python/dist/
-/python/build/
-/python/*.egg-info/
+/source/python/dist/
+/source/python/build/
+/source/python/*.egg-info/

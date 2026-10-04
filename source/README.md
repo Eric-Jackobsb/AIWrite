@@ -105,11 +105,21 @@ M1 验证工具：
 .\aiwrite.exe --web-chat "用一句话介绍你自己"
                               # 网页版端到端生成：PoW（页面内官方 worker）→ completion → SSE
 .\aiwrite.exe --run-selftest  # 执行自检：示例工作流跑到底，打印各节点状态与统计（不开窗口）
+                              # ⚠️ official 模式**依赖本机凭据**（`~/.brain-ai/config.toml` 的 `api_key_ref =
+                              #    brain-ai/deepseek`，或环境变量 DEEPSEEK_API_KEY）—— 换机 / 重装后未重配
+                              #    ⇒ n3 报「缺少 API Key」→ n4 跳过 → exit 1。本机 2026-10-03 实测即为此情形
+                              #    （**环境依赖，非代码问题**；改用下面 `--web` 变体可绕开）
 .\aiwrite.exe --run-selftest --web
                               # 同上，但 LLMGenerate 走网页版真实生成（需已登录过一次；实测 5/5 ≈10s）
+.\aiwrite.exe --pydoll-selftest
+                              # 【新通道 · step 6】起 Python 守护进程 → hello → ready{proto=1} → shutdown（**不开浏览器**）
+                              # 退出码 0=通过 / 1=失败 / 2=依赖问题（无 Python / 无浏览器）；只验通道，不影响生产路径
+.\aiwrite.exe --pydoll-login deepseek-web --timeout 300
+                              # 【新通道 · step 6】起**独立** Edge 窗口，人工登录站点（不代填密码、不绕验证）
+                              # 判据 = cookie_names 命中则关窗；未知 id → 退出码 2 + 可操作提示、**不开窗**
 .\api_probe.exe --selftest                  # V-04 HTTP + V-05 SHA3 自检
 .\api_probe.exe --graph-selftest            # 图模型/注册表/撤销栈/序列化 自检（110 项断言，无需网络）
-.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 + 图片解码 自检（251 项断言，无需网络）
+.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 + 图片解码 自检（326 项断言，无需网络）
 .\api_probe.exe --image-decode D:\a.webp   # 图片诊断：内容嗅探 / MIME / 解码(stb|wic) / 尺寸 / WIC 能力（M7）
 .\api_probe.exe --sha3 "abc"                # 单次 SHA3-256
 $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 Key）
@@ -145,7 +155,7 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 画布设置文件 `~/.brain-ai/node_editor.json` 保存节点坐标与视图；若被写坏会导致 CPU 打满 + 界面无响应，
 程序启动时会自动校验并备份为 `node_editor_bad_<时间>.json` 后重建（详见 `docs/节点编辑器使用说明.md` §9）。
 
-### 4.1 网页版登录与多站点（2026-09-26 已支持）
+### 4.1 网页版登录与多站点（2026-09-26 已支持 · ⚠️ **当前仍走 WebView2**，Pydoll 版见 §4.3）
 
 - **站点身份按「生效条目」**：登录页 / 窗口标题 / 探测路径 / Cookie 名全部取自条目的 `web.*`
   （`src/web/webview_host.h` 的 `interactive_login_request(site,id)` 等）；无参重载 = 旧常量（逐字一致，兼容保留）。
@@ -237,9 +247,32 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 
 ---
 
-### 4.3 「引擎唯一化」与 `I2` 解冻（M7 第三轮 `M7B` · 2026-09-28 · **计划未落地**）
+### 4.3 「引擎唯一化」与 `I2` 解冻（M7 第三轮 `M7B` · 2026-09-28 立项 · **批 1 step 1~6 已落地 / 生产路径未切换**）
 
-> 本节是**计划登记**，不代表已实现。计划全文见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md)。
+> 本节是**计划登记**。**批 1 step 1~6 已落地**（见下方「运行时通道归属」），但**生产路径刻意未切换**
+> （`MB-D1` 先建后拆 / `B12-C1` 只新增不替换）。计划全文见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md)。
+
+#### ⚠️ 当前运行时通道归属（**2026-10-03 实测** · 防误判：**现在跑的仍是 WebView2**）
+
+> **主程序（GUI）里所有网页功能仍然 100% 走 WebView2。** 批 1 step 1~6 建的是**旁路新通道**
+> （`src/web/pydoll_channel.*`），调用方**零改动** ⇒ **看到 WebView2 是符合设计的状态，不是缺陷**。
+> 逐入口实测归属表 + 分辨方法见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §1.4。
+
+| 入口 / 命令 | 现在**实际走** | 备注 |
+|---|---|---|
+| 面板「打开登录窗口（WebView2）」/「按站点注销」 | **WebView2** | `src/ui/property_panel.cpp:230,319,170`（按钮文案仍写死 WebView2） |
+| 登录型节点 / 网页版文字生成（`adapter=dom`） | **WebView2** | `src/nodes/local_nodes.cpp:545`、`src/ai/dom_web_client.cpp:245,256,262,297` |
+| `--login-selftest` / `--web-probe` / `--web-chat` / `--run-selftest --web` | **WebView2** | 同上 |
+| **`--pydoll-selftest`**（新 · step 6） | **Pydoll** | 起守护进程 → `hello` → `ready{proto=1}` → `shutdown`；**不开浏览器**；exit 0 |
+| **`--pydoll-login <id>`**（新 · step 6） | **Pydoll** | **独立** Edge 窗口 + profile `~/.brain-ai/pydoll-profile/`（WebView2 则是 `~/.brain-ai/webview2/`） |
+
+**怎么分辨（Pydoll 底层也是 Edge，别比窗口长相）**：比 **profile 目录**（`pydoll-profile` vs `webview2`）、
+**是否独立任务栏窗口**、**是否有 `~/.brain-ai/logs/pydoll_channel_daemon.log`**。
+
+**切换前置（硬缺口 · 实测）**：Python 侧 `daemon.py` 只实现 `hello`/`shutdown`/`open_tab`/`login_state`，
+`send_prompt`/`read_answer`/`upload_image` 如实回「尚未实现（批 3）」；C++ 侧 `logout_site`/`run_script`/
+`current_tab_site`/`tab_on_site` 为如实占位（`src/web/pydoll_channel.h:39,42,46,47`）
+⇒ **生产路径切换（`M7B-20`）排在批 3**。
 
 **冻结区变更（解冻规则）**：
 
@@ -248,7 +281,7 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 | 解冻规则 | **`I2`** —— 原文「`--web-chat` / `--web-probe` / `--web-session-selftest` **行为不变**」（归档 `M_patchB.md:294`），实际被用来护住「无参 CLI = 内置 DeepSeek 常量」的一整套兼容装置 |
 | 解冻原因 | 宿主 **WebView2 退场**（嵌入控件易被站点识别为非真实浏览器，`MB-D0-2`）；且站点「**不回落**」（`D-22②` / `I14`）此前对 CLI 路径存在豁免，需**贯彻到底**（`MB-D0-6`） |
 | 替代物 | **`I20`（CLI 契约）**：命令名 / 参数形式 / **退出码语义**在 `--help` + 文档 + 断言三处一致；缺 `--provider` → **列候选 + 退出码 2**（不得静默取第一个）；`--provider auto` 为**显式保留字**；自检命令不得残留状态 |
-| 回归基线数字 | `--exec-selftest` **251/0 →（先降后升）→ 实测回填**（删 `VB2-17` 前半 + `VB2-25①③④`；新增 `VB2-28`~`VB2-36`）；路径见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §9.3 |
+| 回归基线数字 | `--exec-selftest` **251/0 →（先降后升）→ 实测回填**（删 `VB2-17` 前半 + `VB2-25①③④`；新增 `VB2-28`~`VB2-36`）；路径见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §9.3。**现状（2026-10-03 · step 6）= 326 / 0**（批 1–4 **只升不降**，删除类动作集中批 5） |
 
 **新增不变量（拟进冻结区 · 与 `I18` / `I19` 同批登记）**：
 
@@ -333,7 +366,8 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 
 ### 6.2 一次性探针脚本的纪律（`M7B` 前置验证教训 · 2026-09-28）
 
-`M7B` 的前置技术验证用**一次性脚本**（`python/_probe/`，不进主管道）在真实浏览器里取证。
+`M7B` 的前置技术验证用**一次性脚本**（`source/python/_probe/`，不进主管道）在真实浏览器里取证。
+> **目录口径（2026-10-03 迁移 · 代码 / 数据分离）**：Python **运行代码**（守护进程包 `brain_ai_browser/` + 探针 `_probe/` + `requirements.txt` + `.venv/`）统一在 **`source/python/`**（随源码树入库）；**运行期数据**一律落 `%USERPROFILE%\.brain-ai`（`logs` / `pydoll-profile` / L2 快照 `session/`）—— **代码入库、数据不入库**。命令口径：`cd source\python` → `.venv\Scripts\python.exe -m brain_ai_browser …`（`--pipe-selftest` 的包目录候选同步改为 `AIWRITE_SOURCE_DIR / "python"`）。
 本轮**两条错误结论**（「页面 hook 未打通」「M7B-05 全 FAIL」）都不是机制问题，而是**探针自身**读错：
 
 1. **读回必须自证**：任何"机制不可用 / 全 FAIL"的结论，**先排除探针**。写法：
@@ -346,10 +380,10 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 3. **读数有作用域**：`tab.get_cookies()`（库实现：无 `browser_context_id` 时走 `Network.getCookies` **不带 urls**）
    **只回「当前页面 URL」的 Cookie** —— 停在 `about:blank` 时**必然读空**。要读**全库**用 `Storage.getCookies`；
    要按站点读用 `Network.getCookies(urls=[...])`。本轮的"attach 只读到 0 条"就是这一条
-   （脚本 `python/_probe/_diag_cookie_scope.py` 四步实证：空 / 导航后 13 条 / 全库 16 条 / 按 URL 13 条）。
+   （脚本 `source/python/_probe/_diag_cookie_scope.py` 四步实证：空 / 导航后 13 条 / 全库 16 条 / 按 URL 13 条）。
 4. **探针必须 `try/finally` 收尾**：崩在 `start()` 之前会**遗留孤儿浏览器实例占住 profile**，
    使**下一次 `start()` 直接 `FailedToStartBrowser`**（本轮遇到两次，现象像"机制坏了"，实为自己留的残骸）。
-   收尾时清点/清理**归属该 profile** 的进程（`python/_probe/m7b09_common.py` 的 `stray_browsers()` / `kill_strays()`）。
+   收尾时清点/清理**归属该 profile** 的进程（`source/python/_probe/m7b09_common.py` 的 `stray_browsers()` / `kill_strays()`）。
 5. **一因多果要逐个排除**：同一现象（"读到空"）先列假设（**不同上下文 / 不同 profile / 读时机 / 作用域**），
    再用**可证伪的证据**逐一筛 —— 例如用 `chrome://version` 的 `Profile Path` 反证"profile 被换"，
    用裸 `Storage.getCookies` 反证"上下文/时机"。**不要在第一层解释上收工**。

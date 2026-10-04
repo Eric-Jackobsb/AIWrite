@@ -32,6 +32,10 @@
 6. **基线提醒**：作废 `I2` 会**删掉**若干旧断言（`--exec-selftest` 总数会变化），属**预期变化**，不得误判为回归
    —— 但因 **`MB-D1` 已定 = 先建后拆**，**删除动作集中在批 5 一次完成**：**批 1–4 数字只升不降**
    （任何下降即**真回归**），批 5 内**先降后升闭合**。预期路径见 **§9.3**。
+7. **⚠️ 防误判（2026-10-03 实测新增）**：**当前运行时仍是 WebView2** —— 批 1 step 1~6 交付的是**旁路新通道**
+   （`web/pydoll_channel`），生产路径按 `MB-D1` / `B12-C1` **刻意零改动**；Pydoll 通道目前**只挂在
+   `--pydoll-selftest` / `--pydoll-login` 两条 CLI 命令**上，**主程序 GUI / 网页节点未接线**
+   （切换 = 批 3 `M7B-20`）。**逐入口实测归属表 + 10 秒分辨法见 §1.4**。
 
 ---
 
@@ -57,7 +61,7 @@
 |---|---|
 | 代码命中 | **0**（`source/` 全库检索） |
 | 文档命中 | 5 个：`M7.md` / `roadmap.md` / `CHANGELOG.md` / `ai_writer_nodes.md` / `节点编辑器使用说明.md` |
-| `python/` 目录 | **不存在**（仓库无任何自研 `.py`） |
+| `python/` 目录 | **不存在**（仓库无任何自研 `.py`）—— ⚠️ **已过期（2026-10-03）**：Python 包已落地并迁至 **`source/python/`**（见 §6.2「目录迁移」） |
 | `web.engine` 字段 | **不存在**（字段与代码均零命中；仅存在于 `M7.md` §17 `Q2` 的选项描述里） |
 
 ### 1.3 WebView2 接触面（撤除工单的事实基础）
@@ -83,6 +87,55 @@
 | `src/nodes/local_nodes.cpp` | 1 | 注释 / 分派点 |
 | `vcpkg.json` | 1 | 移除 `webview2` 依赖 |
 | `build.ps1` | 1 | 构建链同步 |
+
+### 1.4 运行时通道归属盘点（**2026-10-03 实测** · 防误判：现在跑的**还是 WebView2**）
+
+> **一句话**：批 1 step 1~6 交付的是**旁路新通道**；生产路径按 `MB-D1` / `B12-C1` **刻意零改动** ——
+> 主程序（GUI）里所有网页功能**仍然 100% 走 WebView2**。**看到 WebView2 不是 step 6 没生效**，这就是设计。
+
+**实测方法**：`git grep -n -E 'pydoll_channel|web::channel' -- source/`（命中仅 `main.cpp` CLI 分发 + `api_probe.cpp` 断言）
+＋ 逐入口查 `#include` 归属。
+
+| 用户可见入口 | 现在**实际走** | 证据（实测） | 切换任务 |
+|---|---|---|---|
+| 参数面板「打开登录窗口（WebView2）」 | **WebView2**（独立线程 + 内嵌窗口 · profile `~/.brain-ai/webview2/`） | `ui/property_panel.cpp:14`（include）+ `:116`（独立线程）+ `:230` / `:319`（**按钮文案仍写死 WebView2**） | 批 5（§1.3 `property_panel.cpp` 5 处） |
+| 「关闭登录窗口」/「按站点注销」 | **WebView2** | `property_panel.cpp:170-173`（`web::logout_site` —— ⚠️ 与 `web::channel::logout_site` **同名**，靠 namespace 区分） | 批 3 / 批 5 |
+| 登录型节点 `ensure_session` | **WebView2** | `nodes/local_nodes.cpp:14`（include）+ `:545`（`web::ensure_session`） | 批 3（`M7B-20`） |
+| 网页版**文字生成**（`adapter=dom`） | **WebView2 `ExecuteScript`** 注入 → 触发 → 轮询 | `ai/dom_web_client.cpp:12` + `:245`（`ensure_session`）/ `:256,262,297`（`web::run_script_sync`） | 批 3（`M7B-20`~`M7B-23`） |
+| 网页版文字（`adapter=builtin:deepseek`） | **C++ `httplib` 直连**（PoW 借 WebView2 页面求解） | `ai/deepseek_web_client.cpp` + `web/webview_host.h:216` | 批 5（协议栈退役） |
+| `--login-selftest` / `--web-probe` / `--web-chat` / `--run-selftest --web` | **WebView2** | `main.cpp` CLI 分发 | 批 3 / 批 5 |
+| **`--pydoll-selftest`（新 · step 6）** | **Pydoll**（守护进程起 → `hello` → `ready{proto=1}` → `shutdown`；**不开浏览器**） | `main.cpp:1523-1524` → `web::channel::selftest()` | ✅ **已可用** |
+| **`--pydoll-login <id>`（新 · step 6）** | **Pydoll**（**独立** Edge 窗口 + `~/.brain-ai/pydoll-profile/`） | `main.cpp:1529-1530` → `web::channel::pydoll_login()` | ✅ **已可用**（真站点人工冒烟 ⬜ `M7B-19`） |
+
+**10 秒分辨「我现在跑的是哪条通道」**（⚠️ **Pydoll 底层也是 Edge/Chromium，窗口长相不可靠**）：
+
+| 判别项 | **WebView2**（现状 · 生产） | **Pydoll**（新通道 · 仅 CLI） |
+|---|---|---|
+| 触发方式 | 主程序面板按钮 / 网页节点 / 旧 CLI | **只有** `--pydoll-selftest` / `--pydoll-login <id>` |
+| 窗口形态 | **内嵌**在主程序窗口内的子控件 | **独立** Edge 窗口（独立任务栏图标） |
+| profile 目录 | `~/.brain-ai/webview2/`（`paths.h:26`，批 5 退役） | `~/.brain-ai/pydoll-profile/`（`paths.h:28`） |
+| 守护进程日志 | **无** | `~/.brain-ai/logs/pydoll_channel_daemon.log` |
+| 面板按钮文案 | 写死「打开登录窗口（**WebView2**）」 | **尚无**对应按钮 |
+
+**三条常见误判（均可排除）**：
+
+1. 「跑主程序看到 WebView2 ⇒ step 6 白做了」——**错**：step 6 交付 = `--exec-selftest` **326 / 0** + 新通道 CLI 可用
+   + 构建 0/0；生产路径按 `B12-C1`（§6.2）**只新增不替换**，**切换归批 3 `M7B-20`**（`M7B.md` §6.2 / §6 批 3 表）。
+2. 「Pydoll 也是 Edge，看起来一样」——**比 profile 目录 / 独立任务栏窗口 / daemon 日志**，别比窗口长相。
+3. 「改了 `site_ref.h` 就该少掉 WebView2 依赖」——**错**：搬迁只让**新通道**取站点描述时不必 include
+   `webview_host.h`；生产调用方**仍需** `run_script_sync` 等真 WebView2 函数 ⇒ **仍 include**（`webview_host.h:29` 注释即此意）。
+
+**为什么此刻不能直接切（硬缺口 · 实测）**：
+
+| 缺口 | 实测位置 | 状态 |
+|---|---|---|
+| Python 侧只实现 **4 个**命令：`hello` / `shutdown` / `open_tab` / `login_state` | `python/brain_ai_browser/daemon.py:363,382,384` | `upload_image` / `send_prompt` / `read_answer` → **如实回「尚未实现（批 3）」**（`daemon.py:19-20,296`） |
+| C++ 侧 `logout_site` / `run_script` / `current_tab_site` / `tab_on_site` 为**如实占位** | `web/pydoll_channel.h:39,42,46,47` | ⬜ 批 3 |
+| CDP 增量 → **逐字流式** | `M7B-21` | 未做 ⇒ 现在切会丢逐字流式（违反 `I22` 流式降级必须显式） |
+| 真站点人工登录门槛 | `M7B-19` | ⬜ 未执行（人工） |
+
+⇒ **`M7B-20`（生产路径切换）的充分条件 = 批 3 的 `run_script` + `send_prompt` / `read_answer` + CDP 增量先落地。**
+本盘点结论：**观察到的 WebView2 = 符合设计的当前状态，非缺陷、非回归。**
 
 ---
 
@@ -160,8 +213,8 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | 编号 | 任务 | 验收 | 与 P7-b 关系 |
 |---|---|---|---|
 | `M7B-01` | Pydoll 起**独立 Edge / Chrome**（headful）、人工登录、profile 落 `~/.brain-ai/pydoll-profile`；**经 CDP 读 Cookie（含 HttpOnly）** | ✅ **已过（2026-09-28，机制层）**：窗口可见、profile 落盘、CDP 读回含 HttpOnly、重启后持久 Cookie 保留；**真·站点登录仍在 `M7B-06`** | `P7b-01` + 扩展（读 Cookie） |
-| `M7B-02` | C++ ↔ Python **双向 IPC**（命名管道 + Win32 事件；JSON 行协议；非法行拒绝） | ✅ **已过（2026-10-03）**：`python/brain_ai_browser/pipe.py`（`ctypes` → `CreateNamedPipeW` / `ConnectNamedPipe` / `ReadFile` / `WriteFile`，overlapped + 精确超时）↔ `src/web/pipe_client.{h,cpp}`（读线程 + `id` 配对 + `CancelIoEx` 收尾）。**1 命令 + 1 事件**实测：`aiwrite.exe --pipe-selftest` **PASS / exit 0**（`hello` → `ready{proto=1, python=3.12.10, browser=edge@…}`；`shutdown` → `stage{close}`；守护进程退出码 **0**；丢弃非法帧 **0**）。⚠️ 实施要点 `P7`：C++ 句柄**必须** `FILE_FLAG_OVERLAPPED` | `P7b-02` / `P7b-07` |
-| `M7B-03` | **CDP 增量流式三路线实测**：① `Fetch.takeResponseBodyAsStream` + `IO.read` ② `Network.eventSourceMessageReceived` ③ `Network.dataReceived` + `getResponseBody` | ✅ **已过（2026-09-28）**：主路线 = **①+`IO.read(size=128~256)`**（`size` 即推送粒度，实测 256 B/帧）；帧序样本见 §5 结论块与 `python/_probe/out/m7b03_cdp_stream.json` | 本文独有（`R2` 闸门） |
+| `M7B-02` | C++ ↔ Python **双向 IPC**（命名管道 + Win32 事件；JSON 行协议；非法行拒绝） | ✅ **已过（2026-10-03）**：`source/python/brain_ai_browser/pipe.py`（`ctypes` → `CreateNamedPipeW` / `ConnectNamedPipe` / `ReadFile` / `WriteFile`，overlapped + 精确超时）↔ `src/web/pipe_client.{h,cpp}`（读线程 + `id` 配对 + `CancelIoEx` 收尾）。**1 命令 + 1 事件**实测：`aiwrite.exe --pipe-selftest` **PASS / exit 0**（`hello` → `ready{proto=1, python=3.12.10, browser=edge@…}`；`shutdown` → `stage{close}`；守护进程退出码 **0**；丢弃非法帧 **0**）。⚠️ 实施要点 `P7`：C++ 句柄**必须** `FILE_FLAG_OVERLAPPED` | `P7b-02` / `P7b-07` |
+| `M7B-03` | **CDP 增量流式三路线实测**：① `Fetch.takeResponseBodyAsStream` + `IO.read` ② `Network.eventSourceMessageReceived` ③ `Network.dataReceived` + `getResponseBody` | ✅ **已过（2026-09-28）**：主路线 = **①+`IO.read(size=128~256)`**（`size` 即推送粒度，实测 256 B/帧）；帧序样本见 §5 结论块与 `source/python/_probe/out/m7b03_cdp_stream.json` | 本文独有（`R2` 闸门） |
 | `M7B-04` | asyncio 事件循环与管道监听共存 | ✅ **已过（2026-10-03 · step 3 合测）**：`python -m brain_ai_browser --driver-selftest` 组 B —— 管道伺服在**独立线程**（`PipeServer.accept`，实例先由主线程 `open()`），asyncio 主循环里**并发**跑「浏览器命令 burst」与 `asyncio.to_thread(pipe 往返)`：① 往返时刻落在命令窗口内**且返回时命令仍在跑**；② 窗口内心跳持续推进（**12 次 / ≈0.66 s**；headless 轮 14 次 / ≈0.78 s）⇒ 事件循环未被管道读阻塞（**真并发**判据，非「先后都成功」）。**生产形态（`daemon.py` 主循环 + 命令分发）在 §6.2 step 4 复验** | `P7b-03` |
 | `M7B-05` | 页面驱动：真实打字 / 按键（`humanize`）+ `DataTransfer` 注入 File | ✅ **已过（2026-09-28）**：逐字符（154 ms/字符、21 次 input 事件）；文件注入 `expect_file_chooser` 与 `DOM.setFileInputFiles` **两条路径都成功** | `P7b-04` + `P7b-10` 前哨 |
 | `M7B-06` | **DeepSeek 网页版选择器实测**（`input_selector` / `send` / `answer_selector` / `done_when`） | 四项命中且完成**一轮真实问答** | 本文独有（**最大人工关卡**，§10） |
@@ -181,7 +234,7 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 >    `enable_intercept_file_chooser_dialog()` 是**一等公民 API**，应优先于 `DataTransfer` 注入（后者降为备选）。
 > ③ **`Edge` 兜底（`M7B-14`）已在 API 层确认**：`pydoll.browser.chromium` 同模块导出 `Chrome` / `Edge`。
 >
-> **`M7B-03` 实测结论（2026-09-28 · 本地页面自证 · 脚本 `python/_probe/m7b03_cdp_stream.py`）**
+> **`M7B-03` 实测结论（2026-09-28 · 本地页面自证 · 脚本 `source/python/_probe/m7b03_cdp_stream.py`）**
 > **主路线 = ① `Fetch.takeResponseBodyAsStream` + `IO.read`** —— 增量成立，且**粒度 = `IO.read` 的 `size`**：
 >
 > | 变体（本地流） | `read size` | 到达粒度 | 实测 |
@@ -204,7 +257,7 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 > ① **`execute_script` 返回是两层**：`{'id':N,'result':{'result':{'type','value'}}}` —— 解错层级会**静默拿到空串**
 >    （本轮因此误判了两条结论：路线④ 与 M7B-05 的"全 FAIL"都是探针 bug，不是机制问题）。
 > ② **退出必须优雅关闭**：Pydoll 默认 `stop()` = **强杀** → Cookie 库**不落盘**、**重启后登录态丢失**；
->    必须发 CDP **`Browser.close`**（实测：强杀 → 丢失 / 优雅 → 保留，脚本 `python/_probe/_diag_persist.py`）。
+>    必须发 CDP **`Browser.close`**（实测：强杀 → 丢失 / 优雅 → 保留，脚本 `source/python/_probe/_diag_persist.py`）。
 >    **这条直接决定「单 profile 登录态可复用」能否成立**，是 `M7B-11` 的硬要求。
 > ③ **Pydoll 默认已加** `--no-first-run` / `--no-default-browser-check`（再 `add_argument` 会抛
 >    `ArgumentAlreadyExistsInOptions`）；`--user-data-dir` 需自己加（**单 profile 靠它**）。
@@ -229,7 +282,7 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 >    默认**不启用**（不写用户 profile 的 `Preferences`）。
 > ⑨ **登录态读数有作用域**（`M7B-17` 证据采集按此写）：`tab.get_cookies()` 在无 `browser_context_id` 时
 >    走 `Network.getCookies`（**不带 urls**）⇒ **只回当前页面 URL 的 Cookie**；停在 `about:blank` **必读空**。
->    **全库读取一律 `Storage.getCookies`**（诊断：`python/_probe/_diag_cookie_scope.py`）。
+>    **全库读取一律 `Storage.getCookies`**（诊断：`source/python/_probe/_diag_cookie_scope.py`）。
 > ⑩ **profile 被占的两种失败形态都要识别**（`M7B-11` · L3）：**同端口**再启 → `start()` **假成功**
 >    （实为**附着到既有实例**，此后 `stop()` 会**关掉用户浏览器**）；**随机端口** → `FailedToStartBrowser`（超时）。
 >    ⇒ 启动前**先探调试端口 / profile 锁**再决策；**禁止以强杀解决"占着"**（`I21` 不静默）。
@@ -261,7 +314,7 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 > 附带印证：冒烟用 `headless=True` 时 UA 为 `…HeadlessChrome/156.0.0.0…` —— 这**正是** §13 要求
 > 必须 **headful** 的现实理由（无头指纹本身就是"非真实浏览器"信号）。
 >
-> **`M7B-09` 关闭时序 / 持久化 / 接管 实测结论（2026-09-28 · `MB-D0-8` L1~L4 闸门 · `python/_probe/m7b09_*.py`）**
+> **`M7B-09` 关闭时序 / 持久化 / 接管 实测结论（2026-09-28 · `MB-D0-8` L1~L4 闸门 · `source/python/_probe/m7b09_*.py`）**
 >
 > | 轮次 | 问题 | 结果（数字） |
 > |---|---|---|
@@ -331,7 +384,7 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 
 > ⚠️ **实现期订正（2026-10-03 · 批 1 `VB2-29` 暴露）**：`stage` 事件的**阶段标识键 = `stage`**
 > （本表原写 `name`）—— 帧头 `name` 已被「事件名」占用，两者在**同层 JSON 里无法共存**。
-> 两侧同改：Python `python/brain_ai_browser/protocol.py`（`EVENT_FIELDS`）与
+> 两侧同改：Python `source/python/brain_ai_browser/protocol.py`（`EVENT_FIELDS`）与
 > C++ `src/web/channel_frames.*`。（只改**载荷键名**，帧格式与其余词表不变。）
 
 **错误码 → 行为映射**：`no_python` / `no_browser` / `daemon_down` = 依赖缺失（`I21`：**不换通道、不回落**）；
@@ -367,9 +420,9 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | `api_probe --exec-selftest` | **311 / 0**（exit 0） | **开工时为 309 / 1**（既有失败）→ 修复见下行「换机账」 |
 | `api_probe --graph-selftest` | **110 / 0** | |
 | `aiwrite --provider-selftest` / `--provider-dump` | **50 / 0** · **21 条**（official 9 / web 12） | |
-| `aiwrite --run-selftest` | **PASS** | |
+| `aiwrite --run-selftest` | **PASS** ⚠️ **误记 —— step 7（2026-10-03）订正：本机实为 FAIL · exit 1**（缺本机凭据）｜当时跑的很可能是 `--run-selftest --web`（该变体确 PASS） | 环境依赖条（`api_key_ref = brain-ai/deepseek`）：**换机 / 重装后必须重配凭据** |
 | docs 相对链接 | **296 / 0 broken** | 旧机的 `check_links.py` 在本机**不存在** → 用等价内联检查取证 |
-| 环境 | Python **3.12.10** + `python/.venv` + `pydoll-python 2.27.0`（17 包）· **Edge 154.0.4258.48**（无 Chrome） | 见 §11.1 换机登记 |
+| 环境 | Python **3.12.10** + `source/python/.venv` + `pydoll-python 2.27.0`（17 包）· **Edge 154.0.4258.48**（无 Chrome） | 见 §11.1 换机登记 |
 
 > **换机账（本批修复，2026-10-03）**：开工时 `--exec-selftest` 为 **309 / 1**，唯一失败 =
 > `M5-04 示例：E-02 加载校验通过`，根因是**示例文件写死旧机绝对路径**
@@ -383,7 +436,24 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 > ⚠️ **`source/assets/images/sample.png` 的删除**（工作区未暂存）与 `flamingo.png`（未入库）属**上一批未提交变更**，
 > 本批**只做上述兼容性修复，不改其取舍**；两者最终去留待提交时一并拍板。
 
-**批 1 文件表（`python/brain_ai_browser/` · 新包 · 不新增第三方依赖）**
+> **目录迁移（2026-10-03 · step 4 之后 · 纯搬迁 · 零逻辑变更）**：Python **运行代码**由仓库根 `python/` 迁到 **`source/python/`**
+> （包 `brain_ai_browser/` + 探针 `_probe/`（70 文件 / 45 个物证 JSON，`git mv` 保历史）+ `requirements.txt` + `.venv/`）；
+> **运行期数据仍留 `%USERPROFILE%\.brain-ai`**（`logs` / `pydoll-profile` / step 5 的 `session/`）—— **代码入库、数据不入库**。
+>
+> * **C++ 侧同步 1 行**（`src/main.cpp`）：`--pipe-selftest` 的包目录候选 `AIWRITE_SOURCE_DIR.parent_path() / "python"` → **`AIWRITE_SOURCE_DIR / "python"`**
+>   （= `<仓库根>/source/python`）；`.venv` 候选随 `package_dir` 自动正确，子进程 `work_dir` 同步。注释 3 处（`main.cpp` / `web/channel_frames.h` / `web/pipe_client.h`）同改。
+> * **口径同步**：`.gitignore`（`/python/.venv/` → `/source/python/.venv/` 等 4 条 + 段注释）· `runtime.py` 的 `PYDOLL_HINT`（**用户可见引导**）·
+>   `driver.py` 文档串 · `requirements.txt` 头部 · docs **8 文件**（本文件 / `CHANGELOG.md` / `M7.md` / `M_patchAB_rest.md` / `网页版协议实测记录.md` /
+>   `source/README.md` / `DevPlan.todo` / `providers.json`）。**历史物证文件（`_probe/out/*.json|*.err`）保留原路径**（证据不可篡改）。
+> * **验证（逐条与迁移前一致 · 本机）**：`--selftest` **7 / 0** · `--pipe-selftest` **13 / 0** · `--driver-selftest --headless` **22 / 0** ·
+>   `--daemon-selftest --headless` **22 / 0**（子进程 `cwd = parents[1]` 自动跟随的实测）· `aiwrite.exe --pipe-selftest` **PASS** ·
+>   `api_probe` **七组 / 320 / 110** · `aiwrite --provider-selftest` **50 / 0** · `--provider-dump` **21 条** · `--run-selftest` **PASS** ·
+>   构建 **0 error / 0 warning** · docs 断链 **298 / 0**。
+>
+> **以后所有命令口径**：自检/探针一律 `cd source\python` → `.venv\Scripts\python.exe -m brain_ai_browser …`；数据一律在 `~/.brain-ai/…`。
+
+
+**批 1 文件表（`source/python/brain_ai_browser/` · 新包 · 不新增第三方依赖）**
 
 | 文件 | 职责 | 关键 API | 验收 |
 |---|---|---|---|
@@ -392,7 +462,7 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | `protocol.py` | **§6.1 词表唯一实现** | `parse_line(str) -> Frame \| BadFrame` · `encode_cmd/evt/err` · `CMD_SPEC`（7 命令）· `EVT_SPEC`（6 事件）· `ErrorCode`（含 `bad_frame` / `no_upload_evidence`）· 上限（`MAX_FRAME=64KiB` · `MAX_IMAGES=8` · 超时 30/60/120 s） | **`VB2-29`**（纯函数、离线） |
 | `pipe.py` | 命名管道服务端（`ctypes` → `CreateNamedPipe` / `ConnectNamedPipe` / `ReadFile` / `WriteFile`） | `PipeServer(pipe_name)`: `accept` / `read_frame` / `write_frame` / `close` | **`M7B-02`** 冒烟 |
 | `driver.py` | Pydoll 封装（复用探针已验证机制） | `start(profile, window_size)` · `attach_if_running` · `tab_for(provider, url)` · `cookies_all()`（= `Storage.getCookies`）· `cookies_for_domain(suffix)` · `execute_script` · `type_humanized` · `press_key`（`Key` 枚举）· `set_file_input_files` / `expect_file_chooser` · `stream_deltas()` · `close_wait(5s)` | **`M7B-04`** 合测 |
-| `session.py` | **L2 DPAPI 加密快照**（落 `~/.brain-ai/session/`；刷新 <10 s + 登录即写 + 退出前再写；启动回灌 `Network.setCookies`） | `SnapshotStore.save()` / `.load()` | **`VB2-39`** 无明文 |
+| `session.py` | ✅ **已落地（step 5 · 2026-10-03）**：**L2 DPAPI 加密快照**（落 `~/.brain-ai/session/cookies.dat`；定时刷新 5 s + 登录即写 + `shutdown` **关闭前**再写；启动**回灌** `Storage.setCookies`；**无 DPAPI ⇒ 不快照、绝不写明文**） | `SnapshotStore.save()` / `.load()` / `.clear()` · `to_cdp_params()`（白名单 + 会期语义）· `scoped()` / `belongs_to()`（**父域方向**）· `scan_plaintext()` · `dpapi_available()` | ✅ **`VB2-39①~⑬`**（`--session-selftest` **22 / 0**：离线 + 真机「存 → 弃 → 回灌」） |
 | `daemon.py` | 守护进程主循环（命令分发 · 心跳 · 崩溃检测 · L4 埋点 · **吞 `BrowserNotRunning`**） | `Daemon.serve()` | **`VB2-38`** 关闭协议桩 |
 | `browsers.py` | `M7B-14` 浏览器检测（**标准安装路径先 Chrome 后 Edge**；皆无仍返回 Chrome 让库报真错） | `detect_chrome` / `detect_edge` / `browser_class` / `env_proof` | 两条路径均可起浏览器 |
 | `runtime.py` | `M7B-13` 运行时检测 | `check_runtime() -> {python, pydoll, ok, hint}` | 缺失 → 引导，**不阻塞其他功能** |
@@ -414,11 +484,11 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 
 | 文件 | 对外接口 | 顶替 / 新增 |
 |---|---|---|
-| `pipe_client.{h,cpp}` | `class PipeClient { bool connect(std::string pipe_name, int timeout_ms, std::string* err); bool call(std::string name, const json& req, json* resp, int timeout_ms); void on_event(EventCallback); void close(); }` —— 阻塞仅在**执行器工作线程**（`M7.md` `Q4`） | **新增**（`M7B-15`） |
-| `pydoll_channel.{h,cpp}` | `namespace web::channel` —— 与 `webview_host` **同构的自由函数集**（下方接口映射表） | 顶替 `webview_host.h:207/221/230/233`（`M7B-16`），但**本批不接线** |
-| `channel_frames.{h,cpp}` | 纯函数 `parse_frame(string_view)` · `make_cmd(...)` · `delta_text_of_frame(...)` | **新增**（`M7B-12` 的 C++ 侧；`VB2-29` / `VB2-32`） |
-| `session_snapshot.{h,cpp}` | 快照路径 / 触发时机 / 状态展示（快照本体在 Python 侧） | **新增**（`MB-D0-8` L2） |
-| `site_ref.h` | `SiteRef` 值类型 + 既有**纯函数整体搬迁**（`login_request_of` / `interactive_login_request` / `probe_login_request` / `boot_login_request` / `plan_session_boot` / `login_request_site`） | 搬迁，**零语义变化**（仍被 UI / `dom_web_client` / `local_nodes` 调用） |
+| `pipe_client.{h,cpp}` | `class PipeClient { bool connect(std::string pipe_name, int timeout_ms, std::string* err); bool call(std::string name, const json& req, json* resp, int timeout_ms); void on_event(EventCallback); void close(); }` —— 阻塞仅在**执行器工作线程**（`M7.md` `Q4`） | ✅ **已落地**（`M7B-15` · step 2 + **step 6 判据同步**：`stage` 带 id = 完成回包，关闭 `MB-Q10`） |
+| `pydoll_channel.{h,cpp}` | `namespace web::channel` —— 与 `webview_host` **同构的自由函数集**（下方接口映射表） | ✅ **已落地**（`M7B-16` · step 6）：`selftest` / `pydoll_login` 可用；其余如实回「批 3」；**本批不接线** |
+| `channel_frames.{h,cpp}` | 纯函数 `parse_frame(string_view)` · `make_cmd(...)` · `delta_text_of_frame(...)` | ✅ **已落地**（`M7B-12` 的 C++ 侧；`VB2-29` / `VB2-32`） |
+| `session_snapshot.{h,cpp}` | 快照路径 / 触发时机 / 状态展示（快照本体在 Python 侧） | ✅ **已落地**（`MB-D0-8` L2 · step 6）：**只读元数据**（永不读内容 ⇒「零明文」天然成立） |
+| `site_ref.h` | `SiteRef` 值类型 + 既有**纯函数整体搬迁**（`login_request_of` / `interactive_login_request` / `probe_login_request` / `boot_login_request` / `plan_session_boot` / `login_request_site`） | ✅ **已搬迁**（step 6）· **零语义变化**（`webview_host.h` 改为 include 它；`--web-probe` / UI / `dom_web_client` 调用点不动，守 `I2`） |
 
 **批 2 接口映射表（调用方零改动的依据）**
 
@@ -440,13 +510,13 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 
 | 文件 | 动作 | 影响生产路径？ |
 |---|---|---|
-| `src/web/pipe_client.{h,cpp}` · `pydoll_channel.{h,cpp}` · `channel_frames.{h,cpp}` · `session_snapshot.{h,cpp}` · `site_ref.h` | **新增** | ❌ |
-| `src/web/session_store.{h,cpp}` | 注释 + **证据来源**改 CDP（API 全保留；`user_token` 字段不动，`B12-C3`） | ❌ |
-| `src/utils/paths.{h,cpp}` | **只新增** `pydoll_profile()` / `session_snapshot_dir()`；`webview2_profile()` 保留到批 5 | ❌ |
-| `src/ai/provider_spec.{h,cpp}` | `allowed_web_fields()` +`attach` + 解析（不消费） | ❌ |
-| `CMakeLists.txt` | `aiwrite_core` 增 5 组源文件；**不改** WebView2 的 21 处；新增 `aiwrite_copy_python()`（沿用 `aiwrite_copy_assets` 的 `copy_if_different` 风格，`.venv` 排除） | ❌ |
-| `tools/api_probe.cpp` | **只新增**断言块（表见下），**不删任何旧断言** | ❌ |
-| `python/brain_ai_browser/*` | 批 1 产物纳入 `aiwrite_copy_python()` + `VB2-30` 离线桩（守护进程未起 → `no_python` / `daemon_down` 文案） | ❌ |
+| `src/web/pipe_client.{h,cpp}` · `pydoll_channel.{h,cpp}` · `channel_frames.{h,cpp}` · `session_snapshot.{h,cpp}` · `site_ref.h` | ✅ **已新增**（step 6 全部落地） | ❌ |
+| `src/web/session_store.{h,cpp}` | ✅ 注释 + **证据来源**改 CDP（API 全保留；`user_token` 字段不动，`B12-C3`） | ❌ |
+| `src/utils/paths.{h,cpp}` | ✅ **只新增** `pydoll_profile()` / `session_snapshot_dir()`；`webview2_profile()` 保留到批 5 | ❌ |
+| `src/ai/provider_spec.{h,cpp}` | ✅ `allowed_web_fields()` +`attach` + 解析（**不消费**） | ❌ |
+| `CMakeLists.txt` | ✅ `aiwrite_core` 增 3 组源文件（`pydoll_channel` / `session_snapshot`；`site_ref.h` 仅头文件）；**不改** WebView2 的 21 处；新增 `aiwrite_copy_python()`（`copy_if_different` 风格 + `file(GLOB CONFIGURE_DEPENDS)`，**`.venv` 排除**） | ❌ |
+| `tools/api_probe.cpp` | ✅ **只新增**断言块（`VB2-40①~⑤` + `VB2-39⑥`），**不删任何旧断言**（320 → **326**） | ❌ |
+| `source/python/brain_ai_browser/*` | ✅ 批 1 产物纳入 `aiwrite_copy_python()`（实测 `<exe>/python/brain_ai_browser/` 10 个 `.py`）+ `VB2-30` 离线桩（守护进程未起 → 可操作文案） | ❌ |
 
 **批 2 断言归属（§9.2 对照）**
 
@@ -459,7 +529,8 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | `VB2-30` `I21` 依赖缺失 → 报错 + 引导，**不发起 HTTP / 不开浏览器** | 纯逻辑 |
 | `VB2-36` `web_session_failure_hint()` 在**新数据源**下判定一致 | 纯函数 |
 | `VB2-38` 关闭协议桩（缺「`Browser.close` + 等进程退出」即失败；`BrowserNotRunning` 归正常收尾） | Python `daemon.on_shutdown` 契约 |
-| `VB2-39` 快照无明文（DPAPI 往返 + 明文扫描） | Python `session.py` |
+| `VB2-39` 快照无明文（DPAPI 往返 + 明文扫描） | Python `session.py` ✅ **已生效（step 5 · 2026-10-03）**：`--session-selftest` **22 / 0**（离线 8 条 + 真机 5 条：`VB2-39①~⑬`）；**C++ 半（`VB2-39⑥`）亦已生效（step 6）**：`session_snapshot.inspect()` / `summary()` **只碰元数据**（存在 / 字节 / 时间），永不读内容 |
+| `VB2-40`（新 · step 6）**站点描述搬迁零语义 / `attach` 携带 / 快照常量同值 / 新通道如实报错** | C++ 纯逻辑（`api_probe --exec-selftest` · `site_ref.h` + `session_snapshot` + `pydoll_channel`）—— 不启进程、不读密文 |
 
 **`M7B-19` 中间检查点（硬门槛 · 批 2 出口）**
 
@@ -470,7 +541,7 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | `api_probe --exec-selftest` | **≥ 311 / 0**（本批只加不删 → **只升不降**） |
 | `api_probe --graph-selftest` | **110 / 0** |
 | `aiwrite --provider-selftest` / `--provider-dump` | **50 / 0** · **21 条** |
-| `aiwrite --run-selftest` / `--run-selftest --web` | PASS / PASS —— **此时仍走 WebView2**，数字须与批 0 一致（「先建后拆」未动生产路径的证据） |
+| `aiwrite --run-selftest` / `--run-selftest --web` | PASS / PASS —— **此时仍走 WebView2**，数字须与批 0 一致（「先建后拆」未动生产路径的证据）。**step 7 实测**：official **FAIL · exit 1**（缺本机凭据 · **环境依赖**）· `--web` **PASS** ✅ |
 | docs 相对链接 | **0 broken** |
 | 新通道冒烟（人工） | `aiwrite --pydoll-login <id>` 起 Edge 并把 profile 落 `~/.brain-ai/pydoll-profile` |
 
@@ -485,7 +556,7 @@ ImGui 主线程 ── 执行器工作线程（不得阻塞 UI；M7.md Q4 = ①�
 | `P3` | `Storage.getCookies` 读全库 → 跨域污染判据 | **一律按 `domain_suffix` 过滤**（`P7b-05b` B0 误报的直接教训） |
 | `P4` | 视口尺寸决定 DOM 形态 | 启动参数写死 `--window-size=1440,1000`（B1 教训；与 `M7B-28` 同源） |
 | `P5` | 新断言把旧数字压低 | `MB-D1`：批 1–4 只加不删；**任何下降 = 真回归** |
-| `P6` | `python/` 打包路径 / `.venv` 误入库 | 沿用 `aiwrite_copy_assets` 的 `copy_if_different` 模式；`.venv` 由 `.gitignore` 排除 |
+| `P6` | `source/python/` 打包路径 / `.venv` 误入库 | 沿用 `aiwrite_copy_assets` 的 `copy_if_different` 模式；`.venv` 由 `.gitignore` 排除 |
 | `P7` | **同步句柄上的并发 I/O 被 I/O 管理器串行化**（step 2 实测踩到） | C++ 侧句柄**必须** `FILE_FLAG_OVERLAPPED`；读/写各一事件；写加 **30 s 上限**（对端不读**不无限等**）；`close()` 用 `CancelIoEx`。表象与误判路径见上方「实现期订正 ①」 |
 
 **批 1–2 开工顺序（最小可验证切片）**
@@ -495,17 +566,20 @@ step 1  protocol.py + channel_frames.{h,cpp} + 两侧离线桩        → VB2-29
 step 2  pipe.py + pipe_client.{h,cpp} → hello → ready            → M7B-02 冒烟
 step 3  driver.py 最小集（start / cookies_all / execute_script / close_wait） → M7B-04 合测
 step 4  daemon.py + browsers.py + runtime.py + redact.py          → M7B-10~14 收口
-step 5  pydoll_channel + session_snapshot + session_store 证据源  → M7B-15~17
-step 6  诊断工具走新通道（--web-dom-dump / --web-adapter-selftest / --pydoll-login） → M7B-18
-step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
+step 5  session.py（L2 DPAPI 快照）+ daemon 三触发点（定时 / 登录即写 / 关闭前）
+        + --session-selftest                                        → VB2-39 绿（✅ 已过）
+step 6  C++ 侧接线：site_ref.h 搬迁 + session_snapshot + pydoll_channel
+        + PipeClient 判据同步（stage 带 id）+ aiwrite_copy_python     → M7B-15~17（✅ 已过）
+step 7  生产路径切换（dom_web_client → 新通道）+ 诊断换代（--web-dom-dump / --pydoll-login）
+        + 跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2              → M7B-18 / M7B-19   ◀ 已开（基线已跑 · 标签待提交）
 ```
 
-> **进度（2026-10-03）**：**step 1 / 2 / 3 / 4 ✅ 完成**（step 2 = `M7B-02` 冒烟；step 3 = 驱动最小集 + `M7B-04` 合测；step 4 = 守护进程主循环 + `VB2-38`）。
+> **进度（2026-10-03）**：**step 1 / 2 / 3 / 4 / 5 / 6 ✅ 完成**（step 2 = `M7B-02` 冒烟；step 3 = 驱动最小集 + `M7B-04` 合测；step 4 = 守护进程主循环 + `VB2-38`；**step 5 = L2 加密快照 `session.py` + `VB2-39`（`--session-selftest` **22 / 0**）**；**step 6 = C++ 侧接线（`site_ref.h` / `session_snapshot` / `pydoll_channel` + `PipeClient` 判据同步）→ `M7B-15~17`（`--exec-selftest` **320 → 326 / 0**）**）；**step 7 = 已开** —— `M7B-19` 全基线**已跑（12 / 13 绿 · 1 项环境依赖偏差）**、`M7B-18` **受阻已登记**（见下方记录块）。余：`M7B-18` 三路径待拍板；生产路径切换归批 3（`M7B-20`）。
 >
-> * **step 1** —— 新增 `python/brain_ai_browser/`（`__init__.py` / `protocol.py` / `__main__.py`，
+> * **step 1** —— 新增 `source/python/brain_ai_browser/`（`__init__.py` / `protocol.py` / `__main__.py`，
 >   **纯标准库**）+ `src/web/channel_frames.{h,cpp}`（纯函数、无 IO、不抛异常；已挂 `aiwrite_core`）
 >   + `tools/api_probe.cpp` 新增离线断言 **`VB2-29①~⑦` / `VB2-32①②`**（9 条；**不删任何旧断言**）。
-> * **step 2（`M7B-02` 冒烟：1 命令 + 1 事件）** —— 新增 `python/brain_ai_browser/pipe.py`
+> * **step 2（`M7B-02` 冒烟：1 命令 + 1 事件）** —— 新增 `source/python/brain_ai_browser/pipe.py`
 >   （`ctypes` 直调 `CreateNamedPipeW` / `ConnectNamedPipe` / `ReadFile` / `WriteFile`，
 >   **overlapped + 精确超时 + `CancelIoEx` 收尾**）+ `src/web/pipe_client.{h,cpp}`
 >   （读线程 + `id` 配对 + 事件回调；**不得在 UI 线程调 `call()`**）+ `__main__.py` 的
@@ -569,7 +643,8 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 > * **新开口项 `MB-Q8`**（§14.2）：词表缺「依赖细分」码 ——「pydoll 缺失」现沿用 `no_python`
 >   （语义偏「Python 运行时缺失」）+ `hint` 显式说明**缺的是哪个依赖**；**本批不动词表**。
 > * **边界**：**生产路径零改动**（`webview_host` 原样在跑、新通道**未接线**）· `source/assets/providers.json`
->   未改 · `session.py` / `daemon.py` / `redact.py` 未落地 ⇒ **`VB2-38` / `VB2-39` 尚未生效** ·
+>   未改 · `session.py` / `daemon.py` / `redact.py` 未落地 ⇒ **`VB2-38` / `VB2-39` 尚未生效**（**后续**：
+>   `daemon.py` + `redact.py` 于 **step 4** 落地、`session.py` 于 **step 5** 落地）·
 >   `attach_if_running` / 上传 / 流式 / 打字留 step 4 / 批 3。
 
 > **step 4 ✅ 完成（2026-10-03）—— 守护进程主循环（`M7B-10`/`M7B-11`/`M7B-13`/`M7B-14` 收口 + `VB2-38`）**
@@ -595,7 +670,7 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 >   `BrowserNotRunning` → 归正常收尾 / 超时**无 warn** → 失败 / 超时 + warn（±兜底强杀）→ 通过 /
 >   证据自相矛盾 → 失败）+ 端到端物证（`verdict_ok=true`、`waited_s=2.16 s`、**未强杀**）。
 > * **实现期订正 ①（口径）**：`stage` 帧**带请求 id** = 该命令的**完成回包**；`id="-"` 的 `stage` 才是
->   纯进度事件 ⇒ **C++ 侧 `PipeClient` 的进度事件判据需同步**（step 5~6；否则 `open_tab` 的 `call()`
+>   纯进度事件 ⇒ **C++ 侧 `PipeClient` 的进度事件判据需同步**（**step 6**；否则 `open_tab` 的 `call()`
 >   等不到回包）。已登记为 `MB-Q10`。
 > * **实测数字（本机 · 2026-10-03）**：`--daemon-selftest`（**有头窗口 · 正式轮**）**22 / 0**
 >   （合法帧 4 · 丢弃非法帧 0 · 浏览器启动 **2 次**（含自愈 **1 次**）· 守护进程退出码 **0** ·
@@ -609,15 +684,144 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 >   **`MB-Q10`**（`login_state` 的可选字段 `cookie_names` / `domain_suffix` + 「`stage` 带 id = 完成回包」
 >   的口径未入表；本批**不动词表**，先按代码注释与本块口径执行）。
 > * **边界**：**生产路径零改动** · C++ 侧关闭协议同步 / 诊断换代（`--pydoll-login`）/ 自启动与
->   「一键重登」UI 归属 step 5~6 · `session.py`（L2 快照）未落地 ⇒ **`VB2-39` 尚未生效**。
+>   「一键重登」UI 归属 step 6；`session.py`（L2 快照）在 **step 5 已落地** ⇒ **`VB2-39` Python 侧生效**。
 
-> **step 5~7 未开工**（L2 快照 `session.py` / C++ 通道接线与诊断换代 / `M7B-19` 中间检查点）。
+> **批 1 step 5 记录块 —— L2 加密快照 `session.py` + `VB2-39` Python 侧生效（2026-10-03）**
+>
+> * **新增 `session.py`**（`source/python/brain_ai_browser/`）：**DPAPI 加密快照**（`ctypes` 直调
+>   `crypt32`，`CRYPTPROTECT_UI_FORBIDDEN` ⇒ 不弹 UI、**不引第三方依赖**）· 纯函数 `host_of()` /
+>   `belongs_to()`（**父域方向**）/ `scoped()` / `to_cdp_params()`（字段白名单 + 会期语义）/
+>   `usable_cookies()` / `scan_plaintext()` / `summarize()` · `SnapshotStore.save/load/clear`
+>   （**原子写** `.tmp` + `os.replace`；**内容没变不重写**，比较**明文摘要** —— DPAPI 密文每次都不同）；
+>   数据落 **`~/.brain-ai/session/cookies.dat`**（**代码入库、数据不入库**；`BRAIN_AI_SESSION_DIR`
+>   仅作测试钩子 ⇒ 自检**绝不污染真实快照**）。
+> * **daemon 接线（三触发点 + 回灌）**：① `open_tab` 成功即登记作用域（**调用方给的 url**，`I14` 不读条目）；
+>   ② `login_state` 判到 `logged_in` → **登录即写**；③ `shutdown` 在 `Browser.close` **之前**再写；
+>   ④ 空闲 / 命令间隙 **每 5 s 定时刷新**（`_snapshot_tick` 走 `asyncio.wait_for(queue.get(), 5)` ⇒
+>   刷新与命令跑在**同一任务**里，**不存在并发访问 CDP** 的时序问题）；⑤ 启动 / 自愈后
+>   **回灌一次**（`Storage.setCookies`，每浏览器会话一次）——**失败发 `error{not_logged_in}`（`id="-"`）
+>   显式提示**（`I23④`），但**不影响本次命令回包**；`daemon-state.json` 增 `snapshot_saves` /
+>   `snapshot_restores` / `snapshot_reason`（L4）。
+> * **`driver.py` 修正（`M7B-17` 口径）**：`cookies_all()` 由 `Tab.get_cookies()`（**页级**
+>   `Network.getCookies`，依赖当前页、**会漏父域登录 Cookie**）改为 **`Browser.get_cookies()`
+>   （浏览器级 `Storage.getCookies` · 全 origin · 含 HttpOnly）**；新增 `set_cookies()` /
+>   `delete_all_cookies()`（回灌 / 自检注销用）。
+> * **作用域口径（开口项 `MB-Q11` 采纳默认值）**：`scope` = 本次会话**导航过的域**（显式传参，可覆盖）；
+>   **空作用域 ⇒ 不写快照**（隐私最小、宁缺勿滥，不擅自扩散到全库）。
+> * **实现期订正 ①（自愈判据）**：把**内建 `ConnectionError`** 纳入 `gone_exceptions()` ——
+>   浏览器被杀后，下一次 CDP 命令可能先撞「连接被拒绝」（实测 `[WinError 1225]`）而不是
+>   `BrowserNotRunning`；漏掉它会**丢失自愈**（回归实测抓到的真因）。
+> * **实现期订正 ②（DPAPI 完整性）**：DPAPI blob **自带完整性校验**（截断 / 改头部 / 改中段 / 改末尾 /
+>   明文冒充密文 → 一律解密失败，错误码 13）；⚠️ 例外 = blob 头部一小段**明文「描述区」**
+>   （`szDataDescr`）—— 改它不影响解密 ⇒ 自检的「篡改 1 字节」取**中段 / 末尾**（稳定判据）。
+> * **实现期订正 ③（关闭耗时）**：**close 之前刚写过 Cookie** 时 Chrome 退出可能 > 5 s（要 flush
+>   cookie 库）⇒ 自检判据改用**生产同款** `daemon.close_verdict`（超时 + warn + 未强杀 = 可恢复状态
+>   ⇒ 通过），而非「必须 5 s 内退出」。
+> * **实测数字（本机 · 2026-10-03）**：`--session-selftest --headless` **22 / 0**（7 协议 + **`VB2-39①~⑬`**：
+>   DPAPI 往返 · 文件与日志**零明文** · 父域作用域 · 会期语义 · 过期过滤 · **6 例损坏不崩** ·
+>   真机「注入 → 存 → 清空 → 回灌（名字齐 + `httpOnly` 保持）」· 关闭协议 · 快照留盘 · 残留 0 ·
+>   **不污染真实快照**）；**系统 Python 3.14.3（无 pydoll）** 同命令 **15 / 0 + 组 B 显式 SKIP + exit 0**
+>   （`VB2-30` 同族证据）；`--daemon-selftest --headless` **23 / 0**（22 → **+`M7B-11⑭`**：`shutdown`
+>   前落盘必经、非死码；自检子进程快照**强制落临时目录**）；`--driver-selftest` **22 / 0**（回归）·
+>   `--selftest` **7 / 0** · `--pipe-selftest` **13 / 0** · `aiwrite.exe --pipe-selftest` **PASS** ·
+>   `api_probe --selftest` 七组 / `--exec-selftest` **320 / 0** / `--graph-selftest` **110 / 0** ·
+>   `aiwrite --provider-selftest` **50 / 0** · 收尾**无残留进程** · `~/.brain-ai/session/` **未被自检创建**。
+> * **边界**：**C++ 侧零改动**（`pydoll_channel` / `session_snapshot` / `SessionStore` 改造 + `PipeClient`
+>   进度事件判据同步 + 诊断换代归 **step 6**）；`upload_image` / `send_prompt` / `read_answer` 仍未实现（批 3）。
+
+> **批 1 step 6 记录块 —— C++ 侧接线（站点描述搬迁 + 快照只读视图 + 新通道 + `PipeClient` 判据同步）（2026-10-03）**
+>
+> * **新增文件（`src/web/`）**：`site_ref.h`（`SiteRef` = `LoginRequest` **纯别名** + 全部站点纯函数
+>   **搬迁**；`webview_host.h` 改为 include 它 ⇒ 新通道取站点描述**不再拉入 WebView2 依赖**）·
+>   `session_snapshot.{h,cpp}`（**L2 快照只读视图**：路径 / 触发时机 / 状态文案 —— **只碰元数据**
+>   `exists` / `file_size` / `last_write_time`，**永不读内容** ⇒「导出物零明文」在本层**天然成立**）·
+>   `pydoll_channel.{h,cpp}`（`namespace web::channel` 自由函数集：**`selftest` / `pydoll_login` 落地**；
+>   `ensure_session` 只读判定（`I15′`）；`run_script` / `logout_site` / `current_tab_site` / `tab_on_site`
+>   **如实回「尚未实现（批 3）」** —— 不假装成功）。
+> * **`PipeClient` 判据同步（关闭 `MB-Q10`）**：`stage` 帧**带请求 id** ⇒ 视为该命令的**完成回包**；
+>   只有 `id == "-"` 的才算纯进度事件（否则 `call("open_tab", …)` 会一直等到超时）。
+> * **改动（零语义 / 只加不替换 · `B12-C1`）**：`paths.{h,cpp}` +`pydoll_profile()` / `session_snapshot_dir()`；
+>   `provider_spec.{h,cpp}`：`allowed_web_fields()` +`attach` + 解析（**只解析、不消费** · `B12-C2`）；
+>   `session_store.h` 注释（写入方 = CDP 快照 · 持久化归 L2 · `I15′`）；`CMakeLists.txt` 挂 3 组新源
+>   + **`aiwrite_copy_python()`**（`brain_ai_browser/*.py` → `<exe>/python/…`；**`.venv` 排除**）；
+>   `main.cpp` +`--pydoll-selftest` / `--pydoll-login <id>`；`tools/api_probe.cpp` **只新增**断言块。
+> * **实测（本机 · 2026-10-03）**：构建 **0 error / 0 warning**（唯一告警 = **既有** `brotlienc.dll` copy）·
+>   `api_probe --exec-selftest` **320 → 326 / 0**（**只升不降**：`VB2-40①~⑤` + `VB2-39⑥`）·
+>   `api_probe --selftest` 七组 PASS · `--graph-selftest` **110 / 0** · `aiwrite --pydoll-selftest` **exit 0**
+>   （守护进程起 → `hello` → `ready{proto=1, python=3.12.10, browser=edge}` → `shutdown` → 退出码 **0**；
+>   解释器正确取到 `source/python/.venv`）· `aiwrite.exe --pipe-selftest` **PASS**（回归）·
+>   `aiwrite --provider-selftest` **50 / 0** · `--provider-dump` **21 条** · `--run-selftest` **PASS**
+>   （**生产路径仍走 WebView2** ——「先建后拆」证据）· `--pydoll-login <未知 id>` **exit 2 + 可操作提示、不开窗**。
+> * **实现期订正（真因）**：`find_package_dir()` 起初**只按「包目录存在」**挑候选 ⇒ 选中 `<exe>/python`
+>   的拷贝（它旁边**没有** `.venv`）→ 退回 PATH 上的 `python.exe`（本机 **3.14.3 无 pydoll**）⇒ 生产登录必失败。
+>   修法：**优先选「包目录 + 同级 `.venv/Scripts/python.exe`」**那一份（实测后 `python=3.12.10`）。
+> * **边界 / 未含**：`--pydoll-login <id>` 的**真站点人工登录冒烟**待人工执行（`M7B-19` 门槛项）；
+>   生产路径切换（`M7B-20`）/ `upload_image` / `send_prompt` / `read_answer` / 诊断换代（`M7B-18`）
+>   归 **step 7（批 3）**。
+
+> **step 7 开工（2026-10-03）** —— 三项里**两项受阻**（已**如实定位**：不是「做不动」，而是「契约未开」）；
+> **唯一可当场交付 = `M7B-19` 全基线**（**已完成**）。
+>
+> **① `M7B-19` 全基线（硬门槛 · 本机 2026-10-03 实测 · 逐条贴数字）**
+>
+> | 命令 | 实测 | 判定 |
+> |---|---|---|
+> | 构建（`cmake --build --preset debug`） | **0 error / 0 warning**（唯一告警 = **既有** `brotlienc.dll` copy） | ✅ |
+> | `api_probe --selftest` | 七组 PASS · exit 0 | ✅ |
+> | `api_probe --exec-selftest` | **326 / 0** · exit 0 | ✅（只升不降） |
+> | `api_probe --graph-selftest` | **110 / 0** · exit 0 | ✅ |
+> | `aiwrite --provider-selftest` | **50 / 0** · exit 0 | ✅ |
+> | `aiwrite --provider-dump` | **21 条** · exit 0 | ✅ |
+> | `aiwrite --pipe-selftest` | **PASS** · exit 0（守护进程退出码 0 · 丢弃非法帧 0） | ✅ |
+> | `aiwrite --pydoll-selftest` | **exit 0**（`proto=1` · `python=3.12.10` · `browser=edge`） | ✅ |
+> | `aiwrite --pydoll-login <未知 id>` | **exit 2** + 可操作提示 · **不开窗** | ✅ |
+> | `aiwrite --run-selftest --web` | **PASS** · exit 0 | ✅（**生产路径仍走 WebView2** ——「先建后拆」证据） |
+> | `python -m brain_ai_browser --session-selftest` | **22 / 0** · RC=0（`VB2-39①~⑬` 全 PASS） | ✅ |
+> | docs 相对链接（`docs` + `source`） | **320 / 0 broken** | ✅ |
+> | `aiwrite --run-selftest`（**official** 模式） | **FAIL · exit 1** | ⚠️ **环境依赖偏差**（见下） |
+>
+> **⚠️ 唯一偏差 · 如实登记（并订正 v13 / v19 的措辞）**：`--run-selftest`（official）在本机
+> **未设 `DEEPSEEK_API_KEY`**、且本机凭据库**无** `config.toml` 的 `api_key_ref = brain-ai/deepseek` 条目 ⇒
+> `n3 LLMGenerate error（缺少 API Key）` → `n4 skipped` → `PC-05 归档：失败` ⇒ **exit 1**。
+> **判定 = 环境依赖，非代码回归**，三条证据：① 报错路径在 `engine/provider_resolve.cpp:291-295`，
+> **step 1~6 未触碰**；② `--run-selftest --web`（**不依赖** API Key）**PASS** ⇒ 执行器链路完好；
+> ③ §11.1 的「PASS / PASS（5-5）」是 **2026-09-28 旧机**记录（`F:\Python` + Chrome 156），
+> **v13「批 0 复测」把它当成换机后结论照抄** ⇒ **本次订正**：本机**从未真正复测**该条
+> —— **§9.3「换机后必须重取基线」在此抓到一处漏项**。
+> **待办**：用户填 Key（「提供商配置」或环境变量）后**复测该条**，才能在本表记 PASS；
+> 可选改进（**未做**，属新任务）：让 `--run-selftest` 在缺 Key 时**回 2**（对齐 `--web-chat` 的
+> 「2 = 缺少 API Key，离线部分已通过」语义，`main.cpp:74`）。
+>
+> **② `M7B-18` 诊断换代 —— 受阻（如实定位，未擅自扩契约）**
+>
+> * ✅ **已完成部分**：`pydoll_login`（= `aiwrite --pydoll-login <id>`）**step 6 已落地并实测**（未知 id → exit 2）。
+> * ❌ **受阻部分**：`--web-adapter-selftest` / `--web-dom-dump` 走新通道 —— 二者需**在页面内执行诊断 JS**
+>   （现走 `web::run_script_sync` → WebView2：`ai/dom_web_client.cpp:442,619`），而**词表 v1 只有 7 个命令**
+>   （`protocol.py:42-50`：`hello` / `open_tab` / `login_state` / `upload_image` / `send_prompt` /
+>   `read_answer` / `shutdown`）——**没有「执行脚本」这条命令**。⇒ 要落地**必须扩词表**，而 §6.1 冻结规则
+>   明写「**改动 = 升 `v`** + §15 变更记录」（`v1 → v2`；牵动两侧 + `ready{proto}` 断言 + `VB2-40④⑤` 的
+>   「如实报未实现」断言）。
+> * ⚠️ **另有口径冲突，需拍板**：`M7B-18` 列在**批 2** 表内，但 `B12-C1`（§6.2）冻结「**批 2 只新增不替换、
+>   调用方零改动**」—— 而「`--web-dom-dump` 改走新通道」= **替换** `main.cpp` 现有分发 ⇒ **两者不能同真**。
+>   三条可选路径：**(a)** 扩词表 `v2` + 把 `M7B-18` 移到**批 3**（与 `run_script` 同批）；
+>   **(b)** 诊断改走**不经管道**的 Python 侧 CLI（`python -m brain_ai_browser --dom-dump`），词表不动；
+>   **(c)** 保留 WebView2 诊断至批 5。
+>
+> **③ 生产路径切换（`dom_web_client` → 新通道）—— 本 step 明确不做**
+>
+> `B12-C1` 已定「**切换归批 3**（`M7B-20`）」；且前置缺口**实测仍在**：Python 侧 `daemon.py` 只实现
+> `hello` / `shutdown` / `open_tab` / `login_state`（`:363,382,384`），`send_prompt` / `read_answer` /
+> `upload_image` **如实回「尚未实现（批 3）」**；C++ 侧 `run_script` / `logout_site` / `current_tab_site` /
+> `tab_on_site` 仍为如实占位（`web/pydoll_channel.h:39,42,46,47`）⇒ **切换的充分条件 = 批 3 能力先落地**。
+>
+> **④ 打标签 `m7b-batch2` —— 未执行**：工作区**尚有 118 文件未提交**（含 step 1~6 与目录迁移），
+> 打标签须先提交 ⇒ **待用户决定「提交切分 / 标签时机」**。
 
 ### 批 1 —— 底座（Python 侧）
 
 | 编号 | 任务 | 落点 / 验收 |
 |---|---|---|
-| `M7B-10` | Python 包骨架（daemon / pipe / pydoll wrapper） | `python/brain_ai_browser/`（新；**文档中只写反引号、不写链接**） |
+| `M7B-10` | Python 包骨架（daemon / pipe / pydoll wrapper） | `source/python/brain_ai_browser/`（新；**文档中只写反引号、不写链接**） |
 | `M7B-11` | 守护进程：自启动、后台、心跳、崩溃检测、日志脱敏 **+ 退出协议与异常埋点**（`MB-D0-8` L1/L4） | **退出 = `Browser.close` → 等进程退出（默认 5 s）→ 超时才强杀**；**用户手动关窗 = 可恢复状态**（`BrowserNotRunning` 必须被吞，不得报错）；未干净退出 → 下次启动提示「上次异常退出，登录态可能已回滚」+ 一键重登 / 从快照恢复；不留僵尸进程 |
 | `M7B-12` | 管道协议 v1（命令 / 事件 JSON 行 + 版本号 + 非法行拒绝） | 离线桩可断言（`VB2-29`）；**词表见 §6.1（批 1 开工前冻结）** |
 | `M7B-13` | Python 运行时检测与打包策略（`Q7` / `P7b-15` → **M6 硬门槛**） | 未安装 → 引导 + **不阻塞其他功能** |
@@ -630,8 +834,8 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 | `M7B-15` | `web/pipe_client.{h,cpp}`（工作线程阻塞等待，`Q4`） | 不阻塞 UI 线程 |
 | `M7B-16` | `web/pydoll_channel.{h,cpp}`：替代 `run_script_sync` / `ensure_session`（原 `webview_host.h:207/221`） | 接口收敛为「按站点 + 脚本 → JSON」 |
 | `M7B-17` | `SessionStore` 改造：证据来源 = **CDP Cookie 快照**（`I15′`） | 仍是只读暴露 + 仅内存；证据取 **`Storage.getCookies`（浏览器级 · 全 origin · 含 HttpOnly）**；**加密快照落盘归 L2 独立组件**（`session_snapshot`，**不喂** `SessionStore`，`MB-D0-8`） |
-| `M7B-18` | 诊断工具换代：`--web-adapter-selftest` / `--web-dom-dump` 走新通道；新增 `pydoll_login` | 与旧输出**同构**（便于对照） |
-| `M7B-19` | **中间检查点**：本批结束**必须全基线绿**（此时 WebView2 仍在，可对照） | 硬门槛 |
+| `M7B-18` | 诊断工具换代：`--web-adapter-selftest` / `--web-dom-dump` 走新通道；新增 `pydoll_login` | 与旧输出**同构**（便于对照）。**step 7 部分完成**：✅ `pydoll_login` 已落地（step 6）；⬜ 另两者**受阻** —— 需「页面内执行任意 JS」命令，而**词表 v1 无此命令**（扩表 = 升 `v`），且与 `B12-C1`「批 2 不替换」**冲突** ⇒ 见 **step 7 记录块的路径 (a)/(b)/(c)** |
+| `M7B-19` | **中间检查点**：本批结束**必须全基线绿**（此时 WebView2 仍在，可对照） | 硬门槛 —— **step 7 实测 12 / 13 绿**；唯一偏差 = `--run-selftest`（official）缺本机凭据 → **exit 1**（**环境依赖，非回归**）；**门槛未闭合**（待用户配 Key 后复测该条） |
 
 ### 批 3 —— 文字链路迁移
 
@@ -834,7 +1038,7 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 | **`VB2-36`（新）** | **复用资产回归**：`web_session_failure_hint()` 在**新数据源**（CDP 状态码 / body）下判定与旧断言**一致** | |
 | **`VB2-37`（新）** | **合规禁用清单零命中**：源码内不出现 `expect_and_bypass_cloudflare_captcha` / `enable_auto_solve_cloudflare_captcha` / `apply_fingerprint` / `FingerprintApplier`（§13） | |
 | **`VB2-38`（新）** | **关闭协议（`I23①`）离线桩**：退出路径缺「`Browser.close` + 等进程退出」即判失败（纯逻辑桩，不启浏览器）；`BrowserNotRunning` 必须被吞并归为**正常收尾**；超时兜底强杀必须**留 warn**（登录态可能回滚） | ✅ **Python 侧已生效（2026-10-03 · step 4）**：`daemon.close_verdict()` **7 条判据** + `--daemon-selftest` 端到端（`VB2-38①②`）；**C++ 侧关闭协议同步归 step 5~6** |
-| **`VB2-39`（新）** | **快照无明文（`I23③`）**：快照文件字节内**不出现**任何 Cookie 名 / 值明文（DPAPI 加解密往返 + 明文扫描双重断言）；`SessionStore` 导出物同样零明文 | |
+| **`VB2-39`（新）** | **快照无明文（`I23③`）**：快照文件字节内**不出现**任何 Cookie 名 / 值明文（DPAPI 加解密往返 + 明文扫描双重断言）；`SessionStore` 导出物同样零明文 | ✅ **Python 侧已生效（2026-10-03 · step 5）**：`session.py` 的 DPAPI 往返 / 明文扫描 / **6 例损坏不崩** / 真机回灌（名字齐 + `httpOnly` 保持）由 **`--session-selftest` 22 / 0**（`VB2-39①~⑬`）覆盖；**`SessionStore` 导出物零明文归 step 6**（C++） |
 
 ### 9.3 基线数字的预期路径（**先建后拆**：单调段 + 批 5 内闭合）
 
@@ -873,7 +1077,7 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 | `qwen-web` | `dom` | ✅ `textarea[placeholder="Ask Qwen"]` | ✅ `click` | ❌ 空 | 同上 |
 | `yuanbao-web` | `dom` | ✅ `div.ql-editor.ql-blank` | ✅ `key:Enter` | ❌ 空 | 同上 |
 | `ernie-web` | `dom` | ✅ `#chat-textarea` | ✅ `key:Enter` | ❌ 空 | 同上（**建议首个验证站**：`M7B-06`） |
-| `doubao-web` | `dom` | ✅ `div.tiptap.ProseMirror`（**B1 实测 2026-09-29**：未登录即渲染、命中 1 可见） | ⬜（待登录态） | ❌ 空（未登录无回答） | **网页版图片理解首个目标站（方案 B′ · 2026-09-29 · `M7.md` `D10`）**：上传入口 **B1 已判 = `paste_only`**（无 `file input` → 注入走 `DataTransfer`）；三项选择器待人工登录后取齐（`send` / `answer_selector`）+ **纯图无字**视觉性质判别（`python/_probe/m7b28_doubao_recon.py`，见 `M7.md` `P7b-05b`） |
+| `doubao-web` | `dom` | ✅ `div.tiptap.ProseMirror`（**B1 实测 2026-09-29**：未登录即渲染、命中 1 可见） | ⬜（待登录态） | ❌ 空（未登录无回答） | **网页版图片理解首个目标站（方案 B′ · 2026-09-29 · `M7.md` `D10`）**：上传入口 **B1 已判 = `paste_only`**（无 `file input` → 注入走 `DataTransfer`）；三项选择器待人工登录后取齐（`send` / `answer_selector`）+ **纯图无字**视觉性质判别（`source/python/_probe/m7b28_doubao_recon.py`，见 `M7.md` `P7b-05b`） |
 | `tongyi-web` / `chatglm-web` / `spark-web` / `chatgpt-web` / `claude-web` / `gemini-web` | `dom` | ❌ 空（登录型条目） | ❌ | ❌ | 人工登录后 `--web-dom-dump --provider <id>` **一次取齐三项**（`M7B-28`） |
 | **全部 11 条 dom** | — | — | — | — | `cookie_names` 回填（配合 `D-30`「`cookie_names` 优先」）+ `answer_selector` 回填（`M7B-29`，承接 `PB2-29`） |
 
@@ -889,11 +1093,11 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 | `doubao-web` | **14 个鉴权名**：`sessionid` / `sessionid_ss` / `sid_guard` / `sid_tt` / `sid_ucp_v1` / `ssid_ucp_v1` / `uid_tt` / `uid_tt_ss` / `session_tlb_tag` / `odin_tt` / `x-tt-multi-sids` / `passport_auth_status` / `passport_auth_status_ss` / `passport_mfa_token`（登录态站点域共 **33–35 条**） | ✅ **有**（实测 `session: false` ⇒ 全部带 `expires`） | 混合（`sessionid` / `sid_guard` / `uid_tt` 等 = `true`；`passport_csrf_token` / `x-tt-multi-sids` = `false`） | ✅ **是**（`close_wait` 优雅退出 → 重启复读：鉴权名仍在、`仍登录 = True`；另在**异常中断**后复读也仍在） | **2026-10-02** |
 
 > **豆包一行（2026-09-29 计划）**：随 `M7.md` `P7b-05b` 的 **B0 段**（人工登录一次）一并回填 —— 登录前 / 后 Cookie 快照 + 登录 Cookie 名 / `expires` / `httpOnly` / 「干净退出 + 重启后仍登录」。其**「登录前后 Cookie 名差集」同时作为 `D-30`（`cookie_names` 优先）的豆包证据**。
-> **2026-09-29 B1 已取（登录前）**：未登录态就有 **10 条**匿名 Cookie —— `hook_slardar_session_id` / `i18next` / `dbx-web-theme` / `conversation_list_v2_group_mode` / `flow_cur_user_sec_id` / `flow_user_country` / `s_v_web_id` / `passport_csrf_token` / `passport_csrf_token_default` / `biz_trace_id`（**仅名字，值不落盘**）→ 「Cookie 非空 = 已登录」的误报风险**再次得证**；**差集仍待 B0**（登录后快照未取）。物证 `python/_probe/out/m7b28_doubao_recon.json`。
+> **2026-09-29 B1 已取（登录前）**：未登录态就有 **10 条**匿名 Cookie —— `hook_slardar_session_id` / `i18next` / `dbx-web-theme` / `conversation_list_v2_group_mode` / `flow_cur_user_sec_id` / `flow_user_country` / `s_v_web_id` / `passport_csrf_token` / `passport_csrf_token_default` / `biz_trace_id`（**仅名字，值不落盘**）→ 「Cookie 非空 = 已登录」的误报风险**再次得证**；**差集仍待 B0**（登录后快照未取）。物证 `source/python/_probe/out/m7b28_doubao_recon.json`。
 
 > **2026-10-02 误报纠错（B0 判据 · 换机后首次实跑暴露）**：首次 B0 在**无人操作**窗口的 **9 s** 内自报
 > 「✅ 检测到登录成功」——**用户确认当时未做任何登录操作** ⇒ 判为**误报**（**不予采信**；物证另存
-> `python/_probe/out/m7b28_doubao_recon.b0-false-positive-20261002.json`）。根因两条，**都在判据本身**：
+> `source/python/_probe/out/m7b28_doubao_recon.b0-false-positive-20261002.json`）。根因两条，**都在判据本身**：
 > ① **判据太松**：`Cookie 名差集非空` + `输入框出现` —— 前者命中的 `flow_cur_user_sec_id` /
 > `flow_user_country` **匿名态也会被站点种下**，后者**未登录就渲染**（本页上一行的 B1 结论）；
 > ② **Cookie 未按域过滤**：`Storage.getCookies` 返回**整个 profile** —— Edge 首启在 `msn.cn` /
@@ -950,14 +1154,18 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 |---|---|---|
 | `source\build.ps1` | 0 error / 0 warning | **不变**（硬指标） |
 | `api_probe --selftest` | 七组 PASS | 换代后全绿 |
-| `api_probe --exec-selftest` | **251 / 0** | 批 1–4 **只升不降**；批 5 内**先降后升闭合**（§9.3）→ 记录新值并全绿 |
+| `api_probe --exec-selftest` | **251 / 0** → **326 / 0（2026-10-03 · step 6）** | 批 1–4 **只升不降**（现状 ✅）；批 5 内删类断言**先降后升闭合**（§9.3） |
 | `api_probe --graph-selftest` | 110 / 0 | 不变 |
 | `aiwrite --provider-selftest` | 50 / 0（`--provider-dump` 21 条：official 9 / web 12） | 换代后全绿 |
 | `aiwrite --provider-dump` | 21 条（official 9 / web 12） | 条目数不变 |
-| `aiwrite --run-selftest` / `--run-selftest --web` | PASS / PASS（5-5） | 换通道后重测 |
+| `aiwrite --run-selftest` / `--run-selftest --web` | PASS / PASS（5-5）**（⚠️ 2026-09-28 旧机记录）** → **本机 2026-10-03 复测**：official **FAIL · exit 1**（缺本机凭据）· `--web` **PASS** | 换通道后重测；⚠️ **该条依赖本机凭据**（`api_key_ref = brain-ai/deepseek`）—— 换机 / 重装后**必须重配**，否则必红 |
 | `--login-selftest` / `--web-chat` | 0 / 1 / 2 语义 | **调用形式与退出码不变**（`I20`） |
 | `--web-probe` | 可用 | **废弃**（`--help` 标注替代命令） |
 | **新增** `--web-stream-selftest --provider <id>` | — | CDP 增量逐帧 PASS（`I22` 断言） |
+| **新增** `--session-selftest [--headless]` | — | **L2 快照**：`VB2-39①~⑬` 全绿（离线 + 真机「注入 → 存 → 清空 → 回灌」；`VB2-30` 同族：无 pydoll ⇒ 组 B **显式 SKIP + exit 0**） |
+| **新增** `aiwrite --pydoll-selftest` | — | **新通道**（step 6）：起守护进程 → `hello` → `ready{proto=1}` → `shutdown` → 退出码 **0**（实测 exit 0；**不开浏览器**） |
+| **新增** `aiwrite --pydoll-login <id> [--timeout]` | — | **新通道冒烟**（step 6）：起**有头**浏览器 + 人工登录 → 判据 `cookie_names` 命中 → 关窗；未知 id → **exit 2 + 可操作提示、不开窗**（实测）；**真站点登录待人工执行**（`M7B-19` 门槛项） |
+| **新增** `--daemon-selftest [--headless]` | — | 守护进程：`VB2-38` 离线 + `M7B-11` 端到端（**22 → 23 条**：`+M7B-11⑭` L2 触发点；自检子进程快照强制落临时目录） |
 | 文档断链 | broken **0** | **不变**（新文件先只写反引号） |
 
 > **批 0 实测（2026-09-28 复测 · 锚点 `pre-m7b` / `a1a7e0c` · Debug · 本机）**
@@ -987,8 +1195,8 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 >
 > | 项 | 旧机（2026-09-28 批 0） | 本机（2026-10-02 重建后） |
 > |---|---|---|
-> | Python | 3.12.1（`F:\Python`）+ 项目内 `.venv` | **3.12.10**（Install Manager 并行装 · **`PrependPath=0`** 不抢 3.14）+ `python\.venv` |
-> | pydoll | `pydoll-python 2.27.0` | **`pydoll-python 2.27.0`**（**钉版**，理由与安装命令写在 **`python/requirements.txt`** 头部；该文件**入库**，`.venv` 仍忽略） |
+> | Python | 3.12.1（`F:\Python`）+ 项目内 `.venv` | **3.12.10**（Install Manager 并行装 · **`PrependPath=0`** 不抢 3.14）+ `source\python\.venv` |
+> | pydoll | `pydoll-python 2.27.0` | **`pydoll-python 2.27.0`**（**钉版**，理由与安装命令写在 **`source/python/requirements.txt`** 头部；该文件**入库**，`.venv` 仍忽略） |
 > | 浏览器 | **Chrome 156.0.8072.0** | **无 Chrome → Edge 154.0.4258.48**（`M7B-14` 兜底**首次实跑**） |
 >
 > **环境物证**（探针 JSON 的 `env` 字段实读）：`{'python': '3.12.10', 'pydoll': '2.27.0',
@@ -998,9 +1206,9 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 > | 命令 | 实测 |
 > |---|---|
 > | `py -3.12 -V` | **Python 3.12.10** |
-> | `python\.venv\Scripts\python.exe -V` / `-m pip -V` | **3.12.10** / **pip 25.0.1** |
-> | `python\.venv\Scripts\python.exe -m pip install pydoll-python==2.27.0` | **`pip_rc=0`**（**110 s** · 17 包 · **直连 PyPI 不换源**） |
-> | `python\_probe\m7b28_doubao_recon.py --selftest`（本地桩 · 临时 profile · headless · **零副作用、不需登录**） | **PASS**（**exit 0 · 47 s**）：读回自证 `probe-ok` · `entry_kind=file_input` · `file_inputs=['#file']` · `#file` 命中 **1** · 收尾 `close_wait` **残留 0** |
+> | `source\python\.venv\Scripts\python.exe -V` / `-m pip -V` | **3.12.10** / **pip 25.0.1** |
+> | `source\python\.venv\Scripts\python.exe -m pip install pydoll-python==2.27.0` | **`pip_rc=0`**（**110 s** · 17 包 · **直连 PyPI 不换源**） |
+> | `source\python\_probe\m7b28_doubao_recon.py --selftest`（本地桩 · 临时 profile · headless · **零副作用、不需登录**） | **PASS**（**exit 0 · 47 s**）：读回自证 `probe-ok` · `entry_kind=file_input` · `file_inputs=['#file']` · `#file` 命中 **1** · 收尾 `close_wait` **残留 0** |
 >
 > **换机兜底口径（本轮落到代码）**：`m7b09_common.py` 增 `browser_kind()` / `browser_exe()` /
 > `browser_class()` / `env_proof()` —— **只按标准安装路径**先探 Chrome、再探 Edge，**命中谁用谁**；
@@ -1118,6 +1326,8 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 | `MB-Q9` | **词表缺 `login` 事件名**（step 4 实现期暴露）：§6.1 表 2 只列 6 个事件（`stage` / `evidence` / `delta` / `answer_done` / `error` / `ready`），但 §6.2 命令边界表要求 `login_state` 回 `login {state, cookie_names, has_expires, http_only}` | **本批不动词表**（事件词表变更 = 升 `v`）。现状：Python 按 **§6.2 命令边界表**实现 `login`（当步迭代只校验命令词表，不影响运行，且已端到端实测）。**建议**（批 2 收口与 `MB-Q7` / `MB-Q8` 一并定）：把 `login` 补进 §6.1 表 2，或改为 `stage{stage="login"}` |
 | `MB-Q10` | **两处口径未入表**（step 4 实现期暴露）：① `stage` 帧**带请求 id** = 该命令的**完成回包**（`id="-"` 才是纯进度事件）—— C++ 侧 `PipeClient` 的进度事件判据需同步，否则 `open_tab` 的 `call()` 等不到回包；② `login_state` 的两个**可选**字段 `cookie_names` / `domain_suffix`（来源 = 条目 `web.cookie_names` / profile 域过滤；未给 → `state=unknown`） | **本批不动词表**；现状已在代码注释与 §6.2 step 4 块写明（以文档口径先行）。**建议**：① 作为**协议口径澄清**正式写进 §6.1（无需升 `v`）；② 可选字段补进 §6.1 命令表「可选字段」列 |
 
+| `MB-Q11` | **L2 快照作用域默认值**（step 5 实现期定案）：`MB-Q4` 建议「仅配置表内网页版条目 origin」，但 Python 侧按 `I14` **不读 `providers.json`** ⇒ 需要「作用域从哪来」的明确口径 | ✅ **已采纳默认值（step 5）**：`scope` = 本次会话**导航过的域**（由 `open_tab` 的 url 派生、经 `session.SnapshotStore.add_scope()` 登记）；**空作用域 ⇒ 不写快照**（隐私最小、宁缺勿滥）。**接口留口**：`save(hosts=[...])` 可显式覆盖（含"全库"）。**待批 2 收口拍板**：是否给部署期提供「全库快照」开关（默认关） |
+
 ### 14.3 明确不做（硬边界）
 
 - 不改 `utils/image_decode.cpp`（`I17` 冻结区）；
@@ -1134,19 +1344,29 @@ step 7  跑 M7B-19 全基线 + 贴数字 + 打标签 m7b-batch2
 | 2026-09-28 | v1 | **`M7B` 立项**：用户决议 7 条（§2）；完成现状取证（§1）、风险（§4）、前置验证（§5）、6 批任务（§6）、配置迁移（§7）、**`I2` 解冻与 CLI 契约重建**（§8）、不变量与断言全表（§9）、站点重测清单（§10）、基线（§11）、回滚（§12）。**未开工** —— 待 §14.1 待拍板确认后进入 `M7B-01`~`08` |
 | 2026-09-28 | v2 | **`MB-D1` 已定 = 先建后拆**（用户拍板）→ ① §6 批 5 升格为「唯一不可逆点」并写明进入条件；② **顺位修正**：§7 配置收敛与 §9.2 删除类断言**全部压到批 5**（新增 `M7B-42` / `M7B-43`），**批 1–4 只新增不删改**；③ §9.3 数字路径改写为「批 1–4 只升不降 + 批 5 内闭合」（原「批 3–5 过渡态」取消）；④ §12 登记**回滚锚点**（提交 `a1a7e0c` / 标签 `pre-m7b`）；⑤ §1.3 修路径笔误（`tools/api_probe.cpp` 不在 `src/` 下）。**仍为计划、未开工** |
 | 2026-09-28 | v3 | **阶段 0 完成（文档 + 环境，未动一行产品代码）**：① **批 0 基线实测回填**（§11.1：build OK · selftest 七组 · exec **251/0** · graph **110/0** · provider **50/0** · run-selftest **PASS** · run-selftest --web **PASS** · 断链 **265/0**）；② 纠正文档错误：`--provider-selftest` / `--provider-dump` 归 **`aiwrite.exe`**；③ **Pydoll 2.27.0 环境登记 + 冒烟通过**，并据此**修正三处计划假设**（§5：网络日志/响应体有库级 API；文件注入优先 `expect_file_chooser`；`Edge` 兜底 API 已确认）；④ **新增合规禁用清单**（§13）与断言 **`VB2-37`**（验证码规避 / 指纹伪造 API 零命中）；⑤ `.gitignore` 补 Python 运行时忽略项。**仍未开工** |
-| 2026-09-28 | v4 | **`M7B-03` 前置验证通过（结论已回填）**：用**本地页面**（`python/_probe/local_server.py`）把「CDP 能否拿增量」与「站点登录 / 改版」解耦，5 个变体实测 ⇒ **主路线 = `Fetch.takeResponseBodyAsStream` + `IO.read(size=128~256)`**（`size` 即最小推送粒度；实测 256 B/帧、41 帧 / 10 KB 流）；② 仅 `EventSource` 站点可用；③ 只给进度；④ 页面 hook 未打通（备用）。**并新增两条实施要点**（`-32602` 必须容忍；0 字节只在 `eof=true` 结束）。证据：`python/_probe/out/m7b03_cdp_stream.json`。**其余 7 项前置验证未跑** |
-| 2026-09-28 | v5 | **`M7B-01` / `M7B-05` / `M7B-08` 前置验证通过 + 一条**错误结论更正**：① `M7B-01` 全 PASS（headful、profile 落盘 1064 文件、**CDP 见 HttpOnly 而 `document.cookie` 看不到**、重启后持久 Cookie 保留）；② `M7B-05` 全 PASS（**154 ms/字符** 逐字输入 + 21 次 input 事件；文件注入**两条路径**都成功且触发 change）；③ `M7B-08` 全 PASS（两域并存 → 清 A 后 **A 空 / B 完整**）；④ **更正**：路线④（页面 hook）**其实可用**（8 帧 / 5568 ms），首轮"未打通"是**探针读回层级 bug**（`execute_script` 返回**两层 `result`**）；⑤ 新增 **6 条 Pydoll 实施要点**（含**退出必须 `Browser.close` 否则登录态不落盘**、`--no-first-run` 已由库添加、Cookie 按域名隔离、`IO.read` 攒批、打字需先 `focus()`）。证据：`python/_probe/out/m7b0{1,5,8}*.json`、`_diag_persist.py`。**仍剩 `M7B-02`/`M7B-04`（C++↔Python 管道）与 `M7B-06`/`M7B-07`（需人工登录）** |
+| 2026-09-28 | v4 | **`M7B-03` 前置验证通过（结论已回填）**：用**本地页面**（`source/python/_probe/local_server.py`）把「CDP 能否拿增量」与「站点登录 / 改版」解耦，5 个变体实测 ⇒ **主路线 = `Fetch.takeResponseBodyAsStream` + `IO.read(size=128~256)`**（`size` 即最小推送粒度；实测 256 B/帧、41 帧 / 10 KB 流）；② 仅 `EventSource` 站点可用；③ 只给进度；④ 页面 hook 未打通（备用）。**并新增两条实施要点**（`-32602` 必须容忍；0 字节只在 `eof=true` 结束）。证据：`source/python/_probe/out/m7b03_cdp_stream.json`。**其余 7 项前置验证未跑** |
+| 2026-09-28 | v5 | **`M7B-01` / `M7B-05` / `M7B-08` 前置验证通过 + 一条**错误结论更正**：① `M7B-01` 全 PASS（headful、profile 落盘 1064 文件、**CDP 见 HttpOnly 而 `document.cookie` 看不到**、重启后持久 Cookie 保留）；② `M7B-05` 全 PASS（**154 ms/字符** 逐字输入 + 21 次 input 事件；文件注入**两条路径**都成功且触发 change）；③ `M7B-08` 全 PASS（两域并存 → 清 A 后 **A 空 / B 完整**）；④ **更正**：路线④（页面 hook）**其实可用**（8 帧 / 5568 ms），首轮"未打通"是**探针读回层级 bug**（`execute_script` 返回**两层 `result`**）；⑤ 新增 **6 条 Pydoll 实施要点**（含**退出必须 `Browser.close` 否则登录态不落盘**、`--no-first-run` 已由库添加、Cookie 按域名隔离、`IO.read` 攒批、打字需先 `focus()`）。证据：`source/python/_probe/out/m7b0{1,5,8}*.json`、`_diag_persist.py`。**仍剩 `M7B-02`/`M7B-04`（C++↔Python 管道）与 `M7B-06`/`M7B-07`（需人工登录）** |
 | 2026-09-28 | v6 | **登录态持久化改进（用户拍板：四层全做 · `MB-D0-8`）** —— 触发：前置验证暴露 **Pydoll `stop()` = 「`Browser.close` 后立刻 `terminate()`（硬杀）」** → Cookie 库不落盘 → **登录态每次退出即丢**（源码证据 `base.py:223-243` + `browser_process_manager.py:73-89`；实测强杀=False / `close`+等 3 s=True）。落盘改动：① §2 新增决议 **`MB-D0-8`**（L1 干净退出 / L2 DPAPI 加密快照 / L3 启动自愈 / L4 异常退出可见）；② §3 架构表新增「**退出 / 关闭**」与「**登录态持久化**」两行，并收紧「会话存储」行（落盘只经 L2、**不喂** `SessionStore`）；③ §5 实施要点 **+⑦⑧**（`stop()` 禁用 + 源码行号；`browser_preferences` 为库级一等公民、读-合并-写带 backup）并新增**探针纪律**（「机制不可用」结论须先排除探针自身）；④ §5 前置验证 **+`M7B-09`**（关闭时序三档 + 提交时机 + 快照往返 + 接管）与 **+`M7B-06b`**（真站点「重启仍登录」+ 记录 `expires`）；⑤ §6 `M7B-11` 加**退出协议与异常埋点**、`M7B-17` 明确证据取 `Storage.getCookies`；⑥ §9.1 新增不变量 **`I23`** 并给 `I15′` 加补注；⑦ §9.2 新增断言 **`VB2-38`**（关闭协议离线桩）/ **`VB2-39`**（快照无明文）；⑧ §10 新增「**登录 Cookie 存活口径**」回填表（把"下次免登录"从口号变成可核对的数字）；⑨ §12 登记 L2 对新目录**不进回滚清单**；⑩ §13 新增**登录态快照红线**；⑪ §14.2 新增 `MB-Q4`/`MB-Q5`/`MB-Q6`（快照范围 / 关闭等待 5 s / prefs 默认不启用）。**仍只改文档：产品代码零改动** |
 | 2026-09-28 | v7 | **`M7B-09` 前置验证通过（`MB-D0-8` L1~L4 四层全部得到实测支撑）** —— V-a~V-d 四轮 + 4 项补充诊断：① **V-a**：`close_wait`（`Browser.close` → 等进程退出）**0.22 s** 即保住 Cookie；强杀与库默认 `stop()` 丢，强杀残留 `Cookies-journal`；写 Cookie 后**≥30 s** 再强杀仍存活 ⇒ **10–30 s 延迟提交窗口**；② **V-b**：快照往返 7/7（`httpOnly` 保持、站点认账）；③ **V-c**：外部关窗（等价点 X）**0.2 s** 干净退出且 Cookie 保住、`stop()` 抛 **`BrowserNotRunning`（须吞）**；残留实例占 profile 时 **同端口 = 静默附着到既有实例 / 随机端口 = `FailedToStartBrowser`**，`browser.connect(ws)` **attach 可行**；④ **V-d**：**每 case 全新 profile** 对照 ⇒ 干净退出后**会期 Cookie 必掉**（持久 Cookie 保留），**`--restore-last-session` 是其唯一有效保活手段**但**会重开上次标签页**（副作用，实测 2 个 marker 页被恢复）、`session.restore_on_startup=1` 写 `Preferences` **无效**；⑤ **补充诊断**：`_diag_cookie_scope` 证 `tab.get_cookies()` **是当前页作用域**（停在 `about:blank` 必读空；全库须 `Storage.getCookies`）· `_diag_snapshot_session` **端到端证明 L2 回灌能救回会期 Cookie**（`session`/`httpOnly` 保持 + 服务端 `/eyes` 认账）· `_diag_restore_tabs` 证开关副作用 · `_diag_profile_identity` 用 `chrome://version` 排除"profile 被换"假设。落盘文档改动：§5 `M7B-09` 行改为**已过**并新增四轮结论块（含**探针收尾纪律**：崩溃会留孤儿占 profile → 下次 `start()` 直接失败）；§5 实施要点 **+⑨⑩⑪**（读数作用域 / profile 被占两形态 / `--restore-last-session` 默认禁用）；§9.1 **`I23⑤`**；§13 新增**启动与登录态两条"不做"**；§14.2 **`MB-Q6` 结案**（默认不启用 prefs，会期 Cookie 交 L2）；`source/README.md` §6.2 **+3 条探针纪律**；`docs/CHANGELOG.md` 前置验证进度更新。**仍只改文档 + 一次性探针：产品代码零改动** |
 | 2026-09-28 | v8 | **`M7B-09` 补一条收口（L2 快照节奏）**：由 V-a 的提交窗口数字（**10–30 s**）推出实现要求 —— 快照刷新间隔 **< 10 s** + 两个事件触发点（**登录成功即写** / **优雅退出前再写**），否则崩溃/断电时快照会旧一个窗口。同时固化工程纪律：`m7b09_common.shutdown()` 增加**残留自检与清理**（`strays_after` / `strays_killed`），探针一律 `try/finally` 收尾 —— 本轮两次因孤儿实例占住 profile 导致下一次 `start()` 直接 `FailedToStartBrowser`。**仍只改文档 + 一次性探针** |
 | 2026-09-28 | v9 | **文档进度同步（8 个文件 · 只改文档）** —— 前置验证已跑到 **5/9**，但「进度条类」文档仍停在「已立项 · 计划中未开工」，逐处对齐：① `M7B.md` 顶部状态行、§5 标题与进度摘要、`M7B-02` 补「**C++ 工具链冒烟已通**，剩管道双向 IPC 本体」、`M7B-04` 标 🟡 部分；② `CHANGELOG` 前置验证块新增「⏳ 待过 4 项 + 1 项加强」；③ `docs/README.md` 当前进度行、`milestone_plan.md` 状态列与前置口径（`M7B-01`–`08` → `M7B-01`–`09` + `M7B-06b`）；④ `roadmap.md` 轨道 C + **`RQ-6` 由「未实测」改为已实测收口**（`MB-Q1` 结案）；⑤ `ai_writer_nodes.md` §18 两行（**顺带修掉 P7-a 行仍写「计划中」的过期状态**）；⑥ `DevPlan.todo` `TST-M7B-01` 补进度 + **新增 `FEA-M7B-03`（`MB-D0-8` 四层登录态持久化）**；⑦ `M7.md` §12.1（`P7b-01`/`P7b-04` 标已过、`P7b-03` 标部分）+ §12 上方「外部调研」注更正；⑧ `节点编辑器使用说明.md` §10.2 前置验证补状态；⑨ **反向核对再补 3 处**（`M7B.md` §12 三级回滚口径、`CHANGELOG` 立项块任务口径、`ai_writer_nodes.md` §18 P7-b 行状态）。**验证**：文档断链 **276 checked / 0 broken**、`DevPlan.todo` JSON 合法且节点 **196 → 197**、过期措辞反向核对：`⬜ 计划中` 行 **0 命中**、旧「未过则停留」编号 **0 命中**（唯一保留命中 = 本行对旧措辞的引用）、`source/` **产品代码零改动**（其变更均属 P7-a 变更集） |
-| 2026-09-29 | v10 | **方案 B′ 定案（网页版图片理解目标站改豆包）+ 站点多模态能力外部核查（只改文档 · 零产品代码）** —— ① **目标站**：网页版图片理解首个目标站 = **`doubao-web`**（`M7.md` 新增决策 `D10`；理由：条目已存在 + 字节多模态系 + 不动批 4 主线），**`deepseek-web` 保持文字链路主线**（`M7B-06`/`M7B-26` 不变）；② **顺序闸门**：先 `P7b-05b` 只读侦察（`python/_probe/m7b28_doubao_recon.py`）→ 结论**用户审核通过后**才启动 `M7B-02`/`04` 管道本体（`M7.md` §16 已插入该顺序）；③ `M7.md` 新增 **`P7b-05b`**（上传入口 4 类判定 + 三项选择器真实命中 + `D-30` 证据 + **纯图无字**视觉性质判别）与 **`M7-10`**（DeepSeek 官方 API 视觉跟进）；④ **外部核查**：DeepSeek **API 已原生多模态**（2026-09-10 `deepseek-flash` = V4.1-Flash，Vision ✓；`deepseek-v4-pro` ✗）→ 仓库表过时；DeepSeek **网页版**推断无视觉（Web 跑 V4-Pro GA 且 ✗ + 公告只提 API）；**豆包待实测** → 新增 [网页版协议实测记录.md](../网页版协议实测记录.md) **§8**；⑤ §10 表把 `doubao-web` **单列**（从合并行拆出）+ 新增「**网页版图片理解侦察记录**」表 + 「登录 Cookie 存活口径」表补豆包一行（`P7b-05b` B0 段回填）；⑥ `M7.md` `P7b-10` 主路线改写为 **`expect_file_chooser`**（`M7B-05` 已实测两条注入路径均成功）→ 仅当无 `file input` 时才退 `DataTransfer`；⑦ 同步 `M_patchAB_rest.md`（`D-30` 证据计划 + 附录 E 豆包行）/`docs/README.md`/`CHANGELOG.md`/`DevPlan.todo`/`roadmap.md`/`ai_writer_nodes.md`/`milestone_plan.md`。**验证**：文档断链自检 **broken 0**、`source/` **零改动**、`source/assets/providers.json` **未改** |
-| 2026-09-29 | v11 | **豆包 B1 只读侦察结果回填（只改文档 · 零产品代码）** —— 物证 `python/_probe/out/m7b28_doubao_recon.json`（`started 2026-09-29 20:33:03`、`readback_self_proof = "probe-ok"`、`close_wait` 退出码 **0**、`strays_after: []`）。① **入口形态 = `paste_only`**（`file_inputs: []` / `drop_zones: []`）⇒ **`P7b-10` 注入路线判定 = `DataTransfer`**（主路线 `expect_file_chooser` 对豆包**不适用**；`M7.md` §12.1 + §12.2 已补注）；② **composer = `div.tiptap.ProseMirror`**（**未登录即渲染**、命中 1 可见）→ §10 表该行 `input_selector` 由「❌ 空（未登录不渲染输入框）」**更正**为实测量；③ **未登录 10 条匿名 Cookie**（仅名字）→ `D-30`「Cookie 非空 = 已登录」误报风险再获旁证；④ **`answer_selector` 4 类候选全 0**（`message`/`answer`/`reply`/`markdown`）→ 仍需「登录 + 手动发一条」（= `M7B-06` / `M7B-28` 同一人工关卡）；⑤ **B0 / B2 / B3 未跑**（登录 Cookie 差集 / 注入 + 网络回执 / 纯图无字判别）⇒ **本次结果不构成 `I18` 证据**，网页版条目 `capabilities.vision` **保持 `false`**。同步：`M7.md` §12.1（状态列 + B1 结论块）/ `DevPlan.todo` `TST-M7-07`（仍 `done: false`）/ `网页版协议实测记录.md` §8.3 / `CHANGELOG.md`。**验证**：文档断链自检 **docs/ 全量 289 / 0 broken**、`DevPlan.todo` JSON 合法（199 条）、`source/` 与 `source/assets/providers.json` **零改动** |
+| 2026-09-29 | v10 | **方案 B′ 定案（网页版图片理解目标站改豆包）+ 站点多模态能力外部核查（只改文档 · 零产品代码）** —— ① **目标站**：网页版图片理解首个目标站 = **`doubao-web`**（`M7.md` 新增决策 `D10`；理由：条目已存在 + 字节多模态系 + 不动批 4 主线），**`deepseek-web` 保持文字链路主线**（`M7B-06`/`M7B-26` 不变）；② **顺序闸门**：先 `P7b-05b` 只读侦察（`source/python/_probe/m7b28_doubao_recon.py`）→ 结论**用户审核通过后**才启动 `M7B-02`/`04` 管道本体（`M7.md` §16 已插入该顺序）；③ `M7.md` 新增 **`P7b-05b`**（上传入口 4 类判定 + 三项选择器真实命中 + `D-30` 证据 + **纯图无字**视觉性质判别）与 **`M7-10`**（DeepSeek 官方 API 视觉跟进）；④ **外部核查**：DeepSeek **API 已原生多模态**（2026-09-10 `deepseek-flash` = V4.1-Flash，Vision ✓；`deepseek-v4-pro` ✗）→ 仓库表过时；DeepSeek **网页版**推断无视觉（Web 跑 V4-Pro GA 且 ✗ + 公告只提 API）；**豆包待实测** → 新增 [网页版协议实测记录.md](../网页版协议实测记录.md) **§8**；⑤ §10 表把 `doubao-web` **单列**（从合并行拆出）+ 新增「**网页版图片理解侦察记录**」表 + 「登录 Cookie 存活口径」表补豆包一行（`P7b-05b` B0 段回填）；⑥ `M7.md` `P7b-10` 主路线改写为 **`expect_file_chooser`**（`M7B-05` 已实测两条注入路径均成功）→ 仅当无 `file input` 时才退 `DataTransfer`；⑦ 同步 `M_patchAB_rest.md`（`D-30` 证据计划 + 附录 E 豆包行）/`docs/README.md`/`CHANGELOG.md`/`DevPlan.todo`/`roadmap.md`/`ai_writer_nodes.md`/`milestone_plan.md`。**验证**：文档断链自检 **broken 0**、`source/` **零改动**、`source/assets/providers.json` **未改** |
+| 2026-09-29 | v11 | **豆包 B1 只读侦察结果回填（只改文档 · 零产品代码）** —— 物证 `source/python/_probe/out/m7b28_doubao_recon.json`（`started 2026-09-29 20:33:03`、`readback_self_proof = "probe-ok"`、`close_wait` 退出码 **0**、`strays_after: []`）。① **入口形态 = `paste_only`**（`file_inputs: []` / `drop_zones: []`）⇒ **`P7b-10` 注入路线判定 = `DataTransfer`**（主路线 `expect_file_chooser` 对豆包**不适用**；`M7.md` §12.1 + §12.2 已补注）；② **composer = `div.tiptap.ProseMirror`**（**未登录即渲染**、命中 1 可见）→ §10 表该行 `input_selector` 由「❌ 空（未登录不渲染输入框）」**更正**为实测量；③ **未登录 10 条匿名 Cookie**（仅名字）→ `D-30`「Cookie 非空 = 已登录」误报风险再获旁证；④ **`answer_selector` 4 类候选全 0**（`message`/`answer`/`reply`/`markdown`）→ 仍需「登录 + 手动发一条」（= `M7B-06` / `M7B-28` 同一人工关卡）；⑤ **B0 / B2 / B3 未跑**（登录 Cookie 差集 / 注入 + 网络回执 / 纯图无字判别）⇒ **本次结果不构成 `I18` 证据**，网页版条目 `capabilities.vision` **保持 `false`**。同步：`M7.md` §12.1（状态列 + B1 结论块）/ `DevPlan.todo` `TST-M7-07`（仍 `done: false`）/ `网页版协议实测记录.md` §8.3 / `CHANGELOG.md`。**验证**：文档断链自检 **docs/ 全量 289 / 0 broken**、`DevPlan.todo` JSON 合法（199 条）、`source/` 与 `source/assets/providers.json` **零改动** |
 | 2026-10-02 | v12 | **管道协议 v1 词表 + `web.attach` 契约补齐（只改文档 · 零产品代码）** —— 现状核对发现「网页版图片上传」施工图 3 处缺口，本轮补 ②③ 与 C++ 侧契约（① 属实测，留 `P7b-05b` B2）：① **新增 §6.1 协议 v1 词表**（帧格式 / `v`·`id`·`kind` / 7 命令 / 6 事件 / 错误码 → `I21` 映射 / 容量与超时上限），`M7B-12` 与 `P7b-07` 按此施工；② **`web.attach`** 入 §7 配置表迁移（`auto`\|`file_input`\|`drop_zone`\|`paste_only`\|`none`；豆包 = `paste_only`，**赋值随 B2/B3 回填**）；③ `M7B-12` / `VB2-29` 行补「按 §6.1 词表校验」；④ `M7.md` 同批：`D11` / `P7b-16` / §13 / §14 / §15 / §16 + `DevPlan.todo` id 200/201 + `CHANGELOG.md`。**验证**：`DevPlan.todo` JSON 合法（**201 条**）· docs 断链 **0** · `source/` 与 `providers.json` **零改动** |
 | 2026-10-03 | v13 | **批 1–2 施工细化表冻结（`B12-C1`~`C3`）+ 批 0 基线复测（含换机修复）** —— ① 新增 **§6.2**：把批 1（`M7B-10`~`14`）/ 批 2（`M7B-15`~`19`）拆到**文件 / 函数 / 命令字段 / 断言编号**级（批 1 文件表 + 命令边界；批 2 接口映射表 + 逐文件改动清单 + 断言归属 + `M7B-19` 门槛 + 风险 `P1`~`P6` + 开工 step 1~7）；② 三处**冻结口径**：`B12-C1` 批 2 **只新增不替换**（切换归批 3 `M7B-20`）/ `B12-C2` `allowed_web_fields()` 加 `attach`（**运行期不消费**、`providers.json` 不落值）/ `B12-C3` `SessionStore::user_token` **留到批 5**；③ **批 0 基线复测**（换机后必须重取）：构建 **0/0** · `--selftest` 七组 PASS · `--exec-selftest` **311 / 0** · `--graph-selftest` **110 / 0** · `--provider-selftest` **50 / 0** · `--provider-dump` **21 条** · `--run-selftest` **PASS** · docs 相对链接 **296 / 0**；④ **换机账修复（本批唯一产品侧改动 · 4 处）**：开工时 `--exec-selftest` **309 / 1**，唯一失败 = `M5-04 示例：E-02 加载校验通过`（示例写死**旧机绝对路径** `F:/GameDao/.../sample.png`，而 `engine/graph.cpp` 的 File 参数校验对非令牌值只做 `exists(原值)`）⇒ ① 示例改**仓库相对路径** `assets/images/flamingo.png`；② `tools/api_probe.cpp` **新增**「示例图片路径**可移植**（不含盘符 / 反斜杠）」断言 + 校验前把路径**代入本机示例图**；③ `main.cpp` 默认图 `sample.png` → `flamingo.png`；④ `docs/节点编辑器使用说明.md` 同步（断言 **310 → 311**，全绿）；⑤ **工具账**：`source\build.ps1` 在本机**被执行策略拦截**（复现改 `cmake --build --preset debug`）、旧机 `check_links.py` 本机**不存在**（改等价内联检查）。**明确未含**：`sample.png` 删除与 `flamingo.png` 入库的取舍（属上一批未提交变更）；`providers.json` 的 `attach` / `cookie_names` **仍不落值**；`DevPlan.todo` id **200 / 201** 保持 `done: false` |
-| 2026-10-03 | v14 | **step 1 收口 + step 2（`M7B-02`）通过：C++ ↔ Python 命名管道双向 IPC 打通** —— ① **step 1**（§6.2 记录回填）：`python/brain_ai_browser/{__init__,protocol,__main__}.py`（纯标准库）+ `src/web/channel_frames.{h,cpp}` + `api_probe` 离线断言 **`VB2-29①~⑦` / `VB2-32①②`**（**不删旧断言**；`--exec-selftest` **311 → 320 / 0**）；实现期订正：`stage` 事件的阶段键 `name` → **`stage`**（帧头 `name` 已被事件名占用）；② **step 2 新增**：`python/brain_ai_browser/pipe.py`（`ctypes` → `CreateNamedPipeW`/`ConnectNamedPipe`/`ReadFile`/`WriteFile`，**overlapped + 精确超时**、`read_line`/`write_line`/`write_bytes`、`PipeServer.accept` 超时作废实例）+ `src/web/pipe_client.{h,cpp}`（`connect`/`call`/`send_command`/`on_event`/`close`；读线程 + `id` 配对 + **进度事件不完成调用** + 非法帧回 `err{bad_frame}`）+ `main.cpp` 的 **`--pipe-selftest`**（起守护进程 `--serve --once` → `hello` → 校 `ready` → `shutdown` → **等进程退出**；守护进程 stdout/stderr 落 `~/.brain-ai/logs/pipe_selftest_daemon.log`，失败时打印日志尾部）+ `CMakeLists.txt` 挂 `src/web/pipe_client.cpp`；③ **`M7B-02` 判定 ✅ 已过**（§5 行 + §6.2 进度块贴数字）：`--pipe-selftest` **PASS / exit 0**、loopback **13 / 0**、守护进程逐帧物证 **2 帧**、`--exec-selftest` **320 / 0**、`--graph-selftest` **110 / 0**、`--provider-selftest` **50 / 0**、`--provider-dump` **21 条**、`--run-selftest` **PASS**、无残留进程；④ **实施要点 `P7`（新风险行）**：**同步句柄上的并发 I/O 被 I/O 管理器串行化** ⇒ C++ 句柄**必须** `FILE_FLAG_OVERLAPPED`（读/写各一事件）+ 写 30 s 上限 + `close()` 用 `CancelIoEx`；踩坑表象 = 「写阻塞 20 s（＝服务端 idle 超时）后 `ERROR_NO_DATA`」而服务端同轮 0 帧（**双向都像「对方没听见」**，易误判为协议错）；⑤ **`M7B-04` 进度细化**（管道监听线程与调用线程并发已合测；**仅剩** asyncio × 管道监听线程，归 step 4 `daemon.py`）；⑥ **新增开口项 `MB-Q7`**（词表缺「命令未实现」码；本批**不动词表**）；⑦ 顺手修 §6.2 重复标题（`### 批 1` 出现两次）。**边界**：**生产路径零改动**（未接线；`webview_host` 原样在跑），`providers.json` 未改，`DevPlan.todo` id 200/201 仍 `done: false`；step 3~7 未开工 |
-| 2026-10-03 | v15 | **step 3 落地：Pydoll 驱动最小集 + `M7B-04` 合测（§5 **7/9**）+ `VB2-30` 双证据** —— ① 新增 `python/brain_ai_browser/{browsers,runtime,driver}.py`：`M7B-14` 浏览器探测（标准路径**先 Chrome 后 Edge** / `env_proof`）· `M7B-13` 运行时检测（`check_runtime()` + `DependencyError` + 可操作引导）· **Pydoll 最小集**（`start` / `tab_for` / `new_tab` / `cookies_all` / `cookies_for_domain`（`P3` 按域过滤）/ `execute_script`（**单点解包两层 `result`**）/ `close_wait`（**超时只 warn、生产禁强杀**，`MB-D0-8` L1/L3））；pydoll **惰性 import**（`runtime.load_pydoll()` = 唯一入口）⇒ 无 pydoll 的系统 Python 下 `--selftest` / `--pipe-selftest` / `--serve` 照旧可跑（**7 / 0 · 13 / 0** 复核）；② `__main__.py` 新增 **`--driver-selftest [--headless] [--timeout <秒>]`**（组 A = 离线 `VB2-30`；组 B = 真机驱动断言 + `M7B-04`；`--headless` / `--timeout` **仅在**该开关下合法，否则 **exit 2**，**不静默忽略**）；③ **`M7B-04` ✅ 已过**（2026-10-03）：合测 = 管道伺服**独立线程**（实例先由主线程 `open()`）× asyncio 主循环并发跑「浏览器命令 burst」与 `asyncio.to_thread(pipe 往返)` ⇒ 往返落在命令窗口内**且返回时命令仍在跑** + 心跳 **12 次 / ≈0.66 s**（headless 轮 14 次 / ≈0.78 s）⇒ 事件循环未被管道读阻塞（**真并发**判据）；**生产形态（`daemon.py` 主循环 + 命令分发）在 step 4 复验**；④ **`VB2-30` 双证据**（`I21`）：**桩物证** = 组 A 打桩 `no_python` / `no_browser` 两条路径 → 可操作引导 + **启动器调用数 0** + **新建 socket 数 0**（「不开浏览器 / 不发 HTTP」机器判据）+ **真机物证** = **系统 Python 3.14.3（无 pydoll）** 实跑 `--driver-selftest` **11 / 0**（组 B **显式 SKIP** + exit 0，不静默、不假装通过）；⑤ **实现期订正**：初版把伺服线程放在组 B 开头 + `accept` 15 s ⇒ 被「起浏览器 6.6 s + 4 次 PowerShell 取证」挤爆、`accept` 超时**作废实例** → 客户端 `CreateFile` 报 `FILE_NOT_FOUND` 重试到超时（**表象与 step 2 的 `P7` 同类：双方都说「对方没听见」**，成因是**时序**而非句柄模式）；修法 = 实例先由主线程 `open()` + 伺服线程紧贴合测窗口启动（`accept` 30 s 兜底）+ 判据加「往返返回时命令仍在跑」；⑥ **新开口项 `MB-Q8`**（§14.2：词表缺「依赖细分」码 —— pydoll 缺失沿用 `no_python` + `hint` 显式说明；**本批不动词表**）。**实测（本机 · 2026-10-03）**：构建 **0 error / 0 warning**（唯一告警 = **既有** `brotlienc.dll` copy，与本轮无关）· `--driver-selftest` **有头窗口 22 / 0**（起 Edge pid=10448 · 启动 **6.56 s** · `execute_script` → **42** · `cookies_all` list · 真实命令行含 `--window-size` / `--user-data-dir` · `close_wait` **3.83 s / exit 0 / 无强杀** · 残留 **0** · 管道 `served=1`）· `--driver-selftest --headless` **22 / 0**（判据不依赖 headless）· 参数错误路径 4 条均 **exit 2** · `--exec-selftest` **320 / 0** · `--graph-selftest` **110 / 0** · `--provider-selftest` **50 / 0** · `--provider-dump` **21 条**（official 9 / web 12）· `--run-selftest` **PASS** · `aiwrite.exe --pipe-selftest` **PASS**（step 2 回归）· docs 相对链接 **297 / 0** · 收尾**无残留进程**。**边界**：**生产路径零改动**（新通道未接线）· `source/assets/providers.json` 未改 · `session.py` / `daemon.py` / `redact.py` 未落地 ⇒ **`VB2-38` / `VB2-39` 尚未生效**；**step 4~7 未开工** |
-| 2026-10-03 | v16 | **step 4 落地：守护进程主循环（`M7B-10`/`M7B-11`/`M7B-13`/`M7B-14` 收口）+ `VB2-38` Python 侧生效** —— ① 新增 `python/brain_ai_browser/daemon.py`（**唯一主循环**：管道**监听线程**（阻塞 `accept`/`read_line`）→ `call_soon_threadsafe` 投 `asyncio.Queue` → **主线程 asyncio** 跑 `handle_frame`（Pydoll 同循环）；**写帧一律 `asyncio.to_thread`**；收尾 = 关管道放监听线程出来 → `join` → 补关浏览器；浏览器**按需启动** ⇒ `hello`/`shutdown` 不需要浏览器，`aiwrite.exe --pipe-selftest` 仍秒级）+ `redact.py`（日志脱敏 `~/.brain-ai/logs/browser.log`，`log_event()` = **唯一写日志入口** ⇒「无明文」可被扫描断言）；`--serve` 从「最小伺服」**整体迁入** `daemon.serve()`（`__main__` 只留 CLI 与三层自检）；② **命令边界落定**：`hello` → `ready`（**依赖缺失时追加 `error` 事件**带可操作引导）/ `open_tab`（按需起浏览器 + `stage{open, ok}`）/ `login_state` → `login{state, cookie_names, has_expires, http_only}`（**值不进协议**；可选 `cookie_names`/`domain_suffix`，未给 = `unknown`）/ `shutdown`（`stage{close}` → `Browser.close` → 等进程退出 → **超时兜底强杀 + 必留 warn**）；`upload_image`/`send_prompt`/`read_answer` 仍 `err{daemon_down, hint=尚未实现}`；③ **`M7B-11` 关键行为**：**用户手动关窗 = 可恢复状态** —— `BrowserNotRunning` / 进程已死**被吞** + L4 留痕（`browser_selfheal`）+ **自愈重启**（实测：强杀浏览器后命令仍成功、pid 换新、**stderr 零回溯**）；L4 心跳（10 s）/ 崩溃检测 / `daemon-state.json` 留痕（未干净退出 → 下次启动打印 `⚠️ 上次未干净退出（登录态可能已回滚）`）；④ **`VB2-38`（`I23①`）Python 侧生效**：`daemon.close_verdict()` **7 条纯逻辑判据**（缺 `Browser.close` → 失败 / `BrowserNotRunning` → 正常收尾 / 超时无 warn → 失败 / 超时 + warn（±兜底强杀）→ 通过 / 证据自相矛盾 → 失败）+ 端到端物证（`verdict_ok=true`、`waited_s=2.16 s`、未强杀）；⑤ **实现期订正（口径）**：`stage` 帧**带请求 id = 完成回包**、`id="-"` 才是纯进度 ⇒ **C++ 侧 `PipeClient` 判据需同步**（否则 `open_tab` 的 `call()` 等不到回包），登记 **`MB-Q10`**；另暴露 **`MB-Q9`**（词表缺 `login` 事件名）；⑥ **新增 `--daemon-selftest`**（组 A = `VB2-38` 离线 7 条判据 + L4 判定 + 日志脱敏零命中；组 B = 真机端到端 11 条）。**实测（本机）**：`--daemon-selftest` **有头窗口 22 / 0**（合法帧 4 · 丢弃非法帧 0 · 浏览器启动 **2 次**（含自愈 **1 次**）· 退出码 **0** · `close_wait` **2.16 s / 未强杀** · 残留 **0** · stderr 无回溯）· `--daemon-selftest --headless` **22 / 0** · `--driver-selftest` **22 / 0**（回归）· `--selftest` **7 / 0** · `--pipe-selftest` **13 / 0**（系统 Python **3.14.3 无 pydoll → 14 / 0**，多出 1 条 = `ready` 后**追加 error 事件**的真机证据）· `aiwrite.exe --pipe-selftest` **PASS**（**新主循环**在 C++ 侧端到端可用、**未改一行 C++**）· `--exec-selftest` **320 / 0** · `--graph-selftest` **110 / 0** · `--provider-selftest` **50 / 0** · `--provider-dump` **21 条** · `--run-selftest` **PASS** · docs 相对链接 **298 / 0** · 收尾**无残留进程**。**边界**：生产路径零改动 · C++ 侧关闭协议同步 / 诊断换代（`--pydoll-login`）/ 自启动与「一键重登」UI 归 step 5~6 · `session.py`（L2 快照）未落地 ⇒ **`VB2-39` 尚未生效**；**step 5~7 未开工** |
+| 2026-10-03 | v14 | **step 1 收口 + step 2（`M7B-02`）通过：C++ ↔ Python 命名管道双向 IPC 打通** —— ① **step 1**（§6.2 记录回填）：`source/python/brain_ai_browser/{__init__,protocol,__main__}.py`（纯标准库）+ `src/web/channel_frames.{h,cpp}` + `api_probe` 离线断言 **`VB2-29①~⑦` / `VB2-32①②`**（**不删旧断言**；`--exec-selftest` **311 → 320 / 0**）；实现期订正：`stage` 事件的阶段键 `name` → **`stage`**（帧头 `name` 已被事件名占用）；② **step 2 新增**：`source/python/brain_ai_browser/pipe.py`（`ctypes` → `CreateNamedPipeW`/`ConnectNamedPipe`/`ReadFile`/`WriteFile`，**overlapped + 精确超时**、`read_line`/`write_line`/`write_bytes`、`PipeServer.accept` 超时作废实例）+ `src/web/pipe_client.{h,cpp}`（`connect`/`call`/`send_command`/`on_event`/`close`；读线程 + `id` 配对 + **进度事件不完成调用** + 非法帧回 `err{bad_frame}`）+ `main.cpp` 的 **`--pipe-selftest`**（起守护进程 `--serve --once` → `hello` → 校 `ready` → `shutdown` → **等进程退出**；守护进程 stdout/stderr 落 `~/.brain-ai/logs/pipe_selftest_daemon.log`，失败时打印日志尾部）+ `CMakeLists.txt` 挂 `src/web/pipe_client.cpp`；③ **`M7B-02` 判定 ✅ 已过**（§5 行 + §6.2 进度块贴数字）：`--pipe-selftest` **PASS / exit 0**、loopback **13 / 0**、守护进程逐帧物证 **2 帧**、`--exec-selftest` **320 / 0**、`--graph-selftest` **110 / 0**、`--provider-selftest` **50 / 0**、`--provider-dump` **21 条**、`--run-selftest` **PASS**、无残留进程；④ **实施要点 `P7`（新风险行）**：**同步句柄上的并发 I/O 被 I/O 管理器串行化** ⇒ C++ 句柄**必须** `FILE_FLAG_OVERLAPPED`（读/写各一事件）+ 写 30 s 上限 + `close()` 用 `CancelIoEx`；踩坑表象 = 「写阻塞 20 s（＝服务端 idle 超时）后 `ERROR_NO_DATA`」而服务端同轮 0 帧（**双向都像「对方没听见」**，易误判为协议错）；⑤ **`M7B-04` 进度细化**（管道监听线程与调用线程并发已合测；**仅剩** asyncio × 管道监听线程，归 step 4 `daemon.py`）；⑥ **新增开口项 `MB-Q7`**（词表缺「命令未实现」码；本批**不动词表**）；⑦ 顺手修 §6.2 重复标题（`### 批 1` 出现两次）。**边界**：**生产路径零改动**（未接线；`webview_host` 原样在跑），`providers.json` 未改，`DevPlan.todo` id 200/201 仍 `done: false`；step 3~7 未开工 |
+| 2026-10-03 | v15 | **step 3 落地：Pydoll 驱动最小集 + `M7B-04` 合测（§5 **7/9**）+ `VB2-30` 双证据** —— ① 新增 `source/python/brain_ai_browser/{browsers,runtime,driver}.py`：`M7B-14` 浏览器探测（标准路径**先 Chrome 后 Edge** / `env_proof`）· `M7B-13` 运行时检测（`check_runtime()` + `DependencyError` + 可操作引导）· **Pydoll 最小集**（`start` / `tab_for` / `new_tab` / `cookies_all` / `cookies_for_domain`（`P3` 按域过滤）/ `execute_script`（**单点解包两层 `result`**）/ `close_wait`（**超时只 warn、生产禁强杀**，`MB-D0-8` L1/L3））；pydoll **惰性 import**（`runtime.load_pydoll()` = 唯一入口）⇒ 无 pydoll 的系统 Python 下 `--selftest` / `--pipe-selftest` / `--serve` 照旧可跑（**7 / 0 · 13 / 0** 复核）；② `__main__.py` 新增 **`--driver-selftest [--headless] [--timeout <秒>]`**（组 A = 离线 `VB2-30`；组 B = 真机驱动断言 + `M7B-04`；`--headless` / `--timeout` **仅在**该开关下合法，否则 **exit 2**，**不静默忽略**）；③ **`M7B-04` ✅ 已过**（2026-10-03）：合测 = 管道伺服**独立线程**（实例先由主线程 `open()`）× asyncio 主循环并发跑「浏览器命令 burst」与 `asyncio.to_thread(pipe 往返)` ⇒ 往返落在命令窗口内**且返回时命令仍在跑** + 心跳 **12 次 / ≈0.66 s**（headless 轮 14 次 / ≈0.78 s）⇒ 事件循环未被管道读阻塞（**真并发**判据）；**生产形态（`daemon.py` 主循环 + 命令分发）在 step 4 复验**；④ **`VB2-30` 双证据**（`I21`）：**桩物证** = 组 A 打桩 `no_python` / `no_browser` 两条路径 → 可操作引导 + **启动器调用数 0** + **新建 socket 数 0**（「不开浏览器 / 不发 HTTP」机器判据）+ **真机物证** = **系统 Python 3.14.3（无 pydoll）** 实跑 `--driver-selftest` **11 / 0**（组 B **显式 SKIP** + exit 0，不静默、不假装通过）；⑤ **实现期订正**：初版把伺服线程放在组 B 开头 + `accept` 15 s ⇒ 被「起浏览器 6.6 s + 4 次 PowerShell 取证」挤爆、`accept` 超时**作废实例** → 客户端 `CreateFile` 报 `FILE_NOT_FOUND` 重试到超时（**表象与 step 2 的 `P7` 同类：双方都说「对方没听见」**，成因是**时序**而非句柄模式）；修法 = 实例先由主线程 `open()` + 伺服线程紧贴合测窗口启动（`accept` 30 s 兜底）+ 判据加「往返返回时命令仍在跑」；⑥ **新开口项 `MB-Q8`**（§14.2：词表缺「依赖细分」码 —— pydoll 缺失沿用 `no_python` + `hint` 显式说明；**本批不动词表**）。**实测（本机 · 2026-10-03）**：构建 **0 error / 0 warning**（唯一告警 = **既有** `brotlienc.dll` copy，与本轮无关）· `--driver-selftest` **有头窗口 22 / 0**（起 Edge pid=10448 · 启动 **6.56 s** · `execute_script` → **42** · `cookies_all` list · 真实命令行含 `--window-size` / `--user-data-dir` · `close_wait` **3.83 s / exit 0 / 无强杀** · 残留 **0** · 管道 `served=1`）· `--driver-selftest --headless` **22 / 0**（判据不依赖 headless）· 参数错误路径 4 条均 **exit 2** · `--exec-selftest` **320 / 0** · `--graph-selftest` **110 / 0** · `--provider-selftest` **50 / 0** · `--provider-dump` **21 条**（official 9 / web 12）· `--run-selftest` **PASS** · `aiwrite.exe --pipe-selftest` **PASS**（step 2 回归）· docs 相对链接 **297 / 0** · 收尾**无残留进程**。**边界**：**生产路径零改动**（新通道未接线）· `source/assets/providers.json` 未改 · `session.py` / `daemon.py` / `redact.py` 未落地 ⇒ **`VB2-38` / `VB2-39` 尚未生效**；**step 4~7 未开工** |
+| 2026-10-03 | v16 | **step 4 落地：守护进程主循环（`M7B-10`/`M7B-11`/`M7B-13`/`M7B-14` 收口）+ `VB2-38` Python 侧生效** —— ① 新增 `source/python/brain_ai_browser/daemon.py`（**唯一主循环**：管道**监听线程**（阻塞 `accept`/`read_line`）→ `call_soon_threadsafe` 投 `asyncio.Queue` → **主线程 asyncio** 跑 `handle_frame`（Pydoll 同循环）；**写帧一律 `asyncio.to_thread`**；收尾 = 关管道放监听线程出来 → `join` → 补关浏览器；浏览器**按需启动** ⇒ `hello`/`shutdown` 不需要浏览器，`aiwrite.exe --pipe-selftest` 仍秒级）+ `redact.py`（日志脱敏 `~/.brain-ai/logs/browser.log`，`log_event()` = **唯一写日志入口** ⇒「无明文」可被扫描断言）；`--serve` 从「最小伺服」**整体迁入** `daemon.serve()`（`__main__` 只留 CLI 与三层自检）；② **命令边界落定**：`hello` → `ready`（**依赖缺失时追加 `error` 事件**带可操作引导）/ `open_tab`（按需起浏览器 + `stage{open, ok}`）/ `login_state` → `login{state, cookie_names, has_expires, http_only}`（**值不进协议**；可选 `cookie_names`/`domain_suffix`，未给 = `unknown`）/ `shutdown`（`stage{close}` → `Browser.close` → 等进程退出 → **超时兜底强杀 + 必留 warn**）；`upload_image`/`send_prompt`/`read_answer` 仍 `err{daemon_down, hint=尚未实现}`；③ **`M7B-11` 关键行为**：**用户手动关窗 = 可恢复状态** —— `BrowserNotRunning` / 进程已死**被吞** + L4 留痕（`browser_selfheal`）+ **自愈重启**（实测：强杀浏览器后命令仍成功、pid 换新、**stderr 零回溯**）；L4 心跳（10 s）/ 崩溃检测 / `daemon-state.json` 留痕（未干净退出 → 下次启动打印 `⚠️ 上次未干净退出（登录态可能已回滚）`）；④ **`VB2-38`（`I23①`）Python 侧生效**：`daemon.close_verdict()` **7 条纯逻辑判据**（缺 `Browser.close` → 失败 / `BrowserNotRunning` → 正常收尾 / 超时无 warn → 失败 / 超时 + warn（±兜底强杀）→ 通过 / 证据自相矛盾 → 失败）+ 端到端物证（`verdict_ok=true`、`waited_s=2.16 s`、未强杀）；⑤ **实现期订正（口径）**：`stage` 帧**带请求 id = 完成回包**、`id="-"` 才是纯进度 ⇒ **C++ 侧 `PipeClient` 判据需同步**（否则 `open_tab` 的 `call()` 等不到回包），登记 **`MB-Q10`**；另暴露 **`MB-Q9`**（词表缺 `login` 事件名）；⑥ **新增 `--daemon-selftest`**（组 A = `VB2-38` 离线 7 条判据 + L4 判定 + 日志脱敏零命中；组 B = 真机端到端 11 条）。**实测（本机）**：`--daemon-selftest` **有头窗口 22 / 0**（合法帧 4 · 丢弃非法帧 0 · 浏览器启动 **2 次**（含自愈 **1 次**）· 退出码 **0** · `close_wait` **2.16 s / 未强杀** · 残留 **0** · stderr 无回溯）· `--daemon-selftest --headless` **22 / 0** · `--driver-selftest` **22 / 0**（回归）· `--selftest` **7 / 0** · `--pipe-selftest` **13 / 0**（系统 Python **3.14.3 无 pydoll → 14 / 0**，多出 1 条 = `ready` 后**追加 error 事件**的真机证据）· `aiwrite.exe --pipe-selftest` **PASS**（**新主循环**在 C++ 侧端到端可用、**未改一行 C++**）· `--exec-selftest` **320 / 0** · `--graph-selftest` **110 / 0** · `--provider-selftest` **50 / 0** · `--provider-dump` **21 条** · `--run-selftest` **PASS** · docs 相对链接 **298 / 0** · 收尾**无残留进程**。**边界**：生产路径零改动 · C++ 侧关闭协议同步 / 诊断换代（`--pydoll-login`）/ 自启动与「一键重登」UI 归 step 5~6 · `session.py`（L2 快照）未落地 ⇒ **`VB2-39` 尚未生效**；**step 5~7 未开工** |
+| 2026-10-03 | v17 | **目录迁移：Python 运行代码 `python/` → `source/python/`（代码归源码树 · 运行期数据仍归 `~/.brain-ai`；纯搬迁 · 零逻辑变更）** —— ① **迁移范围**：`brain_ai_browser/`（10 个模块）· `_probe/`（**70 文件**、含 45 个物证 JSON，`git mv` 保历史）· `requirements.txt` · `.venv/`（**移动后实测可用**：`sys.prefix` 自动跟随、`-m pip` 正常 ⇒ **未重建**）；② **C++ 同步（1 行逻辑 + 4 处注释）**：`src/main.cpp` 的 `--pipe-selftest` 包目录候选 `<仓库根>/python` → **`AIWRITE_SOURCE_DIR / "python"`**（`.venv` 候选随 `package_dir` 自动正确、`work_dir` 同步）+ `web/channel_frames.h` / `web/pipe_client.h` 注释；③ **口径同步（58 处文本 + 4 处代码文案）**：`.gitignore` 4 条规则 + 段注释 · `runtime.py` 的 **`PYDOLL_HINT`（用户可见引导）** · `driver.py` 文档串 · `requirements.txt` 头部 · docs **8 文件**（`M7B.md` / `CHANGELOG.md` / `M7.md` / `M_patchAB_rest.md` / `网页版协议实测记录.md` / `source/README.md` / `DevPlan.todo` / `providers.json`）；④ **历史物证文件（`_probe/out/*.json|*.err`）按「证据不可篡改」保留原路径**；⑤ **验收（逐条与迁移前一致）**：`--selftest` **7 / 0** · `--pipe-selftest` **13 / 0** · `--driver-selftest --headless` **22 / 0** · `--daemon-selftest --headless` **22 / 0** · `aiwrite.exe --pipe-selftest` **PASS** · `api_probe --selftest` **七组 PASS** / `--exec-selftest` **320 / 0** / `--graph-selftest` **110 / 0** · `aiwrite --provider-selftest` **50 / 0** · `--provider-dump` **21 条** · `--run-selftest` **PASS** · 构建 **0 error / 0 warning** · docs 断链 **298 / 0**。**边界**：零逻辑变更 · `webview_host` 原样在跑 · **`session.py`（step 5 · `VB2-39`）未开工** |
+| 2026-10-03 | v18 | **step 5 落地：L2 加密快照 `session.py` + `VB2-39` Python 侧生效** —— ① 新增 `source/python/brain_ai_browser/session.py`：**DPAPI** 经 `ctypes` 直调 `crypt32`（`CRYPTPROTECT_UI_FORBIDDEN`，**不引第三方依赖**）；数据落 **`~/.brain-ai/session/cookies.dat`**（**代码入库 / 数据不入库**；`BRAIN_AI_SESSION_DIR` 仅作测试钩子 ⇒ 自检不污染真实快照）；纯函数 `host_of` / `belongs_to`（**父域方向**）/ `scoped` / `to_cdp_params`（白名单 + 会期语义）/ `usable_cookies` / `scan_plaintext` / `summarize`；`SnapshotStore.save/load/clear`（**原子写** `.tmp` + `os.replace` + **明文摘要去重**）；② **daemon 三触发点 + 回灌**：`open_tab` 登记作用域 → `login_state=logged_in` **登录即写** → `shutdown` 在 `Browser.close` **之前**再写 → 空闲 / 命令间隙每 **5 s** 刷新（`wait_for(queue.get(), 5)`，与命令**同一任务** ⇒ 不并发访问 CDP）→ 启动 / 自愈后**回灌一次**（失败发 `error{not_logged_in}` **显式提示**，`I23④`，**不影响命令回包**）；`daemon-state.json` 增 `snapshot_saves` / `snapshot_restores` / `snapshot_reason`；③ **订正（`M7B-17` 口径）**：`driver.cookies_all()` 由**页级** `Network.getCookies` 改为**浏览器级 `Storage.getCookies`**（页级依赖当前页、**会漏父域登录 Cookie**），新增 `set_cookies` / `delete_all_cookies`；④ **实现期订正三处**：a) `gone_exceptions()` 纳入内建 **`ConnectionError`**（浏览器被杀后下一条命令先撞「连接被拒绝」`[WinError 1225]` ⇒ 漏掉它**丢失自愈**）；b) DPAPI blob **自带完整性校验**（截断 / 改头部 / 改中段 / 改末尾 / 明文冒充 → 错误码 13），**例外面 = 头部明文「描述区」**（改它不影响解密）⇒ 篡改断言取**中段 / 末尾**；c) **close 前刚写过 Cookie** 时 Chrome 退出可能 > 5 s（flush cookie 库）⇒ 自检改用生产同款 `close_verdict`；⑤ **新开口项 `MB-Q11`**（作用域默认 = **本次会话导航过的域** + **空作用域不写快照**，隐私最小）；⑥ **新增 `--session-selftest [--headless]`**（组 A 离线 8 条 + 组 B 真机 5 条），并把 `--daemon-selftest` 补到 **23 条**（`+M7B-11⑭` L2 触发点非死码）。**实测（本机 · 2026-10-03）**：`--session-selftest --headless` **22 / 0**；**系统 Python 3.14.3（无 pydoll）→ 15 / 0 + 组 B 显式 SKIP + exit 0**；`--daemon-selftest --headless` **23 / 0**；`--driver-selftest` **22 / 0** · `--selftest` **7 / 0** · `--pipe-selftest` **13 / 0** · `aiwrite.exe --pipe-selftest` **PASS** · `api_probe` 七组 / **320 / 0** / **110 / 0** · `aiwrite --provider-selftest` **50 / 0** · `~/.brain-ai/session/` **未被自检创建** · 收尾**无残留进程**。**边界**：**C++ 侧零改动**（`pydoll_channel` / `session_snapshot` / `SessionStore` 改造 + `PipeClient` 进度事件判据同步 + 诊断换代归 **step 6**）；`upload_image` / `send_prompt` / `read_answer` 仍未实现（批 3） |
+| 2026-10-03 | v19 | **step 6 落地：C++ 侧接线（站点描述搬迁 + 快照只读视图 + 新通道 `pydoll_channel` + `PipeClient` 判据同步）** —— ① **新增 `src/web/site_ref.h`**：`SiteRef` = `LoginRequest` **纯别名**，全部站点纯函数（`login_request_of` / `interactive_login_request` / `probe_login_request` / `boot_login_request` / `plan_session_boot` / `login_request_site`）**整体搬迁**；`webview_host.h` 改为 include 它 ⇒ 新通道取站点描述**不再拉入 WebView2 依赖**、现有调用点**零改动**（守 `I2`）；② **新增 `src/web/session_snapshot.{h,cpp}`**（`MB-D0-8` L2 的 C++ **只读视图**：路径 / 触发时机 / 状态文案；**只碰元数据** `exists` / `file_size` / `last_write_time`，**永不读内容** ⇒「导出物零明文」在本层天然成立 · `VB2-39⑥`）；③ **新增 `src/web/pydoll_channel.{h,cpp}`**（`namespace web::channel`：**`selftest` / `pydoll_login` 落地**；`ensure_session` 只读判定（`I15′`）；`run_script` / `logout_site` / `current_tab_site` / `tab_on_site` **如实回「尚未实现（批 3）」**）；④ **`PipeClient` 判据同步（关闭 `MB-Q10`）**：`stage` 帧**带请求 id** = 该命令的完成回包，只有 `id="-"` 才是纯进度事件；⑤ **改动（只加不替换 · `B12-C1`）**：`paths` +`pydoll_profile` / `session_snapshot_dir`；`provider_spec`：`allowed_web_fields()` +`attach` + 解析（**只解析、不消费** · `B12-C2`）；`session_store.h` 注释（写入方 = CDP 快照 · 持久化归 L2）；`CMakeLists.txt` +3 组源 + **`aiwrite_copy_python()`**（**`.venv` 排除**，实测 10 个 `.py` 就位）；`main.cpp` +`--pydoll-selftest` / `--pydoll-login <id>`；`tools/api_probe.cpp` **只新增**断言块；⑥ **实现期订正（真因）**：`find_package_dir()` 必须**优先「包目录 + 同级 `.venv/Scripts/python.exe`」** —— 否则选中 `<exe>/python` 的拷贝、退回 PATH 上的 `python.exe`（本机 3.14.3 **无 pydoll**）⇒ 生产登录必失败。**实测（本机）**：构建 **0 error / 0 warning**（唯一告警 = **既有** `brotlienc.dll` copy）· `api_probe --exec-selftest` **320 → 326 / 0**（`VB2-40①~⑤` + `VB2-39⑥`，**只升不降**）· `--selftest` 七组 PASS · `--graph-selftest` **110 / 0** · `aiwrite --pydoll-selftest` **exit 0**（`ready{proto=1, python=3.12.10, browser=edge}` → 守护进程退出码 **0**）· `aiwrite.exe --pipe-selftest` **PASS** · `aiwrite --provider-selftest` **50 / 0** · `--provider-dump` **21 条** · `--run-selftest` **PASS**（**生产路径仍走 WebView2**）· `--pydoll-login <未知 id>` **exit 2 + 可操作提示、不开窗**。**边界**：`--pydoll-login` 的**真站点人工登录冒烟**待人工执行（`M7B-19` 门槛项）；生产路径切换（`M7B-20`）/ 诊断换代（`M7B-18`）/ 批 3 命令归 **step 7** |
+| 2026-10-03 | v20 | **§1.4 运行时通道归属盘点（防误判 · 纯文档，无代码改动）** —— 起因：用户运行主程序发现「还是 WebView」，怀疑 step 6 未生效。逐入口 `git grep` 实测确认：**生产路径 100% 仍是 WebView2**（`property_panel.cpp:14/116/230/319` · `local_nodes.cpp:14/545` · `dom_web_client.cpp:12/245/256/262/297`）；`pydoll_channel` 仅被 `main.cpp:1523-1530`（CLI 分发）与 `api_probe.cpp:3285+`（断言）引用 ⇒ **符合 `MB-D1` / `B12-C1` 设计，非缺陷、非回归**。新增 **§1.4**：逐入口归属表（含「切换任务」列）+ **10 秒分辨法**（profile 目录 / 独立任务栏窗口 / `pydoll_channel_daemon.log`；⚠️ **Pydoll 底层同为 Edge，窗口长相不可靠**）+ 三条常见误判 + 硬缺口表（Python 仅 4 命令 `daemon.py:363,382,384`；C++ `logout_site`/`run_script`/`current_tab_site`/`tab_on_site` 占位 `pydoll_channel.h:39,42,46,47`；CDP 增量未做 `M7B-21`；`M7B-19` 未过）⇒ **`M7B-20` 切换的充分条件 = 批 3 能力先落地**；§0 加防误判第 **7** 条。**`source/README.md`**：§4.1 / §4.3 标题口径更新（「计划未落地」→「**批 1 step 1~6 已落地 / 生产路径未切换**」）+ 新增「⚠️ 当前运行时通道归属」小节 + 命令清单补 `--pydoll-selftest` / `--pydoll-login` 两行 + `--exec-selftest` **251 → 326 项**。**`docs/README.md`** 进度段加运行时通道警示。校验：docs+source 相对链接 **320 / 0 broken** |
+| 2026-10-03 | v21 | **step 7 开工：`M7B-19` 全基线（12 / 13 绿）+ `M7B-18` 受阻登记 + 订正一处换机漏项（纯文档，零代码改动）** —— ① **`M7B-19` 全基线实测（本机）**：构建 **0 error / 0 warning**（唯一告警 = **既有** `brotlienc.dll` copy）· `--selftest` 七组 PASS · `--exec-selftest` **326 / 0** · `--graph-selftest` **110 / 0** · `--provider-selftest` **50 / 0** · `--provider-dump` **21 条** · `--pipe-selftest` **PASS** · `--pydoll-selftest` **exit 0**（`proto=1` / `python=3.12.10` / `browser=edge`）· `--pydoll-login <未知 id>` **exit 2** · `--run-selftest --web` **PASS** · `--session-selftest` **22 / 0 · RC=0** · docs+source 相对链接 **320 / 0 broken**；② **唯一偏差（如实登记）**：`--run-selftest`（**official**）**FAIL · exit 1** = 本机**缺凭据**（未设 `DEEPSEEK_API_KEY`、凭据库无 `config.toml` 的 `api_key_ref = brain-ai/deepseek` 条目）⇒ `n3 LLMGenerate error → n4 skipped → PC-05 归档失败`；**判定 = 环境依赖、非代码回归**（报错路径 `engine/provider_resolve.cpp:291-295` **未被 step 1~6 触碰**；`--run-selftest --web` **PASS** ⇒ 执行器链路完好）；③ **订正 v13 的一处漏项**：§11.1 的「`--run-selftest` PASS / PASS（5-5）」是 **2026-09-28 旧机**记录（`F:\Python` + Chrome 156），v13 的「批 0 复测」**误当换机后结论照抄** ⇒ §11.1 已改标「**该条依赖本机凭据，换机 / 重装后必须重配，否则必红**」（§9.3「换机后必须重取基线」在此**抓到一处漏项**）；④ **`M7B-18` 受阻如实登记（未擅自扩契约）**：`--web-adapter-selftest` / `--web-dom-dump` 走新通道需「**页面内执行任意 JS**」，而**词表 v1（`protocol.py:42-50`）只有 7 个命令、无此命令**；扩表按 §6.1 冻结规则 = **升 `v`**（牵动两侧 + `ready{proto}` + `VB2-40④⑤`）；且与 `B12-C1`「**批 2 只新增不替换**」**口径冲突** ⇒ 三路径待拍板：**(a)** 扩 `v2` + `M7B-18` 移批 3 / **(b)** 诊断改走**不经管道**的 Python CLI / **(c)** 保留 WebView2 诊断至批 5；⑤ **生产路径切换（`M7B-20`）明确不做** —— 归批 3，前置缺口实测仍在（`daemon.py` 仅 4 命令 · C++ 4 个占位）；⑥ **打标签 `m7b-batch2` 未执行** —— 工作区 **118 文件未提交**，须先提交。**文档落点**：`M7B.md` §6.2 step 7 记录块 + `M7B-18` / `M7B-19` 状态行 + 开工顺序进度段 + §11.1 + 本表；`CHANGELOG.md` step 7 条目；`source/README.md` 命令清单加「`--run-selftest` 依赖本机凭据」警示 |
+
+
+
+
+
 
 **站点选择器回填记录**（格式见 §10；`M7B-06` / `M7B-27` / `M7B-28` / `M7B-29` 执行时逐行追加）：
 

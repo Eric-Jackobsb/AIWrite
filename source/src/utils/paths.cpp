@@ -110,6 +110,21 @@ const std::filesystem::path& webview2_profile()
     return value;
 }
 
+// M7B：Pydoll 单 profile（与 Python `browsers.PROFILE` / `driver.PROFILE` 同值）
+const std::filesystem::path& pydoll_profile()
+{
+    static const std::filesystem::path value = data_root() / "pydoll-profile";
+    return value;
+}
+
+// MB-D0-8 L2：登录态加密快照目录（**≠ snapshots_dir()**：那个是工作流执行快照）
+//  * 目录由 Python `session.py` 按需创建（`SnapshotStore.save` 里 mkdir）；C++ 侧**不建**空目录
+const std::filesystem::path& session_snapshot_dir()
+{
+    static const std::filesystem::path value = data_root() / "session";
+    return value;
+}
+
 // P7a-04：统一资源目录（图片归档根）
 const std::filesystem::path& assets_images_dir()
 {
