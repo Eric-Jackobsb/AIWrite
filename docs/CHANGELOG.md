@@ -25,6 +25,15 @@
 
 ## [Unreleased] — M7（图片收口 + 节点精简）+ M5 核心切片（M5-C）已落地；**M7 第二轮 P7-a 已落地（v0.5.2）**；M7 第三轮 `M7B` 立项（网页通道整体迁 Pydoll —— 📦 已于 2026-10-05 退场归档）；**M7 第四轮 `M8` 立项（网页通道方案 E）**
 
+**🧭 M8 Phase 1 补齐：全链路回滚 —— 面板会话 / 退出收尾 / 日志文案一并回 WebView2（2026-10-05）**
+
+- **起因**：Phase 1 首轮只回滚了生产文字链路的 `ai/dom_web_client.{cpp,h}`；`cdf6d40` 里仍有 **5 个生产文件**把**面板会话 / 退出收尾 / 日志文案**接在 Pydoll 通道上 ⇒ 点面板「打开登录窗口」会起 **Python + Pydoll Edge**，与「回到 WebView2」不符。
+- **动作**：`git checkout faf846b -- source/src/main.cpp source/src/ui/app.cpp source/src/ui/property_panel.{cpp,h} source/src/nodes/local_nodes.cpp`（**-515 / +58 行**）—— `main.cpp` 的 `wait_web_tasks()` 调用依赖 `property_panel.h` 的声明 ⇒ **必须整组回滚**（拆开会留半接线）。
+- **回归（实测 2026-10-05 · 20:33 重建）**：构建 **0 error / 0 warning**；`api_probe --selftest` **335 / 0**（7 组 PASS · **数字不降** —— `tools/api_probe.cpp` 的 `VB2-*` 断言**保留**，因其测的 `web/*` 通道代码仍在树内休眠）；残留进程 **0**。
+- **现状（= WebView2 版本）**：生产路径 `main` / `ui` / `nodes` **零 Pydoll 引用**；面板登录窗口 = **WebView2 内嵌窗口**；文字生成 = **WebView2**；图片上传**未接线**。
+- **休眠保留（Phase 2/3 用）**：`source/src/web/*`（管道 + Pydoll 通道）· `source/python/**` · `main.cpp` 中 **`faf846b` 原生**的 `--pipe-selftest` / `--pydoll-selftest` / `--pydoll-login`。
+- **待跑（需人工登录 + 联网）**：`--web-chat "<prompt>"` / `--run-selftest --web` / `--web-probe`。
+
 **🧭 M8 立项（网页通道方案 E）+ Phase 0 归档（2026-10-05）**
 
 - **起因**：`M7B`（WebView2 退场 → 全部网页版走 Pydoll · Python 守护进程 + 命名管道）已推进到「生产内容路径切换（step 15）」，但**依赖面过重**（Python 运行期 + 命名管道 + 守护进程）而**抗改版能力并未改善** ⇒ 用户 **2026-10-05 拍板方案 E**。

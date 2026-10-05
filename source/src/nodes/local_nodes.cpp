@@ -519,7 +519,8 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
             ctx.console("[文本生成] " + dom.warning); // R13：如实提示（可能仍在生成中）
         }
         ctx.console("[文本生成] DOM 适配器完成：输出 " + std::to_string(dom.text.size()) +
-                    " 字节 / " + std::to_string(dom.elapsed_ms) + " ms" +
+                    " 字节，轮询 " + std::to_string(dom.polls) + " 次 / " +
+                    std::to_string(dom.elapsed_ms) + " ms" +
                     (dom.steps.empty() ? "" : ("｜" + dom.steps)));
         return dom.text;
     }

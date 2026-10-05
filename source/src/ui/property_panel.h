@@ -23,12 +23,4 @@ struct PropertyEditResult {
 void draw_property_panel(const char* window_title, bool* open, engine::Node* node,
                          PropertyEditResult& result);
 
-// **M7B step 11**：等新通道（Pydoll）的后台会话任务结束（登录 / 收尾 / 注销）
-//  * 必须在**进程退出前**调用：任务线程会调 `channel::shutdown_session()` 等阻塞函数，
-//    而静态任务对象析构时若线程仍 joinable → `std::terminate`
-//  * **M7B step 12（`M7B-44`）**：任务**按 `node.id`** 记账 ⇒ 遍历**所有节点** join；
-//    并**先** `channel::request_cancel_session_ops()` 请停登录轮询（否则干等满登录上限）
-//  * 幂等：无任务 / 任务已结束 → 立即返回
-void wait_web_tasks();
-
 } // namespace aiwrite::ui

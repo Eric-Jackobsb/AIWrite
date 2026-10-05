@@ -15,7 +15,6 @@
 #include "utils/log.h"
 #include "utils/paths.h"
 #include "utils/window_geometry.h"
-#include "web/pipe_client.h"   // M7B-46：IPC 计数（「渲染路径零 IPC」护栏）
 #include "web/session_store.h"
 
 #include "engine/recent_files.h"
@@ -480,10 +479,6 @@ int run(const AppOptions& options)
         const bool first_frame = (frame_index++ == 0);
         glfwPollEvents();
 
-        // **M7B step 13（`M7B-46`）**：本帧是否有人在**渲染路径**里发了 IPC
-        //  （在 `draw_property_panel()` 前后取 `ipc_*_count()` 差值 —— 见下方护栏）
-        bool ipc_guard_tripped = false;
-
         // ---- 窗口几何节流保存（F3 / PD-04）：移动/缩放后静默 2s 落盘一次（避免拖拽期间频繁写文件）----
         {
             static auto last_geometry_change = std::chrono::steady_clock::now();
@@ -728,27 +723,7 @@ int run(const AppOptions& options)
                 state.selected_node.empty() ? nullptr : state.graph.findNode(state.selected_node);
 
             PropertyEditResult edit;
-            // **M7B step 13（`M7B-46`）**：护栏 —— 渲染路径**零 IPC**（不变量 `A1`）
-            //  * 病象（2026-10-04 实测）：面板每帧调 `tab_on_site()`（同步 IPC）⇒ 帧率 2–10 fps
-            //  * 判据：画面板前后**本线程**计数必须**不变**；变了 = 有人又把 IPC 塞回渲染路径
-            //  * ⚠️ 必须用**本线程**计数（`ipc_thread_*`）而非全局计数：后台线程（`WebTask` 登录轮询 /
-            //    tab 刷新）**并发**发 IPC 会改动全局计数 ⇒ 用全局计数当护栏会**误报**
-            const std::uint64_t ipc_before =
-                web::ipc_thread_connect_count() + web::ipc_thread_command_count();
             draw_property_panel(kWindowParams, &show_params, selected, edit);
-            const std::uint64_t ipc_after =
-                web::ipc_thread_connect_count() + web::ipc_thread_command_count();
-            if (ipc_after != ipc_before) {
-                ipc_guard_tripped = true;
-                static std::uint64_t guard_warnings = 0; // 只报前几次（护栏为暴露问题，不刷屏）
-                if (guard_warnings < 5) {
-                    ++guard_warnings;
-                    log::warn("[护栏] 渲染路径发起了 IPC（+" +
-                              std::to_string(ipc_after - ipc_before) +
-                              "）—— 违反「渲染路径零 IPC」（`M7B-46`）：请把该调用移出 "
-                              "`draw_property_panel`（改后台任务 + 读缓存）");
-                }
-            }
 
             // begin_edit 在控件被激活、值尚未变化时置位 → 此时压快照可正确回退
             if (edit.begin_edit) {
@@ -813,11 +788,6 @@ int run(const AppOptions& options)
             if (!state.status.empty()) {
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "  %s", state.status.c_str());
-            }
-            if (ipc_guard_tripped) { // `M7B-46` 护栏：渲染路径零 IPC（不变量 `A1`）
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f),
-                                   "  ⚠ 渲染路径发起了 IPC（违反「零 IPC」· 详见 app.log）");
             }
             if (state.last_error.active) { // PA-06：失败运行 → 红色错误条（点击定位节点）
                 ImGui::SameLine();
