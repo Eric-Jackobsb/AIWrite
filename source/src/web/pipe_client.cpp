@@ -97,7 +97,50 @@ bool is_pipe_gone(unsigned long code)
            code == ERROR_NO_DATA || code == ERROR_OPERATION_ABORTED;
 }
 
+// ---- IPC 计数（**M7B step 13 · `M7B-46`**：全进程收口 · 「渲染路径零 IPC」护栏）----
+//  * 收口点 = 本文件（`connect` / `call` / `send_command`）—— 全仓所有 IPC 都经 `PipeClient`
+//  * 计数分**两套**：**全局**（诊断 / 自检打印）与**本线程**（**护栏判据**：UI 线程在
+//    `draw_property_panel()` 前后取差值 ⇒ 非 0 即渲染路径发起了 IPC）
+//    ⚠️ 护栏**不能**用全局计数 —— 后台线程（`WebTask`）并发发 IPC 会改动它 ⇒ **误报**
+//  * （2026-10-04 实测卡死根因：面板每帧调 `tab_on_site()` = 新建连接 + `current_tab`，
+//     单次 30–140 ms、最坏 2.1 s ⇒ 帧率 2–10 fps）
 } // namespace
+
+namespace {
+std::atomic<std::uint64_t> g_ipc_connects{0};   // 全局：成功建立的连接数
+std::atomic<std::uint64_t> g_ipc_commands{0};   // 全局：发出的命令帧数（`call` + `send_command`）
+// 本线程计数（护栏判据）：`thread_local` ⇒ 后台线程的 IPC **不**污染 UI 线程的差值
+thread_local std::uint64_t t_ipc_connects = 0;
+thread_local std::uint64_t t_ipc_commands = 0;
+} // namespace
+
+std::uint64_t ipc_connect_count()
+{
+    return g_ipc_connects.load();
+}
+
+std::uint64_t ipc_command_count()
+{
+    return g_ipc_commands.load();
+}
+
+std::uint64_t ipc_thread_connect_count()
+{
+    return t_ipc_connects;
+}
+
+std::uint64_t ipc_thread_command_count()
+{
+    return t_ipc_commands;
+}
+
+void ipc_reset_counters()
+{
+    g_ipc_connects.store(0);
+    g_ipc_commands.store(0);
+    t_ipc_connects = 0;
+    t_ipc_commands = 0;
+}
 
 std::string daemon_pipe_name(std::uint32_t pid)
 {
@@ -205,6 +248,8 @@ bool PipeClient::connect(const std::string& pipe_name, int timeout_ms, std::stri
         pipe_name_   = full;
     }
     reader_ = std::thread([this, handle, read_event] { reader_loop(handle, read_event); });
+    g_ipc_connects.fetch_add(1); // `M7B-46` 护栏：全局（诊断）
+    ++t_ipc_connects;            // `M7B-46` 护栏：本线程（判据）
     aiwrite::log::info("[管道] 已连接 " + full);
     return true;
 }
@@ -283,6 +328,8 @@ bool PipeClient::write_line(const std::string& line, std::string* error)
 bool PipeClient::call(const std::string& name, const nlohmann::json& fields,
                       nlohmann::json* response, int timeout_ms, std::string* error)
 {
+    g_ipc_commands.fetch_add(1); // `M7B-46` 护栏：全局（入口即计，含词表校验失败 —— 宁可过报）
+    ++t_ipc_commands;            // `M7B-46` 护栏：本线程（判据）
     const std::string    id      = next_id();
     const std::string    line    = channel::make_command(name, id, fields.dump());
     const channel::Frame command = channel::parse_frame(line);
@@ -344,6 +391,8 @@ bool PipeClient::call(const std::string& name, const nlohmann::json& fields,
 bool PipeClient::send_command(const std::string& name, const nlohmann::json& fields,
                               std::string* error)
 {
+    g_ipc_commands.fetch_add(1); // `M7B-46` 护栏：全局（入口即计，同 `call`）
+    ++t_ipc_commands;            // `M7B-46` 护栏：本线程（判据）
     const std::string    id      = next_id();
     const std::string    line    = channel::make_command(name, id, fields.dump());
     const channel::Frame command = channel::parse_frame(line);

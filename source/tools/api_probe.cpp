@@ -3316,15 +3316,17 @@ int execution_selftest()
             expect(check,
                    unknown_ok && unknown_reason.find("未知命令") != std::string::npos &&
                        missing_ok && missing_reason.find("缺少字段") != std::string::npos,
-                   "VB2-29③ 未知命令 / 缺必需字段 → 明确原因（词表 7 命令 + 必需字段）",
+                   "VB2-29③ 未知命令 / 缺必需字段 → 明确原因（词表 10 命令 + 必需字段）",
                    unknown_reason + " | " + missing_reason);
 
-            // ④ 词表完整：7 命令 / 6 事件（与 §6.1 表逐条一致）
+            // ④ 词表完整：10 命令 / 8 事件（v3 起；与 §6.1 表逐条一致）
             expect(check,
-                   known_commands().size() == 7 && known_events().size() == 6 &&
+                   known_commands().size() == 10 && known_events().size() == 8 &&
                        is_known_command("upload_image") && is_known_command("send_prompt") &&
-                       is_known_command("shutdown") && !is_known_command("hello_world"),
-                   "VB2-29④ 词表完整：7 命令 / 6 事件（§6.1 表）",
+                       is_known_command("run_script") && is_known_command("logout_site") &&
+                       is_known_command("current_tab") && is_known_command("shutdown") &&
+                       !is_known_command("hello_world"),
+                   "VB2-29④ 词表完整：10 命令 / 8 事件（§6.1 表 · v3 起）",
                    std::to_string(known_commands().size()) + " / " +
                        std::to_string(known_events().size()));
 
@@ -3442,21 +3444,189 @@ int execution_selftest()
                    aiwrite::web::kSnapshotMaxBytes == 1024u * 1024u,
                "VB2-40③ 快照常量与 Python 同值：`cookies.dat` / 刷新 ≤ 10 s / 1 MiB 上限");
 
-        // ⑤ 新通道**如实报错**（`I21`：不假装成功、不回落旧通道）
+        // ④ 会话族**无会话 → 如实报错**（`I21`：不假装成功、不回落旧通道）
+        //    `logout_site` 于 step 11（v3）**已落地** ⇒ 断言从「尚未实现」升级为
+        //    「无会话 → 可操作错误（管道连不上）+ **不修改任何东西**」
         std::string logout_error;
         const bool  logout_ok = aiwrite::web::channel::logout_site(carried, 1000, &logout_error);
-        std::string script_error;
-        const bool  script_ok = aiwrite::web::channel::run_script(carried, "return 1;", 1000,
-                                                                  nullptr, &script_error);
         expect(check,
-               !logout_ok && logout_error.find("尚未实现") != std::string::npos && !script_ok &&
-                   script_error.find("尚未实现") != std::string::npos,
-               "VB2-40④ 新通道未落地项**如实报错**（`logout_site` / `run_script` → false + 可操作原因）");
+               !logout_ok && logout_error.find("尚未实现") == std::string::npos &&
+                   logout_error.find("会话未在运行") != std::string::npos,
+               "VB2-40④ 会话族无会话 → **可操作错误**（`logout_site`：不再是「尚未实现」；I21）",
+               logout_error);
 
+        // ⑤ 会话生命周期（`M7B-18` 换代）：断言**纯查询 + 幂等收尾**，零副作用
+        //    ⚠️ 不能在此调 `ensure_session`：换代后它会**真起浏览器**（断言须无副作用）
+        const bool no_session = !aiwrite::web::channel::session_ready();
+        const bool closed_now = aiwrite::web::channel::shutdown_session();
+        expect(check, no_session && !closed_now,
+               "VB2-40⑤ 会话生命周期：初始 `session_ready()==false` + `shutdown_session()` **幂等**"
+               "（无会话时返回 false · 不崩 · I21 不假装）");
+    }
+
+    // ---- M7B 批 3（step 8）新增：词表 **v2** 的 `run_script`（纯逻辑；无守护进程 → 可操作错误）----
+    {
+        using namespace aiwrite::web::channel;
+
+        aiwrite::web::SiteRef script_site;
+        script_site.provider_id = "demo-vb241";
+        std::string script_error;
+        const bool  script_ok = run_script(script_site, "return 1;", 1000, nullptr, &script_error);
+        expect(check,
+               !script_ok && script_error.find("尚未实现") == std::string::npos &&
+                   script_error.find("守护进程") != std::string::npos,
+               "VB2-41① `run_script`（v2）无守护进程 → **可操作原因**（不再是「尚未实现」；I21 不静默降级）",
+               script_error);
+
+        const aiwrite::web::channel::Frame run_frame =
+            parse_frame(make_command("run_script", "20",
+                                     "{\"provider\":\"demo-vb241\",\"script\":\"return 1;\"}"));
+        std::string run_reason;
+        const bool  run_ok = validate_command(run_frame, &run_reason);
+        const bool  run_missing_ok = !validate_command(
+            parse_frame(make_command("run_script", "21", "{\"provider\":\"demo-vb241\"}")),
+            &run_reason);
+        expect(check,
+               !run_frame.bad && run_ok && run_missing_ok &&
+                   run_reason.find("script") != std::string::npos && kProtoVersion >= 2 &&
+                   known_commands().size() >= 8 && known_events().size() >= 7,
+               "VB2-41② 词表 ≥v2：`run_script` 必需字段（缺 `script` → 明确原因）+ 版本 / 条数同值",
+               run_reason + " | proto=" + std::to_string(kProtoVersion));
+    }
+
+    // ---- M7B 批 3（step 11）新增：词表 **v3** 会话族（纯逻辑；无守护进程 / 无会话 → 可操作错误）----
+    {
+        using namespace aiwrite::web::channel;
+
+        // ① 词表 v3：条数 / 必需字段 / 事件 / 错误码
+        std::string logout_reason;
+        const Frame logout_frame =
+            parse_frame(make_command("logout_site", "30", "{\"provider\":\"demo-vb243\"}"));
+        const Frame current_frame = parse_frame(make_command("current_tab", "31"));
+        const bool  logout_valid = validate_command(logout_frame, &logout_reason);
+        const bool  logout_missing_ok =
+            !validate_command(parse_frame(make_command("logout_site", "32")), &logout_reason);
+        expect(check,
+               kProtoVersion >= 3 && known_commands().size() == 10 && known_events().size() == 8 &&
+                   logout_valid && logout_missing_ok &&
+                   logout_reason.find("provider") != std::string::npos &&
+                   validate_command(current_frame, nullptr),
+               "VB2-43① 词表 ≥v3：`logout_site`（缺 provider → 明确原因）+ `current_tab`（无必需字段）"
+               "+ 10 命令 / 8 事件",
+               logout_reason + " | proto=" + std::to_string(kProtoVersion));
+
+        // ② `tab` 事件（`current_tab` 回包）可生成且可解析
+        const Frame tab_frame =
+            parse_frame(make_event("tab", "31",
+                                   "{\"url\":\"https://example.com/x\","
+                                   "\"site\":\"https://example.com\"}"));
+        expect(check,
+               !tab_frame.bad && tab_frame.kind == "evt" && tab_frame.name == "tab" &&
+                   tab_frame.id == "31",
+               "VB2-43② `tab` 事件入词表：`current_tab` 回包（url / site）可生成且可解析",
+               tab_frame.bad ? tab_frame.reason : tab_frame.payload_json);
+
+        // ③ 会话族**无会话 → 空结果 / 如实报错**（`I21`：不编造站点、不回落旧通道）
+        aiwrite::web::SiteRef tab_site;
+        tab_site.provider_id = "demo-vb243";
+        tab_site.url         = "https://example.com/";
         std::string session_error;
-        const bool  session_ok = aiwrite::web::channel::ensure_session(carried, 200, &session_error);
-        expect(check, !session_ok && session_error.find("未接线") != std::string::npos,
-               "VB2-40⑤ `ensure_session` 无守护进程时给**可操作原因**（不静默降级、不回落旧通道）");
+        const bool  session_off = !aiwrite::web::channel::tab_on_site("https://example.com");
+        expect(check,
+               session_off && aiwrite::web::channel::current_tab_site().empty() &&
+                   !aiwrite::web::channel::logout_site(tab_site, 500, &session_error) &&
+                   session_error.find("会话未在运行") != std::string::npos,
+               "VB2-43③ 会话族无会话 → 空结果 / 可操作错误（`tab_on_site` 不编造、`logout_site` 如实报）",
+               session_error);
+
+        // ④ `visible_login_request`（step 11）：`dom_chat` 的会话请求 = **有头**
+        //    （新通道的浏览器是用户**唯一的登录入口** ⇒ 必须看得见；`I21` 可操作路径）
+        aiwrite::ai::ProviderWebSpec web_spec;
+        web_spec.login_url = "https://example.com/";
+        const aiwrite::web::LoginRequest visible =
+            aiwrite::web::visible_login_request(web_spec, "demo-vb243");
+        const aiwrite::web::LoginRequest offscreen =
+            aiwrite::web::boot_login_request(web_spec, "demo-vb243");
+        expect(check,
+               !visible.offscreen && offscreen.offscreen && visible.url == "https://example.com/",
+               "VB2-43④ `visible_login_request` = **有头**（`dom_chat` 走新通道的唯一登录入口）；"
+               "`boot_login_request` 仍离屏（只服务旧协议栈）",
+               "visible.offscreen=" + std::to_string(visible.offscreen));
+
+        // ---- VB2-44⑤~⑦（新增 · 批 3 step 14 · 词表 v4）：站字段组 + 内容返回通道 ----
+        const std::vector<std::string> send_fields   = required_fields_of("send_prompt");
+        const std::vector<std::string> answer_fields = required_fields_of("read_answer");
+        const auto                     has_field     = [](const std::vector<std::string>& fields,
+                                                          const char* want) {
+            for (const std::string& item : fields) {
+                if (item == want) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        const std::string good_line = make_command(
+            "send_prompt", "9",
+            "{\"provider\":\"demo-vb244\",\"prompt\":\"x\",\"input_selector\":[\"a\"],"
+            "\"send\":{\"kind\":\"key\",\"value\":\"Enter\"}}");
+        const std::string bad_selector_line = make_command(
+            "send_prompt", "9",
+            "{\"provider\":\"demo-vb244\",\"prompt\":\"x\",\"input_selector\":\"a\","
+            "\"send\":{\"kind\":\"key\",\"value\":\"Enter\"}}");
+        const std::string bad_kind_line = make_command(
+            "send_prompt", "9",
+            "{\"provider\":\"demo-vb244\",\"prompt\":\"x\",\"input_selector\":[\"a\"],"
+            "\"send\":{\"kind\":\"clickk\",\"value\":\"b\"}}");
+        const std::string no_selector_line = make_command(
+            "send_prompt", "9",
+            "{\"provider\":\"demo-vb244\",\"prompt\":\"x\","
+            "\"send\":{\"kind\":\"key\",\"value\":\"Enter\"}}");
+        std::string good_reason;
+        std::string bad_selector_reason;
+        std::string bad_kind_reason;
+        std::string no_selector_reason;
+        const bool  good_valid = validate_command(parse_frame(good_line), &good_reason);
+        validate_command(parse_frame(bad_selector_line), &bad_selector_reason);
+        validate_command(parse_frame(bad_kind_line), &bad_kind_reason);
+        validate_command(parse_frame(no_selector_line), &no_selector_reason);
+        expect(check,
+               kProtoVersion == 4 && has_field(send_fields, "provider") &&
+                   has_field(send_fields, "prompt") && has_field(send_fields, "input_selector") &&
+                   has_field(send_fields, "send") && has_field(answer_fields, "provider") &&
+                   has_field(answer_fields, "answer_selector") &&
+                   known_commands().size() == 10 && known_events().size() == 8,
+               "VB2-44⑤ 词表 v4：`send_prompt` 必需站字段组（provider+prompt+input_selector+send）· "
+               "`read_answer` 必需 answer_selector；**命令 / 事件计数不变**（10 / 8）",
+               "proto=" + std::to_string(kProtoVersion) + " reason=" + no_selector_reason);
+        expect(check,
+               good_valid && good_reason.empty() && !bad_selector_reason.empty() &&
+                   !bad_kind_reason.empty() && !no_selector_reason.empty() &&
+                   bad_selector_reason.find("input_selector") != std::string::npos &&
+                   bad_kind_reason.find("send.kind") != std::string::npos,
+               "VB2-44⑥ 站字段组校验（与 Python `station_fields_reason` 逐条同构）：合法帧通过；"
+               "选择器非数组 / `send.kind` 非法 / 缺选择器 → **可操作原因**",
+               bad_selector_reason + " | " + bad_kind_reason);
+        aiwrite::web::SiteRef content_site;
+        content_site.provider_id = "demo-vb244";
+        content_site.url         = "https://example.com/";
+        std::string upload_error;
+        std::string send_error;
+        std::string answer_error;
+        std::string answer_text;
+        bool        answer_cut  = false;
+        int         answer_size = 0;
+        const bool  upload_rejected = !aiwrite::web::channel::upload_image(
+            content_site, {}, "file_input", "", 1'000, &upload_error);
+        const bool  send_rejected = !aiwrite::web::channel::send_prompt(
+            content_site, "x", {}, "key", "Enter", false, 1'000, &send_error);
+        const bool  answer_rejected = !aiwrite::web::channel::read_answer(
+            content_site, {}, "", 0, 0, 1'000, &answer_text, &answer_cut, &answer_size, &answer_error);
+        expect(check,
+               upload_rejected && send_rejected && answer_rejected && !upload_error.empty() &&
+                   !send_error.empty() && !answer_error.empty(),
+               "VB2-44⑦ 内容返回三函数**参数前置校验**：images / input_selector / answer_selector "
+               "为空 → false + 可操作原因（**不发 IPC** · I21）",
+               upload_error + " | " + send_error + " | " + answer_error);
     }
 
 

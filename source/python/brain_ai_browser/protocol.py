@@ -2,7 +2,7 @@
 
 帧格式（两侧一致）
     每帧 = **UTF-8 JSON 对象，一行一帧**（`\n` 结尾，帧内无裸换行）；必带
-    `v`（整数，本文件 = 1）· `id`（字符串，请求-响应配对；事件帧用 `"-"`）· `kind`（cmd | evt | err）。
+    `v`（整数，本文件 = 4）· `id`（字符串，请求-响应配对；事件帧用 `"-"`）· `kind`（cmd | evt | err）。
 
 非法行（`VB2-29`）
     JSON 不合法 / 缺 `v` 或 `kind` / `v` 不识别 / 超过单帧上限
@@ -21,7 +21,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-PROTO_VERSION = 1
+PROTO_VERSION = 4
 
 # ---- 容量与超时上限（§6.1「容量与超时（写死，防膨胀）」）----
 MAX_FRAME_BYTES = 64 * 1024
@@ -43,22 +43,35 @@ COMMAND_REQUIRED_FIELDS: Dict[str, Tuple[str, ...]] = {
     "hello": (),                                    # 握手；回 ready {proto, python, browser}
     "open_tab": ("provider",),                      # 可选 url（缺省取条目 web.login_url）
     "login_state": ("provider",),                   # 回 login {state, cookie_names, has_expires, http_only}
-    "upload_image": ("provider", "images"),         # 可选 attach / timeout_ms；**只注入、不发提示词**（I18）
-    "send_prompt": ("provider", "prompt"),          # 前置：本会话已有 upload_image 成功证据（I18 协议级拦截）
-    "read_answer": ("provider",),                   # 回 answer_done {text, http_status?}；增量走 delta
+    "upload_image": ("provider", "images"),         # 可选 attach / attach_selector / timeout_ms；**只注入、不发提示词**（I18）
+    "send_prompt": ("provider", "prompt", "input_selector", "send"),  # **v4**：真打字注入 + 按 send 触发
+    "read_answer": ("provider", "answer_selector"),  # **v4**：轮询回答 → answer_done {text, text_bytes?, truncated?}
+    "run_script": ("provider", "script"),           # **批 3 step 8**：页面内执行诊断 JS → 回 script_done {result}
+    "logout_site": ("provider",),                   # **v3（批 3 step 11）**：按站点注销（Storage.clearDataForOrigin）
+    "current_tab": (),                              # **v3（批 3 step 11）**：读当前 tab → 回 tab {url, site}
     "shutdown": (),                                 # 可选 grace_ms（默认 5000）；**禁止 close 后立刻 kill**
 }
 KNOWN_COMMANDS: Tuple[str, ...] = tuple(COMMAND_REQUIRED_FIELDS)
+
+# ---- v4 站字段组（`send_prompt` / `read_answer` / `upload_image` 共用；§6.1 v4 设计定稿）----
+#  * 选择器 / 发送方式一律**由调用方下发**（`I14`：Python 侧不读条目表、无回落）
+#  * `send` = `{"kind": "key" | "click", "value": "<键名 / CSS 选择器>"}`
+#  * `done_when` = `{"kind": "selector_present" | "selector_gone", "selector": "<可选>"}`
+STATION_SELECTOR_FIELDS: Tuple[str, ...] = ("input_selector", "answer_selector")
+SEND_KINDS: Tuple[str, ...] = ("key", "click")
+DONE_KINDS: Tuple[str, ...] = ("selector_present", "selector_gone")
 
 # ---- 事件词表（§6.1 表 2；值 = 字段）----
 #  * ⚠️ `stage` 事件的**阶段标识**放在载荷键 `stage`（不是 `name`）—— 帧头 `name` 已被
 #    「事件名」占用，两者在同层 JSON 里**无法共存**（2026-10-03 实现期暴露的 §6.1 歧义，
 #    已同批回填文档）。
 EVENT_FIELDS: Dict[str, Tuple[str, ...]] = {
-    "stage": ("stage", "ok"),                       # stage ∈ open | login | inject | evidence | send | answer | close
+    "stage": ("stage", "ok"),                       # stage ∈ open | login | inject | evidence | send | answer | script | close
     "evidence": ("page", "network", "both"),        # P7b-11 双证据载体（判据值由 P7b-05b B2 回填）
     "delta": ("seq", "text"),                       # CDP 增量帧（M7B-21）
     "answer_done": ("text",),                       # 可选 http_status
+    "script_done": ("result", "truncated"),        # **批 3 step 8**：`run_script` 回包（result = 脚本返回值；超大 → 截断 + `truncated`）
+    "tab": ("url", "site"),                        # **v3（批 3 step 11）**：`current_tab` 回包（当前 tab 的 url / 站点键）
     "error": ("code", "hint"),                      # 必须可操作（I21）
     "ready": ("proto", "python", "browser"),        # hello 的回包
 }
@@ -76,6 +89,9 @@ ERROR_CODES: Tuple[str, ...] = (
     "attach_unsupported",  # P7b-12 错误条两个显式按钮之一
     "upload_timeout",      # 同上（超时 = 可操作错误，不假装完成）
     "send_timeout",        # 同上
+    "script_error",        # **批 3 step 8**：脚本执行失败（语法 / 超时 / 页面未就绪 —— 一律带可操作 hint）
+    "not_implemented",     # **v3（批 3 step 11）**：词表内但本步未实现的命令（**闭合开口项 MB-Q7**：
+                           # 原借 `daemon_down`，语义不符，易被 UI 误读为「守护进程挂了」）
 )
 
 # ---- 上传入口形态（M7.md D11；只读自条目、**无回落**，I14）----
@@ -220,6 +236,58 @@ def validate_command(frame: Frame) -> Optional[str]:
     attach = frame.payload.get("attach")
     if attach is not None and attach not in ATTACH_KINDS:
         return "attach 取值非法：%s（应为 %s）" % (attach, " | ".join(ATTACH_KINDS))
+    if frame.name in ("send_prompt", "read_answer", "upload_image"):
+        return station_fields_reason(frame)
+    return None
+
+
+def selector_list_reason(value: Any, field_name: str) -> Optional[str]:
+    """选择器字段（多候选）→ 可操作原因（`None` = 合法）。"""
+    if not isinstance(value, list) or not value:
+        return "字段 %s 必须是**非空字符串数组**（多候选逐个探测，首个可见且命中者胜）" % field_name
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            return "字段 %s 的元素必须是**非空字符串**（CSS 选择器）" % field_name
+    return None
+
+
+def station_fields_reason(frame: Frame) -> Optional[str]:
+    """**v4** 站字段组校验（`send_prompt` / `read_answer` / `upload_image`）→ `None` = 通过。
+
+    * 选择器（`input_selector[]` / `answer_selector[]`）必须是**非空字符串数组**
+    * `send` = `{"kind": "key" | "click", "value": "<键名 / CSS 选择器>"}`（`send_prompt` 必需）
+    * `done_when` = `{"kind": "selector_present" | "selector_gone", "selector": "<可选>"}`
+    * `poll_ms` / `max_polls` = 整数；`upload_evidence` = 布尔（`I18` **按位开关**）
+    """
+    for field_name in STATION_SELECTOR_FIELDS:
+        if field_name in frame.payload:
+            reason = selector_list_reason(frame.payload.get(field_name), field_name)
+            if reason is not None:
+                return reason
+    if frame.name == "send_prompt":
+        send = frame.payload.get("send")
+        if not isinstance(send, dict):
+            return "字段 send 必须是对象 {kind, value}（kind = key | click）"
+        if str(send.get("kind") or "") not in SEND_KINDS:
+            return "字段 send.kind 取值非法：%r（应为 %s）" % (
+                send.get("kind"), " | ".join(SEND_KINDS))
+        value = send.get("value")
+        if not isinstance(value, str) or not value.strip():
+            return "字段 send.value 必须是**非空字符串**（按键名或 CSS 选择器）"
+    done = frame.payload.get("done_when")
+    if done is not None:
+        if not isinstance(done, dict):
+            return "字段 done_when 必须是对象 {kind, selector?}"
+        if str(done.get("kind") or "") not in DONE_KINDS:
+            return "字段 done_when.kind 取值非法：%r（应为 %s）" % (
+                done.get("kind"), " | ".join(DONE_KINDS))
+    for field_name in ("poll_ms", "max_polls"):
+        value = frame.payload.get(field_name)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+            return "字段 %s 必须是整数（毫秒 / 轮数）" % field_name
+    evidence = frame.payload.get("upload_evidence")
+    if evidence is not None and not isinstance(evidence, bool):
+        return "字段 upload_evidence 必须是**布尔**（I18 按位开关：仅本次运行**有图**才置位）"
     return None
 
 

@@ -104,4 +104,21 @@ private:
     std::mutex                  write_mutex_;
 };
 
+// ---- IPC 计数（**M7B step 13 · `M7B-46`**：全进程收口 · 「渲染路径零 IPC」护栏）----
+//  * 收口点 = `PipeClient`（`connect` / `call` / `send_command`）—— 全仓 IPC 必经此处
+//  * **两套计数**（缺一不可）：
+//    ① **全局**（`ipc_connect_count` / `ipc_command_count`）= 诊断 / 自检用（**跨线程**累加，
+//       如 `--pipe-selftest` 打印它 ⇒ 证明计数在动）；
+//    ② **本线程**（`ipc_thread_*`）= **护栏判据**：UI 线程在 `draw_property_panel()` 前后取差值。
+//       ⚠️ 必须按**线程归属**判定 —— 后台线程（`WebTask` 登录轮询 / tab 刷新）**并发**发 IPC 时，
+//       全局计数会被它们改动 ⇒ 用全局计数当护栏会**误报**。
+//  * 2026-10-04 实测卡死根因：面板每帧调 `tab_on_site()` = 新建连接 + `current_tab`，
+//    单次 30–140 ms、**最坏 2.1 s** ⇒ 帧率 2–10 fps
+//  * 线程安全（`std::atomic` / `thread_local`）；`ipc_reset_counters()` **仅**自检 / 诊断用
+std::uint64_t ipc_connect_count();        // 全局：成功建立的连接数（每次短连接 +1）
+std::uint64_t ipc_command_count();        // 全局：发出的命令帧数（`call` + `send_command`）
+std::uint64_t ipc_thread_connect_count(); // 本线程：其发起的连接数（**护栏判据**）
+std::uint64_t ipc_thread_command_count(); // 本线程：其发出的命令帧数（**护栏判据**）
+void          ipc_reset_counters();
+
 } // namespace aiwrite::web

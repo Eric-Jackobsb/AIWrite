@@ -4,8 +4,11 @@
     `start` · `tab_for` / `new_tab` · `cookies_all` · `cookies_for_domain` ·
     `set_cookies` / `delete_all_cookies`（step 5：L2 快照**回灌**用）·
     `execute_script` · `close_wait`。
-    ⬜ 未含：`attach_if_running`（step 4）· `type_humanized` / `press_key` /
-    `set_file_input_files` / `expect_file_chooser` / `stream_deltas`（批 3）。
+    ✅ **批 3 step 14（P1）已落地：内容返回基建** —— `selector_facts` / `pick_visible` /
+      `type_humanized` / `press_key` / `click_selector` / `set_file_input_files` /
+      `inject_files_via_chooser` / `read_answer_text`（+ 纯函数 `pick_visible_index` /
+      `answer_payload` / `done_hit`）= `send_prompt` / `read_answer` / `upload_image` 的地基。
+    ⬜ 未含：`attach_if_running`（step 4）· `stream_deltas`（CDP 增量 · `M7B-21`）。
 
 复用的已实测机制（`source/python/_probe/m7b01..m7b09`，**不再重新试错**）
     * headful 起真浏览器 + 单 profile `~/.brain-ai/pydoll-profile`；
@@ -27,6 +30,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -38,11 +42,19 @@ __all__ = [
     "WINDOW_SIZE",
     "DEFAULT_START_TIMEOUT_S",
     "DEFAULT_CLOSE_WAIT_S",
+    "ANSWER_TEXT_LIMIT_BYTES",
+    "DEFAULT_POLL_MS",
+    "DEFAULT_MAX_POLLS",
+    "DEFAULT_STABLE_ROUNDS",
     "DriverDependencyError",
+    "DriverContentError",
     "BrowserDriver",
     "build_options",
     "cookies_for_domain",
     "unwrap_result",
+    "pick_visible_index",
+    "answer_payload",
+    "done_hit",
     "start",
 ]
 
@@ -51,6 +63,22 @@ PROFILE = browsers.PROFILE
 WINDOW_SIZE = browsers.WINDOW_SIZE
 DEFAULT_START_TIMEOUT_S = 60.0   # 新 profile 首次启动较慢（探针经验）
 DEFAULT_CLOSE_WAIT_S = 5.0       # `MB-Q5`：L1 关闭等待阈值（超时**只 warn**）
+
+# ---- 内容返回（批 3 step 14 · P1）----
+#: 回答正文上限：与 `daemon.SCRIPT_RESULT_LIMIT_BYTES` **同值**（单帧 64 KiB 留余量 · `M7B-55`）
+ANSWER_TEXT_LIMIT_BYTES = 48 * 1024
+#: `read_answer` 缺省轮询参数（与 `dom_web_client.clamp_poll_params` 同口径）
+DEFAULT_POLL_MS = 1000
+DEFAULT_MAX_POLLS = 120
+DEFAULT_STABLE_ROUNDS = 3        # 未配 `done_when` 时：文本连续 N 轮不变视为完成
+
+
+class DriverContentError(RuntimeError):
+    """内容返回失败（**可操作** · `I21`）：选择器全未命中 / 输入框不在 / 发送按钮缺失 / 页面未就绪。
+
+    与 `DriverDependencyError` 分开：后者 = 依赖缺失（`no_python` / `no_browser`），
+    前者 = **站点侧**（选择器 / 页面）⇒ 调用方文案不同（`M7B-25`：给出下一步）。
+    """
 
 #: `I21` 依赖缺失错误（`driver` 层沿用 `runtime` 的实现，便于调用方一处 except）
 DriverDependencyError = runtime.DependencyError
@@ -89,6 +117,55 @@ def cookies_for_domain(cookies: Optional[Iterable[Any]], suffix: str) -> List[Di
     want = str(suffix).strip().lower().lstrip(".")
     return [row for row in rows
             if str(row.get("domain") or "").strip().lower().lstrip(".").endswith(want)]
+
+
+def pick_visible_index(facts: Optional[Iterable[Any]]) -> int:
+    """多候选选择器判定（**纯函数** · `M7B-24`）：首个「**命中且可见**」者胜。
+
+    * `facts` = 每个候选的 `{"hits": int, "visible": bool}`（`BrowserDriver.selector_facts()` 采集）
+    * 返回索引；**全不中 → `-1`** ⇒ 调用方**必须如实报错**（不得回落第一个候选 —— `I14` 无回落）
+    """
+    for index, fact in enumerate(facts or []):
+        if not isinstance(fact, dict):
+            continue
+        try:
+            hits = int(fact.get("hits") or 0)
+        except (TypeError, ValueError):
+            hits = 0
+        if hits > 0 and bool(fact.get("visible")):
+            return index
+    return -1
+
+
+def answer_payload(text: Any, limit_bytes: int = ANSWER_TEXT_LIMIT_BYTES) -> Tuple[str, int, bool]:
+    """回答正文 → `(可入帧文本, 原始字节数, 是否截断)`（**纯函数** · `I21` 不假装完整）。
+
+    * 未超限 → 原样 + `truncated=False`
+    * 超限 → **UTF-8 安全前缀** + `truncated=True`（调用方**必须**在界面 / 日志标注「已截断」· `M7B-55`）
+    """
+    body = str(text or "")
+    raw = body.encode("utf-8")
+    if len(raw) <= int(limit_bytes):
+        return body, len(raw), False
+    prefix = raw[:int(limit_bytes)].decode("utf-8", errors="ignore")
+    return prefix, len(raw), True
+
+
+def done_hit(done_when: Optional[Dict[str, Any]], present: bool,
+             stable_rounds: int, need_rounds: int = DEFAULT_STABLE_ROUNDS) -> bool:
+    """`done_when` 判定（**纯函数** · 与 `dom_web_client.kPollScript` 同口径）。
+
+    * `selector_present` → 命中即完成；`selector_gone` → 消失即完成
+    * **缺省 / 未知取值** → 「文本连续 `need_rounds` 轮不变」（不假装有更好判据）
+    """
+    kind = ""
+    if isinstance(done_when, dict):
+        kind = str(done_when.get("kind") or "")
+    if kind == "selector_present":
+        return bool(present)
+    if kind == "selector_gone":
+        return not bool(present)
+    return int(stable_rounds) >= max(1, int(need_rounds))
 
 
 def build_options(*, profile: Optional[Any] = None, window_size: Tuple[int, int] = WINDOW_SIZE,
@@ -196,10 +273,200 @@ class BrowserDriver:
         await self._tab.go_to(url)
         return self._tab
 
+    async def current_tab_url(self) -> str:
+        """当前标签页 URL（`current_tab` 命令的地基 · v3 批 3 step 11）。
+
+        ⚠️ pydoll 的 `Tab.current_url` 在不同版本上有**属性 / 协程**两种形态 ⇒ 这里统一
+        `await if coroutine`；**读不到一律回空串**（调用方按「不在任何站点」处置 —— 不假装）。
+        """
+        if self._tab is None:
+            return ""
+        try:
+            value = getattr(self._tab, "current_url", "")
+            if asyncio.iscoroutine(value):
+                value = await value
+            return str(value or "")
+        except Exception:  # noqa: BLE001 —— 读不到不致命：如实回空串
+            return ""
+
     # ---- 脚本 ----
-    async def execute_script(self, script: str) -> Any:
-        """执行 JS 并返回**解包后的业务值**（两层 `result` 由 `unwrap_result` 收敛）。"""
-        return unwrap_result(await self._tab.execute_script(script))
+    async def execute_script(self, script: str, *, return_by_value: bool = False,
+                             user_gesture: bool = False) -> Any:
+        """执行 JS 并返回**解包后的业务值**（两层 `result` 由 `unwrap_result` 收敛）。
+
+        ⚠️ **默认（`return_by_value=False`）拿不到非原始值**：CDP 对**对象 / 数组**只回
+        `objectId`（不带 `value`）⇒ 解包得 `None`（**静默 null，最易误判为「通道不通」**）。
+        需要**结构化结果**（DOM 枚举 / 诊断脚本 / `run_script`）**必须**传 `return_by_value=True`。
+
+        实测（2026-10-03 · 批 3 step 8）：`return [1,'two',true,null];` 与返回对象的脚本
+        **一律回 `null`**，而 `return 6 * 7;`（数字）正常 ⇒ 与 `M7B-05` 的「两层 `result`」
+        同族坑：**读回层级 / 序列化选项错，会把「机制可用」误记为「机制不可用」**。
+        """
+        if return_by_value:
+            return unwrap_result(await self._tab.execute_script(
+                script, return_by_value=True, user_gesture=user_gesture))
+        return unwrap_result(await self._tab.execute_script(script, user_gesture=user_gesture))
+
+    # ---- 内容返回（批 3 step 14 · P1：`send_prompt` / `read_answer` / `upload_image` 的地基）----
+    #  * 站点知识**全在调用方**（`I14`）：选择器由命令下发，本层不认识任何站点
+    #  * 注入用 pydoll **原生真打字**（`keyboard.type_text` · humanize），与「JS 一次性灌值」区分
+    async def selector_facts(self, selectors: Iterable[Any]) -> List[Dict[str, Any]]:
+        """每个候选的 `{selector, hits, visible}`（**只读**；多候选判定的输入 · `M7B-24`）。"""
+        items = [str(item) for item in (selectors or []) if str(item or "")]
+        if not items:
+            return []
+        script = (
+            "const sels = %s; const out = [];"
+            "for (const s of sels) { let hits = 0; let visible = false;"
+            " try { const nodes = document.querySelectorAll(s); hits = nodes.length;"
+            "  for (const node of nodes) {"
+            "   const rects = node.getClientRects ? node.getClientRects() : null;"
+            "   const shown = (node.offsetParent !== null) || (rects && rects.length > 0);"
+            "   if (shown) { visible = true; break; } } } catch (e) { hits = 0; visible = false; }"
+            " out.push({ hits: hits, visible: visible }); }"
+            "return out;" % json.dumps(items)
+        )
+        value = await self.execute_script(script, return_by_value=True)
+        rows = value if isinstance(value, list) else []
+        facts: List[Dict[str, Any]] = []
+        for index, item in enumerate(items):
+            row = rows[index] if index < len(rows) and isinstance(rows[index], dict) else {}
+            facts.append({"selector": item,
+                          "hits": int(row.get("hits") or 0),
+                          "visible": bool(row.get("visible"))})
+        return facts
+
+    async def pick_visible(self, selectors: Iterable[Any]) -> str:
+        """多候选 → **首个「命中且可见」的选择器**；全不中 ⇒ `DriverContentError`（不回落、不猜 · `I14`）。"""
+        items = [str(item) for item in (selectors or []) if str(item or "")]
+        facts = await self.selector_facts(items)
+        index = pick_visible_index(facts)
+        if index < 0:
+            raise DriverContentError(
+                "选择器全部未命中或不可见：%s（可用 `--web-adapter-selftest --provider <id>` 复核）"
+                % json.dumps(items, ensure_ascii=False))
+        return items[index]
+
+    async def type_humanized(self, selector: str, text: str) -> Dict[str, Any]:
+        """聚焦 `selector` → **humanize 真打字**（`M7B-05` 实测逐字符、154 ms/字符）。"""
+        if not selector:
+            raise DriverContentError("type_humanized 需要具体选择器（I14：选择器由调用方下发）")
+        focused = await self.execute_script(
+            "const el = document.querySelector(%s);"
+            "if (!el) { return false; } el.focus(); return true;" % json.dumps(selector))
+        if not bool(focused):
+            raise DriverContentError("输入框不存在：%s" % selector)
+        await self._tab.keyboard.type_text(str(text))
+        return {"selector": selector, "chars": len(str(text))}
+
+    async def press_key(self, key_name: str) -> Dict[str, Any]:
+        """按一次功能键（`send.kind=key` 的发送实现）。
+
+        ⚠️ `pydoll 2.27.0` 的 `keyboard.press()` 要 **`Key` 枚举**（`pydoll.constants.Key`）；
+        传字符串会按元组解包 ⇒ `ValueError: too many values to unpack`（2026-10-02 B3 实测踩到）。
+        """
+        from pydoll.constants import Key  # 惰性：离线自检不依赖 pydoll
+
+        key = getattr(Key, str(key_name).upper(), None)
+        if key is None:
+            raise DriverContentError("pydoll Key 无成员：%s（可试 Enter / Tab / Escape）" % key_name)
+        await self._tab.keyboard.press(key)
+        return {"key": str(key_name)}
+
+    async def click_selector(self, selector: str) -> Dict[str, Any]:
+        """点击 `selector`（`send.kind=click` 的发送实现；带 `user_gesture` 以触发原生行为）。"""
+        if not selector:
+            raise DriverContentError("click_selector 需要具体选择器")
+        clicked = await self.execute_script(
+            "const el = document.querySelector(%s);"
+            "if (!el) { return false; } el.click(); return true;" % json.dumps(selector),
+            user_gesture=True)
+        if not bool(clicked):
+            raise DriverContentError("发送按钮不存在：%s" % selector)
+        return {"selector": selector}
+
+    async def set_file_input_files(self, selector: str, paths: Iterable[Any]) -> Dict[str, Any]:
+        """文件注入（**主路线** · `P7b-10`）：`DOM.setFileInputFiles`（`M7B-05` 实测生效 + 触发 change）。
+
+        * **必须走 tab 连接**（探针同款：`DOM.getDocument` → `DOM.querySelector` → `setFileInputFiles`）
+        * 站点无 `<input type=file>` → `DriverContentError`（可操作：指向条目 `web.attach` 备选入口）
+        """
+        files = [str(item) for item in (paths or []) if str(item or "")]
+        if not selector or not files:
+            raise DriverContentError("set_file_input_files 需要文件输入框选择器 + 至少一个绝对路径")
+        document = await self._tab._execute_command(  # noqa: SLF001 —— 探针 M7B-05 同款
+            {"method": "DOM.getDocument", "params": {}})
+        root = document.get("result", {}).get("root", {}).get("nodeId")
+        node = await self._tab._execute_command(  # noqa: SLF001
+            {"method": "DOM.querySelector", "params": {"nodeId": root, "selector": selector}})
+        target = node.get("result", {}).get("nodeId")
+        if not target:
+            raise DriverContentError(
+                "未找到文件输入框：%s（站点可能改用拖拽 / 粘贴入口 —— 见条目 `web.attach`）" % selector)
+        await self._tab._execute_command(  # noqa: SLF001
+            {"method": "DOM.setFileInputFiles", "params": {"files": files, "nodeId": target}})
+        return {"selector": selector, "node_id": target, "count": len(files)}
+
+    async def inject_files_via_chooser(self, trigger_selector: str, paths: Iterable[Any],
+                                       *, wait_s: float = 0.6) -> Dict[str, Any]:
+        """文件注入（**备选** · `expect_file_chooser`）：仅当站点**无** `input[type=file]` 时用。"""
+        files = [str(item) for item in (paths or []) if str(item or "")]
+        if not files:
+            raise DriverContentError("inject_files_via_chooser 需要至少一个绝对路径")
+        async with self._tab.expect_file_chooser(files):
+            if trigger_selector:
+                await self.click_selector(trigger_selector)
+            await asyncio.sleep(max(0.0, float(wait_s)))
+        return {"count": len(files), "trigger": trigger_selector}
+
+    async def read_answer_text(self, selectors: Iterable[Any], *, done_when: Any = None,
+                               poll_ms: int = DEFAULT_POLL_MS, max_polls: int = DEFAULT_MAX_POLLS,
+                               timeout_s: float = 120.0,
+                               stable_rounds: int = DEFAULT_STABLE_ROUNDS) -> Dict[str, Any]:
+        """轮询 `answer_selector` 取回答正文（**最后一个**命中节点 = 本轮回答）。
+
+        * 判据：`done_when.kind` = `selector_present` / `selector_gone`；缺省 = **文本连续 N 轮稳定**
+        * 硬上限：`poll_ms` / `max_polls` / `timeout_s`（`R13`：有硬上限，不无限等）
+        * **截断显式**（`I21` · `M7B-55`）：超 `ANSWER_TEXT_LIMIT_BYTES` → `truncated=true` + 前缀
+        * 返回 `{text, text_bytes, truncated, polls, found, last_error}` —— **不抛**（如实回报，
+          由调用方决定「未取到」文案；与 `dom_web_client` 的 R13 口径一致）
+        """
+        items = [str(item) for item in (selectors or []) if str(item or "")]
+        poll_ms = max(200, min(int(poll_ms or DEFAULT_POLL_MS), 2000))
+        max_polls = max(1, min(int(max_polls or DEFAULT_MAX_POLLS), 600))
+        script = (
+            "const sels = %s; let text = ''; let hits = 0;"
+            "for (const s of sels) { try { const nodes = document.querySelectorAll(s);"
+            " if (nodes.length > 0) { const last = nodes[nodes.length - 1];"
+            "  text = (last.innerText || last.textContent || '').trim(); hits = nodes.length;"
+            "  break; } } catch (e) {} }"
+            "return { text: text, hits: hits };" % json.dumps(items)
+        )
+        started = time.monotonic()
+        last = ""
+        stable = 0
+        polls = 0
+        last_error = ""
+        while polls < max_polls and (time.monotonic() - started) < float(timeout_s):
+            polls += 1
+            await asyncio.sleep(poll_ms / 1000.0)
+            try:
+                value = await self.execute_script(script, return_by_value=True)
+            except Exception as exc:  # noqa: BLE001 —— 偶发失败下一轮重试（单次不致命）
+                last_error = "%s: %s" % (type(exc).__name__, exc)
+                continue
+            row = value if isinstance(value, dict) else {}
+            text = str(row.get("text") or "")
+            if text and text != last:
+                last = text
+                stable = 0
+            elif text:
+                stable += 1
+            if last and done_hit(done_when, int(row.get("hits") or 0) > 0, stable, stable_rounds):
+                break
+        body, raw_bytes, truncated = answer_payload(last)
+        return {"text": body, "text_bytes": raw_bytes, "truncated": truncated,
+                "polls": polls, "found": bool(last), "last_error": last_error}
 
     # ---- Cookie（**浏览器级** `Storage.getCookies` · 全 origin · 含 HttpOnly）----
     async def cookies_all(self) -> List[Dict[str, Any]]:
@@ -231,8 +498,27 @@ class BrowserDriver:
 
     async def delete_all_cookies(self) -> None:
         """清空本 profile 的 Cookie（浏览器级 `Storage.clearCookies`）—— 自检「注销→回灌」用；
-        站点级登出（`logout_site`）归 step 6 接线。"""
+        站点级登出（`logout_site`）见下 `clear_origin_data`。"""
         await self._browser.delete_all_cookies()
+
+    async def clear_origin_data(self, origin: str) -> None:
+        """按 origin 清站点数据（`Storage.clearDataForOrigin` · v3 批 3 step 11）—— `logout_site` 的地基。
+
+        * **只碰该 origin**（Cookie / localStorage / IndexedDB / Cache / ServiceWorker …）
+          ——「按站点注销」的语义；其他站点的登录态**不受影响**（与「删整个 profile」区分）
+        * `origin` **必须由调用方给**（`I14`：Python 侧不读条目表、不自造站点）
+        * ⚠️ **必须走 tab（页）连接**，**不能**走浏览器级连接 —— 实测（2026-10-04 · 本机）：
+          浏览器级 `_execute_command` 对**任何** `storageTypes` 取值都回
+          `Internal error (code -32603)`；tab 连接下 `all` / `cookies` / `local_storage`
+          / `cookies,local_storage` **全部 OK**。
+          （⚠️ 对照：`Browser.close` 与 `Storage.getCookies` 恰恰是**浏览器级**才对 ——
+          **同一个 `Storage` 域名内，两条命令的传输层要求不同**，不能想当然照抄。）
+        """
+        if self._tab is None:
+            raise RuntimeError("当前没有打开的标签页：请先 `open_tab` 到目标站点，再按站点注销")
+        await self._tab._execute_command(  # noqa: SLF001 —— tab 级（浏览器级会 -32603，见上）
+            {"method": "Storage.clearDataForOrigin",
+             "params": {"origin": str(origin), "storageTypes": "all"}})
 
     # ---- 关闭（`I23①` / `MB-D0-8` L1）----
     async def close_wait(self, timeout_s: float = DEFAULT_CLOSE_WAIT_S) -> Dict[str, Any]:

@@ -10,6 +10,7 @@
 #include "ui/app.h"
 #include "ui/editor_state.h"
 #include "ui/output_panel.h"
+#include "ui/property_panel.h"
 #include "ai/deepseek_official_provider.h"
 #include "ai/provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）
 #include "engine/node_registry.h"
@@ -90,6 +91,15 @@ void print_usage()
     std::printf("                   M7B 新通道冒烟（批 2）：起**有头**浏览器打开条目站点，\n");
     std::printf("                   等**人工登录**（不代填密码 · §13）→ 判据 = 条目 cookie_names 命中 → 关窗\n");
     std::printf("                   退出码 0=登录成功 / 1=超时或失败 / 2=参数或依赖问题\n");
+    std::printf("  --pydoll-script-selftest [--timeout <秒>]\n");
+    std::printf("                   M7B 新通道**跨语言端到端**（批 3 step 8）：起守护进程 →\n");
+    std::printf("                   open_tab（**本地临时 HTML** · 零外网零登录）/ run_script 读 DOM /\n");
+    std::printf("                   类型保真（数组·字符串·布尔·null）/ 空脚本应回可操作错误\n");
+    std::printf("  --pydoll-chat-selftest [--timeout <秒>]\n");
+    std::printf("                   M7B 新通道**内容返回**端到端（批 3 step 14 · 词表 v4）：起守护进程 →\n");
+    std::printf("                   open_tab（本地夹具）/ send_prompt（真打字 + 触发发送）/ read_answer（取正文）/\n");
+    std::printf("                   I18 拦截 / attach_unsupported 可操作拒绝（零外网零登录 · 不回退旧通道）\n");
+    std::printf("                   退出码 0=通过 / 1=失败 / 2=依赖缺失（无 Python / 无浏览器）\n");
 
     std::printf("  --help           显示本帮助\n");
 }
@@ -1016,6 +1026,13 @@ int pipe_selftest(int timeout_ms)
                 pass ? "PASS" : "FAIL", ready_ok ? "是" : "否", event_ok ? "是" : "否", daemon_code,
                 static_cast<unsigned long long>(client.dropped_frames()));
     std::printf("[管道自检] 守护进程日志：%s\n", log_path.string().c_str());
+    // **M7B step 13（`M7B-46`）**：IPC 计数实测值（「渲染路径零 IPC」护栏的数字来源）
+    //  * 本自检**必然 >0**（`hello` + `shutdown` 两条命令）⇒ 证明计数**真的在动**（不是死码）
+    //  * 判据：`draw_property_panel()` 前后这两个数必须**不增**（渲染路径零 IPC）
+    std::printf("[管道自检] IPC 计数：连接=%llu 命令=%llu\n",
+                static_cast<unsigned long long>(aiwrite::web::ipc_connect_count()),
+                static_cast<unsigned long long>(aiwrite::web::ipc_command_count()));
+
     if (!pass) {
         dump_log_tail(15);
     }
@@ -1343,6 +1360,8 @@ int main(int argc, char** argv)
     bool pipe_selftest_flag        = false; // M7B 批 1 step 2（M7B-02）：命名管道冒烟
     bool        pydoll_selftest_flag = false; // M7B 批 2：新通道自检（**不开浏览器**）
     std::string pydoll_login_id;              // M7B 批 2：--pydoll-login <id>（非空 = 走新通道登录）
+    bool        pydoll_script_selftest_flag = false; // M7B 批 3 step 8：跨语言 `run_script` 端到端（本地夹具）
+    bool        pydoll_chat_selftest_flag = false;   // M7B 批 3 step 14（P4）：**内容返回**端到端（`send_prompt` + `read_answer`）
     std::string web_chat_prompt;
     bool        vlm_selftest_flag = false;                              // M5-02 图片理解自检
     std::string vlm_image;                                              // --image
@@ -1367,6 +1386,12 @@ int main(int argc, char** argv)
         }
         else if (arg == "--pydoll-selftest") {
             pydoll_selftest_flag = true;
+        }
+        else if (arg == "--pydoll-script-selftest") {
+            pydoll_script_selftest_flag = true;
+        }
+        else if (arg == "--pydoll-chat-selftest") {
+            pydoll_chat_selftest_flag = true;
         }
         else if (arg == "--pydoll-login") {
             if (i + 1 >= argc) {
@@ -1526,6 +1551,18 @@ int main(int argc, char** argv)
         aiwrite::log::shutdown();
         return code;
     }
+    if (pydoll_script_selftest_flag) {
+        const int code = aiwrite::web::channel::script_selftest(selftest_timeout);
+        aiwrite::log::info("AIwrite 脚本自检退出，返回码 " + std::to_string(code));
+        aiwrite::log::shutdown();
+        return code;
+    }
+    if (pydoll_chat_selftest_flag) {
+        const int code = aiwrite::web::channel::chat_selftest(selftest_timeout);
+        aiwrite::log::info("AIwrite 内容返回自检退出，返回码 " + std::to_string(code));
+        aiwrite::log::shutdown();
+        return code;
+    }
     if (!pydoll_login_id.empty()) {
         const int code = aiwrite::web::channel::pydoll_login(pydoll_login_id, selftest_timeout);
         aiwrite::log::info("AIwrite 新通道登录退出，返回码 " + std::to_string(code));
@@ -1660,8 +1697,23 @@ int main(int argc, char** argv)
 
     const int exit_code = aiwrite::ui::run(options);
 
+    // `M7B step 11`：先等**后台会话任务**（登录 / 收尾 / 注销）结束 ——
+    //  * 否则它会与下面的会话收尾**并发**操作同一条管道（撞车）；
+    //  * 且静态任务对象析构时线程仍 joinable → `std::terminate`
+    aiwrite::ui::wait_web_tasks();
+
     // 若用户留着网页版登录窗口就退出了程序：先收尾（关窗口、等线程结束），再关日志
     aiwrite::web::stop_login_window();
+
+    // `M7B-20`：新通道（Pydoll 守护进程 + 独立浏览器）的**常驻会话**同样要在退出前收尾
+    //  * 与旧内嵌窗口不同：它**不随本进程消失** ⇒ 漏做会留孤儿浏览器 / 守护进程（`I23` 同族）
+    //  * 幂等：`session_ready()` 为假（本次运行没起过会话）⇒ 什么都不做
+    //  * 位置：放在浏览器收尾之后、`log::shutdown()` 之前 —— 收尾结果仍能进日志
+    if (aiwrite::web::channel::session_ready()) {
+        const bool closed = aiwrite::web::channel::shutdown_session();
+        aiwrite::log::info(closed ? "新通道会话已收尾（守护进程 + 浏览器）"
+                                  : "新通道会话收尾：本次无活动会话");
+    }
 
     aiwrite::log::info("AIwrite 退出，返回码 " + std::to_string(exit_code));
     aiwrite::log::shutdown();

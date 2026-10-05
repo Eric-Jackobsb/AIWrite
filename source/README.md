@@ -112,14 +112,28 @@ M1 验证工具：
 .\aiwrite.exe --run-selftest --web
                               # 同上，但 LLMGenerate 走网页版真实生成（需已登录过一次；实测 5/5 ≈10s）
 .\aiwrite.exe --pydoll-selftest
-                              # 【新通道 · step 6】起 Python 守护进程 → hello → ready{proto=1} → shutdown（**不开浏览器**）
+                              # 【新通道 · step 6】起 Python 守护进程 → hello → ready{proto=4} → shutdown（**不开浏览器**）
                               # 退出码 0=通过 / 1=失败 / 2=依赖问题（无 Python / 无浏览器）；只验通道，不影响生产路径
 .\aiwrite.exe --pydoll-login deepseek-web --timeout 300
                               # 【新通道 · step 6】起**独立** Edge 窗口，人工登录站点（不代填密码、不绕验证）
                               # 判据 = cookie_names 命中则关窗；未知 id → 退出码 2 + 可操作提示、**不开窗**
+.\aiwrite.exe --pydoll-script-selftest
+                              # 【新通道 · step 8】跨语言端到端（词表 v4）：open_tab（**本地 file:/// 夹具**）
+                              # + run_script 读 DOM / 类型保真 / 空脚本报错 + shutdown ⇒ 实测 4/0 · exit 0
+                              # **零外网零登录**；验的是 `--web-dom-dump` 换代后要依赖的「页面内执行 JS」能力
+.\aiwrite.exe --pydoll-chat-selftest
+                              # 【新通道 · step 15】**内容返回**端到端（词表 v4 · `M7B-54`/`M7B-56`）：
+                              # open_tab（本地夹具：输入框 + 发送按钮 + 回答容器）+ **send_prompt**（真打字 + 点击发送）
+                              # + read_answer（正文与夹具渲染**字节一致**）+ I18 拦截 / attach_unsupported 可操作拒绝
+                              # ⇒ 实测 **6/0 · exit 0**；**零外网零登录**；验的是**生产内容路径**（注入 / 发送 / 取回答）
+.\aiwrite.exe --web-dom-dump --provider kimi-web
+                              # 【step 9 换代】选择器候选枚举（只读）：**已走新通道（Pydoll）**——
+                              # 自己起常驻会话 → open_tab 到站点 → read DOM 候选 + 建议选择器；跑完自动收尾
+.\aiwrite.exe --web-adapter-selftest --provider kimi-web
+                              # 【step 9 换代】选择器**命中数**诊断（只读）：**已走新通道（Pydoll）**
 .\api_probe.exe --selftest                  # V-04 HTTP + V-05 SHA3 自检
 .\api_probe.exe --graph-selftest            # 图模型/注册表/撤销栈/序列化 自检（110 项断言，无需网络）
-.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 + 图片解码 自检（326 项断言，无需网络）
+.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 + 图片解码 自检（332 项断言，无需网络）
 .\api_probe.exe --image-decode D:\a.webp   # 图片诊断：内容嗅探 / MIME / 解码(stb|wic) / 尺寸 / WIC 能力（M7）
 .\api_probe.exe --sha3 "abc"                # 单次 SHA3-256
 $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 Key）
@@ -247,32 +261,53 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 
 ---
 
-### 4.3 「引擎唯一化」与 `I2` 解冻（M7 第三轮 `M7B` · 2026-09-28 立项 · **批 1 step 1~6 已落地 / 生产路径未切换**）
+### 4.3 「引擎唯一化」与 `I2` 解冻（M7 第三轮 `M7B` · 2026-09-28 立项 · **批 3 step 1~14 已落地 / 词表 v4 / 全部命令已实现**）
 
-> 本节是**计划登记**。**批 1 step 1~6 已落地**（见下方「运行时通道归属」），但**生产路径刻意未切换**
-> （`MB-D1` 先建后拆 / `B12-C1` 只新增不替换）。计划全文见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md)。
+> 本节是**计划登记**。**批 1~3 的 step 1~14 已落地**（见下方「运行时通道归属」）：诊断工具（step 9 · `M7B-18`）、
+> **生产文字链路 `dom_chat`**（step 10 · `M7B-20`）、**会话族**（step 11 · `M7B-20b`：登录窗口 / 收尾 /
+> 按站点注销 / tab 判定）与 **内容返回正式化**（step 14 · `M7B-54`~`M7B-56`：`send_prompt` / `read_answer` /
+> `upload_image` · **词表 v4**）**都已切到新通道**；仍走 WebView2 的只剩 **`builtin:deepseek`
+> 协议栈族**（随批 5 退役）。计划全文见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md)。
 
-#### ⚠️ 当前运行时通道归属（**2026-10-03 实测** · 防误判：**现在跑的仍是 WebView2**）
+#### ⚠️ 当前运行时通道归属（**2026-10-05 实测** · 防误判：**文字生成 + 登录窗口都已走 Pydoll**）
 
-> **主程序（GUI）里所有网页功能仍然 100% 走 WebView2。** 批 1 step 1~6 建的是**旁路新通道**
-> （`src/web/pydoll_channel.*`），调用方**零改动** ⇒ **看到 WebView2 是符合设计的状态，不是缺陷**。
+> **网页版「文字生成」（`adapter=dom`）与会话族（登录窗口 / 收尾 / 按站点注销 / tab 判定）都已走新通道
+> Pydoll**（step 10 · `M7B-20`；step 11 · `M7B-20b` · **词表 v3**）；仍走 WebView2 的只剩
+> **`builtin:deepseek` 协议栈族**（`--web-probe` / `--web-chat` / `--login-selftest` / `--run-selftest --web` /
+> 面板「探测网页版协议（dev）」）—— **随协议栈在批 5 退役** ⇒ **在 GUI 里偶然看到内嵌 WebView2
+> （协议探测）是符合设计的状态，不是缺陷**。
 > 逐入口实测归属表 + 分辨方法见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §1.4。
 
 | 入口 / 命令 | 现在**实际走** | 备注 |
 |---|---|---|
-| 面板「打开登录窗口（WebView2）」/「按站点注销」 | **WebView2** | `src/ui/property_panel.cpp:230,319,170`（按钮文案仍写死 WebView2） |
-| 登录型节点 / 网页版文字生成（`adapter=dom`） | **WebView2** | `src/nodes/local_nodes.cpp:545`、`src/ai/dom_web_client.cpp:245,256,262,297` |
-| `--login-selftest` / `--web-probe` / `--web-chat` / `--run-selftest --web` | **WebView2** | 同上 |
-| **`--pydoll-selftest`**（新 · step 6） | **Pydoll** | 起守护进程 → `hello` → `ready{proto=1}` → `shutdown`；**不开浏览器**；exit 0 |
+| 面板「打开登录窗口（**Pydoll**）」/「关闭浏览器会话」/「按站点注销」 | **Pydoll** ⚠️ **step 11 已从 WebView2 切走** | `src/ui/property_panel.cpp`：`start_web_task(Login/Logout/Shutdown)` → `channel::login_site` / `logout_site` / `shutdown_session`（**后台线程 + 缓存状态**）·`Q4`：阻塞函数不得在 UI 线程调 |
+| ~~登录型节点 `ensure_session`~~ | **不切（订正）** | `src/nodes/local_nodes.cpp:545` 是 **`builtin:deepseek` → `web_chat()`** 的前置（要 `userToken` + PoW）⇒ **随协议栈在批 5 删除**（`M7B-42` 白名单收敛 `{dom}`）；**给它切新通道是白做**（2026-10-04 订正，原写「需单独切」有误） |
+| 网页版**文字生成**（`adapter=dom`） | **Pydoll** ⚠️ **step 10 切走 · step 15 内容路径改走 v4 命令**（`M7B-20` / `M7B-56`） | `src/ai/dom_web_client.cpp`：`channel::ensure_session` + **`channel::send_prompt`（真打字）+ `channel::read_answer`（取正文）** ⇒ **生产路径已无 `run_script`**（DOM 脚本常量降级为诊断资产）；**已断** `webview_host.h` include；会话请求 = `visible_login_request`（**有头** · step 11）；会话收尾在 `src/main.cpp` |
+| `--login-selftest` / `--web-probe` / `--web-chat` / `--run-selftest --web` | **WebView2**（**只有这一族仍是旧通道**） | 同上（协议栈族，批 5 退役） |
+| **`--pydoll-selftest`**（新 · step 6） | **Pydoll** | 起守护进程 → `hello` → `ready{proto=4}` → `shutdown`；**不开浏览器**；exit 0 |
 | **`--pydoll-login <id>`**（新 · step 6） | **Pydoll** | **独立** Edge 窗口 + profile `~/.brain-ai/pydoll-profile/`（WebView2 则是 `~/.brain-ai/webview2/`） |
+| **`--pydoll-script-selftest`**（新 · step 8） | **Pydoll** | **跨语言端到端**（词表 `run_script` + 本地 `file:///` 夹具）⇒ 实测 **4 / 0 · exit 0**（`proto=4`）；`run_script` 已用于诊断（`--web-dom-dump` 换代的地基） |
+| **`--pydoll-chat-selftest`**（新 · step 15） | **Pydoll** | **内容返回端到端**（`send_prompt` 真打字 + `read_answer` 取正文 + `I18` 拦截 + `attach_unsupported`）/ 本地 `file:///` 夹具 ⇒ 实测 **6 / 0 · exit 0**（`proto=4`）；验的是**生产内容路径** |
+| **`--web-dom-dump` / `--web-adapter-selftest`**（**step 9 换代**） | **Pydoll** ⚠️ **已从 WebView2 切走** | `src/ai/dom_web_client.cpp` 的两个诊断函数 → `web::channel::ensure_session` + `web::channel::run_script`（自起常驻会话 · RAII 收尾）；真站点 `kimi-web` 实测 **exit 0**（读到 `div.chat-input-editor`） |
 
 **怎么分辨（Pydoll 底层也是 Edge，别比窗口长相）**：比 **profile 目录**（`pydoll-profile` vs `webview2`）、
 **是否独立任务栏窗口**、**是否有 `~/.brain-ai/logs/pydoll_channel_daemon.log`**。
+**谁在跑**：**独立窗口 + `pydoll-profile` = 新通道**（文字生成 / 面板登录 / 注销）；
+**内嵌在主窗口里的小窗 = 旧通道**（只剩「探测网页版协议（dev）」）。
 
-**切换前置（硬缺口 · 实测）**：Python 侧 `daemon.py` 只实现 `hello`/`shutdown`/`open_tab`/`login_state`，
-`send_prompt`/`read_answer`/`upload_image` 如实回「尚未实现（批 3）」；C++ 侧 `logout_site`/`run_script`/
-`current_tab_site`/`tab_on_site` 为如实占位（`src/web/pydoll_channel.h:39,42,46,47`）
-⇒ **生产路径切换（`M7B-20`）排在批 3**。
+**切换进度（实测 · 2026-10-05 · 词表 v4 · 命令全部实现 · **生产内容路径已切换（step 15）**）**：Python 侧
+`daemon.py` 已实现 **全部 10 条命令** —— `hello` / `shutdown` / `open_tab` / `login_state` / `run_script`（v2）/
+`logout_site` / `current_tab`（v3）/ **`upload_image` / `send_prompt` / `read_answer`（v4）**；
+`not_implemented` 码**保留但当前无使用点**。**内容返回**（注入 → 发送 → 取回答）= `send_prompt`
+（pydoll **真打字** + 按 `send` 触发）+ `read_answer`（轮询 + **显式截断** `truncated`）；站点选择器 /
+发送方式**由条目下发**（`I14`），`run_script` **降级为诊断专用**。C++ 侧 `login_site` / `logout_site` /
+`current_tab_site` / `tab_on_site` 与 **`upload_image` / `send_prompt` / `read_answer`** 均已落地；
+**`dom_chat`（网页版文字生成）生产路径已改走 `send_prompt` + `read_answer`**（`M7B-56` · 生产再无
+`run_script`），并新增 CLI **`--pydoll-chat-selftest`（6 / 0 · exit 0）**。
+⇒ **文字链路（`dom_chat`）与会话族（登录窗口 / 收尾 / 按站点注销 / tab 判定）都已切换**
+（step 10 · `M7B-20`；step 11 · `M7B-20b`；step 14/15 · `M7B-54`~`M7B-56` · 全回归绿）；余下
+**`M7B-21`**（CDP 流式增量）· **`M7B-24`**（多候选选择器；当前下发**单元素**）· **`P7b-11`**（上传网络回执
+双证据）· **`P7b-16`**（网页版图片理解解禁）· **批 4 站点选择器回填**。
 
 **冻结区变更（解冻规则）**：
 
@@ -281,7 +316,7 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 | 解冻规则 | **`I2`** —— 原文「`--web-chat` / `--web-probe` / `--web-session-selftest` **行为不变**」（归档 `M_patchB.md:294`），实际被用来护住「无参 CLI = 内置 DeepSeek 常量」的一整套兼容装置 |
 | 解冻原因 | 宿主 **WebView2 退场**（嵌入控件易被站点识别为非真实浏览器，`MB-D0-2`）；且站点「**不回落**」（`D-22②` / `I14`）此前对 CLI 路径存在豁免，需**贯彻到底**（`MB-D0-6`） |
 | 替代物 | **`I20`（CLI 契约）**：命令名 / 参数形式 / **退出码语义**在 `--help` + 文档 + 断言三处一致；缺 `--provider` → **列候选 + 退出码 2**（不得静默取第一个）；`--provider auto` 为**显式保留字**；自检命令不得残留状态 |
-| 回归基线数字 | `--exec-selftest` **251/0 →（先降后升）→ 实测回填**（删 `VB2-17` 前半 + `VB2-25①③④`；新增 `VB2-28`~`VB2-36`）；路径见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §9.3。**现状（2026-10-03 · step 6）= 326 / 0**（批 1–4 **只升不降**，删除类动作集中批 5） |
+| 回归基线数字 | `--exec-selftest` **251/0 →（先降后升）→ 实测回填**（删 `VB2-17` 前半 + `VB2-25①③④`；新增 `VB2-28`~`VB2-36`）；路径见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §9.3。**现状（2026-10-04 · step 11）= 332 / 0**（批 1–4 **只升不降**：328 → 332 = +`VB2-43①~④`；删除类动作集中批 5） |
 
 **新增不变量（拟进冻结区 · 与 `I18` / `I19` 同批登记）**：
 

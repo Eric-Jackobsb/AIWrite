@@ -10,6 +10,7 @@
 #include "utils/file_dialog.h"
 #include "utils/log.h"
 #include "utils/paths.h"
+#include "web/pydoll_channel.h"
 #include "web/session_store.h"
 #include "web/webview_host.h"
 
@@ -24,7 +25,11 @@
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <functional>
+#include <map>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace aiwrite::ui {
@@ -112,6 +117,213 @@ std::string param_label(const Param& param)
     return param.display_name + (param.is_required ? " *" : "");
 }
 
+// --------------------------------------------- 新通道会话任务（M7B 批 3 step 11）--
+//  ⚠️ **为什么必须有这个**：新通道（`web/pydoll_channel`）的函数**全是阻塞式**（`M7.md` `Q4`），
+//  而登录 / 收尾 / 按站点注销都要等浏览器 —— 直接在 UI 线程调会让界面卡死。
+//  ⇒ 统一走**后台线程**；UI 线程只读下面这份**缓存**（加锁读，微秒级）。
+//
+//  ⚠️ **M7B step 12（`M7B-44`）· 任务记账按 `node.id`**（**不再**是进程级单例）：
+//   * 病象（2026-10-04 实测）：一份全局任务被**所有** ProviderConfig 节点共用 ⇒ 在节点 A 点的登录，
+//     切到节点 B 也显示同一份状态；B 点按钮还会因 A 在跑而被**静默忽略**（跨节点串状态）。
+//   * 现在：状态 / 禁用 / 去重**都只作用于本节点**；跨节点的只剩**进程级事实**（浏览器会话在不在跑）
+//     —— 且必须**如实标注为进程级**（`I21` 同族：不冒充、不静默）。
+//  * **同一节点内**：同一时刻只跑一个任务（连点 → **明确忽略 + 记日志**，**不排队**）
+//  * 任务体**不得**把异常抛出线程（`std::thread` 里未捕获异常 = `std::terminate`）⇒ 统一兜底
+//  * 进程退出前由 `wait_web_tasks()` 统一 join（`main.cpp` 调用）—— 避免静态对象析构时
+//    仍有 joinable 线程（同样是 `std::terminate`）
+// 「打开登录窗口」的登录态轮询上限（秒）—— **M7B step 12（`M7B-44`）**：`300` → `120`
+//  * 理由（2026-10-04 实测）：轮询期间用户关掉窗口时，旧实现**每一轮都自愈重开**（一次点击 → 4 个窗口，
+//    见 `M7B.md` step 12 物证）；自愈修掉之后，过长的上限只会让「没登成」的会话干等 5 分钟
+//    ⇒ 收敛到 2 分钟，并把「窗口被关闭 = 本次登录结束」如实回报（`I21`）
+constexpr int kLoginPollSeconds = 120;
+
+// **M7B step 13（`M7B-45`）**：`Tab` = 「刷新当前 tab」观测任务（**只读**）
+//  * 病象（2026-10-04 实测）：渲染路径每帧调 `tab_on_site()` = **同步 IPC**（新建连接 2 s 超时 +
+//    `current_tab` 8 s 超时；实测 30–140 ms、最坏 2.1 s）⇒ 帧率 2–10 fps（登录后卡死）
+//  * 修法：观测**只在后台线程**做，结果写进本节点缓存；渲染路径**只读缓存**（`A1` 渲染路径零 IPC）
+enum class WebTaskKind { None, Login, Logout, Shutdown, Tab };
+
+struct WebTask {
+    std::mutex        mutex;
+    bool              running = false;
+    WebTaskKind       kind    = WebTaskKind::None;
+    std::string       node_id;  // 归属节点（**拒绝跨节点串状态** · `M7B-44`）
+    std::string       site_key; // 归属站点（显示 / 日志）
+    std::string       title;    // 任务名（显示 / 日志）
+    std::string       status;   // 最新状态（**可操作**文案，`I21`）
+    bool              last_ok = false;
+    // **M7B step 13（`M7B-45`）**：最近一次「当前 tab」观测（**只由后台任务写**）
+    //  * `tab_known=false` ⇒ 界面如实显示「未观测」（**不假装**「不在当前 tab」 —— `I21`）
+    bool              tab_known   = false;
+    bool              tab_on_site = false;
+    std::string       tab_current; // 观测到的当前站点（原始值；空 = 读不到）
+    std::string       tab_at;      // 观测时间（本地时钟 `HH:MM:SS`）
+    std::thread       worker;
+
+    ~WebTask() { join_worker(); }
+
+    void join_worker()
+    {
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+};
+
+// 节点级任务表（`node.id` → 任务）
+//  * 值类型含 `std::mutex` / `std::thread` ⇒ **不可移动** ⇒ 只用 `try_emplace` 就地构造
+//  * `std::map` 是节点式容器：插入**不会**让已有元素的引用失效（`web_task(node_id)` 返回引用安全）
+std::mutex                      g_web_tasks_mutex;
+std::map<std::string, WebTask>& web_tasks()
+{
+    static std::map<std::string, WebTask> tasks;
+    return tasks;
+}
+
+WebTask& web_task(const std::string& node_id)
+{
+    std::lock_guard<std::mutex> lock(g_web_tasks_mutex);
+    WebTask&                    task = web_tasks().try_emplace(node_id).first->second;
+    task.node_id                     = node_id;
+    return task;
+}
+
+// 读缓存（UI 线程用；**不阻塞**）—— `node_id` 为空 = 无节点上下文 → 返回**空视图**
+struct WebTaskView {
+    bool        running = false;
+    WebTaskKind kind    = WebTaskKind::None;
+    std::string title;
+    std::string status;
+    bool        last_ok = false;
+    // **M7B step 13（`M7B-45`）**：tab 观测快照（渲染路径**只**读这里，不再发 IPC）
+    bool        tab_known   = false;
+    bool        tab_on_site = false;
+    std::string tab_current;
+    std::string tab_at;
+};
+
+WebTaskView web_task_view(const std::string& node_id)
+{
+    WebTaskView view;
+    if (node_id.empty()) {
+        return view;
+    }
+    WebTask&                    task = web_task(node_id);
+    std::lock_guard<std::mutex> lock(task.mutex);
+    view.running     = task.running;
+    view.kind        = task.kind;
+    view.title       = task.title;
+    view.status      = task.status;
+    view.last_ok     = task.last_ok;
+    view.tab_known   = task.tab_known;
+    view.tab_on_site = task.tab_on_site;
+    view.tab_current = task.tab_current;
+    view.tab_at      = task.tab_at;
+    return view;
+}
+
+void web_task_done(const std::string& node_id, const std::string& title, const std::string& status,
+                   bool ok)
+{
+    WebTask&                    task = web_task(node_id);
+    std::lock_guard<std::mutex> lock(task.mutex);
+    task.running = false;
+    task.title   = title;
+    task.status  = status;
+    task.last_ok = ok;
+}
+
+// **M7B step 13（`M7B-45`）**：写「当前 tab」观测结果 —— **只允许后台任务调用**
+//  * 渲染路径**不得**调用（它只读 `web_task_view()`）：观测 = 发 IPC ⇒ 必须留在后台线程
+//  * `known=false` = 读不到（会话未启动 / 浏览器已关闭）⇒ 界面如实显示「未观测」，不编造站点
+void web_task_set_tab(const std::string& node_id, bool known, bool on_site,
+                      const std::string& current, const std::string& at)
+{
+    WebTask&                    task = web_task(node_id);
+    std::lock_guard<std::mutex> lock(task.mutex);
+    task.tab_known   = known;
+    task.tab_on_site = on_site;
+    task.tab_current = current;
+    task.tab_at      = at;
+}
+
+// 本地时钟 `HH:MM:SS`（观测时间戳；失败 → 空串 ⇒ 界面不显示时间，不编造）
+std::string clock_now()
+{
+    const std::time_t now = std::time(nullptr);
+    std::tm           tm{};
+    if (::localtime_s(&tm, &now) != 0) {
+        return {};
+    }
+    char buffer[16] = {};
+    if (std::strftime(buffer, sizeof(buffer), "%H:%M:%S", &tm) == 0) {
+        return {};
+    }
+    return buffer;
+}
+
+// 起一个后台任务（**按节点去重**：同一节点已有任务在跑 → false + 记日志，**不排队**）
+//  * `site_key` 只用于显示 / 日志（归属证据）；命令里的站点仍由调用方下发（`I14`）
+bool start_web_task(const std::string& node_id, WebTaskKind kind, const std::string& site_key,
+                    const std::string& title, std::function<void()> body)
+{
+    WebTask& task = web_task(node_id);
+    {
+        std::lock_guard<std::mutex> lock(task.mutex);
+        if (task.running) {
+            log::info("[网页版会话] 节点（" + node_id + "）已有后台任务在运行（" + task.title +
+                      "）→ 忽略该节点的重复请求：" + title);
+            return false;
+        }
+    }
+    task.join_worker();   // **本节点**上一个已结束：回收线程
+    {
+        std::lock_guard<std::mutex> lock(task.mutex);
+        task.running  = true;
+        task.kind     = kind;
+        task.node_id  = node_id;
+        task.site_key = site_key;
+        task.title    = title;
+        task.status   = title + "…（后台执行 · 界面不会卡）";
+        task.last_ok  = false;
+    }
+    task.worker = std::thread([node_id, body = std::move(body)] {
+        try {
+            body();
+        }
+        catch (const std::exception& ex) {
+            web_task_done(node_id, "会话任务异常", std::string("异常：") + ex.what(), false);
+        }
+        catch (...) {
+            web_task_done(node_id, "会话任务异常", "未知异常（详见 app.log）", false);
+        }
+    });
+    return true;
+}
+
+// 任一节点有任务在跑 —— **只**用于「进程级」按钮给出**显式**禁用理由（不静默、不冒充本节点状态）
+//  * `*who` = 正在执行的任务名，界面据此写出「在等谁」（`M7B-44`：跨节点的信息必须**明说**）
+//  * **M7B step 13（`M7B-45`）**：`WebTaskKind::Tab`（刷新当前 tab）是**只读**观测 ⇒ **不算**
+//    进程级操作，不构成「关闭浏览器会话」的禁用理由（`M7B-44` 纪律：禁用理由必须是真的）
+bool any_web_task_running(std::string* who)
+{
+    std::lock_guard<std::mutex> lock(g_web_tasks_mutex);
+    for (auto& entry : web_tasks()) {
+        WebTask&                    task = entry.second;
+        std::lock_guard<std::mutex> task_lock(task.mutex);
+        if (task.kind == WebTaskKind::Tab) {
+            continue;
+        }
+        if (task.running) {
+            if (who != nullptr) {
+                *who = task.title;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------- 网页版会话 --
 // 登录窗口（独立线程，不阻塞主界面）：进程内单例见 web::login_window()
 bool is_web_mode(const Node& node)
@@ -165,32 +377,69 @@ std::string site_cookie_name(const WebSiteContext& ctx)
     return ctx.site.cookie_names.empty() ? std::string() : ctx.site.cookie_names.front();
 }
 
-// 按**站点**注销（PB2-19）：清该站点的内存会话 + 删该 origin 的 Cookie / localStorage
+// 按**站点**注销（PB2-19 / M7B step 11）：清该站点的内存会话 + 删该 origin 的数据
 // （**不影响**其他站点；不删除登录 profile）
-void logout_web_session(const WebSiteContext& ctx)
+//  * **新通道**：`channel::logout_site`（`Storage.clearDataForOrigin`）—— **阻塞** ⇒ 走后台任务
+// 按**任意站点**注销（生效条目 + 已登录站点列表里的逐条「注销」都走这里）
+//  * 新通道：`channel::logout_site` = `Storage.clearDataForOrigin`（**只清该 origin**）——
+//    **阻塞** ⇒ 走后台任务；`key` 只用于显示（命令里的 origin 由 `site.url` 派生 · `I14`）
+//  * `node_id` = 发起该操作的节点（**任务记账按节点** · `M7B-44`：不必再传进程级单例）
+void logout_web_session_other(const std::string& node_id, const web::LoginRequest& site,
+                              const std::string& key)
 {
-    std::string error;
-    if (!web::logout_site(ctx.manual, 20000, &error)) {
-        log::warn("网页版按站点注销失败: " + error);
+    const bool started = start_web_task(
+        node_id, WebTaskKind::Logout, key, "按站点注销（" + key + "）", [node_id, site, key] {
+            std::string error;
+            if (web::channel::logout_site(site, 20000, &error)) {
+                web_task_done(node_id, "按站点注销完成",
+                              "已清该站点（" + key + "）的 Cookie / localStorage（其他站点不受影响）",
+                              true);
+            }
+            else {
+                web_task_done(node_id, "按站点注销失败", error, false);
+            }
+        });
+    if (started) {
+        log::info("网页版按站点注销：已在后台执行（节点 " + node_id + " · 站点 " + key + "）");
     }
 }
 
-// 高级操作：删除**整个**登录 profile（= 清掉所有站点；PB2-19 / R14 边界说明）
-void delete_web_profile()
+// 按**生效条目站点**注销：站点参数只来自条目（PB2-17 / `I14`），转调上面的通用实现
+void logout_web_session(const std::string& node_id, const WebSiteContext& ctx)
 {
+    logout_web_session_other(node_id, ctx.manual, ctx.site_key);
+}
+
+// 高级操作：删除**整个**登录 profile（= 清掉所有站点；PB2-19 / R14 边界说明）
+//  * **M7B step 11**：profile 路径改 **Pydoll**（`paths::pydoll_profile()`）—— 这是「整体替换」后
+//    用户实际在用的那一份；旧 `~/.brain-ai/webview2` 退役归批 5（`M7B-32`，**不自动删用户数据**）
+void delete_web_profile(const std::string& node_id)
+{
+    // ① 旧通道（WebView2 内嵌窗口）收尾 —— 批 5 随其退役
     web::login_window().request_close();
     web::login_window().join();
     web::SessionStore::instance().clear_all();
 
-    std::error_code ec;
-    const std::filesystem::path profile = paths::webview2_profile();
-    std::filesystem::remove_all(profile, ec);
-    if (ec) {
-        log::warn("网页版注销：profile 目录删除失败 " + profile.string() + "（" + ec.message() + "）");
-    }
-    else {
-        log::info("网页版注销：profile 已删除 " + profile.string() + "（**全部站点**，下次需重新登录）");
-    }
+    // ② 新通道会话（浏览器 + 守护进程）**不随本进程消失** ⇒ 必须显式关（阻塞 ⇒ 后台任务）
+    const std::filesystem::path profile = paths::pydoll_profile();
+    start_web_task(node_id, WebTaskKind::Shutdown, "（所有站点）", "删除整个登录 profile（所有站点）",
+                   [node_id, profile] {
+        web::channel::shutdown_session();
+        std::error_code remove_ec;
+        std::filesystem::remove_all(profile, remove_ec);
+        if (remove_ec) {
+            log::warn("网页版注销：profile 目录删除失败 " + profile.string() + "（" +
+                      remove_ec.message() + "）");
+            web_task_done(node_id, "删除 profile 失败",
+                          "目录删除失败 " + profile.string() + "（" + remove_ec.message() + "）", false);
+        }
+        else {
+            log::info("网页版注销：profile 已删除 " + profile.string() +
+                      "（**全部站点**，下次需重新登录）");
+            web_task_done(node_id, "登录 profile 已删除",
+                          profile.string() + " 已删除（**全部站点**，下次需重新登录）", true);
+        }
+    });
 }
 
 // ProviderConfig 节点在 web 模式下显示「生效站点 + 会话状态 + 登录入口」（PB2-17/18/19）
@@ -227,7 +476,7 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
             }
         }
         ImGui::BeginDisabled(true);
-        ImGui::Button("打开登录窗口（WebView2）", ImVec2(-FLT_MIN, 0.0f));
+        ImGui::Button("打开登录窗口（Pydoll）", ImVec2(-FLT_MIN, 0.0f));
         ImGui::Button("探测网页版协议（dev）", ImVec2(-FLT_MIN, 0.0f));
         ImGui::EndDisabled();
         ImGui::TextDisabled("（站点不可用：**不会**回落到内置默认站点 —— 请先选定网页版站点条目）");
@@ -298,51 +547,138 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
         ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "探测错误：%s", probe.error.c_str());
     }
 
-    web::LoginWindow& window      = web::login_window();
-    const bool        window_here = web::window_on_site(ctx.site_key);
-    if (window.running()) {
-        if (window_here) {
-            ImGui::TextDisabled("登录窗口已打开（该站点）：请在窗口中完成登录，然后关闭它。");
+    // ---- 浏览器会话（**M7B step 11**：新通道 Pydoll · **step 12**：按节点记账 `M7B-44`）----
+    //  * `channel::session_ready()` = **纯查询**（不阻塞）⇒ UI 线程可直接调；⚠️ 它是**进程级**事实
+    //    （整个进程一个守护进程 + 一个浏览器，各站点各占一个 tab · `MB-D2`）⇒ 必须**如实标注为进程级**，
+    //    **不得**冒充「本节点」的状态（`M7B-44`：拒绝跨节点全局通知）
+    //  * 登录 / 关会话 / 按站点注销都要等浏览器（**阻塞**）⇒ 一律走**后台任务**；
+    //    UI 只读**本节点**的 `web_task_view(node.id)` 缓存（加锁读，微秒级）
+    const bool        channel_alive = web::channel::session_ready();
+    const WebTaskView task          = web_task_view(node.id);   // 本地快照（加锁读 · 微秒级）
+    ImGui::TextDisabled("浏览器会话（进程级 · 影响所有站点）：%s",
+                        channel_alive ? "运行中（Pydoll · profile 记住登录态）" : "未启动");
+    // **M7B step 13（`M7B-45`）**：渲染路径**零 IPC**（不变量 `A1`）——
+    //  「本节点站点 tab」**只读后台观测缓存**，**不再**每帧调 `tab_on_site()`
+    //  * 旧实现在这一行发**同步 IPC**（新建连接 2 s 超时 + `current_tab` 8 s 超时；
+    //    实测 30–140 ms、最坏 2.1 s）⇒ 帧率 2–10 fps（登录后卡死的根因）
+    //  * 观测改由**后台任务**（`WebTaskKind::Tab`）执行，结果写进本节点缓存
+    ImGui::TextDisabled("本节点站点 tab：%s",
+                        !task.tab_known ? "未观测（点右侧「刷新」）"
+                                        : (task.tab_on_site ? "在当前 tab" : "不在当前 tab"));
+    ImGui::SameLine();
+    ImGui::BeginDisabled(task.running);
+    if (ImGui::SmallButton("刷新")) {
+        const std::string node_id = node.id;
+        const std::string key     = ctx.site_key;
+        const std::string login   = ctx.login_url;
+        if (start_web_task(node_id, WebTaskKind::Tab, key, "刷新当前 tab（" + key + "）",
+                           [node_id, key, login] {
+                // ⚠️ 本函数体在**后台线程**执行：同步 IPC 只允许出现在这里（`Q4`）
+                const std::string current = web::channel::current_tab_site();
+                if (current.empty()) {
+                    web_task_set_tab(node_id, /*known=*/false, false, {}, clock_now());
+                    web_task_done(node_id, "当前 tab 未观测到",
+                                  "读不到当前 tab（会话未启动，或浏览器已被关闭）—— 界面**不会**"
+                                  "自动重试：请点「打开登录窗口」，或稍后再点「刷新」。",
+                                  false);
+                    return;
+                }
+                // 归一比较（与旧面板 `tab_on_site` 语义一致）；`site` 回包已是 origin
+                const bool here =
+                    !key.empty() && web::site_key_of(current) == web::site_key_of(key);
+                web_task_set_tab(node_id, /*known=*/true, here, current, clock_now());
+                web_task_done(node_id, here ? "当前 tab 在本站点" : "当前 tab 在其他站点",
+                              "已观测当前 tab：" + current, true);
+            })) {
+            log::info("网页版会话：已在后台刷新「当前 tab」（节点 " + node_id + " · 站点 " +
+                      login + "）");
         }
-        else {
-            ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f), "登录窗口正开着其他站点：%s",
-                               web::current_window_site().c_str());
-            ImGui::TextDisabled("点「打开登录窗口」会按串行策略切到本节点站点（先关旧窗）");
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("在**后台线程**读一次当前 tab（同步 IPC 只允许出现在后台线程 —— `Q4`）；\n"
+                          "渲染路径永远不发 IPC（`M7B-45` 修掉的卡顿根因）。");
+    }
+    if (task.tab_known && !task.tab_at.empty()) {
+        ImGui::TextDisabled("（上次观测 %s：%s）", task.tab_at.c_str(),
+                            task.tab_current.empty() ? "（空）" : task.tab_current.c_str());
+    }
+    // 本节点最近一次会话任务（**只**属于本节点 —— 别的节点在跑不会显示在这里）
+    if (!task.status.empty()) {
+        ImGui::TextColored(task.last_ok ? ImVec4(0.31f, 0.75f, 0.42f, 1.0f)
+                                        : ImVec4(0.85f, 0.70f, 0.30f, 1.0f),
+                           "本节点最近任务：%s", task.status.c_str());
+    }
+    // 「关闭浏览器会话」是**进程级**操作 ⇒ 任一节点有任务时必须禁用，且**写出归属**
+    // （不静默禁用、不借别的节点的状态文案 —— `M7B-44`）
+    std::string busy_title;
+    const bool  busy_anywhere = any_web_task_running(&busy_title);
+    if (channel_alive) {
+        ImGui::BeginDisabled(busy_anywhere);
+        if (ImGui::Button("关闭浏览器会话（进程级 · 所有站点）", ImVec2(-FLT_MIN, 0.0f))) {
+            const std::string node_id = node.id;
+            start_web_task(node_id, WebTaskKind::Shutdown, ctx.site_key, "关闭浏览器会话",
+                           [node_id] {
+                // `shutdown_session()` = `Browser.close` → 等进程退出（≤60 s）—— 阻塞 ⇒ 后台
+                if (web::channel::shutdown_session()) {
+                    web_task_done(node_id, "浏览器会话已关闭",
+                                  "守护进程 + 浏览器已收尾（登录态已落盘）", true);
+                }
+                else {
+                    web_task_done(node_id, "浏览器会话", "本次没有活动会话（无需关闭）", true);
+                }
+            });
+            log::info("网页版会话：已在后台关闭浏览器会话（由节点 " + node_id +
+                      " 触发 · **所有站点**）");
         }
-        ImGui::TextDisabled("当前：%s", window.status().c_str());
-        if (ImGui::Button("关闭登录窗口", ImVec2(-FLT_MIN, 0.0f))) {
-            window.request_close();
+        ImGui::EndDisabled();
+        if (busy_anywhere) {
+            ImGui::TextDisabled("（进程级操作暂不可用：正在执行「%s」）", busy_title.c_str());
         }
     }
 
     ImGui::Spacing();
-    if (ImGui::Button("打开登录窗口（WebView2）", ImVec2(-FLT_MIN, 0.0f))) {
-        // 站点参数来自**生效条目**（PB2-17）；页面加载完成后自动探测一次（与改造前一致）
-        if (window.running() && !window_here) {
-            window.request_close(); // 串行复用：先关旧站点窗口（PB2-19 / D-20）
-            window.join();
-        }
-        std::string error;
-        if (!window.running()) {
-            if (window.start(ctx.manual, &error)) {
-                log::info("网页版登录窗口已打开（站点 " + ctx.login_url +
-                          "；独立线程，页面加载后自动探测凭证）");
-            }
-            else {
-                log::warn("网页版登录窗口打开失败: " + error);
-            }
+    // **只**受**本节点**任务控制（别的节点在跑不禁用本节点按钮 —— 拒绝跨节点串状态）
+    ImGui::BeginDisabled(task.running);
+    if (ImGui::Button("打开登录窗口（Pydoll）", ImVec2(-FLT_MIN, 0.0f))) {
+        // 站点参数来自**生效条目**（PB2-17 / `I14`：无站点回落）；值拷贝进后台线程
+        const web::LoginRequest site    = ctx.manual;
+        const std::string       login   = ctx.login_url;
+        const std::string       node_id = node.id;
+        const bool              started = start_web_task(
+            node_id, WebTaskKind::Login, ctx.site_key, "打开登录窗口（" + ctx.site_key + "）",
+            [node_id, site, login] {
+                std::string error;
+                if (web::channel::login_site(site, kLoginPollSeconds, &error)) {
+                    web_task_done(node_id, "登录成功",
+                                  "该站点已登录（" + login + "）；浏览器窗口保持打开，供网页节点复用",
+                                  true);
+                }
+                else {
+                    web_task_done(node_id, "登录未完成", error, false);
+                }
+            });
+        if (started) {
+            log::info("网页版登录窗口：已在后台打开（节点 " + node_id + " · 站点 " + login + "）");
         }
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("站点取自「生效条目」：%s\n"
-                          "profile 会记住登录态（重启后仍在）；窗口打开后会复读该站点 Cookie，面板随即显示登录态。\n"
-                          "切换网页版条目时会改用该条目的登录页（先关旧窗口）。",
+                          "会弹出**独立浏览器窗口**（profile = ~/.brain-ai/pydoll-profile）；\n"
+                          "登录完成后窗口**保持打开** —— 网页版文字生成会复用同一会话。\n"
+                          "登录态判据 = 条目 `web.cookie_names` 命中（不变量 I15′）；\n"
+                          "**关掉该窗口 = 结束本次登录**（本通道不会再自动弹窗；可重新点本按钮）。",
                           ctx.login_url.c_str());
     }
+    ImGui::EndDisabled();
 
     ImGui::Spacing();
     // L4（PB2-28 / I16）：协议探测只对**内置协议站点**适用；DOM 站点改跑**只读诊断**
-    const bool probe_applicable = ai::probe_is_applicable(ctx.site);
+    //  * ⚠️ **本按钮仍走旧通道**（`web::login_window()` 的内嵌窗口：探测要在页面内取
+    //    userToken / 解 PoW）—— 该能力属 `builtin:deepseek` 协议栈，批 5 随其退役（`M7B-42`）；
+    //    新通道侧的对应能力是 CLI `--web-dom-dump` / `--web-adapter-selftest`（step 9 已换代）
+    web::LoginWindow& window        = web::login_window();
+    const bool        probe_applicable = ai::probe_is_applicable(ctx.site);
     if (ImGui::Button(probe_applicable ? "探测网页版协议（dev）"
                                        : "只读诊断（该站点不适用协议探测）",
                       ImVec2(-FLT_MIN, 0.0f))) {
@@ -379,7 +715,7 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
     if (verdict.state == ai::WebSessionState::logged_in) {
         ImGui::Spacing();
         if (ImGui::Button("注销该站点（清会话 + 删该站点 Cookie）", ImVec2(-FLT_MIN, 0.0f))) {
-            logout_web_session(ctx);
+            logout_web_session(node.id, ctx);
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("只影响本站点：内存会话 + 该 origin 的 Cookie / localStorage；\n"
@@ -399,12 +735,11 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
                                 item.user_token.empty() ? "" : "，有凭证");
             ImGui::SameLine();
             if (ImGui::SmallButton("注销")) {
+                // 新通道：按 origin 清站点数据（`Storage.clearDataForOrigin`）—— 阻塞 ⇒ 后台任务
                 web::LoginRequest other;
-                other.url = site; // 只需 origin：注销按站点
-                std::string error;
-                if (!web::logout_site(other, 20000, &error)) {
-                    log::warn("按站点注销失败（" + site + "）: " + error);
-                }
+                other.url           = site; // 只需 origin：注销按站点
+                other.provider_id   = ctx.provider_id;
+                logout_web_session_other(node.id, other, site);
             }
             ImGui::PopID();
         }
@@ -420,9 +755,10 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
     }
     else {
         ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
-                           "将删除 ~/.brain-ai/webview2 —— 所有站点都要重新登录");
+                           "将删除 ~/.brain-ai/pydoll-profile（新通道浏览器 profile）"
+                           "—— 所有站点都要重新登录");
         if (ImGui::SmallButton("确认删除##profile")) {
-            delete_web_profile();
+            delete_web_profile(node.id);
             confirm_delete_profile = false;
         }
         ImGui::SameLine();
@@ -432,7 +768,9 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
     }
 
     ImGui::Spacing();
-    ImGui::TextWrapped("登录窗口内：Ctrl+Alt+C 立即重新提取 Cookie，ESC 关闭窗口。");
+    ImGui::TextWrapped("新通道登录：弹出**独立浏览器窗口**（Pydoll · profile ~/.brain-ai/pydoll-profile）；"
+                       "登录后窗口保持打开，供网页版节点复用。登录 / 收尾 / 注销均在**后台执行**，"
+                       "界面不会卡（进度见上方状态行与 app.log）。");
 
     return changed;
 }
@@ -1501,6 +1839,36 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     }
 
     ImGui::End();
+}
+
+// **M7B step 11**：等新通道（Pydoll）的后台会话任务结束（进程退出前必须调 —— 见头文件）
+//  * **M7B step 12（`M7B-44`）**：任务按 `node.id` 记账 ⇒ 这里**遍历所有节点**逐个 join；
+//    并**先**请求取消正在进行的登录态轮询（否则退出时要把 120 s 上限干等完 —— 实测旧版
+//    关窗后还多等了 3 分钟）
+void wait_web_tasks()
+{
+    // ① 请停止：正在轮询登录态的 `login_site` / `pydoll_login` 应尽早结束（幂等）
+    web::channel::request_cancel_session_ops();
+
+    // ② 先说一声（否则用户只看到界面卡一下，无从解释）—— 顺手快照，**不持锁 join**
+    std::vector<std::string> node_ids;
+    {
+        std::lock_guard<std::mutex> lock(g_web_tasks_mutex);
+        for (auto& entry : web_tasks()) {
+            WebTask&                    task = entry.second;
+            std::lock_guard<std::mutex> task_lock(task.mutex);
+            node_ids.push_back(entry.first);
+            if (task.running) {
+                log::info("[网页版会话] 退出前等待后台任务结束：节点 " + entry.first + " · " +
+                          task.title + "（" + task.status + "）");
+            }
+        }
+    }
+
+    // ③ 逐个 join（**不持 `g_web_tasks_mutex`**：任务体收尾会调 `web_task_done()` 再取它）
+    for (const std::string& node_id : node_ids) {
+        web_task(node_id).join_worker();
+    }
 }
 
 } // namespace aiwrite::ui

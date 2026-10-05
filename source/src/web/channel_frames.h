@@ -1,7 +1,21 @@
 #pragma once
 
 // ============================================================================
-//  管道协议 v1 帧（`docs/actionPlan/M7B.md` §6.1）—— C++ 侧**纯函数**实现
+//  管道协议 v3 帧（`docs/actionPlan/M7B.md` §6.1）—— C++ 侧**纯函数**实现
+//
+//  * **v1 → v2（2026-10-03 · 批 3 step 8）**：+ 命令 `run_script`（页面内执行诊断 JS）+ 事件
+//    `script_done` + 错误码 `script_error` ⇒ 按 §6.1 冻结规则「改动 = 升 `v`」，两侧同升
+//    （Python 侧 `protocol.py` / `__init__.py` 同步为 2）
+//  * **v2 → v3（2026-10-04 · 批 3 step 11）**：+ 命令 `logout_site`（**按站点注销** ·
+//    `Storage.clearDataForOrigin`）与 `current_tab`（读当前 tab 站点）+ 事件 `tab`（`url` / `site`）
+//    + 错误码 `not_implemented`（**闭合开口项 `MB-Q7`**：词表内但本步未实现的命令，不再借
+//    `daemon_down` —— 那个码语义是「守护进程挂了」，会被 UI 误读）
+//  * **v3 → v4（2026-10-05 · 批 3 step 14）**：**内容返回正式化** —— `send_prompt` / `read_answer` /
+//    `upload_image` 的**站字段组**（`input_selector[]` · `send{kind,value}` · `answer_selector[]` ·
+//    `done_when{kind,selector}` · `poll_ms` · `max_polls` · `attach_selector`）+ `send_prompt.upload_evidence`
+//    （**`I18` 按位开关**）+ `answer_done.{text_bytes, truncated}`（长文本**显式截断**）。
+//    ⚠️ **命令 / 事件 / 错误码计数不变**（10 / 8 / 不变）—— v4 = **只加字段、不加名字**；
+//    `not_implemented` 保留但**当前无使用点**（三条命令已落地）；`run_script` **降级为诊断专用**
 //
 //  * 无 IO、无第三方状态 ⇒ 可**离线断言**（`VB2-29` / `VB2-32`）
 //  * 词表**唯一来源** = §6.1；Python 侧同构实现见 `source/python/brain_ai_browser/protocol.py`
@@ -18,7 +32,7 @@
 
 namespace aiwrite::web::channel {
 
-inline constexpr int         kProtoVersion      = 1;
+inline constexpr int         kProtoVersion      = 4;
 inline constexpr std::size_t kMaxFrameBytes     = 64 * 1024;
 inline constexpr std::size_t kMaxImages         = 8;
 inline constexpr int         kTimeoutInjectMs   = 30000;   // 注入 / 上传
@@ -48,8 +62,9 @@ std::string make_error(const std::string& code, const std::string& id,
                        const std::string& hint = "");
 
 // 词表（§6.1）
-const std::vector<std::string>& known_commands();   // 7 条
-const std::vector<std::string>& known_events();     // 6 条
+const std::vector<std::string>& known_commands();   // 10 条（v3 起含 run_script / logout_site / current_tab）
+const std::vector<std::string>& known_events();     // 8 条（v3 起含 script_done / tab）
+// v4（step 14）：`send_prompt` / `read_answer` 的**站字段组**为必需字段（选择器 / 发送方式由调用方下发）
 std::vector<std::string>        required_fields_of(const std::string& command);
 bool                            is_known_command(const std::string& name);
 

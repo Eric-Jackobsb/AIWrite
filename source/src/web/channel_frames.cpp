@@ -58,6 +58,69 @@ Frame bad(std::string reason, const std::string& raw)
     return frame;
 }
 
+// ---- v4（step 14）：站字段组校验（与 Python `protocol.station_fields_reason` **逐条同构**）----
+//  * 选择器（`input_selector[]` / `answer_selector[]`）必须是非空字符串数组（多候选 · `M7B-24`）
+//  * `send` = `{"kind": "key" | "click", "value": "<键名 / CSS 选择器>"}`
+//  * `done_when` = `{"kind": "selector_present" | "selector_gone", ...}`
+//  * `poll_ms` / `max_polls` = 整数；`upload_evidence` = 布尔（`I18` **按位开关**）
+std::string selector_list_reason(const nlohmann::json& value, const std::string& field)
+{
+    if (!value.is_array() || value.empty()) {
+        return "字段 " + field +
+               " 必须是**非空字符串数组**（多候选逐个探测，首个可见且命中者胜）";
+    }
+    for (const nlohmann::json& item : value) {
+        if (!item.is_string() || item.get<std::string>().empty()) {
+            return "字段 " + field + " 的元素必须是**非空字符串**（CSS 选择器）";
+        }
+    }
+    return {};
+}
+
+std::string station_fields_reason(const nlohmann::json& payload, const std::string& name)
+{
+    for (const char* field : {"input_selector", "answer_selector"}) {
+        if (payload.contains(field)) {
+            const std::string reason = selector_list_reason(payload[field], field);
+            if (!reason.empty()) {
+                return reason;
+            }
+        }
+    }
+    if (name == "send_prompt") {
+        if (!payload.contains("send") || !payload["send"].is_object()) {
+            return "字段 send 必须是对象 {kind, value}（kind = key | click）";
+        }
+        const nlohmann::json& send = payload["send"];
+        const std::string     kind = send.value("kind", std::string());
+        if (kind != "key" && kind != "click") {
+            return "字段 send.kind 取值非法（应为 key | click）";
+        }
+        if (send.value("value", std::string()).empty()) {
+            return "字段 send.value 必须是**非空字符串**（按键名或 CSS 选择器）";
+        }
+    }
+    if (payload.contains("done_when")) {
+        const nlohmann::json& done = payload["done_when"];
+        if (!done.is_object()) {
+            return "字段 done_when 必须是对象 {kind, selector?}";
+        }
+        const std::string kind = done.value("kind", std::string());
+        if (kind != "selector_present" && kind != "selector_gone") {
+            return "字段 done_when.kind 取值非法（应为 selector_present | selector_gone）";
+        }
+    }
+    for (const char* field : {"poll_ms", "max_polls"}) {
+        if (payload.contains(field) && !payload[field].is_number_integer()) {
+            return std::string("字段 ") + field + " 必须是整数（毫秒 / 轮数）";
+        }
+    }
+    if (payload.contains("upload_evidence") && !payload["upload_evidence"].is_boolean()) {
+        return "字段 upload_evidence 必须是**布尔**（I18 按位开关：仅本次运行**有图**才置位）";
+    }
+    return {};
+}
+
 } // namespace
 
 const char* error_code_bad_frame()
@@ -182,16 +245,18 @@ std::string make_error(const std::string& code, const std::string& id, const std
 
 const std::vector<std::string>& known_commands()
 {
-    static const std::vector<std::string> commands = {"hello",        "open_tab",    "login_state",
-                                                     "upload_image", "send_prompt", "read_answer",
+    static const std::vector<std::string> commands = {"hello",        "open_tab",     "login_state",
+                                                     "upload_image", "send_prompt",  "read_answer",
+                                                     "run_script",   "logout_site",  "current_tab",
                                                      "shutdown"};
     return commands;
 }
 
 const std::vector<std::string>& known_events()
 {
-    static const std::vector<std::string> events = {"stage",      "evidence", "delta",
-                                                    "answer_done", "error",   "ready"};
+    static const std::vector<std::string> events = {"stage",       "evidence",    "delta",
+                                                    "answer_done", "script_done", "tab",
+                                                    "error",       "ready"};
     return events;
 }
 
@@ -203,16 +268,22 @@ bool is_known_command(const std::string& name)
 
 std::vector<std::string> required_fields_of(const std::string& command)
 {
-    if (command == "open_tab" || command == "login_state" || command == "read_answer") {
+    if (command == "open_tab" || command == "login_state" || command == "logout_site") {
         return {"provider"};
     }
     if (command == "upload_image") {
         return {"provider", "images"};
     }
-    if (command == "send_prompt") {
-        return {"provider", "prompt"};
+    if (command == "send_prompt") {          // v4（step 14）：站字段组**必需**（I14：由调用方下发）
+        return {"provider", "prompt", "input_selector", "send"};
     }
-    return {}; // hello / shutdown：无必需字段
+    if (command == "read_answer") {          // v4（step 14）：选择器必需
+        return {"provider", "answer_selector"};
+    }
+    if (command == "run_script") {           // v2（批 3 step 8）：页面内执行诊断 JS
+        return {"provider", "script"};
+    }
+    return {}; // hello / shutdown / current_tab：无必需字段
 }
 
 bool validate_command(const Frame& frame, std::string* reason)
@@ -270,6 +341,11 @@ bool validate_command(const Frame& frame, std::string* reason)
             value != "paste_only" && value != "none") {
             return fail("attach 取值非法（应为 auto | file_input | drop_zone | paste_only | none）");
         }
+    }
+    // v4（step 14）：站字段组校验（与 Python `protocol.station_fields_reason` **逐条同构**）
+    const std::string station_reason = station_fields_reason(payload, frame.name);
+    if (!station_reason.empty()) {
+        return fail(station_reason);
     }
     return true;
 }

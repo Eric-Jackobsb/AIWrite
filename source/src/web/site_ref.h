@@ -123,11 +123,23 @@ inline LoginRequest probe_login_request(const ai::ProviderWebSpec& site, const s
 }
 
 // 会话自动引导（ensure_session）用的离屏请求：按生效条目的站点（PB2-17）
+//  * ⚠️ **离屏语义只服务旧通道**（WebView2 内嵌窗口 / `builtin:deepseek` 的 `web_chat` PoW 求解）
 inline LoginRequest boot_login_request(const ai::ProviderWebSpec& site, const std::string& provider_id)
 {
     LoginRequest request = login_request_of(site, provider_id, /*for_probe=*/false, /*offscreen=*/true);
     request.probe_after_load = true;
     return request;
+}
+
+// 网页版文字生成（`dom_chat` · **新通道**）的会话引导请求：按生效条目的站点（PB2-17）
+//  * **M7B step 11**：与 `boot_login_request` 的**唯一差别** = `offscreen=false`（**有头**）——
+//    新通道起的浏览器是**独立进程**，且是用户**唯一的登录入口**（旧通道另有面板内嵌 WebView2 窗口）；
+//    离屏窗口用户看不见 ⇒ 未登录时**无路可走** ⇒ 违反 `I21`（必须给出可操作路径）
+//  * ⚠️ 新通道（`web/pydoll_channel`）只消费 `url` / `provider_id` / `cookie_names` ——
+//    `probe_after_load` / `window_title` / 探测端点等**一律不被消费**（新通道不注入站点端点，`I16`）
+inline LoginRequest visible_login_request(const ai::ProviderWebSpec& site, const std::string& provider_id)
+{
+    return login_request_of(site, provider_id, /*for_probe=*/false, /*offscreen=*/false);
 }
 
 // ---------------------------------------------------------------------------

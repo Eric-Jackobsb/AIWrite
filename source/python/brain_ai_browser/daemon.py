@@ -14,13 +14,19 @@
       **不静默降级、不换通道**（`I21`）；
     * **用户手动关窗 = 可恢复状态**（`M7B-11`）：`BrowserNotRunning` 被**吞掉** → 记 L4 + **自愈重启**
       一次（日志留痕、`session_starts` 递增），不把异常抛给调用方；
+      ⚠️ **例外：`login_state` 是「纯观测」命令，**不自愈**（`M7B-44`）** —— 登录轮询场景下
+      用户**主动关窗**就是「本次登录结束」，每轮自愈会**反复弹新窗口**（实测一次点击 → 4 个窗口）
+      ⇒ 观测命令浏览器不在 → 如实回 `err{daemon_down}`，由调用方结束轮询；
     * `shutdown` → `stage{close}` → `Browser.close` → **等进程退出**（默认 5 s，`MB-Q5`）
       → **超时才兜底强杀，且必须留 warn**（`VB2-38` / `I23①`）；判定走 `close_verdict()` 纯函数；
     * 词表内**尚未实现**的命令（`upload_image` / `send_prompt` / `read_answer`）→ 如实回
-      `err{daemon_down, hint=尚未实现}` 并**保持存活**（词表缺「未实现」码 = 开口项 **`MB-Q7`**）；
-    * **L2 登录态快照**（`MB-D0-8` L2 · step 5 · `VB2-39`）：`open_tab` / `login_state` 起浏览器后
-      **回灌一次**（每浏览器会话一次；失败 → 追加 `error{not_logged_in}` 事件**显式提示**，`I23④`，
-      但**不影响本次命令回包**）；`login_state` 判到 `logged_in` → **登录即写**；
+      `err{not_implemented, hint=尚未实现}` 并**保持存活**（**v3 起用 `not_implemented` 码** ——
+      原借 `daemon_down`，语义不符；开口项 **`MB-Q7`** 由此闭合）；
+    * **L2 登录态快照**（`MB-D0-8` L2 · step 5 · `VB2-39`）：`open_tab` **起浏览器后回灌一次**
+      （每浏览器会话一次；失败 → 追加 `error{not_logged_in}` 事件**显式提示**，`I23④`，
+      但**不影响本次命令回包**）；`login_state` 判到 `logged_in` → **登录即写**
+      （⚠️ `M7B-44` 起 `login_state` **不再自己起浏览器 / 不再回灌** —— 回灌归 `open_tab`；
+      判到登录仍会**写**快照，这一半不变）；
       `shutdown` 在 `Browser.close` **之前**再写一次；空闲 / 命令间隙每 5 s **定时刷新**
       （`_snapshot_tick` —— 与命令跑在**同一任务**里 ⇒ 不存在并发访问 CDP 的时序问题）；
     * ⚠️ **`login_state` 的回包名是 `login`** —— 该事件名**不在** §6.1 表 2 的事件词表里（当步迭代仅校验
@@ -48,8 +54,8 @@ from . import runtime
 from . import session
 
 __all__ = ["DEFAULT_IDLE_TIMEOUT_S", "ready_payload", "dependency_problem",
-           "close_verdict", "BrowserAccess", "Daemon", "serve",
-           "serve_offline_connection", "handle_frame"]
+           "close_verdict", "script_payload", "site_key_of", "BrowserAccess", "Daemon",
+           "serve", "serve_offline_connection", "handle_frame"]
 
 DEFAULT_IDLE_TIMEOUT_S = 30.0     # 连接空闲 / 等待连接的超时（不留僵尸）
 HEARTBEAT_INTERVAL_S = 10.0       # L4 心跳埋点间隔（`M7B-11`：心跳可检测）
@@ -138,6 +144,7 @@ class BrowserAccess:
         self.snapshot_saves = 0     # L2 实际写盘次数（内容有变化才算）
         self.snapshot_restores = 0  # L2 成功回灌次数（每个浏览器会话一次）
         self._restored_at = 0       # 回灌时的 `session_starts`（幂等记账）
+        self._upload_evidence: Dict[str, Dict[str, Any]] = {}   # v4（step 14）：按 provider 记上传成功证据
         self._driver: Optional[driver.BrowserDriver] = None
 
     # ---- 状态 ----
@@ -188,6 +195,29 @@ class BrowserAccess:
     def note_command_error(self, code: str, hint: str) -> None:
         redact.log_event("command_error", "命令失败（可操作错误已回给调用方）",
                          level="warn", code=code, hint=hint)
+
+    # ---- 上传成功证据记账（**v4 step 14** · `I18` 的协议级拦截依据）----
+    #  * 粒度 = **按 provider**（每个站点各自记账）；凭证 = **当前浏览器会话代数**
+    #    （`session_starts`）—— 浏览器重启 = 页面上下文丢失 ⇒ 旧证据自动**失效**，
+    #    必须重新上传（否则会拿「上一轮的证据」放行本轮「有图未传」）
+    def mark_upload_evidence(self, provider: str, *, count: int, files: int) -> None:
+        """记一次 `upload_image` 成功（页面侧证据）。**只记账、不落盘**（值 / 路径不进日志）。"""
+        self._upload_evidence[str(provider or "")] = {
+            "session": self.session_starts, "count": int(count), "files": int(files)}
+
+    def has_upload_evidence(self, provider: str) -> bool:
+        """本会话（**同一浏览器实例**）内该 provider 是否已有上传成功证据。"""
+        entry = self._upload_evidence.get(str(provider or ""))
+        if not entry or entry.get("session") != self.session_starts:
+            return False
+        return int(entry.get("files") or 0) > 0
+
+    def clear_upload_evidence(self, provider: str = "") -> None:
+        """清证据（`logout_site` 清站点数据后调用 —— 上传痕迹随登录态一起作废）。"""
+        if provider:
+            self._upload_evidence.pop(str(provider), None)
+        else:
+            self._upload_evidence.clear()
 
     # ---- L2 快照（`MB-D0-8` L2 · step 5 · `VB2-39`）----
     async def save_snapshot(self, *, reason: str, provider: str = "") -> Dict[str, Any]:
@@ -293,12 +323,16 @@ OFFLINE_HINT = ("本次伺服未接浏览器会话（离线 / 自检模式）：
                 "（`M7B.md` §6.2 step 4）")
 MISSING_URL_HINT = ("缺少 url：条目 `web.login_url` 由 C++ 侧解析后下发"
                     "（`I14`：站点只来自条目，Python 侧无回落）")
-NOT_IMPLEMENTED_HINT = ("命令 %s 尚未实现（批 3 / step 5 落地）；词表暂缺「命令未实现」错误码 →"
-                        " 现借 `daemon_down`（开口项 `MB-Q7`）")
+NOT_IMPLEMENTED_HINT = ("命令 %s 尚未实现（**词表 v4 起：全部命令均已实现** —— 本码保留给"
+                        "「先入表、后实现」的未来命令；`MB-Q7` 语义不变）")
 
 # `I23④`：快照存在却恢复不了 → **必须显式提示**（不得静默降级成「没登录过」）
 RESTORE_FAILED_HINT = ("登录态快照无法恢复（%s）→ 请重新登录一次；"
                        "下次干净退出后会重新写入快照")
+
+# `run_script`（v2 · 批 3 step 8）：单帧上限 64 KiB ⇒ 结果留 **48 KiB** 余量；
+# 超出**截断 + 显式 `truncated=true`**（不假装完整 —— 同 `I21` 口径）
+SCRIPT_RESULT_LIMIT_BYTES = 48 * 1024
 
 _GONE_EXCEPTIONS: Optional[Tuple[type, ...]] = None
 
@@ -383,12 +417,27 @@ async def handle_frame(frame: P.Frame, *, write: WriteLine,
         return await _cmd_open_tab(frame, write, browser)
     if frame.name == "login_state":
         return await _cmd_login_state(frame, write, browser)
+    if frame.name == "run_script":                       # v2（批 3 step 8）
+        return await _cmd_run_script(frame, write, browser)
+    if frame.name == "logout_site":                      # v3（批 3 step 11）
+        return await _cmd_logout_site(frame, write, browser)
+    if frame.name == "current_tab":                      # v3（批 3 step 11）
+        return await _cmd_current_tab(frame, write, browser)
+    if frame.name == "upload_image":                     # v4（step 14）：图片注入（I18 物理分离）
+        return await _cmd_upload_image(frame, write, browser)
+    if frame.name == "send_prompt":                      # v4（step 14）：真打字注入 + 触发发送
+        return await _cmd_send_prompt(frame, write, browser)
+    if frame.name == "read_answer":                      # v4（step 14）：轮询取回答正文
+        return await _cmd_read_answer(frame, write, browser)
 
-    # 词表内、但尚未实现 → 如实报错 + 保持存活（不静默装作成功；MB-Q7）
+    # 词表内、但尚未实现 → 如实报错 + 保持存活（不静默装作成功）
+    #  * **v4 起：词表内全部命令均已实现** ⇒ 本分支当前**无使用点**（保留给「先入表、后实现」）
+    #  * **v3 起用 `not_implemented`**（闭合开口项 `MB-Q7`）：原借 `daemon_down`，
+    #    那个码的语义是「守护进程挂了」，会把「本步没做」误报成依赖故障
     hint = NOT_IMPLEMENTED_HINT % frame.name
     if browser is not None:
-        browser.note_command_error("daemon_down", hint)
-    await _error(write, frame, "daemon_down", hint)
+        browser.note_command_error("not_implemented", hint)
+    await _error(write, frame, "not_implemented", hint)
     return True
 
 
@@ -447,6 +496,46 @@ async def _run_browser_op(browser: "BrowserAccess", op: Callable[[], Any]) -> An
         return await op()
 
 
+async def _read_op(op: Callable[[], Any]) -> Any:
+    """**不自愈**的浏览器读取（`M7B-44`）。
+
+    与 `_run_browser_op` 的**唯一**差别：**不** `restart_after_gone()` —— 连接类异常**原样抛出**，
+    由调用方回可操作错误（`I21`）。用于 `login_state` 这类**纯观测**命令：
+
+    用户关掉登录窗口后，每一轮轮询若都自愈重启，就会**反复弹出新窗口**
+    （2026-10-04 实测：一次点击 → `browser_start` 4 次 = 4 个窗口）。
+    """
+    return await op()
+
+
+async def _browser_no_restart(browser: Optional["BrowserAccess"], write: WriteLine,
+                              frame: P.Frame) -> Optional[driver.BrowserDriver]:
+    """**纯观测**用前置检查：浏览器不在 → 如实回 `daemon_down`，**绝不重启**（`M7B-44`）。
+
+    * `M7B-11` 的自愈对**生产命令**（`open_tab` / `run_script` / `logout_site` / `current_tab`）
+      **保留**（见 `_ensure_browser_restored` / `_run_browser_op`）；
+    * 但 `login_state` 是**轮询观测**命令：用户**主动关窗**时的每一轮若都自愈，就会反复弹窗口
+      ⇒ 观测命令一律不自愈 —— 浏览器不在 = 用户意图 / 会话已结束，**如实回报**，由调用方结束轮询。
+    * 两种「不在」分开给文案（`I21`：可操作、不误导）：还没起过浏览器 vs 起过但已退出。
+    """
+    if browser is None:
+        await _error(write, frame, "daemon_down", OFFLINE_HINT)
+        return None
+    if browser.driver is None:
+        hint = ("本次会话还没有启动浏览器（`login_state` 是**纯观测**命令，**不会**自动起浏览器）"
+                "—— 请先 `open_tab` 到目标站点，或在参数面板点「打开登录窗口」")
+        browser.note_command_error("daemon_down", hint)
+        await _error(write, frame, "daemon_down", hint)
+        return None
+    if not browser.alive:
+        hint = ("浏览器会话已不在运行（窗口被关闭？）—— 本次登录观测结束；"
+                "如需继续请重新点「打开登录窗口」（本命令**不会**自动重开浏览器，避免反复弹窗）")
+        browser.note_command_error("daemon_down", hint)
+        await _error(write, frame, "daemon_down", hint)
+        return None
+    return browser.driver
+
+
 async def _cmd_open_tab(frame: P.Frame, write: WriteLine,
                         browser: Optional["BrowserAccess"]) -> bool:
     """`open_tab`：导航到调用方给的 url（**无站点回落**，`I14`）+ `stage{open}`。"""
@@ -487,8 +576,14 @@ async def _cmd_login_state(frame: P.Frame, write: WriteLine,
     `state` 判定：给了期望名单（**可选**字段 `cookie_names`，来源 = 条目 `web.cookie_names`）→
     `logged_in` / `not_logged_in`；**未给 → `unknown`**（观测值照回，判定交调用方 —— `I14`：
     站点知识只在条目，Python 侧不自造）。
+
+    ⚠️ **M7B step 12（`M7B-44`）：本命令是「纯观测」—— 不自愈、不重启、也不做 L2 回灌。**
+    * 理由（2026-10-04 实测）：登录轮询每 1.5 s 发一条本命令；旧实现走 `_ensure_browser_restored`，
+      用户关掉登录窗口后**每一轮都把浏览器重新拉起**（一次点击 → `browser_start` 4 次 = 4 个窗口）；
+    * L2 回灌是「**起会话**」的动作 ⇒ 归 `open_tab`（它已按 `_ensure_browser_restored` 做）；
+      观测命令不做（真实流程里 `open_tab` 总在 `login_state` 之前：面板 / CLI / `ensure_session` 皆然）。
     """
-    if await _ensure_browser_restored(browser, write, frame) is None:
+    if await _browser_no_restart(browser, write, frame) is None:
         return True
     assert browser is not None
     provider = str(frame.field("provider") or "")
@@ -496,9 +591,10 @@ async def _cmd_login_state(frame: P.Frame, write: WriteLine,
     expected = [str(item) for item in raw_expected] if isinstance(raw_expected, list) else []
     suffix = str(frame.field("domain_suffix") or "")
     try:
-        cookies = await _run_browser_op(browser, lambda: browser.driver.cookies_for_domain(suffix))
+        cookies = await _read_op(lambda: browser.driver.cookies_for_domain(suffix))
     except Exception as exc:  # noqa: BLE001
-        hint = "读取 Cookie 失败：%s（可重试）" % exc
+        hint = ("读取 Cookie 失败：%s（窗口可能刚被关闭 —— 本命令**不会**自动重开浏览器；"
+                "可重试，或重新点「打开登录窗口」）" % exc)
         browser.note_command_error("daemon_down", hint)
         await _error(write, frame, "daemon_down", hint)
         return True
@@ -516,6 +612,305 @@ async def _cmd_login_state(frame: P.Frame, write: WriteLine,
                                http_only=any(bool(row.get("http_only")) for row in rows)))
     redact.log_event("login_state", "登录态观测（值不进协议、日志已脱敏）", provider=provider,
                      state=state, expected=expected, cookies=rows)
+    return True
+
+
+def script_payload(value: Any) -> Tuple[Any, bool]:
+    """`run_script` 的返回值 → `(可入帧的载荷, 是否截断)`（**不假装完整**）。
+
+    * 可 JSON 序列化且未超限 → 原样回（`truncated=false`）
+    * 超限 / 不可序列化（`undefined` / 循环引用 / 自定义对象）→ 降级为**文本前缀**
+      （`truncated=true`）—— 单帧 64 KiB 是词表硬约束（§6.1「容量与超时」），
+      **不能靠「碰巧不超」**。
+    """
+    try:
+        text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return repr(value)[:SCRIPT_RESULT_LIMIT_BYTES], True
+    if len(text.encode("utf-8")) <= SCRIPT_RESULT_LIMIT_BYTES:
+        return value, False
+    return text[:SCRIPT_RESULT_LIMIT_BYTES], True
+
+
+async def _cmd_run_script(frame: P.Frame, write: WriteLine,
+                          browser: Optional["BrowserAccess"]) -> bool:
+    """`run_script`（v2 · 批 3 step 8）：页面内执行**调用方给的**诊断 JS → `script_done{result,truncated}`。
+
+    * `script` 由 C++ 侧下发 —— Python 侧**不认识任何站点选择器**（`I14`：站点知识只在条目）；
+      本命令是 `--web-dom-dump` / `--web-adapter-selftest` 走新通道的**地基**（`M7B-18`）
+    * 语义 = **只读诊断**（枚举 DOM 候选 / 命中数）；注入提示词走 `send_prompt`（`I18` 物理分离）
+    * 失败一律 `err{script_error}` + 可操作 hint（空脚本 / 页面未就绪 / 脚本内异常）
+    """
+    if await _ensure_browser_restored(browser, write, frame) is None:
+        return True
+    assert browser is not None
+    provider = str(frame.field("provider") or "")
+    script = str(frame.field("script") or "")
+    if not script.strip():
+        hint = ("run_script 的 script 为空：请下发要执行的**诊断用** JS"
+                "（注入提示词请改用 send_prompt —— I18 物理分离）")
+        browser.note_command_error("script_error", hint)
+        await _error(write, frame, "script_error", hint)
+        return True
+    try:
+        value = await _run_browser_op(
+            browser, lambda: browser.driver.execute_script(script, return_by_value=True))
+    except Exception as exc:  # noqa: BLE001 —— 失败要可操作，不静默
+        hint = ("页面内执行脚本失败：%s: %s（可重试；若页面尚未就绪，先 open_tab 到目标页）"
+                % (type(exc).__name__, exc))
+        browser.note_command_error("script_error", hint)
+        await _error(write, frame, "script_error", hint)
+        return True
+    result, truncated = script_payload(value)
+    await write(P.encode_event("script_done", frame.id, result=result, truncated=truncated))
+    redact.log_event("run_script", "页面内脚本执行完成", provider=provider,
+                     script_bytes=len(script.encode("utf-8")), truncated=truncated,
+                     result_kind=type(result).__name__)
+    return True
+
+
+def site_key_of(url: str) -> str:
+    """URL → 站点键（**origin**）—— 与 C++ `web::site_key_of` **逐字同构**。
+
+    `scheme://` 之后到首个 `/` / `?` / `#` 之前，**全小写**；不含 `://`（`about:blank` /
+    相对路径）→ **原样返回**。跨语言同值是为了让 C++ 侧的站点键判定在这里也对得上
+    （`current_tab` 的 `site` 字段 / `SessionStore` 归档键 / `I15′` 的站点域过滤）。
+    """
+    text = str(url or "")
+    scheme = text.find("://")
+    if scheme < 0:
+        return text
+    end = len(text)
+    for mark in ("/", "?", "#"):
+        position = text.find(mark, scheme + 3)
+        if position >= 0:
+            end = min(end, position)
+    return text[:end].lower()
+
+
+async def _cmd_logout_site(frame: P.Frame, write: WriteLine,
+                           browser: Optional["BrowserAccess"]) -> bool:
+    """`logout_site`（v3 · 批 3 step 11）：按 **origin** 清站点数据（`Storage.clearDataForOrigin`）。
+
+    * `origin` **必须由调用方下发**（`I14`：Python 侧不读条目表、不自造站点）—— 缺 → 可操作错误
+    * 离线伺服（`browser is None`）→ `err{daemon_down}` + 引导（不假装成功，`I21`）
+    * 成功 → `stage{close, ok=true}`（**带请求 id** = 完成回包，§6.2 口径）
+      + L2 快照**立刻重写** —— 该 origin 的 Cookie 刚被清掉，快照若不重写，
+      下次启动**回灌会把登录态灌回来**（等于注销失效）
+    """
+    if browser is None:
+        await _error(write, frame, "daemon_down", OFFLINE_HINT)
+        return True
+    provider = str(frame.field("provider") or "")
+    origin = str(frame.field("origin") or "")
+    if not origin:
+        hint = ("缺少 origin：`logout_site` 需要**具体 origin**（如 https://example.com）；"
+                "由 C++ 侧按条目 `web.login_url` 派生后下发（I14：站点只来自条目）")
+        browser.note_command_error("daemon_down", hint)
+        await _error(write, frame, "daemon_down", hint)
+        return True
+    try:
+        await _run_browser_op(browser, lambda: browser.driver.clear_origin_data(origin))
+    except Exception as exc:  # noqa: BLE001 —— 失败要可操作，不静默
+        hint = ("按站点注销失败（%s）：%s: %s（可重试；若浏览器已被关，命令会自动重启浏览器）"
+                % (origin, type(exc).__name__, exc))
+        browser.note_command_error("daemon_down", hint)
+        await _error(write, frame, "daemon_down", hint)
+        return True
+    # L2（`I23②` 同族）：Cookie 已清 → 快照**必须同步重写**（否则下次回灌把登录态带回来）
+    browser.clear_upload_evidence(provider)   # v4（step 14）：上传痕迹随该站点登录态一起作废
+    snapshot = await browser.save_snapshot(reason="logout", provider=provider)
+    await write(P.encode_event("stage", frame.id, stage="close", ok=True))
+    redact.log_event("logout_site", "按站点注销完成（该 origin 数据已清；值不入日志）",
+                     provider=provider, origin=origin,
+                     snapshot_ok=bool(snapshot.get("ok")), snapshot_reason=snapshot.get("reason"))
+    return True
+
+
+async def _cmd_current_tab(frame: P.Frame, write: WriteLine,
+                           browser: Optional["BrowserAccess"]) -> bool:
+    """`current_tab`（v3 · 批 3 step 11）：读**当前 tab** URL → `tab{url, site}`。
+
+    * `site` = 站点键（origin，与 C++ 同构）⇒ 调用方据此判「tab 是否在某站点」
+      （旧通道 `window_on_site` / `current_window_site` 的替代）
+    * 离线 / 读失败 → `err{daemon_down}` + 可操作提示（**不假装**「不在任何站点」）
+    """
+    if browser is None:
+        await _error(write, frame, "daemon_down", OFFLINE_HINT)
+        return True
+    try:
+        url = await _run_browser_op(browser, lambda: browser.driver.current_tab_url())
+    except Exception as exc:  # noqa: BLE001
+        hint = "读取当前标签页失败：%s: %s（可重试）" % (type(exc).__name__, exc)
+        browser.note_command_error("daemon_down", hint)
+        await _error(write, frame, "daemon_down", hint)
+        return True
+    url = str(url or "")
+    site = site_key_of(url)
+    await write(P.encode_event("tab", frame.id, url=url, site=site))
+    redact.log_event("current_tab", "当前标签页观测", url_len=len(url), site=site)
+    return True
+
+
+async def _cmd_upload_image(frame: P.Frame, write: WriteLine,
+                            browser: Optional["BrowserAccess"]) -> bool:
+    """`upload_image`（**v4 · step 14**）：注入本地图片（**只注入、不发提示词** —— `I18` 物理分离）。
+
+    * 入口选择器（`attach_selector`）**由调用方按条目下发**（`I14`：Python 侧不读条目表）
+    * `attach=none` → `err{attach_unsupported}`（该站点无上传入口 → 引导改走官方 API）
+    * 主路线 = `DOM.setFileInputFiles`（`P7b-10` · `M7B-05` 实测）；`drop_zone` / `paste_only`
+      **本版本未实现** ⇒ 如实回 `attach_unsupported`（不假装成功）
+    * 成功 → `evidence{page, network:[], both:false}` + `stage{inject, ok}` + **记账**上传证据
+      （⚠️ **网络回执采集归 `P7b-11`** ⇒ `both=false` **如实标注**，不假装「双证据齐备」）
+    """
+    driver_now = await _ensure_browser_restored(browser, write, frame)
+    if driver_now is None:
+        return True
+    assert browser is not None
+    provider = str(frame.field("provider") or "")
+    images = [str(item) for item in (frame.field("images") or [])]
+    attach = str(frame.field("attach") or "auto")
+    selector = str(frame.field("attach_selector") or "")
+    if attach == "none":
+        hint = ("条目声明 `web.attach=none`（该站点无上传入口）—— 图片理解请改用官方 API 条目"
+                "（`--provider-dump` 查 `capabilities.vision=true` 的条目）")
+        browser.note_command_error("attach_unsupported", hint)
+        await _error(write, frame, "attach_unsupported", hint)
+        return True
+    if not selector:
+        hint = ("缺少 `attach_selector`：文件输入框选择器必须**由调用方按条目下发**（`I14`）；"
+                "若该站点走拖拽 / 粘贴入口（`web.attach=drop_zone|paste_only`），本版本**尚未实现**")
+        browser.note_command_error("attach_unsupported", hint)
+        await _error(write, frame, "attach_unsupported", hint)
+        return True
+    try:
+        outcome = await _run_browser_op(
+            browser, lambda: browser.driver.set_file_input_files(selector, images))
+    except driver.DriverContentError as exc:
+        hint = ("图片注入失败：%s（可用 `--web-adapter-selftest --provider %s` 复核上传入口选择器）"
+                % (exc, provider))
+        browser.note_command_error("attach_unsupported", hint)
+        await _error(write, frame, "attach_unsupported", hint)
+        return True
+    except Exception as exc:  # noqa: BLE001 —— 一律可操作，不静默
+        hint = "图片注入失败：%s: %s（可重试）" % (type(exc).__name__, exc)
+        browser.note_command_error("upload_timeout", hint)
+        await _error(write, frame, "upload_timeout", hint)
+        return True
+    files = int(outcome.get("count") or 0)
+    browser.mark_upload_evidence(provider, count=len(images), files=files)
+    # 证据：页面侧已注入；**网络回执未采集**（归 `P7b-11`）⇒ `both=false` 如实标注（I21）
+    await write(P.encode_event("evidence", frame.id,
+                               page={"files": files, "selector": selector},
+                               network=[], both=False))
+    await write(P.encode_event("stage", frame.id, stage="inject", ok=True))
+    redact.log_event("upload_image", "图片已注入（**只注入、不发提示词**；路径 / 内容不进日志）",
+                     provider=provider, count=len(images), files=files,
+                     network_evidence=False)
+    return True
+
+
+async def _cmd_send_prompt(frame: P.Frame, write: WriteLine,
+                           browser: Optional["BrowserAccess"]) -> bool:
+    """`send_prompt`（**v4 · step 14**）：挑输入框 → **真打字**注入 → 按 `send` 触发 → `stage{send, ok}`。
+
+    * 输入框 = `input_selector[]` 里**首个「命中且可见」**者（`M7B-24`）；全不中 → `err{send_timeout}`
+      （**不回落、不猜** —— `I14`）
+    * 注入 = pydoll 原生**真打字**（`keyboard.type_text` · humanize），**不是** JS 一次性灌值
+    * 触发 = `send.kind`：`key` → `press_key(send.value)`（缺省 `Enter`）；`click` → `click_selector(send.value)`
+    * `upload_evidence=true` 且**本会话无上传成功证据** → `err{no_upload_evidence}`（`I18` 协议级拦截）；
+      **纯文本生成不置该位**（不误拦）
+    """
+    driver_now = await _ensure_browser_restored(browser, write, frame)
+    if driver_now is None:
+        return True
+    assert browser is not None
+    provider = str(frame.field("provider") or "")
+    prompt = str(frame.field("prompt") or "")
+    selectors = [str(item) for item in (frame.field("input_selector") or [])]
+    send = frame.field("send") or {}
+    if frame.field("upload_evidence") is True and not browser.has_upload_evidence(provider):
+        hint = ("本次运行**没有**上传成功证据，但命令要求（`upload_evidence=true`）⇒ 按 `I18` 拒绝发送；"
+                "请在界面上显式选择「不含图片继续」（并记录「本次未含图片」），"
+                "或先在本次会话里成功调用 `upload_image`")
+        browser.note_command_error("no_upload_evidence", hint)
+        await _error(write, frame, "no_upload_evidence", hint)
+        return True
+    kind = str(send.get("kind") or "key")
+    value = str(send.get("value") or ("Enter" if kind == "key" else ""))
+    try:
+        selector = await _run_browser_op(
+            browser, lambda: browser.driver.pick_visible(selectors))
+        typed = await _run_browser_op(
+            browser, lambda: browser.driver.type_humanized(selector, prompt))
+        if kind == "click":
+            await _run_browser_op(browser, lambda: browser.driver.click_selector(value))
+        else:
+            await _run_browser_op(browser, lambda: browser.driver.press_key(value))
+    except driver.DriverContentError as exc:
+        hint = ("注入 / 发送失败：%s（可用 `--web-adapter-selftest --provider %s` 复核选择器）"
+                % (exc, provider))
+        browser.note_command_error("send_timeout", hint)
+        await _error(write, frame, "send_timeout", hint)
+        return True
+    except Exception as exc:  # noqa: BLE001 —— 一律可操作，不静默
+        hint = "注入 / 发送失败：%s: %s（可重试）" % (type(exc).__name__, exc)
+        browser.note_command_error("send_timeout", hint)
+        await _error(write, frame, "send_timeout", hint)
+        return True
+    await write(P.encode_event("stage", frame.id, stage="send", ok=True))
+    redact.log_event("send_prompt", "提示词已注入并触发发送（内容不进日志）",
+                     provider=provider, selector=selector, chars=typed.get("chars"),
+                     send_kind=kind, prompt_bytes=len(prompt.encode("utf-8")))
+    return True
+
+
+async def _cmd_read_answer(frame: P.Frame, write: WriteLine,
+                           browser: Optional["BrowserAccess"]) -> bool:
+    """`read_answer`（**v4 · step 14**）：轮询 `answer_selector` → `answer_done{text, text_bytes, truncated}`。
+
+    * 判据 = `done_when`（缺省「文本连续 N 轮稳定」）；硬上限 `poll_ms` / `max_polls` / `timeout_ms`
+    * 未取到 → `err{send_timeout}` + 可操作 hint（**不假装**拿到空答案）
+    * 超 48 KiB → `truncated=true` + 前缀（`I21`：调用方须显式标注「已截断」· `M7B-55`）
+    * **增量（`delta`）走 `M7B-21`**（CDP 流式）—— 本命令为**轮询式**，调用方按 `I22` 标注「非流式」
+    """
+    driver_now = await _ensure_browser_restored(browser, write, frame)
+    if driver_now is None:
+        return True
+    assert browser is not None
+    provider = str(frame.field("provider") or "")
+    selectors = [str(item) for item in (frame.field("answer_selector") or [])]
+    kwargs: Dict[str, Any] = {"done_when": frame.field("done_when") or {}}
+    poll_ms = frame.field("poll_ms")
+    max_polls = frame.field("max_polls")
+    timeout_ms = frame.field("timeout_ms")
+    if isinstance(poll_ms, int) and not isinstance(poll_ms, bool):
+        kwargs["poll_ms"] = poll_ms
+    if isinstance(max_polls, int) and not isinstance(max_polls, bool):
+        kwargs["max_polls"] = max_polls
+    if isinstance(timeout_ms, (int, float)) and not isinstance(timeout_ms, bool):
+        kwargs["timeout_s"] = float(timeout_ms) / 1000.0
+    try:
+        outcome = await _run_browser_op(
+            browser, lambda: browser.driver.read_answer_text(selectors, **kwargs))
+    except Exception as exc:  # noqa: BLE001 —— 可操作错误，不静默
+        hint = "读取回答失败：%s: %s（可重试）" % (type(exc).__name__, exc)
+        browser.note_command_error("send_timeout", hint)
+        await _error(write, frame, "send_timeout", hint)
+        return True
+    if not outcome.get("found"):
+        hint = ("未取到答案文本（`answer_selector` 未命中或站点仍在生成）；"
+                "可用 `--web-adapter-selftest --provider " + provider + "` 复核选择器")
+        browser.note_command_error("send_timeout", hint)
+        await _error(write, frame, "send_timeout", hint)
+        return True
+    await write(P.encode_event("answer_done", frame.id,
+                               text=outcome.get("text", ""),
+                               text_bytes=int(outcome.get("text_bytes") or 0),
+                               truncated=bool(outcome.get("truncated"))))
+    redact.log_event("read_answer", "回答正文已取回（内容不进日志）", provider=provider,
+                     polls=outcome.get("polls"), text_bytes=outcome.get("text_bytes"),
+                     truncated=bool(outcome.get("truncated")))
     return True
 
 

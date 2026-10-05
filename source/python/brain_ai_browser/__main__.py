@@ -16,11 +16,13 @@
 退出码
     0 = 通过 · 1 = 有失败 · 2 = 参数错误
 
-⚠️ 批 1 当前边界（**如实声明，不越权宣称**）：
-    * `--serve` = **守护进程主循环**（`daemon.py`：管道监听线程 × asyncio 事件循环）；
-      `hello` / `open_tab` / `login_state` / `shutdown` 已实现，浏览器**按需启动**；
-      `upload_image` / `send_prompt` / `read_answer` 仍回 `err{daemon_down, hint=尚未实现}`
-      （词表缺「未实现」码 = 开口项 **`MB-Q7`**）。
+✅ 批 3 step 14 起（**词表 v4**）**全部 10 条命令均已实现**：
+    * `--serve` = **守护进程主循环**（`daemon.py`：管道监听线程 × asyncio 事件循环）：
+      `hello` / `open_tab` / `login_state` / `upload_image` / `send_prompt` / `read_answer` /
+      `run_script` / `logout_site` / `current_tab` / `shutdown`（浏览器**按需启动**）；
+      `not_implemented` 码**保留但当前无使用点**（留给「先入表、后实现」的未来命令）。
+    * **内容返回**（注入 → 发送 → 取回答）= `send_prompt` + `read_answer`
+      （选择器**由调用方下发** · `I14`；注入 = pydoll **真打字**）；`run_script` **降级为诊断专用**。
     * `--driver-selftest` / `--daemon-selftest` 均含**离线组**（不碰浏览器）与**真机组**；
       依赖缺失时真机组**显式 SKIP**（不静默、不假装通过 —— `I21` 同族）。
     * **`VB2-38` 已在 Python 侧生效**（`daemon.close_verdict` 纯逻辑 + 端到端关闭协议）；
@@ -77,7 +79,7 @@ class _Counter:
 
 def _protocol_selftest(counter: _Counter) -> None:
     """`VB2-29` / `VB2-32` 的 Python 侧等价断言（纯函数、离线）。"""
-    print("[协议词表] 管道协议 v1（§6.1）离线自检")
+    print("[协议词表] 管道协议 v3（§6.1）离线自检")
 
     # ---- VB2-29① 合法命令帧：v / kind / id / name 解析正确 ----
     hello = P.parse_line(P.encode_command("hello", "7"))
@@ -115,7 +117,7 @@ def _protocol_selftest(counter: _Counter) -> None:
     counter.check(
         isinstance(unknown_reason, str) and "未知命令" in unknown_reason
         and isinstance(missing_reason, str) and "缺少字段" in missing_reason,
-        "VB2-29③ 未知命令 / 缺必需字段 → 明确原因（词表 7 命令 + 必需字段）",
+        "VB2-29③ 未知命令 / 缺必需字段 → 明确原因（词表 10 命令 + 必需字段）",
         "%r / %r" % (unknown_reason, missing_reason))
 
     # ---- VB2-29④ err{bad_frame} 回帧可生成且 id 与请求配对 ----
@@ -156,6 +158,117 @@ def _protocol_selftest(counter: _Counter) -> None:
                   and stage.name == "stage" and stage.field("stage") == "answer",
                   "VB2-32②/I22 无增量 → 置「非流式（轮询）」标记（不静默改变行为）",
                   "")
+
+    # ---- VB2-41①②（批 3 step 8 · 词表 v2）：`run_script` 入词表 + 结果截断保护 ----
+    run_required = P.COMMAND_REQUIRED_FIELDS.get("run_script", ())
+    counter.check(
+        "run_script" in P.KNOWN_COMMANDS and "provider" in run_required and "script" in run_required
+        and "script_done" in P.KNOWN_EVENTS and "script_error" in P.ERROR_CODES
+        and PROTO_VERSION >= 2,
+        "VB2-41① 词表 ≥v2：`run_script`（必需 provider+script）+ 事件 `script_done` + 错误码 `script_error`",
+        "v=%d cmd=%d evt=%d" % (PROTO_VERSION, len(P.KNOWN_COMMANDS), len(P.KNOWN_EVENTS)))
+
+    small_value, small_truncated = daemon.script_payload({"ok": 1})
+    big_value, big_truncated = daemon.script_payload(
+        {"pad": "x" * (daemon.SCRIPT_RESULT_LIMIT_BYTES + 10)})
+    counter.check(
+        small_value == {"ok": 1} and not small_truncated
+        and big_truncated and isinstance(big_value, str)
+        and len(big_value) <= daemon.SCRIPT_RESULT_LIMIT_BYTES,
+        "VB2-41② `run_script` 结果截断保护：小结果原样回；超 48 KiB → 截断 + `truncated=true`（不假装完整）",
+        "small_truncated=%s big_truncated=%s" % (small_truncated, big_truncated))
+
+    # ---- VB2-42①②③（批 3 step 11 · 词表 v3）：会话族命令 + 站点键跨语言同构 ----
+    logout_required = P.COMMAND_REQUIRED_FIELDS.get("logout_site", ())
+    counter.check(
+        PROTO_VERSION >= 3 and "logout_site" in P.KNOWN_COMMANDS
+        and "provider" in logout_required and "current_tab" in P.KNOWN_COMMANDS
+        and P.COMMAND_REQUIRED_FIELDS.get("current_tab") == ()
+        and "tab" in P.KNOWN_EVENTS and "not_implemented" in P.ERROR_CODES
+        and len(P.KNOWN_COMMANDS) == 10 and len(P.KNOWN_EVENTS) == 8,
+        "VB2-42① 词表 ≥v3：`logout_site`（必需 provider）+ `current_tab`（无必需字段）+ 事件 `tab`"
+        " + 错误码 `not_implemented`（闭合 MB-Q7）；词表 10 命令 / 8 事件",
+        "v=%d cmd=%d evt=%d" % (PROTO_VERSION, len(P.KNOWN_COMMANDS), len(P.KNOWN_EVENTS)))
+
+    tab_line = P.encode_event("tab", "21", url="https://example.com/x",
+                              site="https://example.com")
+    tab_frame = P.parse_line(tab_line)
+    counter.check(
+        isinstance(tab_frame, P.Frame) and tab_frame.is_event() and tab_frame.name == "tab"
+        and tab_frame.field("site") == "https://example.com",
+        "VB2-42② `tab` 事件入词表：`current_tab` 回包（url / site）可生成且可解析",
+        tab_line)
+
+    counter.check(
+        daemon.site_key_of("https://Example.COM/a/b?q=1#f") == "https://example.com"
+        and daemon.site_key_of("about:blank") == "about:blank"
+        and daemon.site_key_of("") == "",
+        "VB2-42③ `site_key_of` 与 C++ **逐字同构**（去路径/查询/片段 + 全小写；无 `://` 原样）",
+        "%r / %r" % (daemon.site_key_of("https://Example.COM/a/b?q=1#f"),
+                     daemon.site_key_of("about:blank")))
+
+    # ---- VB2-44①~⑤（批 3 step 14 · 词表 v4）：站字段组 + 内容返回纯函数 ----
+    send_required = P.COMMAND_REQUIRED_FIELDS.get("send_prompt", ())
+    answer_required = P.COMMAND_REQUIRED_FIELDS.get("read_answer", ())
+    bad_send = P.parse_line(P.encode_command(
+        "send_prompt", "9", provider="p", prompt="x", input_selector="input",
+        send={"kind": "key", "value": "Enter"}))
+    no_selector = P.parse_line(P.encode_command(
+        "send_prompt", "9", provider="p", prompt="x", send={"kind": "key", "value": "Enter"}))
+    bad_kind = P.parse_line(P.encode_command(
+        "send_prompt", "9", provider="p", prompt="x", input_selector=["input"],
+        send={"kind": "clickk", "value": "b"}))
+    good_send = P.parse_line(P.encode_command(
+        "send_prompt", "9", provider="p", prompt="x", input_selector=["a", "b"],
+        send={"kind": "key", "value": "Enter"}, upload_evidence=True))
+    bad_evidence = P.parse_line(P.encode_command(
+        "send_prompt", "9", provider="p", prompt="x", input_selector=["a"],
+        send={"kind": "key", "value": "Enter"}, upload_evidence="yes"))
+    counter.check(
+        PROTO_VERSION == 4 and "input_selector" in send_required and "send" in send_required
+        and "answer_selector" in answer_required
+        and P.validate_command(bad_send) is not None       # 选择器给成字符串 → 非法
+        and P.validate_command(no_selector) is not None    # 缺必需字段
+        and P.validate_command(bad_kind) is not None       # send.kind 取值非法
+        and P.validate_command(bad_evidence) is not None   # upload_evidence 非布尔
+        and P.validate_command(good_send) is None
+        and len(P.KNOWN_COMMANDS) == 10 and len(P.KNOWN_EVENTS) == 8,
+        "VB2-44④ 词表 v4（站字段组）：`send_prompt` 必需 provider+prompt+input_selector+send、"
+        "`read_answer` 必需 answer_selector；字段校验一律回**可操作原因**；命令 / 事件计数**不变**",
+        "v=%d cmd=%d evt=%d reason=%s" % (PROTO_VERSION, len(P.KNOWN_COMMANDS),
+                                          len(P.KNOWN_EVENTS), P.validate_command(bad_kind)))
+
+    picked = driver.pick_visible_index(
+        [{"hits": 0, "visible": False}, {"hits": 2, "visible": False},
+         {"hits": 1, "visible": True}, {"hits": 3, "visible": True}])
+    counter.check(
+        picked == 2 and driver.pick_visible_index([]) == -1
+        and driver.pick_visible_index([{"hits": 5, "visible": False}]) == -1,
+        "VB2-44① 多候选判定（M7B-24）：首个「命中且可见」者胜；**全不中 → -1**（I14：不回落、不猜）",
+        "picked=%s" % picked)
+
+    counter.check(
+        driver.done_hit({"kind": "selector_present"}, True, 0)
+        and not driver.done_hit({"kind": "selector_present"}, False, 9)
+        and driver.done_hit({"kind": "selector_gone"}, False, 0)
+        and not driver.done_hit({"kind": "selector_gone"}, True, 9)
+        and driver.done_hit({}, True, driver.DEFAULT_STABLE_ROUNDS)
+        and not driver.done_hit({}, True, driver.DEFAULT_STABLE_ROUNDS - 1),
+        "VB2-44② `done_when` 判定：`selector_present` / `selector_gone` / 缺省 = 文本稳定 N 轮"
+        "（与 `dom_web_client.kPollScript` 同口径）",
+        "stable_rounds=%d" % driver.DEFAULT_STABLE_ROUNDS)
+
+    short_text, short_bytes, short_cut = driver.answer_payload("你好")
+    long_body = "汉" * (driver.ANSWER_TEXT_LIMIT_BYTES // 3 + 100)
+    long_text, long_bytes, long_cut = driver.answer_payload(long_body)
+    counter.check(
+        short_text == "你好" and short_bytes == 6 and not short_cut
+        and long_cut and long_bytes == len(long_body.encode("utf-8"))
+        and len(long_text.encode("utf-8")) <= driver.ANSWER_TEXT_LIMIT_BYTES
+        and long_text == "汉" * len(long_text),
+        "VB2-44③ 截断口径（I21 · M7B-55）：未超限原样回；超 48 KiB → **UTF-8 安全前缀** + "
+        "`truncated=true` + 原始字节数（不假装完整）",
+        "short=%d/%s long=%d/%s" % (short_bytes, short_cut, long_bytes, long_cut))
 
 
 # ============================================================================
@@ -491,6 +604,14 @@ async def _driver_online(counter: "_Counter", *, headless: bool, timeout_s: floa
         counter.check(script_value == 42,
                       "step3-④ execute_script 两层 result 解包 → 42", repr(script_value))
 
+        # 批 3 step 8：**结构化结果必须 `return_by_value=True`**
+        #  （默认 False 时 CDP 对对象 / 数组只回 `objectId` ⇒ 解包得 `None` ⇒ 静默 null）
+        script_obj = await drv.execute_script("return {a:1};", return_by_value=True)
+        counter.check(script_obj == {"a": 1},
+                      "step8-① `return_by_value=True` → 结构化对象可用"
+                      "（默认 False 只回 objectId ⇒ null · 2026-10-03 实测教训）",
+                      repr(script_obj))
+
         cookies = await drv.cookies_all()
         filtered = await drv.cookies_for_domain("example.invalid")
         counter.check(isinstance(cookies, list) and filtered == [],
@@ -772,6 +893,35 @@ def _daemon_online(counter: "_Counter", *, headless: bool, timeout_s: float) -> 
                               "%r · heals=%d" % (reply, len(heals)))
             else:
                 counter.check(False, "M7B-11⑧ 自愈前置条件：拿不到 browser_pid（L4 缺口）", "")
+
+            # ④′ **M7B-44（step 12）**：观测命令**不自愈** —— 关掉浏览器后发 `login_state`，
+            #     必须回**可操作错误**，且**不得**冒出新的 `browser_start`（否则 = 又弹一个窗口）。
+            #     ⚠️ 这一步是「一次点击弹出 4 个窗口」的**回归防线**（旧实现每轮轮询都重开浏览器）
+            starts_now = _log_records("browser_start", since)
+            live_pid = starts_now[-1].get("browser_pid") if starts_now else None
+            if isinstance(live_pid, int):
+                subprocess.run(["taskkill", "/PID", str(live_pid), "/F"],
+                               capture_output=True, check=False)
+                time.sleep(1.5)
+                before_starts = len(_log_records("browser_start", since))
+                reply = _daemon_call(client, "login_state", "d4b", provider="selftest",
+                                     domain_suffix="brain-ai.invalid", timeout_ms=20_000)
+                after_starts = len(_log_records("browser_start", since))
+                hint = str(reply.field("hint") or "") if isinstance(reply, P.Frame) else ""
+                counter.check(isinstance(reply, P.Frame) and reply.is_error()
+                              and reply.name == "daemon_down"
+                              and after_starts == before_starts and "不会" in hint,
+                              "M7B-44① 观测命令 `login_state` **不自愈**：浏览器被关后回"
+                              "err{daemon_down} + **不再重开**（browser_start %d → %d）"
+                              % (before_starts, after_starts), repr(reply))
+                # 生产命令的自愈**保留**（`M7B-11` 行为不变）—— 顺便把会话复原给 ⑤ 收尾
+                reply = _daemon_call(client, "open_tab", "d4c", provider="selftest",
+                                     url="about:blank", timeout_ms=int(timeout_s * 1000))
+                counter.check(isinstance(reply, P.Frame) and reply.field("ok") is True,
+                              "M7B-44② `open_tab` 的自愈**保留**（生产命令不受本步影响）",
+                              repr(reply))
+            else:
+                counter.check(False, "M7B-44① 前置条件：拿不到 browser_pid（L4 缺口）", "")
 
             # ⑤ shutdown → stage{close} → 守护进程**等浏览器进程退出后**自行退出（I23①）
             client.write_line(P.encode_command("shutdown", "d5", grace_ms=5_000))
@@ -1167,9 +1317,10 @@ def main(argv: List[str]) -> int:
     if "--session-selftest" in flags:
         _session_selftest(counter, headless=headless, timeout_s=driver_timeout_s)
     if stub:
-        print("   ----  桩边界：`upload_image` / `send_prompt` / `read_answer` 仍未实现（批 3）；"
-              "C++ 侧关闭协议同步 / `pydoll_channel` 接线 / 诊断换代待 step 6；"
-              "`session.py`（L2 快照 · `VB2-39`）**已在 Python 侧生效**（`--session-selftest`）")
+        print("   ----  桩边界（**v4 起**）：全部 10 条命令均已实现；`upload_image` 的**网络回执证据**"
+              "（`evidence.both=true`）归 `P7b-11`（当前**如实**回 `both=false`）；"
+              "`stream_deltas`（CDP 增量 · `M7B-21`）与 `dom_chat` 生产切换（**P4**）"
+              "（含 C++ 侧接线已落地的 `channel::{send_prompt,read_answer,upload_image}`）")
     print("=== 自检结果: %d 通过 / %d 失败 ===" % (counter.passed, counter.failed))
     return 0 if counter.failed == 0 else 1
 
