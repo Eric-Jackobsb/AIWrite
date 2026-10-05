@@ -71,24 +71,25 @@
 | 项 | 内容 | 理由 |
 |---|---|---|
 | `PD-03` 设置面板 | 配置不再手改 `config.toml` | 非技术用户不会手改配置文件 |
-| `PM-01` WebView2 Runtime 检测与引导 | 缺失时给官方下载链接 / 引导安装 | 非技术用户不会装 Runtime —— ⚠️ **已作废（2026-09-28 · [M7B.md](actionPlan/M7B.md) `MB-D0-2`）**：WebView2 退场后**不再需要 Runtime 检测**，改由 `M7B-14`（**浏览器检测与引导**：Chrome 缺失 → Edge 兜底）替代 |
+| `PM-01` WebView2 Runtime 检测与引导 | 缺失时给官方下载链接 / 引导安装 | 非技术用户不会装 Runtime —— ⚠️ **已作废（2026-09-28 · [M7B.md](Archive/actionPlan/M7B.md) `MB-D0-2`）**：WebView2 退场后**不再需要 Runtime 检测**，改由 `M7B-14`（**浏览器检测与引导**：Chrome 缺失 → Edge 兜底）替代 |
 | `P7b-15` Python 运行时检测与打包策略 | 检测 + 引导，或**内嵌**（见 §十一 `RQ-3`） | 非技术用户不会装 Python |
 | `PB2-24` 自建站点 UI 闭环 | 新建条目 + 重新加载配置表 + 下拉即时刷新 + 配置错误可见 | **`RM-D4`**：用户**不接触 JSON** |
 
 > 这四条是"面向 C"的**最低门槛**；`PB2-24` 是 `RM-D4` 决策的直接落地。
 
-### 轨道 C：`M7B` 网页通道唯一化（内部版本 v0.5.4 · 已立项 · **前置验证 7/9 已过 · 批 1 step 1~6 已落地（含 **L2 加密快照** 与 **C++ 新通道 `pydoll_channel`**）· Python 运行代码在 `source/python/`、运行期数据在 `~/.brain-ai`**）
+### 轨道 C：📦 **`M7B` 网页通道唯一化 —— 已归档（2026-10-05 · 路线退场 · 未完成）**　现行 **方案 E** → [actionPlan/M8.md](actionPlan/M8.md)（文字生成回 WebView2 + 图片上传走 C++ native HTTP · Pydoll 栈退场）。历史状态（原）： · **前置验证 7/9 已过 · 批 1 step 1~6 已落地（含 **L2 加密快照** 与 **C++ 新通道 `pydoll_channel`**）· Python 运行代码在 `source/python/`、运行期数据在 `~/.brain-ai`**）
 
 | 项 | 内容 |
 |---|---|
-| 依据 | 用户 2026-09-28 决议 7 条（[actionPlan/M7B.md](actionPlan/M7B.md) §2） |
+| 依据 | 用户 2026-09-28 决议 7 条（[actionPlan/M7B.md](Archive/actionPlan/M7B.md) §2） |
 | 目标 | **WebView2 退场** + 网页版**全部走 Pydoll**（`builtin:deepseek` 协议栈退役）+ **CDP `Network` 事件重建 SSE 增量** |
 | 登录态 | **只维护一套**（`~/.brain-ai/pydoll-profile`）；旧 `webview2` 登录态**不可迁移** → 老用户重登一次 |
 | 与 P7-b 关系 | **通道底座归 `M7B`**（批 1–2），P7-b 只保留**图片上传专有部分**（`P7b-10`/`11`/`13`/`14`）；前置验证**合并执行一次**（**进行中：`M7B-01`/`03`/`05`/`08`/`09` 已过**；`P7b-01`/`P7b-04` 已随 `M7B-01`/`M7B-05` 通过） |
 | 不变量 | **`I2` 作废** → 新增 `I20`（CLI 契约：`--provider` 必填 / 缺参列候选 + 退出码 2）/ `I21`（不静默降级）/ `I22`（流式降级显式） |
 | 回滚 | **先建后拆**（批 1–4 期间 WebView2 仍在，可切回）；批 5 后只能 `git revert` |
+| 📦 归档 | **2026-10-05 · 整体退场**：用户拍板**方案 E** ⇒ 本轨道**不再执行**（**WebView2 不退场**；改为「文字生成走 WebView2 + 图片上传走 **C++ native HTTP**」）。计划全文 [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md)；现行 [actionPlan/M8.md](actionPlan/M8.md) |
 
-> `M7B` 使本文件 §四 轨道 B 的 `PM-01` 作废，并使 §十一 `RQ-3`（Python 运行时）**升级为 M6 硬门槛**。
+> `M7B` 使本文件 §四 轨道 B 的 `PM-01` 作废，并使 §十一 `RQ-3`（Python 运行时）**升级为 M6 硬门槛**。　📦 **已推翻（2026-10-05 · 方案 E）**：`PM-01` **恢复**（WebView2 回归 ⇒ M6-02 引导仍由它承接）、`RQ-3` **作废**（**运行期无 Python**）—— 见 [actionPlan/M8.md](actionPlan/M8.md)。
 
 ---
 
@@ -175,7 +176,7 @@ M1 → M2 → M4 → M5 → M7 第一轮 → P7-a → P7-b
 | Python 运行时打包 | 用户机器无 Python | `P7b-15` 检测 + 引导，或**内嵌**（`RQ-3`） |
 | 站点改版 | 选择器失效 | `PB2-24` UI 闭环（**用户不接触 JSON**，`RM-D4`） |
 | 匿名 Cookie 误报 | 面板显示"已登录"但实际未登录 | `D-30`：`cookie_names` 命中优先（待拍板落地） |
-| 安装包体积 | **内嵌 Python**（`WebView2` **退场后不再含 WebView2 Runtime**，净变化待评估） | 评估"内嵌 vs 引导"，定体积预算（`RQ-3`）；打包项见 [actionPlan/M7B.md](actionPlan/M7B.md) `M7B-38` |
+| 安装包体积 | **内嵌 Python**（`WebView2` **退场后不再含 WebView2 Runtime**，净变化待评估） | 评估"内嵌 vs 引导"，定体积预算（`RQ-3`）；打包项见 [actionPlan/M7B.md](Archive/actionPlan/M7B.md) `M7B-38` |
 | 范围失控 | 拖住 M6 | §十「不做清单」**硬约束**；新需求先进 §六 滚动发布 |
 
 ---
@@ -196,10 +197,10 @@ M1 → M2 → M4 → M5 → M7 第一轮 → P7-a → P7-b
 |---|---|---|---|
 | `RQ-1` | **滚动发布的形态** | **未答** | 建议：内部滚动（不发布到公开渠道）+ 每批提交打内部版本号；对非技术用户的正式交付只在 M6 安装包形态下发生 |
 | `RQ-2` | **安装包形态** | MSI / NSIS / Inno Setup / 自解压 zip | 建议 **Inno Setup 或 NSIS**：单 exe、可内置前置检测（WebView2 / Python / VC++ 运行时）、体积可控；MSI 更适合企业分发 |
-| `RQ-3` | **Python 运行时策略** | 检测引导 vs 内嵌 | 建议随安装包**内嵌**（面向非技术用户）；`P7b-15` 按此立项，M6 打包时定最终体积预算 |
+| `RQ-3` | ~~**Python 运行时策略**~~ | ~~检测引导 vs 内嵌~~ | 📦 **作废（2026-10-05 · 方案 E）**：**运行期无 Python**（`P7b-15` 随 Pydoll 栈退场）；M6 打包口径回归「**WebView2 Runtime 检测 + 引导**」（`PM-01` 复活） |
 | `RQ-4` | P7-b 内部版本号 `v0.5.3` | 待确认 | — |
-| `RQ-5` | **`M7B` 内部版本号 `v0.5.4`** | 待确认（归 [actionPlan/M7B.md](actionPlan/M7B.md) `MB-D5`） | 建议 v0.5.4；顺序建议 **P7-a → `M7B` 批 1–2（通道底座）→ P7-b 上传 + `M7B` 批 3+** |
-| `RQ-6` | **CDP 增量流式主路线**（三选一） | ✅ **已实测（2026-09-28 · `M7B-03`）**：主路线 = `Fetch.takeResponseBodyAsStream` + `IO.read(size=128~256)`（`size` 即推送粒度，实测 256 B/帧、41 帧 / 10 KB 流；仅 `EventSource` 站点适用 / 只给进度） | **已按实测收口 —— `MB-Q1` 已结案**（见 [actionPlan/M7B.md](actionPlan/M7B.md) §14.2 / §5）；兜底 DOM 轮询须**显式标注非流式**（`I22`） |
+| `RQ-5` | **版本号 `v0.5.4`（内部）** | 📦 已改归 [actionPlan/M8.md](actionPlan/M8.md) `M8-Q4`（原归 [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md) `MB-D5`） | 建议**沿用 v0.5.4**（该号**从未对外发布**）；原顺序建议随 `M7B` 退场作废 |
+| `RQ-6` | **CDP 增量流式主路线**（三选一） | ✅ **已实测（2026-09-28 · `M7B-03`）**：主路线 = `Fetch.takeResponseBodyAsStream` + `IO.read(size=128~256)`（`size` 即推送粒度，实测 256 B/帧、41 帧 / 10 KB 流；仅 `EventSource` 站点适用 / 只给进度） | **已按实测收口 —— `MB-Q1` 已结案**（见 [actionPlan/M7B.md](Archive/actionPlan/M7B.md) §14.2 / §5）；兜底 DOM 轮询须**显式标注非流式**（`I22`）　📦 **随 `M7B` 退场（2026-10-05）**：CDP 增量方案**不再实现** —— 方案 E 的图片上传走 **native HTTP**、文字生成**回 WebView2** ⇒ 仍为**轮询式**（`I22` 保留） |
 
 ---
 
@@ -212,6 +213,6 @@ M1 → M2 → M4 → M5 → M7 第一轮 → P7-a → P7-b
 | 3 | 目标用户：**非技术用户**（原多处按"开发者 / 自用"口径） | [ai_writer_nodes.md](ai_writer_nodes.md) §1 定位、[节点编辑器使用说明.md](节点编辑器使用说明.md)、[actionPlan/M6.md](actionPlan/M6.md) §一 | 定位段补"目标用户 = 非技术用户；术语与配置默认不暴露" |
 | 4 | 版本策略：**滚动发布**（对外不强调版本号） | [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md)、[CHANGELOG.md](CHANGELOG.md) | 各补一行口径说明（版本号仅用于内部追踪与回归基线） |
 | 5 | IPC 抽象命名 **`IpcChannel`** | [actionPlan/M7.md](actionPlan/M7.md) §12（`P7b-06`/`P7b-07`/`P7b-08`） | 落点补抽象层（Windows = 命名管道 + 事件；未来 Unix = domain socket + poll，`RM-D3`） |
-| 6 | **网页通道唯一化**（`M7B`）：WebView2 **退场**、协议栈退役、单登录态、`I2` 作废（2026-09-28） | [actionPlan/M7.md](actionPlan/M7.md) §13 行「不改协议栈」+ §17 `Q2`/`Q3`（**均已标作废**）；本文件 §四 轨道 B `PM-01`（**已标作废**）；[actionPlan/milestone_plan.md](actionPlan/milestone_plan.md)；[ai_writer_nodes.md](ai_writer_nodes.md) §2 依赖表；[节点编辑器使用说明.md](节点编辑器使用说明.md)；[../source/README.md](../source/README.md)（`I2` 解冻 + `I20`/`I21`/`I22`） | 计划落在 [actionPlan/M7B.md](actionPlan/M7B.md)；**逐项同步状态见该文 §11.2** |
+| 6 | **网页通道唯一化**（`M7B`）：WebView2 **退场**、协议栈退役、单登录态、`I2` 作废（2026-09-28） | [actionPlan/M7.md](actionPlan/M7.md) §13 行「不改协议栈」+ §17 `Q2`/`Q3`（**均已标作废**）；本文件 §四 轨道 B `PM-01`（**已标作废**）；[actionPlan/milestone_plan.md](actionPlan/milestone_plan.md)；[ai_writer_nodes.md](ai_writer_nodes.md) §2 依赖表；[节点编辑器使用说明.md](节点编辑器使用说明.md)；[../source/README.md](../source/README.md)（`I2` 解冻 + `I20`/`I21`/`I22`） | 计划落在 [actionPlan/M7B.md](Archive/actionPlan/M7B.md)；**逐项同步状态见该文 §11.2** |
 
 > 同步执行顺序建议：**1 → 2 → 5 → 3 → 4**（1/2 影响交付与排期；5 影响 P7-b 设计；3/4 属口径统一）。

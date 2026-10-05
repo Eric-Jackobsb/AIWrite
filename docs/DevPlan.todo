@@ -2135,7 +2135,7 @@
               "content": "FEA-M7B-01 网页通道唯一化：WebView2 退场 + 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态 ｜ M7B.md §3 / §6 M7B-10~M7B-25",
               "done": false,
               "level": "default",
-              "fileLink": "docs/actionPlan/M7B.md"
+              "fileLink": "docs/Archive/actionPlan/M7B.md"
             }
           },
           {
@@ -2146,7 +2146,7 @@
               "content": "TST-M7B-01 前置技术验证（已过 5/9 · 2026-09-28：M7B-01/03/05/08/09；余 M7B-02/04 命名管道双向 IPC（C++ 工具链冒烟已通）、M7B-06/07 需真站点人工登录；另增 M7B-06b）：Pydoll 起真实浏览器 + CDP 读 Cookie / 命名管道双向 / **CDP 增量三路线实测** / asyncio 共存 / 页面驱动与 DataTransfer 注入 / **DeepSeek 网页版选择器实测** / 会话失效证据来源 / 单 profile 多站点 + 按 origin 注销 / **关闭时序与会话持久化（M7B-09 · MB-D0-8）** ｜ M7B.md §5 M7B-01~09 + M7B-06b（未全过则停留）",
               "done": false,
               "level": "default",
-              "fileLink": "docs/actionPlan/M7B.md"
+              "fileLink": "docs/Archive/actionPlan/M7B.md"
             }
           },
           {
@@ -2157,7 +2157,7 @@
               "content": "FEA-M7B-02 撤除 WebView2：删 webview_host / webview2_login / vcpkg+CMake 依赖 / paths::webview2_profile（17 文件 ≈184 处）+ 死码清理（保留 delta_text_of / web_session_failure_hint 复用）｜ M7B.md §6 批 5–6（先建后拆，批 5 才删）",
               "done": false,
               "level": "default",
-              "fileLink": "docs/actionPlan/M7B.md"
+              "fileLink": "docs/Archive/actionPlan/M7B.md"
             }
           },
           {
@@ -2168,7 +2168,7 @@
               "content": "FEA-M7B-03 登录态持久化四层（MB-D0-8 · 由 M7B-09 四轮实测支撑）：L1 干净退出（Browser.close → 等进程退出，默认 5s，禁用 stop()）/ L2 DPAPI 加密 Cookie 快照（刷新间隔 < 10s + 登录成功即写 + 优雅退出前再写，启动回灌）/ L3 启动自愈（profile 被占 → 善意 attach connect(ws) 或如实告知，禁止强杀）/ L4 异常退出可见（埋点 + 一键重登/恢复）｜ M7B.md §5 M7B-09 / §9.1 I23 / §13",
               "done": false,
               "level": "default",
-              "fileLink": "docs/actionPlan/M7B.md"
+              "fileLink": "docs/Archive/actionPlan/M7B.md"
             }
           },
           {
@@ -2179,7 +2179,7 @@
               "content": "TST-M7B-02 不变量换代：作废 I2 → 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2）/ I21（不静默降级）/ I22（流式降级显式）；I15 → I15′；I16 升级为全局；断言 VB2-28~VB2-36（含删 VB2-17 前半、VB2-25①③④）｜ M7B.md §8–§9（基线先降后升）",
               "done": false,
               "level": "default",
-              "fileLink": "docs/actionPlan/M7B.md"
+              "fileLink": "docs/Archive/actionPlan/M7B.md"
             }
           },
           {
@@ -2190,7 +2190,7 @@
               "content": "DOC-M7B-01 文档同步 11 项 + I2 解冻登记（source/README.md §4.3）+ 12 条站点选择器回填记录（在 Pydoll 通道一次测完，不在 WebView2 重复测）｜ M7B.md §10–§11 / M7B-29 / M7B-40",
               "done": false,
               "level": "default",
-              "fileLink": "docs/actionPlan/M7B.md"
+              "fileLink": "docs/Archive/actionPlan/M7B.md"
             }
           },
           {
@@ -2201,7 +2201,7 @@
               "content": "TST-M7B-00 阶段 0（开工前置 · ✅ 已完成 2026-09-28 · 未动产品代码）：批 0 基线复测（build OK · selftest 七组 · exec 251/0 · graph 110/0 · provider 50/0 · run-selftest(--web) PASS · 断链 265/0）+ Pydoll 2.27.0 环境就绪（项目内 .venv 冒烟通过：探测 Chrome → CDP 读 Cookie → execute_script）+ 回滚锚点 pre-m7b 已打并推送 ｜ M7B.md §11.1",
               "done": true,
               "level": "default",
-              "fileLink": "docs/actionPlan/M7B.md"
+              "fileLink": "docs/Archive/actionPlan/M7B.md"
             }
           }
         ],

@@ -142,9 +142,9 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 .\webview2_login.exe --ephemeral            # 使用临时 profile（退出丢弃登录态）
 ```
 
-> ⚠️ **上述 `webview2_login` 三行计划退场（M7 第三轮 `M7B`，2026-09-28 · 见 §4.3）**：WebView2 退场后由
+> ⚠️ ~~**上述 `webview2_login` 三行计划退场（M7 第三轮 `M7B`，2026-09-28 · 见 §4.3）**~~ 📦 **已作废（2026-10-05 · 方案 E）**：**WebView2 不退场**（文字生成回归），`webview2_login` **保留** —— 见 [../docs/actionPlan/M8.md](../docs/actionPlan/M8.md)：WebView2 退场后由
 > **`pydoll_login --provider <id>`** 取代（退出码三档语义不变）；`webview2_login.cpp` 从 `tools/` 删除。
-> 计划全文见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §8.4 / `M7B-30`。
+> 计划全文见 [../docs/actionPlan/M7B.md](../docs/Archive/actionPlan/M7B.md) §8.4 / `M7B-30`。
 
 > 面板可见性由 `~/.brain-ai/config.toml` 的 `[ui]` 段控制（`show_node_library` / `show_property_panel` /
 > `show_console`）；**默认显示节点库与参数面板**（`P7a-12`，2026-09-28 起；**显式写了 `false` 的老配置仍保持隐藏** —— `P7a-13`，
@@ -261,13 +261,16 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 
 ---
 
-### 4.3 「引擎唯一化」与 `I2` 解冻（M7 第三轮 `M7B` · 2026-09-28 立项 · **批 3 step 1~14 已落地 / 词表 v4 / 全部命令已实现**）
+### 4.3 「引擎唯一化」与 `I2` 解冻 —— 📦 **已归档（2026-10-05 · 路线退场）**
+
+> 📦 **本节已归档（2026-10-05）**：`M7B` 的 Pydoll 路线（WebView2 退场 → 全部网页版走 Pydoll · Python 守护进程 + 命名管道）已被 **方案 E** 取代 ⇒ **文字生成回退 WebView2**、**图片上传改走 C++ native HTTP**、**Python / 命名管道 / 守护进程整体退场**（Phase 3）。本节原记「M7 第三轮 `M7B` · 2026-09-28 立项 · 批 3 step 1~14 已落地 / 词表 v4 / 全部命令已实现」。
+> **现行计划** → [../docs/actionPlan/M8.md](../docs/actionPlan/M8.md)　**归档全文** → [../docs/Archive/actionPlan/M7B.md](../docs/Archive/actionPlan/M7B.md)　**摘录件** → [../docs/Archive/actionPlan/M7_P7b_pydollRoute.md](../docs/Archive/actionPlan/M7_P7b_pydollRoute.md)
 
 > 本节是**计划登记**。**批 1~3 的 step 1~14 已落地**（见下方「运行时通道归属」）：诊断工具（step 9 · `M7B-18`）、
 > **生产文字链路 `dom_chat`**（step 10 · `M7B-20`）、**会话族**（step 11 · `M7B-20b`：登录窗口 / 收尾 /
 > 按站点注销 / tab 判定）与 **内容返回正式化**（step 14 · `M7B-54`~`M7B-56`：`send_prompt` / `read_answer` /
 > `upload_image` · **词表 v4**）**都已切到新通道**；仍走 WebView2 的只剩 **`builtin:deepseek`
-> 协议栈族**（随批 5 退役）。计划全文见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md)。
+> 协议栈族**（随批 5 退役）。计划全文见 [../docs/actionPlan/M7B.md](../docs/Archive/actionPlan/M7B.md)。
 
 #### ⚠️ 当前运行时通道归属（**2026-10-05 实测** · 防误判：**文字生成 + 登录窗口都已走 Pydoll**）
 
@@ -276,7 +279,7 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 > **`builtin:deepseek` 协议栈族**（`--web-probe` / `--web-chat` / `--login-selftest` / `--run-selftest --web` /
 > 面板「探测网页版协议（dev）」）—— **随协议栈在批 5 退役** ⇒ **在 GUI 里偶然看到内嵌 WebView2
 > （协议探测）是符合设计的状态，不是缺陷**。
-> 逐入口实测归属表 + 分辨方法见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §1.4。
+> 逐入口实测归属表 + 分辨方法见 [../docs/actionPlan/M7B.md](../docs/Archive/actionPlan/M7B.md) §1.4。
 
 | 入口 / 命令 | 现在**实际走** | 备注 |
 |---|---|---|
@@ -316,7 +319,7 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 | 解冻规则 | **`I2`** —— 原文「`--web-chat` / `--web-probe` / `--web-session-selftest` **行为不变**」（归档 `M_patchB.md:294`），实际被用来护住「无参 CLI = 内置 DeepSeek 常量」的一整套兼容装置 |
 | 解冻原因 | 宿主 **WebView2 退场**（嵌入控件易被站点识别为非真实浏览器，`MB-D0-2`）；且站点「**不回落**」（`D-22②` / `I14`）此前对 CLI 路径存在豁免，需**贯彻到底**（`MB-D0-6`） |
 | 替代物 | **`I20`（CLI 契约）**：命令名 / 参数形式 / **退出码语义**在 `--help` + 文档 + 断言三处一致；缺 `--provider` → **列候选 + 退出码 2**（不得静默取第一个）；`--provider auto` 为**显式保留字**；自检命令不得残留状态 |
-| 回归基线数字 | `--exec-selftest` **251/0 →（先降后升）→ 实测回填**（删 `VB2-17` 前半 + `VB2-25①③④`；新增 `VB2-28`~`VB2-36`）；路径见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §9.3。**现状（2026-10-04 · step 11）= 332 / 0**（批 1–4 **只升不降**：328 → 332 = +`VB2-43①~④`；删除类动作集中批 5） |
+| 回归基线数字 | `--exec-selftest` **251/0 →（先降后升）→ 实测回填**（删 `VB2-17` 前半 + `VB2-25①③④`；新增 `VB2-28`~`VB2-36`）；路径见 [../docs/actionPlan/M7B.md](../docs/Archive/actionPlan/M7B.md) §9.3。**现状（2026-10-04 · step 11）= 332 / 0**（批 1–4 **只升不降**：328 → 332 = +`VB2-43①~④`；删除类动作集中批 5） |
 
 **新增不变量（拟进冻结区 · 与 `I18` / `I19` 同批登记）**：
 
@@ -327,7 +330,7 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
    （超时才强杀），**禁止「close 后立刻 kill」**；持久 Cookie 的存续不得依赖单一机制（干净退出 + **DPAPI 加密快照**双保险）；
    快照**不得明文落盘 / 不得外传**；恢复失败必须**显式提示**。配套决议 **`MB-D0-8`**（四层：L1 干净退出 /
    L2 加密快照 / L3 启动自愈 / L4 异常退出可见），断言 `VB2-38` / `VB2-39`，见
-   [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §2 / §5 / §9。
+   [../docs/actionPlan/M7B.md](../docs/Archive/actionPlan/M7B.md) §2 / §5 / §9。
 
 **将退役 / 改写的实现（计划 · 见 `M7B-30` / `M7B-31` / `M7B-37`）**：
 
@@ -424,7 +427,7 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
    用裸 `Storage.getCookies` 反证"上下文/时机"。**不要在第一层解释上收工**。
 
 > 相关：`M7B` 关闭时序与登录态持久化的四轮实测（**干净退出只保住持久 Cookie**；会期 Cookie 需 L2 加密快照回灌；
-> 有既有实例时只能 attach、**禁止强杀**）见 [../docs/actionPlan/M7B.md](../docs/actionPlan/M7B.md) §5
+> 有既有实例时只能 attach、**禁止强杀**）见 [../docs/actionPlan/M7B.md](../docs/Archive/actionPlan/M7B.md) §5
 > （`M7B-09` 结论块）与 §13。
 
 ---

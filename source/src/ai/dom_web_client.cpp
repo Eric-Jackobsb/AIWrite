@@ -9,12 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include "utils/log.h"
-// M7B 批 3：**生产链路与诊断工具统一走新通道**（`M7B-18` 诊断换代 → `M7B-20` 生产换代）
-//  * 本文件**不再 include `web/webview_host.h`**（该头拉入 WebView2 依赖）——
-//    站点描述与全部纯函数已搬迁至 `web/site_ref.h`（零语义），会话证据在 `web/session_store.h`
-#include "web/pydoll_channel.h"
-#include "web/session_store.h"
-#include "web/site_ref.h"
+#include "web/webview_host.h"
 
 namespace aiwrite::ai {
 namespace {
@@ -241,85 +236,121 @@ DomChatResult dom_chat(const DomChatRequest& request)
         return finish();
     }
 
-    // ---- 1) 按站点确保会话（`M7B-20`：**新通道** Pydoll 守护进程）----
-    //  * 语义 = 「确保**有活会话且已导航到站点**」（`channel::ensure_session` = 起常驻浏览器 +
-    //    `open_tab` + `I15′` 登录态判定）；已有会话则**复用**（不重复起浏览器）
-    //  * 未登录 / 未取到会话**不阻断**：DOM 站点的可写性由页面自己暴露 ——
-    //    「输入框在不在 / 能不能写入」交给下面的脚本诊断给出可操作原因
-    //  * ⚠️ 与旧内嵌 WebView2 窗口不同：新通道起的是**独立有头浏览器 + 常驻守护进程**，
-    //    会话**不随本进程消失** ⇒ 由 `main.cpp` 在应用退出时统一 `shutdown_session()` 收尾
-    // `M7B step 11`：会话请求改**有头**（`visible_login_request`）—— 新通道的浏览器是用户
-    // **唯一的登录入口**；离屏窗口看不见 ⇒ 未登录时无路可走（违反 `I21`）。旧 `boot_login_request`
-    // （离屏）只服务 `builtin:deepseek` 协议栈（批 5 随其退役）。
+    // ---- 1) 按站点确保窗口（未登录不阻断：DOM 站点的登录态在浏览器 profile 里；
+    //         页面自己会告诉我们「输入框在不在 / 能不能写入」——由脚本诊断给出可操作原因）----
     const web::LoginRequest site_request =
-        web::visible_login_request(request.site, request.provider_id);
+        web::boot_login_request(request.site, request.provider_id);
     std::string boot_error;
     const int   boot_timeout = std::max(15000, std::min(request.timeout_ms, 60000));
-    if (!web::channel::ensure_session(site_request, boot_timeout, &boot_error)) {
-        result.warning = "本次未取到已登录会话（仍会继续尝试驱动页面；选择器命中情况见脚本诊断）：" +
-                         boot_error;
+    if (!web::ensure_session(site_request, boot_timeout, &boot_error)) {
+        result.warning = "未取到内存凭证（该站点可能未登录，或该站点不产生 userToken）：" + boot_error;
     }
 
-    // ---- 2) 内容返回（**v4 · step 14 · P4**）：`send_prompt`（**真打字**注入 + 触发发送）----
-    //  * 站点知识**由调用方下发**（`I14`）：`input_selector` / `send{kind,value}` 来自条目 `web` 段
-    //  * `upload_evidence = false`：**纯文本生成不置** `I18` 位（只有图片链路才置 → `P7b-16`）
-    //  * ⚠️ DOM 脚本常量（`dom_cfg_json` / `dom_kickoff_script` / `dom_poll_script`）**保留**为
-    //    **诊断资产**（`--web-dom-dump` / `--web-adapter-selftest` 与 `VB2-22` 仍在使用），
-    //    但**生产路径不再使用** ⇒ 口径由「DOM 层零改动」更新为「**纯函数不变 + 生产不再使用**」
+    // ---- 2) 页面内驱动：注入提示词 → 触发发送 → 轮询答案（全部走 web::run_script_sync）----
     int poll_ms   = 0;
     int max_polls = 0;
     clamp_poll_params(request.site, &poll_ms, &max_polls);
 
-    const std::string send_kind  = request.site.send_kind.empty() ? "key" : request.site.send_kind;
-    const std::string send_value = request.site.send_value.empty() ? "Enter" : request.site.send_value;
-    const int         send_timeout = std::max(15000, std::min(request.timeout_ms, 60000));
-    std::string       send_error;
-    if (!web::channel::send_prompt(site_request, request.prompt,
-                                   std::vector<std::string>{request.site.input_selector},
-                                   send_kind, send_value, /*upload_evidence=*/false, send_timeout,
-                                   &send_error)) {
-        result.error = "注入 / 发送失败：" + send_error +
-                       "（用 --web-adapter-selftest --provider " + request.provider_id +
-                       " 复核选择器）";
+    std::string raw;
+    std::string script_error;
+    if (!web::run_script_sync(site_request,
+                              "window.__aiwriteDom = " + dom_cfg_json(request) + "; 'ok';", 10000,
+                              &raw, &script_error)) {
+        result.error = "注入站点配置失败：" + script_error;
         return finish();
     }
-    result.steps = "send_prompt（" + send_kind + "）+ read_answer";
+    if (!web::run_script_sync(site_request, dom_kickoff_script(), 15000, &raw, &script_error)) {
+        result.error = "站点页面交互失败：" + script_error;
+        return finish();
+    }
+    try {
+        const nlohmann::json kick       = nlohmann::json::parse(raw);
+        const bool           kicked     = kick.value("ok", false);
+        const int            input_hits = kick.value("input_hits", 0);
+        const int            send_hits  = kick.value("send_hits", 0);
+        result.steps = "input_selector 命中 " + std::to_string(input_hits) + " 个（" +
+                       kick.value("input_tag", std::string("?")) + "）；send=" +
+                       kick.value("send_kind", std::string("key")) + " 命中 " +
+                       std::to_string(send_hits);
+        if (!kicked) {
+            result.error = kick.value("error", std::string("写入 / 发送失败")) +
+                           "（用 --web-adapter-selftest --provider " + request.provider_id +
+                           " 复核选择器）";
+            return finish();
+        }
+    }
+    catch (const std::exception& ex) {
+        result.error = std::string("解析 kickoff 结果失败：") + ex.what() + "；原始返回：" +
+                       raw.substr(0, 200);
+        return finish();
+    }
 
-    // ---- 3) 取回答：`read_answer`（轮询 + **显式截断**）----
-    //  * 判据 `done_when`（条目 `web.done_when`）由调用方下发；缺省 = 文本连续 N 轮稳定
-    //  * 硬上限：`poll_ms` / `max_polls`（`clamp_poll_params` 已钳制）+ 总超时
-    //  * **截断显式**（`I21` · `M7B-55`）：超 48 KiB → `truncated=true` ⇒ 写入 `warning`
-    std::string answer_text;
-    std::string answer_error;
-    bool        truncated  = false;
-    int         text_bytes = 0;
-    if (!web::channel::read_answer(site_request,
-                                   std::vector<std::string>{request.site.answer_selector},
-                                   request.site.done_kind, poll_ms, max_polls,
-                                   request.timeout_ms > 0 ? request.timeout_ms : 180000,
-                                   &answer_text, &truncated, &text_bytes, &answer_error)) {
-        result.error = "未取到答案文本：" + answer_error;
-        return finish();
-    }
-    result.text  = answer_text;
-    result.polls = 0;   // v4：轮询在 Python 侧（`read_answer`）—— 协议不回传次数
-    if (truncated) {
-        result.warning = "回答正文超过 48 KiB：**已截断**（`truncated=true`，原始 " +
-                         std::to_string(text_bytes) +
-                         " 字节）—— 如需完整正文请缩短站点回答，或改用官方 API 条目";
+    // ---- 3) 轮询答案：done_when 命中 / 文本连续 N 轮稳定 / 到达上限（R13：如实返回 + 提示）----
+    std::string last_text;
+    std::string last_poll_error;
+    int         stable = 0;
+    for (int attempt = 1; attempt <= max_polls; ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(poll_ms));
+        result.polls = attempt;
+        std::string poll_raw;
+        std::string poll_error;
+        if (!web::run_script_sync(site_request, dom_poll_script(), 15000, &poll_raw, &poll_error)) {
+            last_poll_error = poll_error; // 单次失败不致命：下一轮重试
+            continue;
+        }
+        try {
+            const nlohmann::json poll   = nlohmann::json::parse(poll_raw);
+            const bool           found  = poll.value("found", false);
+            const bool           is_done = poll.value("done", false);
+            const std::string    text   = found ? poll.value("text", std::string()) : std::string();
+            if (found && !text.empty()) {
+                if (result.text.empty()) {
+                    result.steps += "；answer_selector 命中 " +
+                                    std::to_string(poll.value("count", 0)) + " 个";
+                }
+                result.text = text;
+            }
+            if (is_done) {
+                break; // done_when 条件成立
+            }
+            if (!result.text.empty() && result.text == last_text) {
+                if (++stable >= kStableRounds) {
+                    break; // 未配 done_when：文本稳定即完成
+                }
+            }
+            else {
+                stable    = 0;
+                last_text = result.text;
+            }
+        }
+        catch (const std::exception&) {
+            continue; // 页面切换 / 偶发解析失败：下一轮重试
+        }
+        if (std::chrono::steady_clock::now() - started >
+            std::chrono::milliseconds(request.timeout_ms > 0 ? request.timeout_ms : 180000)) {
+            result.warning = "达到总超时（" + std::to_string(request.timeout_ms) +
+                             " ms）：已取回当前文本，可能仍在生成中";
+            break;
+        }
     }
     if (result.text.empty()) {
-        result.error = "未取到答案文本（`answer_selector` 未命中或站点仍在生成）";
-        if (!answer_error.empty()) {
-            result.error += "（" + answer_error + "）";
+        result.error = "未取到答案文本（answer_selector 未命中或站点仍在生成）"
+                       "；可用 --web-adapter-selftest --provider <id> 诊断选择器";
+        if (!last_poll_error.empty()) {
+            result.error += "（最后一次轮询错误：" + last_poll_error + "）";
         }
-        result.error += "；可用 --web-adapter-selftest --provider <id> 诊断选择器";
         return finish();
     }
+    if (result.warning.empty() && result.polls >= max_polls) {
+        result.warning = "轮询上限（" + std::to_string(max_polls) +
+                         " 次 / 约 " + std::to_string((max_polls * poll_ms) / 1000) +
+                         " 秒）到达：已取回文本，可能不完整";
+    }
     result.ok = true;
-    log::info("[DOM 适配器] 站点=" + request.site.login_url + "（send_prompt + read_answer · " +
-              std::to_string(result.elapsed_ms) + " ms）文本 " + std::to_string(result.text.size()) +
-              " 字节" + (result.warning.empty() ? "" : ("；警告：" + result.warning)) +
+    log::info("[DOM 适配器] 站点=" + request.site.login_url + " 轮询=" + std::to_string(result.polls) +
+              " 次 / " + std::to_string(result.elapsed_ms) + " ms，文本 " +
+              std::to_string(result.text.size()) + " 字节" +
+              (result.warning.empty() ? "" : ("；警告：" + result.warning)) +
               (result.error.empty() ? "" : ("；错误：" + result.error)));
     return finish();
 }
@@ -369,25 +400,9 @@ std::string suggest_selector_of(const nlohmann::json& d)
     return selector;
 }
 
-// M7B 批 3 step 9（`M7B-18`）：**诊断工具走新通道**（Pydoll 守护进程 + `run_script`）——
-//  * 会话由诊断函数**自己起**（换代后的 `channel::ensure_session` = 起常驻浏览器 + `open_tab` + 判登录态）
-//  * `ChannelSessionGuard` 保证**任何 return / 抛异常**都收尾（不留孤儿浏览器 / 守护进程）；
-//    WebView2 版不需要它（内嵌窗口随进程退出）⇒ 只在走新通道的**诊断**函数里用
-namespace {
-struct ChannelSessionGuard {
-    ~ChannelSessionGuard()
-    {
-        if (aiwrite::web::channel::session_ready()) {
-            aiwrite::web::channel::shutdown_session();
-        }
-    }
-};
-} // namespace
-
 int dom_selector_dump(const std::string& provider_id, int timeout_ms)
 {
   try { // 兜底：把任何 C++ 异常转成可读错误（否则 std::terminate → __fastfail 0xC0000409，输出全丢）
-    const ChannelSessionGuard guard;   // 起会话后**任何路径**都收尾（含提前 return / 抛异常）
     const ProviderSpec* spec       = provider_specs().find(provider_id);
     const std::string   site_error = web_site_error(spec);
     if (!site_error.empty()) {
@@ -406,8 +421,7 @@ int dom_selector_dump(const std::string& provider_id, int timeout_ms)
     std::string boot_error;
     const int   boot_timeout =
         std::max(10000, std::min(timeout_ms > 0 ? timeout_ms * 1000 : 30000, 60000));
-    // 会话 = **新通道**（`M7B-18` 换代）：起常驻浏览器 + `open_tab`（站点 `url`）+ `I15′` 登录态
-    const bool        session_ok = web::channel::ensure_session(request, boot_timeout, &boot_error);
+    const bool        session_ok = web::ensure_session(request, boot_timeout, &boot_error);
     const std::string site_key   = web::login_request_site(request);
     const web::Session session   = web::SessionStore::instance().snapshot(site_key);
     const WebSessionVerdict verdict =
@@ -425,15 +439,10 @@ int dom_selector_dump(const std::string& provider_id, int timeout_ms)
 
     std::string raw;
     std::string script_error;
-    if (!web::channel::run_script(request, std::string(kDiscoverScript), 15000, &raw,
-                                  &script_error)) {
+    if (!web::run_script_sync(request, std::string(kDiscoverScript), 15000, &raw, &script_error)) {
         std::printf("枚举失败 : %s\n", script_error.c_str());
         std::printf("（提示：窗口 / 页面未就绪，或站点拒绝脚本执行；可重跑本命令）\n");
         return 1;
-    }
-    if (!script_error.empty()) {
-        // ⚠️ **成功但截断**（> 48 KiB）：`run_script` 用 `*error` 给说明 —— 不得静默（`I21`）
-        std::printf("警告      : %s\n", script_error.c_str());
     }
     std::fflush(stdout); // 排障：确认发现脚本已执行
     nlohmann::json root;
@@ -546,7 +555,6 @@ int dom_selector_dump(const std::string& provider_id, int timeout_ms)
 
 int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
 {
-    const ChannelSessionGuard guard;   // 起会话后**任何路径**都收尾（含提前 return）
     const ProviderSpec* spec       = provider_specs().find(provider_id);
     const std::string   site_error = web_site_error(spec);
     if (!site_error.empty()) {
@@ -583,8 +591,7 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
     std::string boot_error;
     const int   boot_timeout =
         std::max(10000, std::min(timeout_ms > 0 ? timeout_ms * 1000 : 30000, 60000));
-    // 会话 = **新通道**（`M7B-18` 换代）：起常驻浏览器 + `open_tab`（站点 `url`）+ `I15′` 登录态
-    const bool        session_ok = web::channel::ensure_session(request, boot_timeout, &boot_error);
+    const bool        session_ok = web::ensure_session(request, boot_timeout, &boot_error);
     const std::string site_key   = web::login_request_site(request);
     const web::Session session   = web::SessionStore::instance().snapshot(site_key);
     std::printf("站点键      : %s\n", site_key.c_str());
@@ -607,21 +614,12 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
 
     std::string raw;
     std::string script_error;
-    if (!web::channel::run_script(request,
-                                  "window.__aiwriteDomProbe = " + probe_cfg.dump() + "; 'ok';",
-                                  10000, &raw, &script_error)) {
+    if (!web::run_script_sync(request, "window.__aiwriteDomProbe = " + probe_cfg.dump() + "; 'ok';",
+                              10000, &raw, &script_error) ||
+        !web::run_script_sync(request, dom_probe_script(), 15000, &raw, &script_error)) {
         std::printf("探测失败    : %s\n", script_error.c_str());
         std::printf("（提示：窗口 / 页面未就绪，或站点拒绝脚本执行；可重跑本命令）\n");
         return 1;
-    }
-    if (!web::channel::run_script(request, dom_probe_script(), 15000, &raw, &script_error)) {
-        std::printf("探测失败    : %s\n", script_error.c_str());
-        std::printf("（提示：窗口 / 页面未就绪，或站点拒绝脚本执行；可重跑本命令）\n");
-        return 1;
-    }
-    if (!script_error.empty()) {
-        // ⚠️ **成功但截断**（> 48 KiB）：如实提示（`I21`：不假装完整）
-        std::printf("警告        : %s\n", script_error.c_str());
     }
     nlohmann::json r;
     try {
