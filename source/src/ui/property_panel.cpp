@@ -1073,6 +1073,11 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                                 effective.from_edge ? "" : "（provider 输入未连接）");
         }
 
+        // ---- M8-37（零开关）：生成字段未回填**不是**失败 —— 运行期自动识别选择器 ----
+        if (effective.mode == "web" && aiwrite::ai::web_login_only(effective.spec)) {
+            ImGui::TextDisabled("选择器未回填：运行时会**自动识别**输入框 / 答案容器（结果打印在 Console）；"
+                                "如需固化为数据，见 --web-dom-dump");
+        }
         const std::string reason = engine::unwired_reason(editor().graph, *node);
         if (!reason.empty()) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));

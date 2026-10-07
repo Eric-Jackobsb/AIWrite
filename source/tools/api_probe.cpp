@@ -35,6 +35,8 @@
 #include "utils/output_archive.h"
 #include "utils/paths.h"
 #include "web/session_store.h"
+#include "web/web_owner.h"     // M_patchC（PW-01）：归属（纯函数断言）
+#include "web/ready_level.h"   // M_patchC（PW-03）：就绪三级（纯函数断言）
 #include "web/webview_host.h" // plan_session_boot / interactive_login_request（纯逻辑断言用）
 #include "ai/deepseek_official_provider.h" // M5-02：多模态请求体断言
 #include "ai/provider_spec.h"              // M_patchB L1：Provider 配置表断言
@@ -45,6 +47,9 @@
 #include "web/pydoll_channel.h"          // M7B 批 2：新通道如实报错断言（VB2-40④⑤ · I21）
 #include "ai/deepseek_web_client.h"       // L4（PB2-28④）：会话失效识别断言（VB2-27）
 #include "utils/image_decode.h"           // M7-04/05：图片格式嗅探 + 解码 + 失败文案断言
+#include "ai/upload/image_convert.h"      // M8-14：图片准备（白名单 / 限额 → 缩放 + 转码）离线断言
+#include "ai/upload/upload_evidence.h"    // M8-14：上传双证据（I18）离线断言
+#include "ai/upload/upload_registry.h"    // M8-14：站点上传注册表 + 契约离线断言
 #include "utils/asset_store.h"            // P7a-04：统一资源目录（令牌 / 归档 / 解析）断言
 
 #include <fstream>
@@ -2578,7 +2583,14 @@ int execution_selftest()
                 }
             }
 
-            // 7c) 图片理解 + 网页版 → 明确拒绝（不发起 HTTP）
+            // 7c) 图片理解 + 网页版（**M8-34 接线** + **M8-37 自动识别**）
+            //  * §9.3 成对登记：原断言（`M5-02b`）断言「web 模式 → 图片理解暂不支持网页版」——
+            //    该行为**已于 2026-10-06 被 `M8-34` 取代**（网页版图片理解 → 站点上传模板 + 站点自身
+            //    多模态能力）⇒ 原断言**就地改写**为新路径（断言数不变；原因见 CHANGELOG）
+            //  * M8-37（零开关）：生成字段未回填（`web_login_only`）**不再**是拦路理由 —— 本用例用
+            //    `yuanbao-web`（adapter=dom，**登录型**，且**未声明 upload_adapter**）证明：
+            //    报错是「**真不可用**：未接图片上传」，而**不是**旧的「登录型条目 / 暂不支持网页版」；
+            //    该分支在 `dom_chat` 之前（不打开窗口 / 不发网络），故断言可离线复现
             {
                 Graph             graph;
                 const std::string img      = add_node(check, graph, "ImageInput", "VLM 图片输入");
@@ -2587,6 +2599,7 @@ int execution_selftest()
                 const std::string provider = add_node(check, graph, "ProviderConfig", "VLM 配置 web");
                 set_param(graph, img, "path", png_a.string());
                 set_param(graph, text, "text", "描述这张图");
+                set_param(graph, provider, "provider", "yuanbao-web"); // 登录型网页条目（缺 upload_adapter）
                 set_param(graph, provider, "mode", "web");
                 graph.edges.push_back(make_edge("v1", img, "image", vlm, "image"));
                 graph.edges.push_back(make_edge("v2", text, "text", vlm, "prompt"));
@@ -2596,15 +2609,19 @@ int execution_selftest()
                 std::string error;
                 const bool  started = executor.start(graph, &error);
                 expect(check, started,
-                       "M5-02b 接线：图片理解（web 模式）运行前校验不阻断（仅警告）", error);
+                       "M8-34 接线：图片理解（web 模式 · 网页版条目）运行前校验不阻断", error);
                 if (started) {
                     executor.runToCompletion(&graph, 64);
                     const engine::Node* node = graph.findNode(vlm);
+                    const std::string   message =
+                        node != nullptr ? node->error_message : std::string();
                     expect(check,
                            node != nullptr && node->state == engine::NodeState::Error &&
-                               node->error_message.find("暂不支持网页版") != std::string::npos,
-                           "M5-02b 接线：web 模式 → 「图片理解暂不支持网页版」",
-                           node != nullptr ? node->error_message : std::string());
+                               message.find("暂不支持网页版") == std::string::npos &&
+                               message.find("图片理解（网页版）") != std::string::npos &&
+                               message.find("upload_adapter") != std::string::npos,
+                           "M8-37 接线：web 模式不再因「生成字段未回填」拦路（真不可用才报错）",
+                           message);
                 }
             }
 
@@ -3018,7 +3035,7 @@ int execution_selftest()
             expect(check,
                    kimi != nullptr && aiwrite::ai::web_login_only(kimi) &&
                        aiwrite::ai::web_adapter_implemented(kimi->web.adapter),
-                   "VB2-21③ 生成未就绪被如实标记（dom 适配器**已实现**，但该条缺生成字段 → 登录型条目拦截）");
+                   "VB2-21③ 生成未就绪被如实标记（dom 适配器**已实现**，该条缺生成字段 → 标记 `web_login_only`；运行期自动识别，M8-37）");
 
             expect(check,
                    ds_web2 != nullptr && !aiwrite::ai::web_login_only(ds_web2) &&
@@ -3071,13 +3088,18 @@ int execution_selftest()
                          cfg.value("send_value", std::string()) == "Enter" &&
                          cfg.value("answer_selector", std::string()) == site.answer_selector &&
                          cfg.value("done_kind", std::string()) == "selector_gone" &&
-                         cfg.value("done_selector", std::string()) == site.done_selector;
+                         cfg.value("done_selector", std::string()) == site.done_selector &&
+                         // M8-37：自动识别开关与候选池随配置下发（仍是**纯数据**，不落盘）
+                         cfg.value("auto_input", false) && cfg.value("auto_answer", false) &&
+                         !cfg.value("input_pool", std::string()).empty() &&
+                         !cfg.value("answer_pool", std::string()).empty() &&
+                         cfg.value("answer_min_chars", 0) > 0;
             }
             catch (const std::exception&) {
                 cfg_ok = false;
             }
             expect(check, cfg_ok,
-                   "VB2-22② 注入配置可解析且**转义安全**（提示词含引号 / 反斜杠 / 换行 / 制表）");
+                   "VB2-22② 注入配置可解析且**转义安全**（提示词含引号 / 反斜杠 / 换行 / 制表 · 含 M8-37 自动识别字段）");
 
             const std::string kick = aiwrite::ai::dom_kickoff_script();
             const std::string poll = aiwrite::ai::dom_poll_script();
@@ -3087,8 +3109,12 @@ int execution_selftest()
                        poll.find("window.__aiwriteDom") != std::string::npos &&
                        prb.find("window.__aiwriteDomProbe") != std::string::npos &&
                        kick.find("input_selector") != std::string::npos &&
-                       poll.find("answer_selector") != std::string::npos,
-                   "VB2-22③ 页面脚本常量（kickoff/poll 读 __aiwriteDom；probe 读 __aiwriteDomProbe）");
+                       poll.find("answer_selector") != std::string::npos &&
+                       // M8-37：自动识别分支真的在页面脚本里（输入框打分 + 答案基线差分）
+                       kick.find("input_auto") != std::string::npos &&
+                       kick.find("__aiwriteDomRuntime") != std::string::npos &&
+                       poll.find("answer_pool") != std::string::npos,
+                   "VB2-22③ 页面脚本常量（kickoff/poll 读 __aiwriteDom；probe 读 __aiwriteDomProbe；含 M8-37 自动识别）");
 
             aiwrite::ai::ProviderSpec ready_spec;
             ready_spec.kind = "web";
@@ -3100,11 +3126,16 @@ int execution_selftest()
                               aiwrite::ai::web_adapter_implemented("dom"),
                    "VB2-22④ 就绪度推断：生成字段齐 → 非登录型；缺 answer_selector → 登录型（补齐即就绪）");
 
-            aiwrite::ai::DomChatRequest bad;
-            bad.site = short_spec.web; // 缺 answer_selector
-            const aiwrite::ai::DomChatResult bad_result = aiwrite::ai::dom_chat(bad);
-            expect(check, !bad_result.ok && !bad_result.error.empty(),
-                   "VB2-22⑤ dom_chat 前置校验（缺生成字段 → 立即报错；不打开窗口、不发送）");
+            // M8-37（零开关）：**真不可用**仍立即报错 —— 缺站点登录页时连窗口都无从开；
+            //  而「生成字段未回填」已不再是前置失败（改由运行期自动识别，见 VB2-22②③）
+            aiwrite::ai::DomChatRequest no_site;
+            no_site.site = short_spec.web; // 缺 answer_selector（登录型）
+            no_site.site.login_url.clear();
+            const aiwrite::ai::DomChatResult no_site_result = aiwrite::ai::dom_chat(no_site);
+            expect(check,
+                   !no_site_result.ok &&
+                       no_site_result.error.find("login_url") != std::string::npos,
+                   "VB2-22⑤ dom_chat 前置校验（缺 web.login_url → 立即报错；不打开窗口、不发送）");
         }
     }
 
@@ -3696,6 +3727,88 @@ int execution_selftest()
         const int spec_failed = aiwrite::ai::provider_spec_selftest(&spec_passed);
         check.passed += spec_passed;
         check.failed += spec_failed;
+    }
+
+    {
+        // M8-14：站点上传模板（**离线**三组：图片准备 / 双证据 / 注册表与契约）
+        //  * 不联网、不开窗口 —— 真机验证走 `aiwrite.exe --upload-selftest --provider <id>`
+        std::printf("   -- 站点上传模板：图片准备（M8-14）--\n");
+        int convert_passed = 0;
+        int evidence_passed = 0;
+        int registry_passed = 0;
+        const int convert_failed  = aiwrite::ai::image_convert_selftest(&convert_passed);
+        std::printf("   -- 站点上传模板：双证据判定（M8-14）--\n");
+        const int evidence_failed = aiwrite::ai::upload_evidence_selftest(&evidence_passed);
+        std::printf("   -- 站点上传模板：注册表与契约（M8-14）--\n");
+        const int registry_failed = aiwrite::ai::upload_registry_selftest(&registry_passed);
+        check.passed += convert_passed + evidence_passed + registry_passed;
+        check.failed += convert_failed + evidence_failed + registry_failed;
+    }
+
+    {
+        // M_patchC（`PW-01` / `PW-03`）：**归属 + 就绪三级**的纯函数断言（离线；不开窗口、不联网）
+        //  * 依据：真机 2026-10-06 三次运行（113 ms 假失败 / 41 ms 误归因）—— 见
+        //    `docs/actionPlan/M_patchC_web_node_bind.md` §3 / §4.1 / §4.2
+        namespace web = aiwrite::web;
+        std::printf("   -- 网页通道归属与就绪三级（M_patchC PW-01 / PW-03）--\n");
+
+        // ---- ① 归属（`WebOwner` · I24 的基础）----
+        web::WebOwner a;
+        a.run_id   = "run1";
+        a.node_id  = "n7";
+        a.site_key = "https://www.doubao.com";
+        web::WebOwner b    = a;
+        web::WebOwner c    = a;
+        c.node_id          = "n3";
+        const web::WebOwner none; // 未标注
+        expect(check, web::owner_same(a, b), "PW-01 owner_same：同 run+node = 同一归属");
+        expect(check, !web::owner_same(a, c),
+               "PW-01 owner_same：不同 node ⇒ 不同归属（同站点多节点可区分，I24）");
+        expect_eq(check, web::owner_key(a), "run1#n7", "PW-01 owner_key = run#node");
+        expect(check, web::owner_key(none).empty(), "PW-01 空 owner ⇒ 键为空（未标注）");
+        expect_eq(check, web::owner_tag(none), "[owner 未标注]",
+                  "PW-01 owner_tag 永不为空（日志可 grep）");
+        expect(check, web::owner_known(a) && !web::owner_known(none),
+               "PW-01 owner_known：能区分「已标注 / 未标注」");
+
+        // ---- ② 就绪三级（位组合 / 判定 / 可读串）----
+        expect(check, web::kReadyWindow == 1 && web::kReadyPage == 2 &&
+                          web::kReadyComposer == 4 && web::kReadyFileInput == 8,
+               "PW-03 就绪位：窗口=1 / 页面=2 / 输入框=4 / 附件入口=8（可组合）");
+        expect(check, web::kReadyScript == (web::kReadyWindow | web::kReadyPage | web::kReadyComposer) &&
+                          web::kReadyUpload == (web::kReadyScript | web::kReadyFileInput),
+               "PW-03 组合：kReadyScript = L1+L2+L3a；kReadyUpload = 再加 L3b");
+        expect(check, web::ready_satisfied(web::kReadyWindow | web::kReadyPage,
+                                          web::kReadyWindow | web::kReadyPage) &&
+                          !web::ready_satisfied(web::kReadyWindow,
+                                                web::kReadyWindow | web::kReadyPage),
+               "PW-03 ready_satisfied：必须**覆盖**需求（缺一级即不满足）");
+        expect_eq(check, web::ready_first_missing(web::kReadyUpload,
+                                                 web::kReadyWindow | web::kReadyPage),
+                  "交互态（输入框）", "PW-03 缺级判定：窗口 → 页面 → 交互态（逐级）");
+        expect(check, web::ready_satisfied(web::kReadyUpload, web::kReadyUpload) &&
+                          web::ready_first_missing(web::kReadyUpload, web::kReadyUpload).empty(),
+               "PW-03 全满足 ⇒ 无缺级（空串）");
+        expect_eq(check, web::ready_reached_text(web::kReadyWindow | web::kReadyPage),
+                  "窗口级 + 页面级", "PW-03 已达级别可读串（日志 / 报告用）");
+        expect_eq(check, web::ready_reached_text(web::kReadyNone), "未就绪",
+                  "PW-03 一级都不达 ⇒ 「未就绪」");
+
+        // ---- ③ 归因分离（`G6` 的回归断言：未就绪 ≠ 形态不支持）----
+        const std::string miss_input =
+            web::ready_missing_text(web::kReadyUpload, web::kReadyWindow | web::kReadyPage);
+        const std::string miss_page   = web::ready_missing_text(web::kReadyPage, web::kReadyNone);
+        const std::string miss_window = web::ready_missing_text(web::kReadyWindow, web::kReadyNone);
+        //  * 判据踩在**旧误导文案**上（「可能是拖拽 / 粘贴入口」「暂不支持该形态」），
+        //    而不是简单禁词 —— 新文案允许**显式否认**该结论（那正是归因分离的表达）
+        expect(check,
+               miss_input.find("页面未就绪") != std::string::npos &&
+                   miss_input.find("可能是拖拽") == std::string::npos &&
+                   miss_input.find("暂不支持该形态") == std::string::npos,
+               "PW-03 归因分离：附件未挂载 ⇒ 报「页面未就绪」，**不得**沿用「该站点可能是拖拽 / 粘贴入口」");
+        expect(check, miss_page.find("页面级") != std::string::npos &&
+                          miss_window.find("窗口级") != std::string::npos,
+               "PW-03 归因分离：缺哪一级就点哪一级（窗口级 / 页面级）");
     }
 
     std::printf("=== 执行器自检结果: %d 通过 / %d 失败 ===\n", check.passed, check.failed);

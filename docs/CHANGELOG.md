@@ -16,6 +16,7 @@
 | [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md) · [Archive/actionPlan/M7_P7b_pydollRoute.md](Archive/actionPlan/M7_P7b_pydollRoute.md) | **已归档（2026-10-05）**：`M7B`（网页通道整体迁 Pydoll —— **路线退场 · 未完成**）+ `M7.md` 的 Pydoll 章节摘录 —— 决策追溯与资料取用（**内容取用终点 `git cdf6d40`**） |
 | [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) | **补丁系列剩余工作总集**（Patch A/B 残项 + 数据安全 + 交互打磨 + 并行小项 + `B2` 残项）—— **后续唯一执行入口**；含现行规格（附录 B `JSON` 规范 / C 加载顺序 / D 自建站点 / E 站点清单两列）与待拍板决策 |
 | [Archive/actionPlan/M_patchA.md](Archive/actionPlan/M_patchA.md) · [Archive/actionPlan/M_patchB.md](Archive/actionPlan/M_patchB.md) | **已完成部分已归档（2026-09-27）**：Patch A（结果回流与可观测性）· `M_patchB`（Provider 可插拔化：**JSON 配置表** + **API 与网页版同表同机制** + L1 收口 + L3 DOM 站点适配器 + L4 部分落地）—— 历史规格与各批次实测记录 |
+| [actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md) | **补丁系列第三期（🆕 2026-10-06 · 拍板 2026-10-07）**：网页版「节点 ↔ 窗口」绑定与页面就绪判据 —— 真机归因（`imgTest` 三次运行）· 缺口 `G1`–`G6` · 修正 `W-D1`–`W-D8` · 不变量 `I24` / `I25` / `I26` · 计划 `PW-01`…`PW-13` · **已拍板 `D-33`…`D-36`**（②独立窗口真并行 / ①`answer_selector`可选 / ③复位首次+失败 / ②`web.attach`诊断字段） | 网页版**多节点 / 多运行**异常时**先读** |
 | [DevPlan.todo](DevPlan.todo) | **开发计划看板**：TodoList 格式（根键 `todotree`），Debug / Feature / Test / Docs / Archive 五类 × M1–M7 分层，每条含一行描述与 `fileLink` 文档链接 |
 | [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) | M1 实测环境、验证结果与问题记录（已归档） |
 | [Archive/README.md](Archive/README.md) | 归档索引与归档规则 |
@@ -24,6 +25,136 @@
 ---
 
 ## [Unreleased] — M7（图片收口 + 节点精简）+ M5 核心切片（M5-C）已落地；**M7 第二轮 P7-a 已落地（v0.5.2）**；M7 第三轮 `M7B` 立项（网页通道整体迁 Pydoll —— 📦 已于 2026-10-05 退场归档）；**M7 第四轮 `M8` 立项（网页通道方案 E）**
+
+**📄 文档：网页版「节点 ↔ 窗口」归属与就绪判据诊断 + 纠错 + 新建 `M_patchC`（2026-10-06 · 仅文档，代码未改）**
+
+- **触发**：真机 `imgTest`（`n7` 豆包图片理解 + `n3` deepseek 文本）**三次运行** = **1 次「假成功」+ 2 次必然失败**：
+  * 运行 1：上传成功，但答案自动识别命中**布局容器** `div.bp5-overflow-list` → 输出 **12 字节**（`n2` 模板输出 37 字节 = `{vars}` 未替换）；
+  * 运行 2：`n3(deepseek)` 抢占站点时**关掉了 `n7` 的窗口**，重试 **113 ms** 报「登录窗口未就绪」（就绪判据只到**凭证级**：该站点 Cookie 非空）；
+  * 运行 3：窗口活着但**页面未处于可上传交互态** ⇒ **0 个 `input[type=file]`**，**41 ms** 判死，并被**错误归因**为「该站点可能是拖拽 / 粘贴入口」。
+- **根因（结构性，非选择器）**：网页通道**没有「节点 / 运行 ↔ 窗口」的绑定与仲裁** —— 全进程只有一套按**站点**键控的全局单例（窗口 / 脚本槽 / 上传槽 / 网络回执 / PoW / 会话等待），`current_window_site()` 取的是**最后一次开窗请求的 URL**；跨站点 = **抢占式「先关旧窗再开」**（无租约 / 无等待 / 无通知）。
+- **落地（文档）**：
+  1. 🆕 新建 **[actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md)**（补丁系列第三期）：真机归因（时间线 + 代码行号 + 日志时间戳）· 缺口 `G1`–`G6` · 修正设计 `W-D1`–`W-D8` · **新不变量 `I24`（窗口归属唯一）/ `I25`（就绪三级）/ `I26`（证据归属）** · 计划 `PW-01`…`PW-12` · 验收 `AW-01`…`AW-05` · 待拍板 `D-33`…`D-36`；
+  2. 纠错 **[actionPlan/M8.md](actionPlan/M8.md)**：顶部状态行 + `M8-37` 行（✅ → 🟡 已落地但真机暴露结构性缺陷）+ §9.6 真机结果与「零开关」**前提**反证 + §13.6 `drop_zone` / `paste_only` 归因 + §13.7（「`answer_selector` 未回填 = 已可跑」→ **可跑但结果不可信**；回填从「可选」→ **真机前建议必做**）；
+  3. 纠错 **[网页版协议实测记录.md](网页版协议实测记录.md)**：§8.3 B1 豆包入口（`paste_only` 再更正 = **按需挂载**的状态相关组件）· §10.5 卡点块（「不再拦路」加前提）· §10.6 ③ 答案容器（**差分 ≠ 归属**）+ ④ 上传侧（**0 个候选 ≠ 形态不支持**）· 7.1 / 7.3 窗口串行复用（「够不够」→ **不够**）；
+  4. 同步 [README.md](README.md) 文档地图 · 本文件索引与条目（新补丁**独立成文** —— ⛔ **不改动 `actionPlan/M_patchAB_rest.md`**）。
+- **未做（如实登记）**：**代码未改** · `providers.json` 未改 · `DevPlan.todo` 未改（`PW-*` 条目**待由 UI 写入**，沿用既有口径）。
+
+**📌 `M_patchC` 决策拍板 `D-33`–`D-36`（2026-10-07 · 仅文档，代码未改）**
+
+- **`D-33 = ②`** **独立窗口 / profile（真并行）** —— 用户口径「真并行。后期需要使用，这个能力很重要」⇒ 窗口层由**单例**改为**窗口表**（每站点一窗 · 每窗一 owner）；「跨站点 = 先关旧窗」这一机制**退场**；
+- **`D-35 = ③`** 复位 = **首次 + 失败时**（窗口级首选「关窗重开」；交互态级只做 `wait_ready` L1→L2→L3）；
+- **`D-34 = ①`** `answer_selector` **维持「可选」**（用户口径「加（为必做）不需要，直接用真机来测试」）⇒ 判据加固改为**真机实测驱动**（`PW-07` 定位为伴随加固，含**取消「短候选也算成功」**，杜绝 12 字节类"假成功"）；
+- **`D-36 = ②`** `web.attach` **降级为诊断字段**（保留解析 + 诊断回显，**不作分派依据**；`M8-Q1` 结案）。
+- **同步（`actionPlan/M_patchC_web_node_bind.md` v2）**：§1（归属主线）· §4.1（**窗口表**替代租约表）· §4.4（复位时机 + **实现事实**：不再假想 `Navigate(login_url)`）· §4.5（`D-34①`）· **§4.7（🆕 `web.attach` 诊断字段）** · §5（`I24` 措辞）· §6（`PW-02` / `PW-06` / `PW-07` / `PW-08` / `PW-09` + **🆕 `PW-13`**）· §7.2（`AW-03` / `AW-04` + **🆕 `AW-06`**）· §8 / §9（待拍板 → 已拍板）/ §10（v2 行）；并修 **3 处行号勘误**（`web/site_ref.h` 的 `LoginRequest` 实为 `:32-57`；「登录窗口未就绪」文案源 = `webview_host.cpp:1766-1770`；`set_file_input_files` 空指针检查 `:1917-1918`）。
+- **未做（如实登记）**：**代码未改** · `providers.json` 未改 · `DevPlan.todo` 未改（`PW-*` 待由 UI 写入）；⛔ **`actionPlan/M_patchAB_rest.md` 一行未改**（新补丁独立成文 · 只单向引用）。
+
+**🔧 `M_patchC` P1 首段落地：`PW-01`（归属贯穿）+ `PW-03`（就绪三级）（2026-10-07 · 代码已改）**
+
+- **`PW-01`（归属 · `I24` / `I26` 的基础）**：🆕 `web/web_owner.h`（`WebOwner{run_id,node_id,site_key}` + `owner_same` / `owner_key` / `owner_tag` / `owner_known`，**纯函数**）·
+  `web/site_ref.h` 增 `LoginRequest.owner` + `with_owner()` · `engine/executor.{h,cpp}` 增 `ExecutionContext.run_id`（`start()` 生成，同一次运行内稳定）·
+  `nodes/local_nodes.cpp` 用 `web_owner_of()` 填 owner · `ai/dom_web_client.h` / `ai/upload/upload_contract.h` 透传 ·
+  `web/webview_host.cpp` 日志统一带 `[owner run#node]`。**只传递、不改行为**（窗口行为与改造前一致）。
+- **`PW-03`（就绪三级 · `I25`）**：🆕 `web/ready_level.h`（位 `kReadyWindow/Page/Composer/FileInput` + `ready_satisfied` / `ready_first_missing` / `ready_missing_text`，**纯函数**）·
+  `web/webview_host.{h,cpp}` 新增 `wait_ready()` / `peek_page_state()`：
+  * **L1 窗口级** = 等 controller / webview 创建（50 ms 粒度，复用 `logout_site` 既有写法）；**L2 页面级** = `document.readyState=complete` **且** `site_key_of(location.href)` 命中目标站点（**实时 URL**，不再是 `g_request.url`）；**L3 交互态级** = 可见输入候选 > 0（上传场景再加 `input[type=file]` > 0）；
+  * **归因分离**（`G6`）：附件入口未挂载 ⇒ 报「**页面未就绪**」，**不再**说「该站点可能是拖拽 / 粘贴入口」；`resolve_file_input_selector` 的「0 个候选」只在 L3 通过后按「懒加载竞态」表述；
+  * 前置接入：`run_script_sync` = L1+L2（消除真机 `113 ms` 假失败）· `set_file_input_files` / `resolve_file_input_selector` = L1+L2+L3 · `dom_chat` 增 L3 **诊断**等待（不阻断，保留 kickoff 自动识别的报错口径）；
+  * 就绪缓存 1.5 s（轮询期间免重复探针），窗口 `start()` / `WM_DESTROY` 时失效。
+- **验证（本机实测 2026-10-07）**：构建 **0 error / 0 warning** · `api_probe.exe --selftest` **422 通过 / 0 失败**（基线 407 → **+15**）· `aiwrite.exe --upload-selftest` **72 通过 / 0 失败**（**串行**跑）。
+- **未做（如实登记）**：`PW-02`（窗口表 / 独立窗口 · **真并行**）· `PW-04`（owner 分桶）· `PW-05`（归因分离文案全量）· `PW-06`…`PW-13` 未动；
+  **真机 `AW-01` / `AW-06` 待登录后跑** · `providers.json` 未改 · `DevPlan.todo` 待 UI 写入；⛔ `actionPlan/M_patchAB_rest.md` **一行未改**。
+
+**⚙️ M8-37 运行期自动识别（零开关）：点「运行」即自动跑完整链路 · 选择器未回填不再拦路（2026-10-06）**
+
+- **用户口径**：**不要显式开关** —— 网页版与文字版同一条处理方式；**点「运行」时才执行上传与理解**（与 API 模式同感）；
+  自动识别到的选择器**只打印不落盘**（口径①：进 Console / 日志 / `steps`，**不**回写 `providers.json`，零副作用）。
+- **改动（C++ 7 个文件）**：
+  * `ai/dom_web_client.{h,cpp}`：**运行期自动识别** —— 输入框（可见 + 靠视口下半部 + 有 placeholder 打分；
+    声明值优先）、发送（`click` 未命中 → 自动找可见发送按钮；`key` 默认 Enter）、答案容器（**发送前基线快照** →
+    取「新出现且文本 ≥8 字、**文档顺序最后**」的候选池节点；自动排除输入区与自己那条回声）⇒ `dom_chat` 的
+    前置硬校验**收缩为只查 `web.login_url`**；顺序调整为「**纯本地上传准备/交件 → 会话引导 → 注入 → 发送 → 取答案**」
+    （坏图 / 坏令牌在碰浏览器之前就失败）；`DomChatResult` 新增 `input_auto` / `input_used` / `answer_auto` / `answer_fingerprint` 诊断字段。
+  * `ai/upload/upload_evidence.{h,cpp}`：**站点无关自动判据**（`I18` 不放宽，两侧仍缺一不放行）——
+    页面侧 = 交付文件名出现 **或** 附件候选池 / 缩略图相对**交件前基线**增加；网络侧 = 交件后的 **POST/PUT** 且 URL 含
+    通用上传特征词（`upload` / `/files` / `attach` / `media` / `oss` / `tos` / `storage` / `blob`）。采样脚本与解析同步扩展
+    （`file_hits` / `attach_pool` / `blob_images`），并新增 `evidence_for_auto()` / `match_page_evidence_auto()` 纯函数。
+  * `ai/upload/upload_registry.cpp`：`attach_selector` 未命中 → **只读自动识别后只重试一次**（识别结果进日志 / `steps`）；
+    交件前采一次页面基线；诊断改用 `web::resolve_file_input_selector`（**单一实现**，删掉重复的枚举脚本）。
+  * `web/webview_host.{h,cpp}`：新增传输原语 `resolve_file_input_selector()`（只读枚举页面 `input[type=file]`；
+    取值策略 = `accept` 含 image → 隐藏且带 accept → 文档顺序首个；返回全部候选清单）。
+  * `nodes/local_nodes.cpp` / `main.cpp` / `ui/property_panel.cpp`：两处 `web_login_only` **抛错 → 一行提示**（文字与图片同步，
+    避免「图片能跑文字反而不能」）；`--run-selftest --web` 不再因缺字段返回 1；`--upload-selftest` 就绪度行改为
+    「未回填（**运行时会自动识别**）」并把后续命令标为**可选**；参数面板补一行灰字说明。
+- **§9.3 断言成对登记（**数字 + 原因**）**：
+  * **就地改写（数量不变）**：`M8-34` 的 7c) 断言改用 `yuanbao-web`（登录型 + 未声明 `upload_adapter`）⇒ 断言「**真不可用才报错**」
+    （文案含「图片理解（网页版）」+「upload_adapter」，**不再**出现「登录型条目 / 暂不支持网页版」）—— 该分支在 `dom_chat` 之前，
+    **不打开窗口**故可离线复现；`VB2-22②③` 就地补上自动识别字段 / 脚本分支的断言；`VB2-22⑤` 就地改为「缺 `web.login_url` → 立即报错」
+    （原用例在改动后会真的开窗，必须改写）。
+  * **新增（+10）**：`api_probe --selftest` **397 → 407**、`aiwrite --upload-selftest` **62 → 72**，
+    原因 = 双证据组新增 **10** 条纯函数断言（页面自动判据 5 · 网络自动判据 3 · 采样脚本与解析扩展 2）。
+- **验证（可复现 · 串行跑）**：构建 **0 error / 0 warning**；`api_probe --selftest` **407/0**；`aiwrite --upload-selftest` **72/0**；
+  两站就绪度检查返回 0 且**不开窗**；残留进程 **0**。另做**真机级脚本验证**：用 Edge headless + 假站点夹具（脚本文本**从源码重建**）
+  在**真实 Chromium** 上跑通 —— kickoff 自动识别输入框 `div#composer`、poll 自动识别答案容器 `div.markdown` 且**正确排除用户回声**、
+  上传采样脚本返回 `file_hits` / `attach_pool` / `blob_images`（夹具为**临时脚本**，放在**构建目录 · 不入库**：`build\m837_harness*.ps1`）。
+- **遗留（真机一次）**：两站现在**只差真实登录态** —— 登录后点一次「运行」（或 `--upload-selftest --provider <id> --image <图>`）即可端到端验证；
+  选择器回填**可选**（`--web-dom-dump` / `--web-adapter-selftest` 仍保留为固化工具）。
+
+**🔌 M8-34 连线：网页版「图片上传 + 图片理解」全链路打通（2026-10-06）**
+
+- **代码连线（3 处）**：
+  * `ai/dom_web_client.*`：`DomChatRequest` 新增 `image_values` / `image_max_bytes`；`dom_chat()` 在 `ensure_session` 之后、**注入提示词之前**执行上传（`upload_images`）—— **双证据不齐备就直接返回**（`I18`：不注入、不发送）；`DomChatResult` 新增 `uploaded` / `upload_page` / `upload_net` / `conversions` 诊断字段。
+  * `nodes/local_nodes.cpp`：`VLMGenerate(mode=web)` **不再抛「图片理解暂不支持网页版」**，改为走站点上传模板 → `dom_chat` → 返回文本（Console 打印每张格式转换 / 双证据 / 轮询统计）。
+  * `engine/provider_resolve.cpp`：`unwired_reason()` 对 VLM+web **只在「该站点没接上传单元」时**才算必定失败（文案指向 `web.upload_adapter`）。
+- **就绪度检查 + 未命中诊断**（`M8-35`）：`--upload-selftest --provider <id>` 打印 adapter / attach_selector / answer_selector / 生成字段是否齐全，缺字段时**直接给出下一条命令**（`--web-dom-dump` / `--web-adapter-selftest`）；未给 `--image` 时**只检查不上传**；交件「选择器未命中」时**只读枚举**页面 `input[type=file]`（accept / multiple / 可见性 / 建议选择器）拼进错误里 —— 接新站点不必人肉 F12。
+- **配置表**（`M8-36`）：`doubao-web` 回填**实测**字段 `input_selector=div.tiptap.ProseMirror` + `send={key,Enter}`（物证 B3：输入后无发送按钮 ⇒ **Enter 发送成功**并取回回答），`capabilities.vision` 翻 **true**（依据 = B3 真视觉）；`kimi-web` 保持 `vision:false`（未实测 ⇒ 不宣称）。
+- **§9.3 断言成对登记**：`api_probe` 原断言「`M5-02b` 接线：web 模式 → 「图片理解暂不支持网页版」」所断言的行为**已被本批取代** ⇒ 该断言**就地改写**为「`M8-34` 接线：web 模式**不再**报「暂不支持网页版」（改走站点上传链路）」（**断言数不变，总数仍 397**；新旧文案与原因在本节留档）。
+- **数字**：构建 **0 error / 0 warning**；`api_probe --selftest` **397/0**；`aiwrite --upload-selftest` **62/0**；豆包 / Kimi 就绪度检查均返回 0；残留进程 0。⚠️ 离线自检共用 `%TEMP%\aiwrite-upload\selftest` ⇒ **不要并发跑多个实例**（会互相删目录 → 假失败）。
+- **两站剩余缺口（只差字段，不改代码）**：`doubao-web` 只差 `answer_selector`；`kimi-web` 差 `attach_selector` + `answer_selector` ⇒ 按 `PB2-26` **不猜选择器**，用 `--web-dom-dump` + `--web-adapter-selftest` 一次实跑回填（步骤见 `M8.md` §13.7）。
+  > 🔁 **本条已于同日的 `M8-37` 取代**：缺字段**不再拦路**（运行期自动识别，只打印不落盘）⇒ 回填**降为可选**；`397/0` 与 `62/0` 亦随 `M8-37` 变为 **407/0** 与 **72/0**（原因 = 双证据组 +10 条自动判据断言）。
+
+**🧩 M8 Phase 2 定型：站点上传模板（公共契约 + 每站独立上传函数）· 豆包 + Kimi 先验（2026-10-06）**
+
+- **用户拍板**（取代 `M8.md` §3.1 的 ①/②/③ 提问）：图片上传**不做原生复刻**（不追 `lHg` / `s=` 算法），改为**模板化** ——
+  **公共契约 + 每站一个独立上传函数 + 每站格式识别/转换**；上传仍由**站点自己的页面 SDK**在 WebView2 会话内完成，
+  C++ 只负责**选文件 / 交件 / 要证据**（`I18`：页面证据 **且** 网络回执齐备才算成功）。首站 = 豆包（实测值全已知），
+  第二站 = Kimi（**用来验证「只加一个站点单元就能通」**）。
+- **新增（C++）**：`ai/upload/upload_contract.h`（`SiteUpload` 四件套：`prepare` / `deliver` / `expect` / `prepare_options`）·
+  `ai/upload/image_convert.{h,cpp}`（内容嗅探 → 站点白名单/体积/边长 → `stb_image_resize` 缩放 + `stb_image_write` 转 PNG/JPG；
+  `utils/image_decode.*` **冻结区只调用不改**；stb 头文件 vcpkg 已在树里 ⇒ **零新增依赖**）·
+  `ai/upload/upload_evidence.{h,cpp}`（页面状态脚本生成 + 解析 + 网络回执匹配 + `I18` 组合判定；**纯函数**）·
+  `ai/upload/upload_registry.{h,cpp}`（注册表 + **唯一入口** `upload_images()`：值解析 → 准备 → 注入 → 等双证据）·
+  `ai/upload/site_uploads.h` + `ai/upload/sites/site_upload_doubao.cpp` + `site_upload_kimi.cpp`。
+- **新增（传输原语）**：`web::set_file_input_files()`（**进程内** CDP 三步 `DOM.getDocument → DOM.querySelector → DOM.setFileInputFiles`，
+  `ICoreWebView2::CallDevToolsProtocolMethod`）+ `web::begin/take_resource_capture()`（`ICoreWebView2_2::add_WebResourceResponseReceived`，
+  **有界 400 条**）。复用既有线程模型（窗口线程 `PostMessage` + 调用方条件变量等待）。
+- **配置表**：`web` 段新增 `upload_adapter`（选站点单元）/ `attach_selector`（覆盖选择器）/ `upload_accept`（覆盖白名单）；
+  `doubao-web` 落值 = `builtin:doubao` + `input.hidden`（B1 实测的唯一隐藏 file input）；`kimi-web` 落 `builtin:kimi`（选择器待侦察）。
+  ⚠️ `web.attach` **原样保留、仍未消费**（`M8-Q1` 不再阻塞）。
+- **CLI**：`aiwrite.exe --upload-selftest [--provider <id>] [--image <路径>] [--timeout <秒>]`（离线三组 + 可选真机一次；返回码 0/1/2）；
+  离线三组同时并入 `api_probe.exe --selftest` 计数。
+- **数字（可复现）**：构建 **0 error / 0 warning**；`api_probe --selftest` **397 通过 / 0 失败**（Phase 1 基线 335 ⇒ **+62**，
+  原因 = 新增三组离线断言：图片准备 **19** · 双证据 **22** · 注册表与契约 **21**）；未起浏览器时残留进程 **0**。
+- **Kimi 侦察脚本**（新）：`source/python/_probe/m7b28_kimi_recon.py` —— **复用** `m7b28_doubao_recon.py` 全部机制（只覆盖站点常量，
+  **零逻辑分叉**），产物 `out/m7b28_kimi_recon.b1-<时间戳>.json` **不覆盖**豆包既有物证；鉴权 Cookie 名未实测 ⇒ 登录判定先只按 DOM 正证据
+  （不猜名字，避免豆包 B0 误报的同类坑）。
+- **文档**：`M8.md` 新增 **§13 站点上传模板**（分层 / 契约 / 接入三步 / 不变量连锁 / 文件清单 / **未做登记**）+ `M8-24`~`M8-33` 任务行
+  + §9.4 基线 + §0/§2.2/§3.1 订正 + `M8-Q6`（节点层接线口径，**待拍板**）；`M7.md` `D5` 行加**术语订正**
+  （「不使用 CDP **端点**」≠ 禁止**进程内** `CallDevToolsProtocolMethod`）；`网页版协议实测记录.md` 新增 §10（模板取值 + Kimi 侦察配方）。
+- **待用户真机（阻塞项）**：① 豆包端到端 `--upload-selftest --provider doubao-web --image <图>`（需已登录一次）；
+  ② Kimi 侦察 `python m7b28_kimi_recon.py --login / --recon / --inject`（需手动登录）→ 回填 `web.attach_selector`（**不改 C++**）。
+  **未做**（如实登记）：节点层接线（`VLMGenerate(web)` 的 `image` 端口；待 `M8-Q6`）、`capabilities.vision` 声明（与 `P7b-16` 三处同批）。
+
+**🧭 M8 Phase 2 开工：C++ 供料探针就位 + 物证解读（2026-10-05）**
+
+- **物证解读（零浏览器）**：`m7b28_doubao_recon*.json` 显示豆包上传四段链 = `GET /alice/resource/prepare_upload?...&device_id=<客户端参数>` → `GET /top/v1?Action=ApplyImageUpload&...&s=<11 字符短票据>` → `POST https://tos-hl-x.snssdk.com/upload/v1/<bucket>/<hash>.png` → `POST /top/v1?Action=CommitImageUpload`。**`device_id` 是客户端查询参数**（localStorage 键 `client_device_info` 为候选）；**`s=` 短票据更可能由 `prepare_upload` 服务端下发**（待验证）—— 若成立，方案 E **无需页面 JS 签名**。
+- **新增 `ai/upload_supply_probe.{h,cpp}` + CLI `--web-supply-probe [--provider <id>] [--timeout <秒>] [--get <路径?查询串>]`**：**站点无关**（不内置厂商常量；站点查询串由 `--get` 传参，避免违反「C++ 内不出现厂商常量」并绕开未拍板的 `M8-Q1` 字段命名）。链路：按条目 `interactive_login_request` → `web::ensure_session`（有头 WebView2 · **人工登录**）→ 页面只读取样 `device_id` 候选 + `document.cookie` 名 → 会话取样（`SessionStore` Cookie，**值一律脱敏**）→ 仅当给 `--get` 时用会话 Cookie 发**一次 GET** 并扫描签名类键名 ⇒ 输出「服务端下发 / 需页面 JS」判定；报告落 `~/.brain-ai/logs/m8_supply_probe_<时间戳>.json`。退出码 0=完成 / 1=页面或会话未就绪 / 2=条目或站点不可用。
+- **验证（离线）**：构建 **0 error / 0 warning**；`--help` 列出新命令；`--web-supply-probe --provider no-such-entry` → 退出码 **2** + 可操作文案且**不开窗**；残留进程 **0**。
+- **待人工（Phase 2 Gate）**：`--web-supply-probe --provider doubao-web`（人工登录）→ **重跑**并带 `--get "<豆包 prepare_upload 查询串>"` ⇒ 结论回填 `M8.md` §3 / `M8-11`。
+- **口径**：探针**只读**（默认不碰站点接口）；`--get` 这一次站点接口调用属 Phase 2 的 **Gate 实验**，产品化仍待 `M8-Q2`（合规口径）拍板。
+- **静态取证（2026-10-05 · 零浏览器 · 已复现）**：抓 `https://www.doubao.com/chat/` → HTML **内联 webpack runtime** 含 **id→分包名 / id→hash** 两张表与**路由→分包映射** → 按 `static/js/async/<name>.<hash>.js` 取分包，得 **`s2-uploader-service`（id `1d` · 7 KB）**。其源码显示：`let {data: p} = await u.CZ.ResourcePrepareUpload({...})` 之后 **`upload_host` / `service_id` / STS（`upload_auth_token.{access_key,secret_key,session_token,current_time,expired_time}`）全部取自该接口响应**，随后 `setOption({imageHost: (p.upload_host, "https://www.doubao.com/top/v1"), imageConfig: {serviceId: p.service_id}})` ⇒ **上传链凭证面由服务端下发**；`service_id` 与物证 `ServiceId=a9rns2rl98` **逐字一致**。记录见 [网页版协议实测记录.md](网页版协议实测记录.md) §9（含复现配方）。
+- **判定（`s=` 的来源）**：物证 URL 里 `s=9r6t746jf4g`（11 字符）**只出现在 `ApplyImageUpload`**（`CommitImageUpload` 无）⇒ 由站点**前端上传 SDK** 用 ① 的 STS 物料计算；算法在 **模块 `lHg`**（**不在** `chat.*.js` / `vp.js` / `lib-polyfill.js`，在 1001 个分包之一；已按路由相关 + 名字关键词试 **34 个** ⇒ **0 命中**）⇒ **暂停 crawl**，改由真机响应体定论（`--web-supply-probe`）。
+- **新增实现路线分叉（`M8.md` §3.1 · **待用户拍板**）**：① **纯 native**（C++ 复刻 `s` 短签名，需先拿到 SDK/实测比对；`R1` 抗改版 ≈ 0）② **WebView2 混合**（C++ 读文件 + **CDP `DOM.setFileInputFiles`** 注入，签名与直传交给**页面内官方 SDK** ⇒ 抗改版最好、零 Python；代价 = 把 CDP 纳入核心路径 ⇒ 需**订正 `M7.md` `D5`**）③ 先补 crawl 再回 ①。**里程碑建议：先 ② 拿双证**（`both=true`），再按 `M8-Q2` 决定是否投入 ①（② 可长期作为 `adapter=dom` 上传兜底 = `R2` 要求的双轨）。
 
 **🧭 M8 Phase 1 补齐：全链路回滚 —— 面板会话 / 退出收尾 / 日志文案一并回 WebView2（2026-10-05）**
 

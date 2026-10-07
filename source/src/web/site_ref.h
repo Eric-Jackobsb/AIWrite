@@ -18,6 +18,7 @@
 
 #include "ai/provider_spec.h"     // 站点参数来自配置表条目（ProviderWebSpec）
 #include "web/session_store.h"    // 站点键（origin）= site_key_of
+#include "web/web_owner.h"        // M_patchC（PW-01）：归属标识（纯数据）
 
 namespace aiwrite::web {
 
@@ -54,10 +55,22 @@ struct LoginRequest {
     // ---- M7B（`B12-C2`）：上传入口形态 `auto | file_input | drop_zone | paste_only | none` ----
     //  * **本批只解析 / 携带、运行期不消费**（取值归批 3 `P7b-10`）；缺省空串 = 未声明
     std::string              attach;
+    // ---- M_patchC（`PW-01` · 不变量 `I24` / `I26`）：**归属** ----
+    //  * 随请求流动（`PW-01` **只传递**，不改变任何窗口行为）；
+    //    日志 / 离线断言 / `PW-02` 窗口表仲裁都据此回答「这是哪个运行、哪个节点要的」
+    //  * 空 owner = 未标注（CLI / 自检等没有节点上下文的调用点）
+    WebOwner                 owner;
 };
 
 //: `SiteRef` = 站点描述（**与 `LoginRequest` 同一类型**的纯别名；新通道按此名调用，零语义）
 using SiteRef = LoginRequest;
+
+// 带归属的副本（M_patchC `PW-01`：**只传递**，不改行为 / 不改选择器 / 不写配置）
+inline LoginRequest with_owner(LoginRequest request, const WebOwner& owner)
+{
+    request.owner = owner;
+    return request;
+}
 
 // ---- 纯函数（**搬迁**自 `webview_host.h`，零语义；可离线断言）----
 

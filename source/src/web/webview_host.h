@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "ai/provider_spec.h"     // M_patchB L1 续（PB2-17）：站点参数来自配置表条目
+#include "web/ready_level.h"      // M_patchC（PW-03）：就绪三级（纯函数：位 / 文案）
 #include "web/session_store.h"    // 站点键（origin）/ 会话归档
 #include "web/site_ref.h"         // M7B 批 2：站点描述 + 纯函数**已搬迁到此**（零语义；见该文件头注释）
 
@@ -89,6 +90,59 @@ int protocol_probe_for_provider(const std::string& provider_id, int timeout_seco
 //  * 典型用途：DOM 适配器（注入提示词 / 触发发送 / 轮询答案）与选择器探测（PB2-15）
 bool run_script_sync(const LoginRequest& site_request, const std::string& script_js, int timeout_ms,
                      std::string* json_result, std::string* error);
+
+// ---- M8-14：站点上传模板的**传输原语**（进程内 CDP）----
+//  * 口径（`M7.md` `D5` 订正）：`D5` 禁止的是「CDP **端点**」（远程调试端口 / 外部工具连入）；
+//    这里用的是**进程内** `CallDevToolsProtocolMethod`（WebView2 的公开 API），不监听任何端口、
+//    不引入外部进程，与本进程既有的 `ExecuteScript` 同级。见 `M8.md` 的订正行。
+struct WebResourceRecord {          // WebView2 网络回执（**站点无关**）
+    std::string url;
+    std::string method;             // GET / POST / …
+    int         status = 0;         // HTTP 状态码（0 = 未知）
+};
+
+// 清空网络采集缓冲（一次上传开始前调用；只清本进程内存）
+void begin_resource_capture();
+// 取走并清空缓冲（**增量**语义；调用方自行累积判定）
+std::vector<WebResourceRecord> take_resource_capture();
+// 采集是否已挂钩（诊断：取不到 `ICoreWebView2_2` 时为 false —— 退化为「仅页面证据」）
+bool resource_capture_ready();
+
+// 把本地文件交给页面的 `<input type="file">`：
+//   CDP 三步 = `DOM.getDocument` → `DOM.querySelector` → `DOM.setFileInputFiles`
+//  * 需要已登录窗口：内部按站点 `ensure_session` / 离屏开窗（与 `run_script_sync` 同策略）
+//  * `absolute_paths` = **绝对路径**（调用方保证文件存在、已按站点要求转码）
+//  * `*detail` 诊断（nodeId / 文件数）；失败 → `*error` 为**可操作**原因（`I21`）
+bool set_file_input_files(const LoginRequest& site_request, const std::string& css_selector,
+                          const std::vector<std::string>& absolute_paths, int timeout_ms,
+                          std::string* detail, std::string* error);
+
+// ---- M_patchC（`PW-03` · 不变量 `I25`）：**就绪三级**（窗口级 → 页面级 → 交互态级）----
+//  背景：真机实证「就绪 = 凭证级」导致 `113 ms` 假失败；「页面不在交互态」被误归因为
+//  「该站点用拖拽 / 粘贴入口」（`G2` / `G6`）。本 API 把「能不能动手」判到**页面级 / 交互态级**。
+//  * `need` = `ready_level.h` 的位组合（例 `kReadyUpload` = 窗口 + 页面 + 输入框 + 附件入口）
+//  * 返回**已达掩码**（调用方用 `ready_satisfied(reached, need)` 判定；失败文案用
+//    `ready_missing_text(need, reached)` —— 归因分离，绝不含「形态不支持」）
+//  * 逐级等待 + 逐级日志（带 `owner` 标签）；L1 复用「等 controller」既有写法
+//  * **只读**：只读页面状态（URL / readyState / 候选计数），不点击、不写入、不改导航
+int  wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std::string* error);
+
+// 页面状态探针（只读；供诊断 / 断言 / `wait_ready` 内部使用）
+struct WebPageState {
+    std::string url;
+    bool        ready_state_complete = false;
+    int         composer_hits        = 0; // **可见**输入候选数（textarea / contenteditable / textbox …）
+    int         file_inputs          = 0; // `input[type=file]` 命中数（含隐藏）
+};
+bool peek_page_state(const LoginRequest& site_request, WebPageState* out, std::string* error);
+
+// ---- M8-37（零开关）：attach_selector 未回填 / 未命中时的**只读自动识别** ----
+//  * 枚举页面 `input[type=file]` → 取值策略：accept 含 image → 隐藏且带 accept → 文档顺序首个
+//  * `*detail` = 全部候选清单（选择器 / accept / multiple / 可见）+「⇒ 自动识别选择器」行
+//  * 只读（不点击 / 不写入 / 不读值）；取不到候选 → false + 可操作原因（`I21`）
+//  * ⚠️ 结果**只用于本次运行**：不回写任何配置（口径①：只打印不落盘）
+bool resolve_file_input_selector(const LoginRequest& site_request, int timeout_ms,
+                                 std::string* selector, std::string* detail, std::string* error);
 
 // 用**登录窗口内的官方 PoW worker** 求解（M4-06/M4-09 方案 A：版本自适应、零逆向）
 //  * site_url：**目标站点**（origin / 登录页；PB2-23：不再用「内置默认站点」猜 —— 决策 D-22②）

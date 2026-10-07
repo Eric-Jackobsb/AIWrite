@@ -13,9 +13,11 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
+#include <functional>
 #include <mutex>
 #include <exception>
 #include <filesystem>
@@ -39,6 +41,7 @@ constexpr UINT           kProbeMessage  = WM_APP + 1; // 请求协议探测（�
 constexpr UINT           kSolvePowMessage = WM_APP + 2; // 请求在页面内求解 PoW（任意线程 Post）
 constexpr UINT           kLogoutMessage   = WM_APP + 3; // 请求按站点注销（删该 origin 的 Cookie + 清 localStorage）
 constexpr UINT           kRunScriptMessage = WM_APP + 4; // L3：请求在页面内执行一段脚本并回传原始 JSON（任意线程 Post）
+constexpr UINT           kSetFilesMessage  = WM_APP + 5; // M8-14：请求把本地文件交给 input[type=file]（任意线程 Post）
 // 页面加载完成后到开始协议探测的等待（给 SPA 一点就绪时间）
 constexpr DWORD kProbeDelayMs = 1500;
 
@@ -275,6 +278,39 @@ DWORD                 g_last_poll  = 0;
 ComPtr<ICoreWebView2Environment> g_environment;
 ComPtr<ICoreWebView2Controller>  g_controller;
 ComPtr<ICoreWebView2>            g_webview;
+
+// ---- M8-14：CDP「把本地文件交给页面」的跨线程同步状态（调用方等待，窗口线程执行）----
+std::mutex               g_files_mutex;
+std::condition_variable  g_files_cv;
+bool                     g_files_done = false;
+bool                     g_files_ok   = false;
+std::string              g_files_selector;
+std::vector<std::string> g_files_paths;
+std::string              g_files_detail;
+std::string              g_files_error;
+
+// ---- M8-14：网络回执采集（`ICoreWebView2_2::add_WebResourceResponseReceived`）----
+std::mutex                     g_net_mutex;
+std::vector<WebResourceRecord> g_net_records;
+bool                           g_net_ready = false;     // 是否挂钩成功
+constexpr std::size_t          kNetRecordLimit = 400;   // 有界缓冲（R13：不能无限增长）
+
+// ---- M_patchC（`PW-03` · 不变量 `I25`）：**就绪缓存** ----
+//  * 目的：轮询期间（`dom_chat` 每 500 ms 一轮）不必每轮都多跑一次页面状态探针
+//  * 失效点：窗口 start（换站点 / 重开）与 WM_DESTROY（窗口关闭）
+//  * 只缓存「已达掩码」，**不缓存**页面内容 —— 不改变任何判定语义
+std::mutex  g_ready_mutex;
+std::string g_ready_site;
+int         g_ready_mask = 0;
+DWORD       g_ready_tick = 0;
+
+void forget_ready()
+{
+    std::lock_guard<std::mutex> lock(g_ready_mutex);
+    g_ready_site.clear();
+    g_ready_mask = 0;
+    g_ready_tick = 0;
+}
 
 std::wstring to_wide(const std::string& text)
 {
@@ -627,6 +663,200 @@ void run_script_in_window()
     }
 }
 
+// ---- M8-14：把本地文件交给页面（CDP）--------------------------------------------------
+
+// 结束一次「注入文件」（窗口线程调用）
+void finish_set_files(bool ok, std::string detail, std::string error)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_files_mutex);
+        g_files_ok     = ok;
+        g_files_detail = std::move(detail);
+        g_files_error  = std::move(error);
+        g_files_done   = true;
+    }
+    g_files_cv.notify_all();
+}
+
+// 调用一次 CDP 方法（回调在窗口线程；`params_json` 为 UTF-8 JSON 文本）
+void call_cdp(const wchar_t* method, const std::string& params_json,
+              std::function<void(HRESULT, const std::string&)> on_done)
+{
+    if (g_webview == nullptr) {
+        on_done(E_FAIL, {});
+        return;
+    }
+    const std::wstring method_name = method;
+    const std::wstring params      = to_wide(params_json);
+    const HRESULT      hr          = g_webview->CallDevToolsProtocolMethod(
+        method_name.c_str(), params.c_str(),
+        Callback<ICoreWebView2CallDevToolsProtocolMethodCompletedHandler>(
+            [on_done](HRESULT result, LPCWSTR json_result) -> HRESULT {
+                on_done(result, json_result == nullptr ? std::string() : to_utf8(json_result));
+                return S_OK;
+            })
+            .Get());
+    if (FAILED(hr)) {
+        // 同步失败时回调不会触发 → 必须显式收尾，否则调用方等到超时
+        log::warn("[图片上传] CallDevToolsProtocolMethod 同步失败 HRESULT=" + std::to_string(hr));
+        on_done(hr, {});
+    }
+}
+
+// CDP 三步：DOM.getDocument → DOM.querySelector → DOM.setFileInputFiles
+void run_set_files_in_window()
+{
+    if (g_webview == nullptr) {
+        finish_set_files(false, {}, "WebView2 未就绪");
+        return;
+    }
+    std::string              selector;
+    std::vector<std::string> paths;
+    {
+        std::lock_guard<std::mutex> lock(g_files_mutex);
+        selector = g_files_selector;
+        paths    = g_files_paths;
+    }
+    if (selector.empty()) {
+        finish_set_files(false, {}, "选择器为空（站点单元未给 attach_selector）");
+        return;
+    }
+    if (paths.empty()) {
+        finish_set_files(false, {}, "文件列表为空");
+        return;
+    }
+
+    call_cdp(L"DOM.getDocument", "{\"depth\":1}",
+             [selector, paths](HRESULT result, const std::string& json_text) {
+                 if (FAILED(result)) {
+                     finish_set_files(false, {}, "CDP DOM.getDocument 失败（HRESULT " +
+                                                     std::to_string(result) + "）");
+                     return;
+                 }
+                 int root_node_id = 0;
+                 try {
+                     root_node_id = nlohmann::json::parse(json_text).at("root").value("nodeId", 0);
+                 }
+                 catch (const std::exception&) {
+                     root_node_id = 0;
+                 }
+                 if (root_node_id <= 0) {
+                     finish_set_files(false, {},
+                                      "CDP DOM.getDocument 未返回根节点（原始：" +
+                                          json_text.substr(0, 160) + "）");
+                     return;
+                 }
+                 nlohmann::json query;
+                 query["nodeId"]   = root_node_id;
+                 query["selector"] = selector;
+                 call_cdp(L"DOM.querySelector", query.dump(),
+                          [selector, paths](HRESULT query_result, const std::string& query_text) {
+                              if (FAILED(query_result)) {
+                                  finish_set_files(false, {},
+                                                   "CDP DOM.querySelector 失败（HRESULT " +
+                                                       std::to_string(query_result) + "）");
+                                  return;
+                              }
+                              int node_id = 0;
+                              try {
+                                  node_id = nlohmann::json::parse(query_text).value("nodeId", 0);
+                              }
+                              catch (const std::exception&) {
+                                  node_id = 0;
+                              }
+                              if (node_id <= 0) {
+                                  finish_set_files(false, {},
+                                                   "选择器未命中页面元素：" + selector +
+                                                       "（请跑 --upload-selftest 复核 "
+                                                       "web.attach_selector）");
+                                  return;
+                              }
+                              nlohmann::json set_params;
+                              set_params["nodeId"] = node_id;
+                              set_params["files"]  = paths;
+                              call_cdp(L"DOM.setFileInputFiles", set_params.dump(),
+                                       [selector, node_id, count = paths.size()](
+                                           HRESULT set_result, const std::string& /*json*/) {
+                                           if (FAILED(set_result)) {
+                                               finish_set_files(
+                                                   false, {},
+                                                   "CDP DOM.setFileInputFiles 失败（HRESULT " +
+                                                       std::to_string(set_result) + "，选择器 " +
+                                                       selector + "，nodeId " +
+                                                       std::to_string(node_id) + "）");
+                                               return;
+                                           }
+                                           finish_set_files(
+                                               true,
+                                               "CDP DOM.setFileInputFiles 完成（nodeId=" +
+                                                   std::to_string(node_id) + "，文件 " +
+                                                   std::to_string(count) + " 个）",
+                                               {});
+                                       });
+                          });
+             });
+}
+
+// M8-14：网络回执挂钩（窗口线程；控制器就绪后调用一次）
+void hook_resource_capture()
+{
+    if (g_webview == nullptr) {
+        return;
+    }
+    ComPtr<ICoreWebView2_2> webview2;
+    if (FAILED(g_webview->QueryInterface(IID_PPV_ARGS(&webview2))) || webview2 == nullptr) {
+        log::warn("[图片上传] 取不到 ICoreWebView2_2 —— 网络回执采集不可用"
+                  "（本页只能用页面证据判定）");
+        return;
+    }
+    EventRegistrationToken token{};
+    const HRESULT          hr = webview2->add_WebResourceResponseReceived(
+        Callback<ICoreWebView2WebResourceResponseReceivedEventHandler>(
+            [](ICoreWebView2* /*sender*/,
+               ICoreWebView2WebResourceResponseReceivedEventArgs* args) -> HRESULT {
+                if (args == nullptr) {
+                    return S_OK;
+                }
+                WebResourceRecord record;
+                ComPtr<ICoreWebView2WebResourceRequest> request;
+                if (SUCCEEDED(args->get_Request(&request)) && request != nullptr) {
+                    LPWSTR uri = nullptr;
+                    if (SUCCEEDED(request->get_Uri(&uri)) && uri != nullptr) {
+                        record.url = to_utf8(uri);
+                        ::CoTaskMemFree(uri);
+                    }
+                    LPWSTR method = nullptr;
+                    if (SUCCEEDED(request->get_Method(&method)) && method != nullptr) {
+                        record.method = to_utf8(method);
+                        ::CoTaskMemFree(method);
+                    }
+                }
+                ComPtr<ICoreWebView2WebResourceResponseView> response;
+                if (SUCCEEDED(args->get_Response(&response)) && response != nullptr) {
+                    int status = 0;
+                    if (SUCCEEDED(response->get_StatusCode(&status))) {
+                        record.status = status;
+                    }
+                }
+                if (record.url.empty()) {
+                    return S_OK;
+                }
+                std::lock_guard<std::mutex> lock(g_net_mutex);
+                if (g_net_records.size() >= kNetRecordLimit) {
+                    g_net_records.erase(g_net_records.begin()); // 有界（R13）
+                }
+                g_net_records.push_back(std::move(record));
+                return S_OK;
+            })
+            .Get(),
+        &token);
+    g_net_ready = SUCCEEDED(hr);
+    log::info(std::string("[图片上传] 网络回执采集：") +
+              (g_net_ready ? "已挂钩（WebResourceResponseReceived）" : "挂钩失败"));
+}
+
+
+
 void finish_pow_solve(long long answer, std::string error)
 {
     {
@@ -847,6 +1077,9 @@ HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
         settings->put_IsStatusBarEnabled(FALSE);
     }
 
+    // M8-14：挂钩网络回执采集（上传证据的第二条腿；失败只记日志，不影响登录/生成）
+    hook_resource_capture();
+
     EventRegistrationToken token{};
     g_webview->add_NavigationCompleted(
         Callback<ICoreWebView2NavigationCompletedEventHandler>(
@@ -983,6 +1216,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         run_script_in_window();
         return 0;
 
+    case kSetFilesMessage: // M8-14：把本地文件交给页面（CDP 三步）
+        run_set_files_in_window();
+        return 0;
+
     case kProbeMessage:
         start_protocol_probe();
         return 0;
@@ -1008,6 +1245,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         g_webview     = nullptr;
         g_environment = nullptr;
         g_window      = nullptr;
+        forget_ready(); // M_patchC PW-03：窗口关闭 ⇒ 就绪缓存作废
         if (g_result.load() < 0) {
             g_result = (g_cookie_count.load() > 0) ? 0 : 1;
         }
@@ -1155,6 +1393,7 @@ bool LoginWindow::start(const LoginRequest& request, std::string* error)
     g_probe_stage      = 0;
     g_probe_attempt    = 0;
     g_window           = nullptr;
+    forget_ready(); // M_patchC PW-03：重开窗口 ⇒ 就绪缓存作废
     {
         std::lock_guard<std::mutex> lock(g_logout_mutex);
         g_logout_done    = false;
@@ -1591,6 +1830,207 @@ bool wait_page_ready(int wait_ms)
     return false;
 }
 
+// ---- M_patchC（`PW-03` · 不变量 `I25`）：就绪三级 —— **实现** ----
+//  * L1 窗口级：窗口在该站点 + controller / webview 已创建（复用 logout 里的既有写法）
+//  * L2 页面级：`document.readyState == complete` **且实时 URL 的站点键 == 目标站点**
+//  * L3 交互态级：可见输入候选 > 0（+ 上传场景：`input[type=file]` > 0）
+//  * **只读**：只读页面状态；不点击 / 不写入 / 不改导航（复位归 `PW-08` / `D-35③`）
+
+namespace {
+
+constexpr DWORD kReadyCacheMs = 1500; // 就绪缓存有效期（轮询期间的免探针窗口）
+
+void remember_ready(const std::string& site, int mask)
+{
+    std::lock_guard<std::mutex> lock(g_ready_mutex);
+    g_ready_site = site;
+    g_ready_mask = mask;
+    g_ready_tick = ::GetTickCount();
+}
+
+int cached_ready(const std::string& site, int need)
+{
+    std::lock_guard<std::mutex> lock(g_ready_mutex);
+    if (g_ready_site != site || g_ready_mask == 0) {
+        return 0;
+    }
+    if (::GetTickCount() - g_ready_tick > kReadyCacheMs) {
+        return 0;
+    }
+    return ready_satisfied(g_ready_mask, need) ? g_ready_mask : 0;
+}
+
+// L1：等 controller / webview 创建完成（50 ms 粒度；与 logout_site 既有写法同源）
+bool wait_controller_ready(int timeout_ms, std::string* error)
+{
+    const DWORD deadline = ::GetTickCount() + static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 0);
+    while (::GetTickCount() < deadline) {
+        if (g_window.load() != nullptr && g_webview != nullptr) {
+            return true;
+        }
+        ::Sleep(50);
+    }
+    if (error != nullptr) {
+        *error = "WebView2 控制器在时限内未就绪";
+    }
+    return false;
+}
+
+// 页面状态探针（**只读**）：URL / readyState / 可见输入候选 / `input[type=file]` 计数
+constexpr const char* kPageStateScript = R"JS(
+(function () {
+  const out = { url: '', ready_state: '', composer_hits: 0, composer_total: 0, file_inputs: 0 };
+  try {
+    out.url = location.href || '';
+    out.ready_state = document.readyState || '';
+    const pool = 'textarea, input[type="text"], input[type="search"], input:not([type]), ' +
+                 '[contenteditable="true"], [contenteditable=""], [role="textbox"]';
+    const nodes = document.querySelectorAll(pool);
+    out.composer_total = nodes.length;
+    let visible = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      const r = nodes[i].getBoundingClientRect();
+      if (r.width > 1 && r.height > 1) { visible += 1; }
+    }
+    out.composer_hits = visible;
+    out.file_inputs = document.querySelectorAll('input[type=file]').length;
+  } catch (e) {
+    out.ready_state = 'error:' + ((e && e.message) ? e.message : String(e));
+  }
+  return out;
+})();
+)JS";
+
+} // namespace
+
+bool peek_page_state(const LoginRequest& site_request, WebPageState* out, std::string* error)
+{
+    (void)site_request; // 站点过滤由调用方做（L2 用 site_key_of(url) 比较）
+    if (out == nullptr) {
+        if (error != nullptr) {
+            *error = "输出参数为空";
+        }
+        return false;
+    }
+    *out = WebPageState{};
+    std::string raw;
+    std::string why;
+    if (!run_script_now(kPageStateScript, 8000, &raw, &why)) {
+        if (error != nullptr) {
+            *error = "读取页面状态失败：" + why;
+        }
+        return false;
+    }
+    try {
+        const nlohmann::json parsed = nlohmann::json::parse(raw);
+        out->url                  = parsed.value("url", std::string());
+        out->ready_state_complete = parsed.value("ready_state", std::string()) == "complete";
+        out->composer_hits        = parsed.value("composer_hits", 0);
+        out->file_inputs          = parsed.value("file_inputs", 0);
+        return true;
+    }
+    catch (const std::exception& ex) {
+        if (error != nullptr) {
+            *error = std::string("页面状态解析失败：") + ex.what() + "；原始结果：" + raw.substr(0, 160);
+        }
+        return false;
+    }
+}
+
+int wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std::string* error)
+{
+    if (error != nullptr) {
+        error->clear();
+    }
+    if (need == kReadyNone) {
+        return kReadyNone;
+    }
+    need |= kReadyWindow; // L2 / L3 都隐含「窗口存在」
+
+    const std::string site     = site_key_of(site_request.url);
+    const std::string tag      = owner_tag(site_request.owner);
+    const int         budget   = timeout_ms > 0 ? timeout_ms : 15000;
+    const DWORD       deadline = ::GetTickCount() + static_cast<DWORD>(budget);
+
+    const int cached = cached_ready(site, need);
+    if (cached != 0) {
+        return cached;
+    }
+
+    int reached = kReadyNone;
+
+    // ---- L1 窗口级 ----
+    if (!window_on_site(site)) {
+        std::string boot_error;
+        if (!ensure_session(site_request, std::min(budget, 15000), &boot_error) &&
+            !window_on_site(site)) {
+            LoginWindow& window = login_window();
+            if (window.running()) {
+                window.request_close(); // 串行复用（决策 D-20；`PW-02` 起改由窗口表取窗）
+                window.join();
+            }
+            LoginRequest request     = site_request;
+            request.offscreen        = true;
+            request.probe_after_load = false;
+            std::string start_error;
+            if (!window.start(request, &start_error)) {
+                if (error != nullptr) {
+                    *error = tag + " 打开登录窗口失败：" + start_error +
+                             (boot_error.empty() ? std::string() : ("（" + boot_error + "）"));
+                }
+                return reached;
+            }
+        }
+    }
+    {
+        const DWORD now  = ::GetTickCount();
+        const int   left = now < deadline ? static_cast<int>(deadline - now) : 0;
+        std::string why;
+        if (!wait_controller_ready(left, &why)) {
+            if (error != nullptr) {
+                *error = tag + " " + ready_missing_text(need, reached) + "（" + why + "）";
+            }
+            return reached;
+        }
+        reached |= kReadyWindow;
+    }
+
+    // ---- L2 / L3：轮询页面状态（逐级达成 / 逐级日志）----
+    while (::GetTickCount() < deadline) {
+        WebPageState state;
+        std::string  why;
+        if (peek_page_state(site_request, &state, &why)) {
+            if ((reached & kReadyPage) == 0 && state.ready_state_complete &&
+                site_key_of(state.url) == site) {
+                reached |= kReadyPage;
+                log::info(tag + " 就绪 L2 页面级：readyState=complete，URL=" + state.url);
+            }
+            if ((reached & kReadyPage) != 0) {
+                if ((reached & kReadyComposer) == 0 && state.composer_hits > 0) {
+                    reached |= kReadyComposer;
+                    log::info(tag + " 就绪 L3 交互态：可见输入候选 " +
+                              std::to_string(state.composer_hits) + " 个");
+                }
+                if ((reached & kReadyFileInput) == 0 && state.file_inputs > 0) {
+                    reached |= kReadyFileInput;
+                    log::info(tag + " 就绪 L3 交互态：input[type=file] 命中 " +
+                              std::to_string(state.file_inputs) + " 个");
+                }
+            }
+            if (ready_satisfied(reached, need)) {
+                remember_ready(site, reached);
+                return reached;
+            }
+        }
+        ::Sleep(200);
+    }
+
+    if (error != nullptr) {
+        *error = tag + " " + ready_missing_text(need, reached);
+    }
+    return reached;
+}
+
 // L3（PB2-13 / PB2-15）：按站点在页面内执行一段脚本（同步等待结果；由调用方解析 JSON）
 //  * 前置（三级，逐级放宽，**不把「内存 userToken」当通用条件** —— 通用 DOM 站点的登录态在浏览器 profile 里）：
 //    ① 窗口已在该站点 → 直接执行
@@ -1620,6 +2060,85 @@ bool run_script_sync(const LoginRequest& site_request, const std::string& script
             std::string start_error;
             if (!window.start(request, &start_error)) {
                 if (error != nullptr) {
+                    *error = std::string(owner_tag(site_request.owner)) + " 打开登录窗口失败：" + start_error +
+                             (boot_error.empty() ? std::string() : ("（" + boot_error + "）"));
+                }
+                return false;
+            }
+            wait_page_ready(std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000));
+        }
+    }
+
+    // ---- M_patchC PW-03（不变量 I25）：脚本前置 = L1 窗口级 + L2 页面级 ----
+    //  * **不再**把「窗口尚在创建 / 页面还在导航」当成「脚本失败」—— 先逐级等就绪（消除 113 ms 假失败）
+    //  * 交互态（L3）由调用方按需另行要求（上传路径 / 文字生成），以免影响只读诊断（dump / probe）
+    const int   need_ready = kReadyWindow | kReadyPage;
+    std::string ready_error;
+    const int   reached = wait_ready(site_request, need_ready,
+                                     std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000), &ready_error);
+    if (!ready_satisfied(reached, need_ready)) {
+        if (error != nullptr) {
+            *error = ready_error.empty() ? std::string("页面未就绪（脚本未执行）") : ready_error;
+        }
+        return false;
+    }
+    return run_script_now(script_js, timeout_ms, json_result, error);
+}
+
+// ---- M8-14：站点上传模板的传输原语（公开 API）----------------------------------------
+
+void begin_resource_capture()
+{
+    std::lock_guard<std::mutex> lock(g_net_mutex);
+    g_net_records.clear();
+}
+
+std::vector<WebResourceRecord> take_resource_capture()
+{
+    std::lock_guard<std::mutex> lock(g_net_mutex);
+    std::vector<WebResourceRecord> out;
+    out.swap(g_net_records); // 增量取走（调用方累积）
+    return out;
+}
+
+bool resource_capture_ready()
+{
+    return g_net_ready;
+}
+
+bool set_file_input_files(const LoginRequest& site_request, const std::string& css_selector,
+                          const std::vector<std::string>& absolute_paths, int timeout_ms,
+                          std::string* detail, std::string* error)
+{
+    if (css_selector.empty()) {
+        if (error != nullptr) {
+            *error = "选择器为空（站点单元未给 attach_selector）";
+        }
+        return false;
+    }
+    if (absolute_paths.empty()) {
+        if (error != nullptr) {
+            *error = "文件列表为空";
+        }
+        return false;
+    }
+
+    // 前置与 run_script_sync 同策略（三级：窗口已在该站点 → ensure_session → 离屏开窗）
+    const std::string site_key = site_key_of(site_request.url);
+    if (!window_on_site(site_key)) {
+        std::string boot_error;
+        if (!ensure_session(site_request, 15000, &boot_error) && !window_on_site(site_key)) {
+            LoginWindow& window = login_window();
+            if (window.running()) {
+                window.request_close(); // 串行复用（决策 D-20）
+                window.join();
+            }
+            LoginRequest request     = site_request;
+            request.offscreen        = true;  // 离屏：不抢焦点
+            request.probe_after_load = false; // 上传不依赖 userToken
+            std::string start_error;
+            if (!window.start(request, &start_error)) {
+                if (error != nullptr) {
                     *error = "打开登录窗口失败：" + start_error +
                              (boot_error.empty() ? std::string() : ("（" + boot_error + "）"));
                 }
@@ -1628,7 +2147,189 @@ bool run_script_sync(const LoginRequest& site_request, const std::string& script
             wait_page_ready(std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000));
         }
     }
-    return run_script_now(script_js, timeout_ms, json_result, error);
+
+    // ---- M_patchC PW-03（不变量 I25）：**上传前置 = L1 + L2 + L3（含附件入口）** ----
+    //  * 关键：`input[type=file]` 是**按需挂载**的 —— 未挂载时**不得**报「该站点用拖拽 / 粘贴入口」
+    //    （真机 41 ms 假失败的根因，`G6`）；这里等到它挂载，否则给出「页面未就绪」的可操作原因
+    const int   need_ready = kReadyUpload;
+    std::string ready_error;
+    const int   reached = wait_ready(site_request, need_ready,
+                                     std::min(timeout_ms > 0 ? timeout_ms : 20000, 20000), &ready_error);
+    if (!ready_satisfied(reached, need_ready)) {
+        if (error != nullptr) {
+            *error = ready_error.empty() ? std::string("页面未就绪（未交件）") : ready_error;
+        }
+        return false;
+    }
+
+    const HWND window = g_window.load();
+    if (window == nullptr || g_webview == nullptr) {
+        if (error != nullptr) {
+            *error = std::string(owner_tag(site_request.owner)) +
+                     " 登录窗口在就绪检查后被关闭（请重试）";
+        }
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_files_mutex);
+        g_files_selector = css_selector;
+        g_files_paths    = absolute_paths;
+        g_files_done     = false;
+        g_files_ok       = false;
+        g_files_detail.clear();
+        g_files_error.clear();
+    }
+    ::PostMessageW(window, kSetFilesMessage, 0, 0);
+
+    std::unique_lock<std::mutex> lock(g_files_mutex);
+    const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 20000);
+    if (!g_files_cv.wait_for(lock, wait_ms, [] { return g_files_done; })) {
+        if (error != nullptr) {
+            *error = std::string(owner_tag(site_request.owner)) +
+                     " 注入文件超时（页面可能未就绪，或选择器无匹配元素）";
+        }
+        return false;
+    }
+    if (detail != nullptr) {
+        *detail = g_files_detail;
+    }
+    if (error != nullptr) {
+        *error = g_files_error;
+    }
+    return g_files_ok;
+}
+
+
+namespace {
+
+// M8-37：**只读**枚举页面里的 `input[type=file]` —— 供 attach_selector 未回填 / 未命中时兜底
+//  * 与 `--upload-selftest` 的「选择器未命中」诊断同源：枚举 → 挑最优 → 给出可回填清单
+//  * 只读：不点击、不写入、不读取任何值；失败一律如实报错（绝不静默换选择器）
+constexpr const char* kFileInputProbeScript = R"JS(
+(function () {
+  const out = { count: 0, items: [] };
+  try {
+    const nodes = document.querySelectorAll('input[type=file]');
+    out.count = nodes.length;
+    for (let i = 0; i < nodes.length && i < 8; i++) {
+      const el = nodes[i];
+      const cls = (typeof el.className === 'string') ? el.className : '';
+      const r = el.getBoundingClientRect();
+      const first = cls.replace(/\s+/g, ' ').trim().split(' ')[0];
+      out.items.push({ accept: (el.getAttribute('accept') || '').slice(0, 120),
+                       multiple: el.multiple === true,
+                       visible: r.width > 1 && r.height > 1,
+                       selector: el.id ? ('#' + el.id) : (first ? ('.' + first) : 'input[type=file]') });
+    }
+  } catch (e) { out.count = -1; }
+  return out;
+})();
+)JS";
+
+} // namespace
+
+bool resolve_file_input_selector(const LoginRequest& site_request, int timeout_ms,
+                                 std::string* selector, std::string* detail, std::string* error)
+{
+    if (selector != nullptr) {
+        selector->clear();
+    }
+    if (detail != nullptr) {
+        detail->clear();
+    }
+
+    // ---- M_patchC PW-03（不变量 I25）：先等**附件入口级**就绪 ----
+    //  * 真机 41 ms 假失败 = 附件区懒加载未挂载时枚举到 0 个，却被归因为「形态不支持」（`G6`）
+    //  * 这里先等到 L3（含附件入口）；未就绪 → 如实报「页面未就绪」，**不**报形态结论
+    const int   need_ready = kReadyUpload;
+    std::string ready_error;
+    const int   reached = wait_ready(site_request, need_ready,
+                                     std::min(timeout_ms > 0 ? timeout_ms : 10000, 15000), &ready_error);
+    if (!ready_satisfied(reached, need_ready)) {
+        if (error != nullptr) {
+            *error = ready_error.empty() ? std::string("页面未就绪（未枚举附件入口）") : ready_error;
+        }
+        return false;
+    }
+
+    std::string raw;
+    std::string why;
+    if (!run_script_sync(site_request, kFileInputProbeScript, timeout_ms > 0 ? timeout_ms : 10000, &raw,
+                         &why)) {
+        if (error != nullptr) {
+            *error = std::string(owner_tag(site_request.owner)) +
+                     " 读取页面 `input[type=file]` 失败：" + why;
+        }
+        return false;
+    }
+    try {
+        const nlohmann::json parsed = nlohmann::json::parse(raw);
+        const int            count  = parsed.value("count", 0);
+        if (count < 0) {
+            if (error != nullptr) {
+                *error = "页面脚本异常：无法枚举 `input[type=file]`";
+            }
+            return false;
+        }
+        const nlohmann::json items = parsed.value("items", nlohmann::json::array());
+        std::string list = "页面里 `input[type=file]` 共 " + std::to_string(count) + " 个";
+        if (count == 0) {
+            // 归因分离（`G6`）：就绪三级**已通过**（上面刚等到附件入口）⇒ 这里是**竞态**
+            // （懒加载卸载 / 换帧），不再归因为「该站点用拖拽 / 粘贴入口」
+            list += "（就绪检查已通过，但枚举瞬间没有 `input[type=file]` —— 多为懒加载竞态；请重试）";
+        }
+        std::string with_image;   // accept 含 image（最可能是图片入口）
+        std::string hidden_input; // 隐藏且带 accept（附件入口通常隐藏）
+        std::string first_input;  // 文档顺序首个
+        for (const auto& item : items) {
+            const std::string sel    = item.value("selector", std::string("?"));
+            const std::string accept = item.value("accept", std::string());
+            const bool        visible = item.value("visible", false);
+            list += "\n    · " + sel + "（accept=" + (accept.empty() ? std::string("(无)") : accept) +
+                    "，multiple=" + (item.value("multiple", false) ? "true" : "false") + "，可见=" +
+                    (visible ? "是" : "否") + "）";
+            if (first_input.empty()) {
+                first_input = sel;
+            }
+            if (with_image.empty() && accept.find("image") != std::string::npos) {
+                with_image = sel;
+            }
+            if (hidden_input.empty() && !visible && !accept.empty()) {
+                hidden_input = sel;
+            }
+        }
+        // 取值策略（确定性，口径写在这里）：accept 含 image → 隐藏且带 accept → 文档顺序首个
+        const std::string picked = !with_image.empty()    ? with_image
+                                   : !hidden_input.empty() ? hidden_input
+                                                           : first_input;
+        if (picked.empty()) {
+            if (error != nullptr) {
+                *error = std::string(owner_tag(site_request.owner)) +
+                         " 页面里没有可用的 `input[type=file]`（共 " + std::to_string(count) +
+                         " 个；就绪已达：" + ready_reached_text(reached) +
+                         "）—— 就绪检查此前已通过 ⇒ 多为懒加载竞态，请重试；"
+                         "若持续出现，可在 providers.json 该条目填实测 `web.attach_selector`";
+            }
+            if (detail != nullptr) {
+                *detail = list;
+            }
+            return false;
+        }
+        if (selector != nullptr) {
+            *selector = picked;
+        }
+        if (detail != nullptr) {
+            *detail = list + "\n    ⇒ 自动识别选择器：" + picked;
+        }
+        return true;
+    }
+    catch (const std::exception& ex) {
+        if (error != nullptr) {
+            *error = std::string("枚举结果解析失败：") + ex.what() + "；原始结果：" + raw.substr(0, 160);
+        }
+        return false;
+    }
 }
 
 long long solve_pow_via_page(const std::string& site_url, const std::string& challenge_json,

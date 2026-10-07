@@ -15,6 +15,10 @@
 #include "engine/node_registry.h"
 #include "ai/deepseek_web_client.h"
 #include "ai/dom_web_client.h"      // L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
+#include "ai/upload_supply_probe.h"   // M8 Phase 2：C++ 供料探针（--web-supply-probe）
+#include "ai/upload/upload_registry.h"  // M8-14：站点上传模板（--upload-selftest）
+#include "ai/upload/image_convert.h"    // M8-14：图片准备（离线断言）
+#include "ai/upload/upload_evidence.h"  // M8-14：上传双证据（离线断言）
 #include "utils/config.h"
 #include "utils/text_export.h"
 #include "utils/credential.h"
@@ -91,6 +95,21 @@ void print_usage()
     std::printf("                   等**人工登录**（不代填密码 · §13）→ 判据 = 条目 cookie_names 命中 → 关窗\n");
     std::printf("                   退出码 0=登录成功 / 1=超时或失败 / 2=参数或依赖问题\n");
 
+    std::printf("  --web-supply-probe [--provider <id>] [--timeout <秒>] [--get <路径?查询串>]\n");
+    std::printf("                   M8 Phase 2 供料探针（**只读**）：按条目起有头 WebView2（需人工登录）→\n");
+    std::printf("                   取样 device_id 候选 + 会话 Cookie（值脱敏）→ 报告写 ~/.brain-ai/logs/；\n");
+    std::printf("                   带 --get 时用会话 Cookie 发**一次 GET**，判定站点接口是否下发签名材料\n");
+    std::printf("                   退出码 0=完成 / 1=页面或会话未就绪 / 2=条目或站点不可用\n");
+
+    std::printf("  --upload-selftest [--provider <id>] [--image <路径>] [--timeout <秒>]\n");
+    std::printf("                   M8-14 站点上传模板自检：离线三组（图片准备 / 双证据判定 / 注册表与\n");
+    std::printf("                   契约）→ 带 --provider 时**追加真机一次**（按条目把 --image 交给\n");
+    std::printf("                   WebView2 页面里的站点自己的上传逻辑，并要求**双证据**齐备：\n");
+    std::printf("                   页面附件区节点 + 站点上传请求回执；缺一即如实报错、不继续发送）\n");
+    std::printf("                   退出码 0=全绿 / 1=有失败 / 2=站点不可用（非网页版 / 缺 login_url）\n");
+    std::printf("                   真机示例：aiwrite.exe --upload-selftest --provider doubao-web --image \"D:\\a.png\"\n");
+    std::printf("                   （需该站点已登录过一次；离屏窗口自动复用，用户无需干预）\n");
+
     std::printf("  --help           显示本帮助\n");
 }
 
@@ -133,10 +152,12 @@ int run_selftest(bool use_web, const std::string& provider_id)
             return 2;
         }
         if (aiwrite::ai::web_login_only(spec)) {
-            std::printf("[运行自检] ✗ 条目 %s 是**登录型条目**（缺生成字段）：请先补齐 web.input_selector / "
-                        "send / answer_selector（用 --web-adapter-selftest --provider %s 诊断）\n",
+            // M8-37（零开关）：生成字段未回填**不再判定为失败** —— 运行期会自动识别选择器；
+            //  这里只如实提示（原「登录型条目 → 返回 1」的行为已被自动识别取代）
+            std::printf("[运行自检] ⚠ 条目 %s 的生成字段未回填（web.input_selector / send / "
+                        "answer_selector）：本次运行将**自动识别**（结果打印在下方）；"
+                        "如需固化可用 --web-dom-dump --provider %s 取建议选择器\n",
                         web_entry.c_str(), web_entry.c_str());
-            return 1;
         }
     }
     for (aiwrite::engine::Node& node : state.graph.nodes) {
@@ -1243,8 +1264,9 @@ int provider_selftest(const std::string& provider_id, const std::string& api_bas
             std::printf("[Provider 自检] 端点：不适用（DOM 适配器；无内置端点）\n");
             std::printf("[Provider 自检] 生成：%s\n",
                         aiwrite::ai::web_login_only(spec)
-                            ? "未就绪（登录型站点条目：缺选择器 / 发送 / 取答案）"
-                            : "未就绪（DOM 适配器本版本尚未实现，L3 PB2-13…16）");
+                            ? "未回填（生成字段缺失）—— **运行时会自动识别**选择器（M8-37）；"
+                              "固化可用 --web-dom-dump"
+                            : "字段齐全（声明值优先；未命中时仍会自动识别兜底）");
         }
         else {
             std::printf("[Provider 自检] 端点：host=%s completion=%s challenge=%s\n",
@@ -1351,6 +1373,9 @@ int main(int argc, char** argv)
     std::string vlm_key_ref;                                            // 空 = 用表/内置默认
     bool        provider_selftest_flag = false;                         // M_patchB L1 配置表自检
     bool        provider_dump_flag     = false;                         // 打印生效配置表
+    bool        supply_probe_flag  = false;                             // M8 Phase 2：--web-supply-probe（**只读**供料探针）
+    bool        upload_selftest_flag = false;                           // M8-14：--upload-selftest（离线三组；带 --provider 追加真机）
+    std::string supply_get_path;                                        // --get <路径?查询串>（空 = 只读模式）
     std::string provider_id;                                            // --provider <id>
     int  selftest_timeout = 30;
 
@@ -1422,6 +1447,19 @@ int main(int argc, char** argv)
         }
         else if (arg == "--web-dom-dump") {
             dom_dump_flag = true; // L4（PB2-29）：只读枚举页面候选元素 + 建议选择器
+        }
+        else if (arg == "--web-supply-probe") {
+            supply_probe_flag = true; // M8 Phase 2：只读供料探针（起有头 WebView2 + 人工登录）
+        }
+        else if (arg == "--upload-selftest") {
+            upload_selftest_flag = true; // M8-14：站点上传模板自检（离线三组；带 --provider 追加真机一次）
+        }
+        else if (arg == "--get") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --get 缺少取值（路径?查询串）\n");
+                return 2;
+            }
+            supply_get_path = argv[++i];
         }
         else if (arg == "--web-session-selftest") {
             web_session_selftest_flag = true;
@@ -1559,7 +1597,7 @@ int main(int argc, char** argv)
                     continue;
                 }
                 const char* kind_text = (spec.web.adapter == "dom")
-                                            ? (aiwrite::ai::web_login_only(&spec) ? "dom · 登录型"
+                                            ? (aiwrite::ai::web_login_only(&spec) ? "dom · 未回填"
                                                                                   : "dom")
                                             : spec.web.adapter.c_str();
                 std::printf("   %-16s %-28s %s\n", spec.id.c_str(), spec.display.c_str(), kind_text);
@@ -1590,6 +1628,134 @@ int main(int argc, char** argv)
     }
 
     // 网页版协议探测（需要 profile 里已有登录态）
+    // M8（Phase 2 · Gate）：C++ 供料探针 —— WebView2 会话能否为 C++ 原生 HTTP 供料
+    if (supply_probe_flag) {
+        const int code = aiwrite::ai::upload_supply_probe(provider_id, selftest_timeout, supply_get_path);
+        aiwrite::log::info("AIwrite 供料探针退出，返回码 " + std::to_string(code));
+        aiwrite::log::shutdown();
+        return code;
+    }
+
+    // M8-14：站点上传模板自检（离线三组；带 --provider 追加真机一次）
+    if (upload_selftest_flag) {
+        int passed = 0;
+        int failed = 0;
+        std::printf("=== 站点上传模板自检（M8-14 · 方案 E）===\n");
+        std::printf("-- ① 图片准备（格式识别 → 白名单 / 限额 → 缩放 + 转码）--\n");
+        int group = 0;
+        failed += aiwrite::ai::image_convert_selftest(&group);
+        passed += group;
+        std::printf("-- ② 上传双证据判定（I18：无证据不发送）--\n");
+        group = 0;
+        failed += aiwrite::ai::upload_evidence_selftest(&group);
+        passed += group;
+        std::printf("-- ③ 站点注册表与契约（每站独立实现）--\n");
+        group = 0;
+        failed += aiwrite::ai::upload_registry_selftest(&group);
+        passed += group;
+
+        int code = failed == 0 ? 0 : 1;
+
+        if (provider_id.empty()) {
+            std::printf("[真机] 未指定 --provider → 跳过真机（示例：--upload-selftest --provider "
+                        "doubao-web --image <图片路径>）\n");
+        }
+        else {
+            const aiwrite::ai::ProviderSpec* spec = nullptr;
+            for (const aiwrite::ai::ProviderSpec& candidate : aiwrite::ai::provider_specs().items) {
+                if (candidate.id == provider_id) {
+                    spec = &candidate;
+                    break;
+                }
+            }
+            if (spec == nullptr || spec->kind != "web") {
+                std::printf("[真机] ✗ 条目 %s 不是**网页版**条目（或不存在）—— 请用 --provider <web 条目 id>\n",
+                            provider_id.c_str());
+                code = 2;
+            }
+            else if (!aiwrite::ai::web_site_error(spec).empty()) {
+                std::printf("[真机] ✗ 站点不可用：%s\n", aiwrite::ai::web_site_error(spec).c_str());
+                code = 2;
+            }
+            else {
+                aiwrite::ai::UploadPlan plan;
+                plan.site        = spec->web;
+                plan.provider_id = spec->id;
+                if (!vlm_image.empty()) {
+                    plan.image_values.push_back(vlm_image);
+                }
+                plan.max_bytes  = spec->limits.image_max_bytes;
+                plan.timeout_ms = selftest_timeout > 0 ? selftest_timeout * 1000 : 180000;
+                std::printf("[真机] 站点 %s｜upload_adapter=%s｜attach_selector=%s｜图片 %s\n",
+                            spec->id.c_str(),
+                            plan.site.upload_adapter.empty() ? "(未声明)"
+                                                             : plan.site.upload_adapter.c_str(),
+                            plan.site.attach_selector.empty() ? "(用站点单元默认)"
+                                                              : plan.site.attach_selector.c_str(),
+                            vlm_image.empty() ? "(未给 --image)" : vlm_image.c_str());
+                // 接入就绪度（**先把缺什么讲清楚**，再尝试 —— 免得把「缺字段」误读成「上传坏了」）
+                std::printf("[真机] 就绪度：adapter=%s｜answer_selector=%s｜生成字段 %s\n",
+                            plan.site.adapter.empty() ? "(空=内置默认)" : plan.site.adapter.c_str(),
+                            plan.site.answer_selector.empty() ? "(未声明)"
+                                                              : plan.site.answer_selector.c_str(),
+                            aiwrite::ai::web_login_only(spec)
+                                ? "未回填（**运行时会自动识别**，M8-37）"
+                                : "齐全");
+                if (plan.site.adapter != "dom") {
+                    std::printf("[真机] ⚠ 该条目 adapter=%s（图片上传当前只支持 dom 站点 + 上传单元）\n",
+                                plan.site.adapter.c_str());
+                }
+                if (aiwrite::ai::web_login_only(spec)) {
+                    std::printf("[真机] 提示：生成字段未回填**不影响本次运行** —— 发送 / 取答案会"
+                                "自动识别选择器（识别结果打印在 Console / 日志里）。"
+                                "若要固化为数据（可选）：\n"
+                                "         ① aiwrite.exe --web-dom-dump --provider %s"
+                                "（候选枚举 → 建议选择器）\n"
+                                "         ② aiwrite.exe --web-adapter-selftest --provider %s"
+                                "（只读复核命中数；登录后手动发一条消息再跑，回答容器才会出现）\n",
+                                provider_id.c_str(), provider_id.c_str());
+                }
+                if (vlm_image.empty()) {
+                    // 只做就绪度检查：**不**发起上传（免得把「没给图片」误读成「上传失败」）
+                    std::printf("[真机] 未给 --image → 仅做就绪度检查；真机一次请这样跑："
+                                "--upload-selftest --provider %s --image \"D:\\a.png\"\n",
+                                provider_id.c_str());
+                }
+                else {
+                    const aiwrite::ai::UploadResult result = aiwrite::ai::upload_images(plan);
+                    for (const std::string& line : result.conversions) {
+                        std::printf("[真机] 转换：%s\n", line.c_str());
+                    }
+                    if (!result.steps.empty()) {
+                        std::printf("[真机] 步骤：%s\n", result.steps.c_str());
+                    }
+                    if (result.ok) {
+                        std::printf("[真机] ✓ 双证据齐备 —— 页面：%s｜网络：%s\n",
+                                    result.page_evidence.c_str(), result.net_evidence.c_str());
+                    }
+                    else {
+                        std::printf("[真机] ✗ %s\n", result.error.c_str());
+                        if (!result.page_evidence.empty() || !result.net_evidence.empty()) {
+                            std::printf(
+                                "[真机]   已得证据 —— 页面：%s｜网络：%s\n",
+                                result.page_evidence.empty() ? "(缺失)"
+                                                             : result.page_evidence.c_str(),
+                                result.net_evidence.empty() ? "(缺失)"
+                                                            : result.net_evidence.c_str());
+                        }
+                        code = 1;
+                    }
+                }
+            }
+        }
+
+        std::printf("=== 站点上传模板自检结果：%d 通过 / %d 失败（返回码 %d）===\n", passed, failed,
+                    code);
+        aiwrite::log::info("AIwrite 站点上传模板自检退出，返回码 " + std::to_string(code));
+        aiwrite::log::shutdown();
+        return code;
+    }
+
     if (web_probe_flag) {
         // M_patchB L1 修订（PB2-23）：`--web-probe --provider <id>` = 按**条目**的站点（严格解析，不回落）
         const int probe_code =

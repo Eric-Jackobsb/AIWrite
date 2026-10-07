@@ -254,6 +254,12 @@ src/engine/provider_resolve.cpp
     src/ai/web_pow.cpp
     src/ai/deepseek_web_client.cpp
     src/ai/dom_web_client.cpp        # L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
+    src/ai/upload_supply_probe.cpp  # M8 Phase 2：C++ 供料探针（WebView2 会话供料 + 站点只读 GET）
+    src/ai/upload/image_convert.cpp        # M8-14：图片准备（站点白名单 / 限额 → 缩放 + 转码）
+    src/ai/upload/upload_evidence.cpp      # M8-14：上传双证据（页面 + 网络；I18）纯函数
+    src/ai/upload/upload_registry.cpp      # M8-14：站点上传注册表 + 唯一执行入口 upload_images
+    src/ai/upload/sites/site_upload_doubao.cpp # M8-14：豆包站点上传单元（B1/B2 实测）
+    src/ai/upload/sites/site_upload_kimi.cpp   # M8-14：Kimi 站点上传单元（模板性验证站）
     src/ai/deepseek_official_provider.cpp
     src/ai/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）
     src/nodes/local_nodes.cpp

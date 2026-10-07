@@ -86,6 +86,10 @@ struct ExecutionContext {
     // （例如官方 API 的 api_key）；仅运行期使用，绝不写入 Graph / 不落盘 / 不打印
     const Graph* graph = nullptr;
     std::string  current_node_id;
+    // M_patchC（PW-01 · 归属）：本次**运行会话** id（`start()` 时生成，同一次运行内稳定）
+    //  * 用途：`web::WebOwner.run_id` —— 网页通道据此区分「同一次运行的先后节点」
+    //  * 只读运行态：绝不写入 Graph / 不落盘
+    std::string  run_id;
 
     bool is_cancelled() const { return cancelled != nullptr && cancelled->load(); }
     void console(const std::string& text) const

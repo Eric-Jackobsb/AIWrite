@@ -1,5 +1,6 @@
 #include "engine/provider_resolve.h"
 
+#include "ai/upload/upload_registry.h" // M8-14：网页版图片上传是否已接（未接 → 运行前明示）
 #include "utils/credential.h"
 
 #include <cstdlib>
@@ -226,9 +227,16 @@ std::string unwired_reason(const Graph& graph, const Node& node)
     // ---- 图片理解：按**能力表**判断（不再写死「web 不支持」）----
     if (node.type == "VLMGenerate" && effective.spec != nullptr) {
         if (effective.kind == "web") {
-            return effective.display +
-                   "（网页版）不支持图片理解：请把「提供商配置」改为视觉 API 条目"
-                   "（如 zhipu / siliconflow）";
+            // M8-14：网页版图片理解**已接线**（站点上传模板 + 站点自己的多模态能力）⇒
+            //  只有当**该站点没接上传单元**时才是「本次运行必定失败」，并给出可操作原因。
+            //  * 口径：真视觉有无由站点自身决定（豆包 B3 实测真视觉；Kimi 待侦察）——
+            //    这里只判断「能不能把图交给站点」，不对「站点是否真看懂」下断言
+            const std::string upload_error =
+                ai::site_upload_error(effective.spec->web.upload_adapter);
+            if (!upload_error.empty()) {
+                return effective.display + "（网页版）未接图片上传：" + upload_error;
+            }
+            return {};
         }
         bool declared = false;
         if (!ai::spec_model_supports_vision(*effective.spec, effective.model, &declared)) {

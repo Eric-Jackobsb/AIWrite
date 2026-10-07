@@ -15,13 +15,22 @@
 //         · 未配 done_when → 「文本连续 stable_rounds 轮不变」视为完成
 //         · 到达上限 → **如实返回已取文本 + 明确警告**（R13：不假装成功、不无限等待）
 //
+//  M8-37（零开关）：2)/3)/4) 的**选择器缺失不再拦路** —— 声明值未命中时运行期自动识别：
+//    · 输入框：候选池打分（可见 + 靠视口下半部 + 有 placeholder）
+//    · 发送：click 未命中时自动找可见发送按钮（key 默认 Enter）
+//    · 答案容器：**发送前基线快照** → 取「新出现 / 文本增长」且足够长的**文档顺序最后**候选
+//      （不猜类名；自动排除输入区与「自己那条回声」）；识别结果只**打印**，不回写配置（口径①）
+//
 //  纯函数（离线可断言，见 `VB2-22`）：clamp_poll_params / dom_cfg_json /
 //  dom_kickoff_script / dom_poll_script / dom_probe_script
 // ============================================================================
 
+#include <cstddef>
 #include <string>
+#include <vector>
 
 #include "ai/provider_spec.h"
+#include "web/web_owner.h" // M_patchC（PW-01）：归属（纯数据；无 Win32 依赖）
 
 namespace aiwrite::ai {
 
@@ -30,6 +39,16 @@ struct DomChatRequest {
     ProviderWebSpec site;                // 站点（选择器 / done_when / 轮询参数 / 登录页）
     std::string     provider_id;         // 条目 id（日志 / 站点键归属）
     int             timeout_ms = 180000; // 总超时（含 ensure_session）
+    // ---- M8-14：图片（**先上传，再发送**；不变量 `I18`）----
+    //  * 值形态：`aiwrite-asset:<摘要>` 令牌 或 绝对路径（`upload_images` 内部再兜一层解析，`I19`）
+    //  * 非空时：走**站点上传模板**（`ai/upload/**`）→ **双证据齐备**才注入提示词；
+    //    否则**不发送**并如实报错（绝不静默降级、绝不假装成功）
+    std::vector<std::string> image_values;
+    std::size_t              image_max_bytes = 0; // 站点 / 表限额（0 = 用站点单元默认）
+    // ---- M_patchC（`PW-01` · 不变量 `I24` / `I26`）：**归属** ----
+    //  * 由节点层填（`run_id` = 本次运行 · `node_id` = 当前节点）；空 = 未标注（CLI / 自检）
+    //  * 一路带到 `web/webview_host`（日志 / 证据归属 / `PW-02` 窗口表仲裁）
+    web::WebOwner owner;
 };
 
 struct DomChatResult {
@@ -39,7 +58,20 @@ struct DomChatResult {
     std::string error;                   // ok=false 时的可操作原因
     int         polls = 0;               // 实际轮询次数
     long long   elapsed_ms = 0;
-    std::string steps;                   // 诊断摘要（input 命中 / send / answer 命中数）
+    std::string steps;                   // 诊断摘要（图片上传步骤 + input / send / answer 命中数）
+    // ---- M8-14：图片上传阶段的诊断（进 Console / 节点输出）----
+    bool                     uploaded = false; // 是否执行了上传**且双证据齐备**
+    std::string              upload_page;      // 页面证据（例：命中 2 个（…））
+    std::string              upload_net;       // 网络回执（例：POST 200 …）
+    std::vector<std::string> conversions;      // 图片转换说明（每张一行）
+    // ---- M8-37：运行期**自动识别**（零开关：选择器未回填不再拦路）----
+    //  * 口径①（用户拍板）：**只打印不落盘** —— 识别结果只进 Console / steps，**不**回写任何配置
+    //  * 用途：`dom_chat` 的脚本在「声明值未命中」时自动识别输入框 / 答案容器；
+    //    这里把「实际用什么跑的 + 页面指纹」如实带出来，便于**可选**回填 providers.json
+    bool        input_auto = false;         // true = 输入框由运行期自动识别（非声明值）
+    std::string input_used;                 // 实际使用的输入框（声明值或自动识别值）
+    bool        answer_auto = false;        // true = 答案容器由「基线新增节点差分」自动识别
+    std::string answer_fingerprint;         // 自动识别到的答案容器指纹（例：div.markdown）
 };
 
 // 轮询参数钳制：poll_ms ∈ [200, 2000]、max_polls ∈ [10, 600]（R13：有硬上限）

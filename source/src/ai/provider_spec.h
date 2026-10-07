@@ -78,6 +78,15 @@ struct ProviderWebSpec {            // 网页版站点描述（kind=web）
     // M7B（`B12-C2`）：上传入口形态 `auto | file_input | drop_zone | paste_only | none` ——
     //  **本批只解析、不消费**（运行期取值归 M7B 批 3 `P7b-10`）；缺省空串 = 未声明
     std::string attach;
+    // ---- M8-14：站点**图片上传**字段（方案 E「每站独立上传函数」）----
+    //  * `upload_adapter`：站点上传单元 id（例 `builtin:doubao`）—— 空 = 该站点暂不支持自动上传
+    //    （运行期给出**可操作**报错，绝不静默降级：`R12` / `I21`）
+    //  * `attach_selector`：文件输入框选择器（站点单元里的默认值可被本字段覆盖 —— 换 DOM 时
+    //    **只改表不改代码**）
+    //  * `upload_accept`：站点 accept 串（覆盖站点单元白名单；非图片扩展名会被自动丢弃）
+    std::string upload_adapter;
+    std::string attach_selector;
+    std::string upload_accept;
 };
 
 // ---- M_patchB L4（PB2-27 / 决策 D-27 / 不变量 I15）：**站点无关**的「已登录」判定 ----

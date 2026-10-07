@@ -18,6 +18,7 @@
     "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": true },
     "web": {
       "adapter": "dom",
+      "_upload_note": "图片上传（M8-14 站点上传模板）：upload_adapter = 站点上传单元（已实现 builtin:doubao / builtin:kimi）；attach_selector = 文件输入框选择器（覆盖站点单元默认值，换 DOM 时只改表）；upload_accept = 站点 accept 串（覆盖白名单；非图片扩展名会被自动丢弃）。不填 upload_adapter ⇒ 该站点不做自动上传（运行期给出可操作报错，绝不静默降级）",
       "login_url": "https://kimi.moonshot.cn/",
       "window_title": "AIwrite · Kimi 网页版登录",
       "input_selector": "[contenteditable='true']",
@@ -266,10 +267,11 @@
         "login_url": "https://www.kimi.com/",
         "window_title": "AIwrite · Kimi 网页版登录（登录后关闭窗口）",
         "input_selector": "div.chat-input-editor",
-        "send": { "kind": "key", "value": "Enter" }
+        "send": { "kind": "key", "value": "Enter" },
+        "upload_adapter": "builtin:kimi"
       },
       "verified": false,
-      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`kimi.moonshot.cn` 会 301 到 **www.kimi.com**（本条目即取最终域）；**输入框选择器已实测** = `div.chat-input-editor`（contenteditable=true，可见），按 **Enter 发送**。⚠️ 仍未实测：`answer_selector`（回答容器 `div.message-list` 在**登录并发出第一条消息后**才出现）→ 补齐后即可生成；另注意：未登录页面也有 4 条**匿名 Cookie**（登录态判据待 `D-30` 收紧）",
+      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`kimi.moonshot.cn` 会 301 到 **www.kimi.com**（本条目即取最终域）；**输入框选择器已实测** = `div.chat-input-editor`（contenteditable=true，可见），按 **Enter 发送**。⚠️ 仍未实测：`answer_selector`（回答容器 `div.message-list` 在**登录并发出第一条消息后**才出现）→ 补齐后即可生成；另注意：未登录页面也有 4 条**匿名 Cookie**（登录态判据待 `D-30` 收紧）。🆕 **M8-14（2026-10-06）站点上传模板**：本条目已接上模板（`web.upload_adapter=builtin:kimi`），但站点单元里的选择器与判据**仍是待侦察占位**（`input[type=file]` / `[class*=\"attachment-item\"]` / `kimi.com/api`）—— 设计上「认错就如实超时报错」，**不会产生假成功**（`I18`）。**下一步（需你手动登录一次）**：`cd source/python/_probe` → `python m7b28_kimi_recon.py --login`（手动登录）→ `--recon` / `--inject`；把确认值回填本条目 `web.attach_selector`（必要时 `web.upload_accept`）即可 —— 站点单元与 C++ **都不用改**。🆕 **2026-10-06 连线完成（与豆包同一条链路）**：`VLMGenerate(mode=web)` → **先上传（双证据）** → 注入提示词 → 发送 → 取答案。⚠️ 但 Kimi 还差**两项数据**（都属「不猜」范畴）：① `web.attach_selector`（跑 `source/python/_probe/m7b28_kimi_recon.py` 侦察）② `web.answer_selector`（登录并**手动发第一条消息**后，用 `--web-adapter-selftest --provider kimi-web` 取值 —— 当前缺 ⇒ 本条目仍被判为**登录型条目**，上传能过、**发送/取答案**会明确报错）。跑 `aiwrite.exe --upload-selftest --provider kimi-web` 的「就绪度」行可直接看到这两项是否就位。⚠️ `capabilities.vision` 保持 **false**：Kimi 真视觉**未实测** ⇒ 不做无证据宣称（`I18`）。🆕 **M8-37（2026-10-06）运行期自动识别（零开关）**：本条目**不再**因缺 `attach_selector` / `answer_selector` 被判为「登录型条目 → 生成不可用」—— 点「运行」时自动执行 **会话 → 图片上传 → 注入提示词 → 发送 → 取答案**：`attach_selector` 未命中 → **只读枚举页面 `input[type=file]`** 自动取值（`accept` 含 image → 隐藏且带 accept → 首个）并**只重试一次**；`answer_selector` 未回填 → **发送前基线快照 → 取新增且足够长的最后候选**（不猜类名）；双证据的**自动判据** = 页面（交付文件名出现 / 附件候选池或缩略图相对基线增加）**且** 网络（交件后 POST/PUT 且 URL 含通用上传特征词）。识别结果**只打印**（口径①：不回写本文件）；上面的侦察回填因此**降为可选**。判据全文见 `docs/网页版协议实测记录.md` §10.6",
       "docs_url": ""
     },
     {
@@ -327,15 +329,19 @@
       "display": "豆包（字节网页版）",
       "kind": "web",
       "protocol": "dom",
-      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
+      "capabilities": { "vision": true, "seed": false, "system_role": false, "stream": false },
       "models": [],
       "web": {
         "adapter": "dom",
         "login_url": "https://www.doubao.com/chat/",
-        "window_title": "AIwrite · 豆包网页版登录（登录后关闭窗口）"
+        "window_title": "AIwrite · 豆包网页版登录（登录后关闭窗口）",
+        "input_selector": "div.tiptap.ProseMirror",
+        "send": { "kind": "key", "value": "Enter" },
+        "upload_adapter": "builtin:doubao",
+        "attach_selector": "input.hidden"
       },
       "verified": false,
-      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`https://www.doubao.com/chat/` 加载正常（标题「豆包 - 字节跳动旗下 AI 智能助手」）；页面 4 条匿名 Cookie + localStorage 有 `conversation_list_v2_group_mode`。🔁 **订正（2026-09-29 B1 只读侦察 · 物证 `source/python/_probe/out/m7b28_doubao_recon.json`）**：① **未登录即渲染输入框**（`div.tiptap.ProseMirror`，`contenteditable: true`、`visible: true`、命中 1；原「未登录不渲染输入框（0 个可见候选）」**作废**）；② 未登录匿名 Cookie 实为 **10 条**（`hook_slardar_session_id` / `passport_csrf_token` / `flow_cur_user_sec_id` / `s_v_web_id` 等，**仅名字入库**）⇒ 再次印证决策 `D-30`「Cookie 非空 = 已登录」必然误报；③ ~~**上传入口 = `paste_only`**（无 `input[type=file]`、无拖拽区）⇒ `P7b-10` 的 `expect_file_chooser` 主路线**在本站不可用**，须走 `DataTransfer` 构造 File + 合成 `paste`~~ ⇒ ⚠️ **已更正（2026-10-02 · B0/B1/B2/B3 四段实测）**：`paste_only` 是**小视口（默认 859×450）假象** —— 登录态 + **大视口（1440×1000）**实测入口 = **`file_input`**（`input.hidden` = 隐藏 file input）⇒ 主路线 = **`DOM.setFileInputFiles` / `expect_file_chooser`**（**B2 双证据已 PASS**：文件真进 `input.files` + 4 条 POST 回执 `prepare_upload` → TOS `upload/v1/…png` → `CommitImageUpload`），`DataTransfer` **降为备选**；⚠️ 启动浏览器**必须显式设窗口尺寸**（否则入口根本不在 DOM）。④ **B3「纯图无字」实测 = 真视觉**（256×256 纯红方块 → 答「一整块均匀、饱和度很高的**正红色**…没有任何图案、文字、物体」；⚠️ 同一夹具 **1×1** 尺寸会退化成「完全纯白色」）⇒ 不再缺证据；`web.attach` 落值仍**不填** —— 取值形态属 `D11` 契约，与探针结论分开拍板。⚠️ `capabilities.vision` **仍保持 `false`**：真视觉证据**已到手**，但改它属**产品能力声明**（牵连 `P7b-16` 三处落点 + `D11②` 显式确认口径）⇒ **待拍板后同批落**（`I18` 既不无证据宣称，也不越权宣称）",
+      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`https://www.doubao.com/chat/` 加载正常（标题「豆包 - 字节跳动旗下 AI 智能助手」）；页面 4 条匿名 Cookie + localStorage 有 `conversation_list_v2_group_mode`。🔁 **订正（2026-09-29 B1 只读侦察 · 物证 `source/python/_probe/out/m7b28_doubao_recon.json`）**：① **未登录即渲染输入框**（`div.tiptap.ProseMirror`，`contenteditable: true`、`visible: true`、命中 1；原「未登录不渲染输入框（0 个可见候选）」**作废**）；② 未登录匿名 Cookie 实为 **10 条**（`hook_slardar_session_id` / `passport_csrf_token` / `flow_cur_user_sec_id` / `s_v_web_id` 等，**仅名字入库**）⇒ 再次印证决策 `D-30`「Cookie 非空 = 已登录」必然误报；③ ~~**上传入口 = `paste_only`**（无 `input[type=file]`、无拖拽区）⇒ `P7b-10` 的 `expect_file_chooser` 主路线**在本站不可用**，须走 `DataTransfer` 构造 File + 合成 `paste`~~ ⇒ ⚠️ **已更正（2026-10-02 · B0/B1/B2/B3 四段实测）**：`paste_only` 是**小视口（默认 859×450）假象** —— 登录态 + **大视口（1440×1000）**实测入口 = **`file_input`**（`input.hidden` = 隐藏 file input）⇒ 主路线 = **`DOM.setFileInputFiles` / `expect_file_chooser`**（**B2 双证据已 PASS**：文件真进 `input.files` + 4 条 POST 回执 `prepare_upload` → TOS `upload/v1/…png` → `CommitImageUpload`），`DataTransfer` **降为备选**；⚠️ 启动浏览器**必须显式设窗口尺寸**（否则入口根本不在 DOM）。④ **B3「纯图无字」实测 = 真视觉**（256×256 纯红方块 → 答「一整块均匀、饱和度很高的**正红色**…没有任何图案、文字、物体」；⚠️ 同一夹具 **1×1** 尺寸会退化成「完全纯白色」）⇒ 不再缺证据；`web.attach` 落值仍**不填** —— 取值形态属 `D11` 契约，与探针结论分开拍板。⚠️ ~~`capabilities.vision` **仍保持 `false`**：真视觉证据**已到手**，但改它属**产品能力声明**（牵连 `P7b-16` 三处落点 + `D11②` 显式确认口径）⇒ **待拍板后同批落**~~ ⇒ 🔁 **已落（2026-10-06）**：用户拍板「连线」后翻为 **true**（见本条末段）；`P7b-16` 三处属**官方 API 路径**的口径，与本条**网页链路**互不影响（`I18` 仍成立：**有实测证据才宣称**）。🆕 **M8-14（2026-10-06）站点上传模板（方案 E）**：本条目已接上**站点上传单元** `builtin:doubao` + `attach_selector=input.hidden`（B1 实测的唯一隐藏 file input）—— 交付方式 = 进程内 CDP `DOM.getDocument → DOM.querySelector → DOM.setFileInputFiles`，判据 = **双证据**（页面 `[class*='chat-input-attachment-area']` 出现节点 **且** 网络回执命中 `tos-hl-x.snssdk.com/upload/v1/` 或 `Action=CommitImageUpload`）；**不做**原生复刻（`s=` 由页面内模块 `lHg` 产出，见 `docs/网页版协议实测记录.md` §9）⇒ 上传仍由站点自己的页面 SDK 完成，C++ 只注入 + 取证据。图片格式由模板自动按站点白名单/限额处理（白名单外或超限 → 先缩放再转 PNG，每次转换都写进 Console），无需手工预处理。🆕 **2026-10-06 连线完成**：`capabilities.vision` 翻为 **true**（依据 = 上文 B3 实测真视觉，**非**推测）；网页版**图片理解**链路已接通 = `VLMGenerate(mode=web)` → `dom_chat`（图片**先上传** → 双证据齐备才注入提示词 → 发送 → 取答案；`I18`），因此该条目可同时用于文字生成与图片理解。🆕 **2026-10-06 实测字段回填**：`input_selector`=`div.tiptap.ProseMirror` 与 `send`={kind:key,value:Enter} 均为 **B1/B3 实测有效**（B3 实测：输入后**无**发送按钮渲染 ⇒ 退到 Enter 发送**成功**并取回回答；物证 `out/m7b28_doubao_recon.b3-1x1-white-20261002.json` 的 `send.send_target = 「Enter(键盘)」`）；⚠️ 仍缺 `answer_selector`（豆包回答容器**尚无实测选择器** —— B3 当时读的是整页 `document.body.innerText`）⇒ 一次实跑即可回填：`aiwrite.exe --web-dom-dump --provider doubao-web`（候选枚举）+ `--web-adapter-selftest --provider doubao-web`（只读复核；**登录后手动发一条消息**回答容器才会出现）。**凭实测、不猜**（PB2-26）。🆕 **M8-37（2026-10-06）运行期自动识别（零开关）**：本条目**不再**因缺 `answer_selector` 被判为「登录型条目 → 生成不可用」—— 点「运行」时按 **会话 → 图片上传（双证据）→ 注入提示词 → 发送 → 取答案** 自动执行，缺的选择器由**运行期自动识别**（输入框 = 可见 + 靠视口下半部打分；答案容器 = **发送前基线快照** → 取「新出现且足够长、文档顺序最后」的候选池节点；点击型发送未命中时自动找可见发送按钮）。识别结果**只打印**在 Console / 日志 / steps（口径①：**不回写本文件**）；上面的「一次实跑回填」因此**降为可选**（固化后不必每次靠启发式）。判据全文见 `docs/网页版协议实测记录.md` §10.6",
       "docs_url": ""
     },
     {

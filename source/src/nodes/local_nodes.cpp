@@ -9,6 +9,7 @@
 #include "utils/paths.h"               // P7a-01/02：image 端口多值 + 多选路径解析
 #include "ai/deepseek_web_client.h"
 #include "ai/dom_web_client.h"         // L3（PB2-13）：通用 DOM 站点适配器
+#include "ai/upload/upload_registry.h" // M8-14：站点上传模板（网页版图片上传 → 再发送）
 #include "utils/log.h"
 #include "web/session_store.h"
 #include "web/webview_host.h"
@@ -192,6 +193,19 @@ void console_provider_line(const engine::ExecutionContext& ctx, const std::strin
         text += " / 模型=" + effective.model;
     }
     ctx.console(text);
+}
+
+// M_patchC（`PW-01` · 不变量 `I24` / `I26`）：**归属** —— 把「运行会话 + 当前节点 + 站点」打包
+//  * `run_id` / `node_id` 来自执行器（只读运行态）；`site_key` = 该站点 origin（`site_key_of`）
+//  * 空 `run_id` / `node_id`（没有执行器上下文的调用点）⇒ 未标注，行为与改造前一致
+web::WebOwner web_owner_of(const engine::ExecutionContext& ctx, const ai::ProviderWebSpec& site,
+                           const std::string& provider_id)
+{
+    web::WebOwner owner;
+    owner.run_id   = ctx.run_id;
+    owner.node_id  = ctx.current_node_id;
+    owner.site_key = web::login_request_site(web::boot_login_request(site, provider_id));
+    return owner;
 }
 
 } // namespace
@@ -494,12 +508,13 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
 
     // ---- L3（PB2-13）：通用 DOM 适配器（选择器驱动）—— 站点 = 纯数据，程序里无站点专有 C++ ----
     if (site.adapter == "dom") {
+        // M8-37（零开关）：生成字段（选择器 / 发送 / 取答案）**未回填不再拦路** ——
+        //  dom_chat 会在运行期自动识别（输入框打分 / 答案容器基线差分），识别结果只打印、不回写配置
         if (ai::web_login_only(effective.spec)) {
-            throw engine::NodeError(
-                "文本生成（网页版）不可用：站点「" + site_label +
-                "」是**登录型条目**（缺生成字段）——可用于登录 / 协议探测；生成需先补齐 "
-                "web.input_selector / send / answer_selector（见使用说明 §9）"
-                "；可用 --web-adapter-selftest --provider " + site_id + " 诊断选择器");
+            ctx.console("[文本生成] 站点「" + site_label +
+                        "」的生成字段未回填（web.input_selector / send / answer_selector）—— "
+                        "本次运行将**自动识别**（结果打印在下方；如需固化可用 --web-dom-dump "
+                        "--provider " + site_id + " 取建议选择器写进 providers.json）");
         }
         const std::string dom_field_warnings = ai::web_site_field_warnings(effective.spec);
         if (!dom_field_warnings.empty()) {
@@ -511,9 +526,16 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         dom_request.prompt      = prompt;
         dom_request.site        = site;
         dom_request.provider_id = site_id;
+        dom_request.owner       = web_owner_of(ctx, site, site_id); // M_patchC PW-01：归属
         const ai::DomChatResult dom = ai::dom_chat(dom_request);
         if (!dom.ok) {
             throw engine::NodeError("文本生成（网页版 · DOM 适配器）失败：" + dom.error);
+        }
+        if (dom.input_auto) {
+            ctx.console("[文本生成] 自动识别输入框：" + dom.input_used); // M8-37：只打印不落盘
+        }
+        if (dom.answer_auto) {
+            ctx.console("[文本生成] 自动识别答案容器：" + dom.answer_fingerprint); // M8-37
         }
         if (!dom.warning.empty()) {
             ctx.console("[文本生成] " + dom.warning); // R13：如实提示（可能仍在生成中）
@@ -636,12 +658,77 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
         throw engine::NodeError("图片理解：未连接图片（请把「图片输入」节点的 image 连到本节点 image 端口）");
     }
 
+    // ---- M8-14：网页版图片理解（**先上传，再发送**）----
+    //  * 上传走**站点上传模板**（`ai/upload/**`）：每站一个独立上传单元 + 每站格式识别/转换
+    //  * 不变量 `I18`：上传**双证据齐备**（页面附件区 + 站点上传请求回执）才注入提示词；
+    //    不齐备 → 本节点直接报错，**不发送**（绝不把「图没上去」当成「模型没看懂」）
+    //  * 「看图」由**站点自己的能力**完成（豆包 B3 已实测真视觉；Kimi 待侦察）
     if (mode == "web") {
-        // M_patchB L1：文案按**表内显示名**生成（保留「暂不支持网页版」以便既有断言与用户习惯）
-        throw engine::NodeError(
-            "图片理解暂不支持网页版（" + effective.display +
-            "）：请把「提供商配置」改为视觉 API 条目（如 zhipu / siliconflow），"
-            "或在「模型（自定义）」填写视觉模型名（如 glm-4v-flash）");
+        const std::string site_error = ai::web_site_error(effective.spec);
+        if (!site_error.empty()) {
+            throw engine::NodeError("图片理解（网页版）不可用：" + site_error);
+        }
+        const ai::ProviderWebSpec site   = ai::strict_web_spec_for(effective.spec);
+        const std::string        site_id = ai::strict_web_provider_id_for(effective.spec);
+        if (site.adapter != "dom") {
+            throw engine::NodeError(
+                "图片理解（网页版）不可用：站点「" + effective.display + "」的适配器 " +
+                site.adapter + " 尚未接图片上传（当前支持：adapter=dom 的站点 + 站点上传单元）");
+        }
+        const std::string upload_error = ai::site_upload_error(site.upload_adapter);
+        if (!upload_error.empty()) {
+            throw engine::NodeError("图片理解（网页版）不可用：" + upload_error);
+        }
+        // M8-37（零开关）：生成字段未回填**不再拦路** —— dom_chat 运行期自动识别输入框 / 答案容器
+        //  （识别结果只打印；要固化可用 --web-dom-dump --provider <id> 取建议选择器）
+        if (ai::web_login_only(effective.spec)) {
+            ctx.console("[图片理解] 站点「" + site.login_url +
+                        "」的生成字段未回填（web.input_selector / send / answer_selector）—— "
+                        "本次运行将**自动识别**；如需固化可用 --web-dom-dump --provider " + site_id +
+                        " 取建议选择器写进 providers.json");
+        }
+        const std::string dom_field_warnings = ai::web_site_field_warnings(effective.spec);
+        if (!dom_field_warnings.empty()) {
+            ctx.console("[图片理解] " + dom_field_warnings); // 决策 D-26：可回落 + 警告
+        }
+        ctx.console("[图片理解] 站点：" + site.login_url + "（网页版 · 上传单元 " +
+                    site.upload_adapter + "；图片 " + std::to_string(images.size()) +
+                    " 张 / 提示词 " + std::to_string(prompt.size()) + " 字节）");
+
+        ai::DomChatRequest dom_request;
+        dom_request.prompt          = prompt;
+        dom_request.site            = site;
+        dom_request.provider_id     = site_id;
+        dom_request.owner           = web_owner_of(ctx, site, site_id); // M_patchC PW-01：归属
+        dom_request.image_values    = images; // 上传模板内部再解析令牌 / 校验存在性（I19）
+        dom_request.image_max_bytes =
+            effective.spec != nullptr ? effective.spec->limits.image_max_bytes : 0;
+        const ai::DomChatResult dom = ai::dom_chat(dom_request);
+        for (const std::string& line : dom.conversions) {
+            ctx.console("[图片理解] 转换：" + line); // 每张的格式处理都如实记录（可追溯）
+        }
+        // M8-37（口径①：只打印不落盘）：把自动识别到的选择器如实带出来，便于**可选**回填
+        if (dom.input_auto) {
+            ctx.console("[图片理解] 自动识别输入框：" + dom.input_used);
+        }
+        if (dom.answer_auto) {
+            ctx.console("[图片理解] 自动识别答案容器：" + dom.answer_fingerprint);
+        }
+        if (dom.uploaded) {
+            ctx.console("[图片理解] 上传双证据齐备 —— 页面：" + dom.upload_page + "｜网络：" +
+                        dom.upload_net);
+        }
+        if (!dom.ok) {
+            throw engine::NodeError("图片理解（网页版）失败：" + dom.error);
+        }
+        if (!dom.warning.empty()) {
+            ctx.console("[图片理解] " + dom.warning); // R13：如实提示（可能仍在生成中）
+        }
+        ctx.console("[图片理解] 网页版完成：输出 " + std::to_string(dom.text.size()) +
+                    " 字节，轮询 " + std::to_string(dom.polls) + " 次 / " +
+                    std::to_string(dom.elapsed_ms) + " ms" +
+                    (dom.steps.empty() ? "" : ("｜" + dom.steps)));
+        return dom.text;
     }
     // 能力门控（表驱动）：表内声明 vision=false 的模型直接拒绝；表外模型放行（交给后端报错）
     if (effective.spec != nullptr) {

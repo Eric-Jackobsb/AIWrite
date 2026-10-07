@@ -295,6 +295,9 @@ bool Executor::start(Graph& graph, std::string* error)
 
     state_      = ExecState::Running;
     start_time_ = std::chrono::steady_clock::now();
+    // M_patchC（PW-01 · 归属）：运行会话 id —— 同一次运行内稳定，供 web::WebOwner 标注
+    ctx_.run_id = std::to_string(
+        std::chrono::duration_cast<std::chrono::milliseconds>(start_time_.time_since_epoch()).count());
     ctx_.console("[执行器] 开始执行：共 " + std::to_string(plan_.size()) + " 个节点");
     for (const std::string& text : warnings) {
         ctx_.console("[警告] " + text);

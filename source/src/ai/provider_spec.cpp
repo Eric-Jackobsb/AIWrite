@@ -230,7 +230,9 @@ const std::set<std::string>& allowed_web_fields()
         "adapter",     "login_url",       "window_title",   "endpoints",  "probe_paths",
         "cookie_names", "token_expr",     "input_selector", "send",       "answer_selector",
         "done_when",   "answer_poll_ms",  "answer_max_polls",
-        "attach"};  // M7B（B12-C2）：先放开白名单（**解析但运行期不消费**）—— 取值归批 3
+        "attach",      // M7B（B12-C2）：先放开白名单（**解析但运行期不消费**）—— 取值归批 3
+        // M8-14：站点图片上传字段（上传模板；见 ai/upload/**）
+        "upload_adapter", "attach_selector", "upload_accept"};
     return fields;
 }
 
@@ -799,6 +801,10 @@ void parse_web(const json& entry, ProviderSpec* out, const std::string& where,
     read_string(web, "input_selector", &out->web.input_selector, type_ok);
     read_string(web, "answer_selector", &out->web.answer_selector, type_ok);
     read_string(web, "attach", &out->web.attach, type_ok);  // M7B（B12-C2）：只解析、不消费
+    // M8-14：站点图片上传字段（上传模板消费；见 ai/upload/upload_registry.cpp）
+    read_string(web, "upload_adapter", &out->web.upload_adapter, type_ok);
+    read_string(web, "attach_selector", &out->web.attach_selector, type_ok);
+    read_string(web, "upload_accept", &out->web.upload_accept, type_ok);
     read_string_array(web, "probe_paths", &out->web.probe_paths, type_ok);
     read_string_array(web, "cookie_names", &out->web.cookie_names, type_ok);
     bool ok = true;
