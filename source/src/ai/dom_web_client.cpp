@@ -175,6 +175,218 @@ constexpr const char* kKickoffScript = R"JS(
 })();
 )JS";
 
+// ============================================================================
+//  M_patchC（`PW-07f` · 2026-10-08 · **自 `wip/pw07n-20261008` 移植回主分支**）
+//  真实发送链路 = 三步（`kKickoffScript` **降级**为合成事件回退）
+//
+//  真机证据（2026-10-08）：豆包纯文本路径连续三次 `候选池 0 个`，且运行后页面 URL 仍停在
+//  `https://www.doubao.com/chat/`（**没有新会话**）⇒ 消息**根本没发出去**；同一站点图片路径
+//  却「能用」（`候选池 39 → 47`）—— 因为图片走 CDP `DOM.setFileInputFiles`（**可信**）先落进
+//  composer，合成回车才有内容可发。可见症结 = `kKickoffScript` 的**合成事件**写法：
+//  `execCommand('insertText')` / `el.textContent =` 直接改 DOM，`new KeyboardEvent('keydown')`
+//  的 `isTrusted=false` —— 豆包（tiptap / ProseMirror）用自己的 state 重渲染 ⇒ 文本被抹掉、
+//  回车被忽略，而旧代码 `out.ok = true` **不做任何校验**（假阳性 ⇒ 白等 60 秒才报「未取到答案」）。
+//  修正：① 页面脚本只做**发现 + 聚焦 + 清空 + 记基线**；② 文本与回车交给 C++
+//  `web::cdp_input_text`（CDP `Input.insertText` / `Input.dispatchKeyEvent`，**isTrusted=true**）；
+//  ③ 用回执脚本**验证确实发出去**（URL 变化 / 出现新消息节点），未生效则依次降级
+//  （合成事件 → 点可见发送按钮）并**如实报错**（`R13`：宁可失败，不许假成功）。
+// ============================================================================
+
+// ① 准备：与 `kKickoffScript` 的「发现输入框 + 记基线」同源，另外**聚焦 + 清空**；**不写入、不发送**
+constexpr const char* kPrepareScript = R"JS(
+(function () {
+  const cfg = window.__aiwriteDom || {};
+  const out = { ok: false, error: '', input_selector: '', input_hits: 0, input_tag: '',
+                input_auto: false, input_fingerprint: '', baseline: 0, focused: false,
+                contenteditable: false, cleared: false };
+  const norm = function (s) { return (s || '').replace(/\s+/g, ' ').trim(); };
+  const visible = function (el) {
+    try { const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; } catch (e) { return false; }
+  };
+  const fingerprint = function (el) {
+    const cls = (typeof el.className === 'string') ? el.className.replace(/\s+/g, ' ').trim() : '';
+    const id = el.id || '';
+    const first = cls.split(' ')[0] || '';
+    return el.tagName.toLowerCase() + (id ? ('#' + id) : (first ? ('.' + first) : ''));
+  };
+  const score_input = function (el) {
+    let score = 0;
+    if (visible(el)) { score += 4; }
+    const r = el.getBoundingClientRect();
+    if (r.top > (window.innerHeight || 0) * 0.35) { score += 3; }
+    if (el.getAttribute('placeholder')) { score += 1; }
+    if (el.disabled === true || el.readOnly === true) { score -= 6; }
+    return score;
+  };
+  try {
+    const declared = cfg.input_selector || '';
+    let el = null;
+    if (declared) {
+      out.input_hits = document.querySelectorAll(declared).length;
+      el = document.querySelector(declared);
+    }
+    const input_pool_sel = cfg.input_pool || 'textarea, [contenteditable="true"], [role="textbox"]';
+    if (!el) {
+      let best = null;
+      let best_score = -99;
+      document.querySelectorAll(input_pool_sel).forEach(function (cand) {
+        const score = score_input(cand);
+        if (score >= best_score) { best_score = score; best = cand; } // 同分取文档顺序靠后者
+      });
+      if (best) { el = best; out.input_auto = true; }
+    }
+    if (!el) {
+      out.error = '输入框未命中（声明值：' + (declared || '（空）') + '；页面候选 ' +
+                  document.querySelectorAll(input_pool_sel).length +
+                  ' 个）且自动识别未取到候选；可用 --web-dom-dump --provider <id> 取建议选择器';
+      return out;
+    }
+    out.input_tag = (el.tagName || '').toLowerCase();
+    out.contenteditable = el.isContentEditable === true;
+    out.input_selector = out.input_auto ? fingerprint(el) : declared;
+    out.input_fingerprint = fingerprint(el);
+    if (out.input_hits === 0) { out.input_hits = 1; }
+
+    // 答案基线（**发送前**快照）+ 发送回执锚点（URL / 基线节点打标）
+    window.__aiwriteDomRuntime = { composer: el, baseline: [], seen: {}, seq: 0,
+                                   at: Date.now(), url_before: location.href };
+    try {
+      const pool_sel = cfg.answer_pool || '';
+      const base = [];
+      if (pool_sel) {
+        document.querySelectorAll(pool_sel).forEach(function (cand) {
+          try { cand.__aiwritePreSend = true; } catch (e) { }
+          base.push(norm(cand.innerText || cand.textContent || ''));
+        });
+      }
+      window.__aiwriteDomRuntime.baseline = base;
+      out.baseline = base.length;
+    } catch (e) { }
+
+    // 聚焦（CDP 真实输入要求编辑区拿到焦点；**不写入**）
+    try { el.focus(); } catch (e) { }
+    try { out.focused = (document.activeElement === el); } catch (e) { out.focused = false; }
+    // 清空残留（上一次失败尝试可能留下半截文本 ⇒ 不清会**重复发送**）
+    //  * 只在**确实聚焦**时做：`execCommand('selectAll')` 选的是**当前焦点**范围，
+    //    未聚焦时会选中整页 ⇒ 后续 delete 会破坏页面（保守做法：宁可不清晰，交给回执判定）
+    if (out.focused) {
+      if (out.contenteditable) {
+        try {
+          if ((el.innerText || el.textContent || '') !== '') {
+            document.execCommand('selectAll', false, null);
+            document.execCommand('delete', false, null);
+          }
+          out.cleared = ((el.innerText || el.textContent || '') === '');
+        } catch (e) { out.cleared = false; }
+      } else {
+        try { if (typeof el.value === 'string' && el.value !== '') { el.value = ''; } } catch (e) { }
+        out.cleared = true;
+      }
+    }
+    out.ok = true;
+  } catch (e) { out.error = 'DOM 执行异常：' + (e && e.message ? e.message : String(e)); }
+  return out;
+})();
+)JS";
+// ---- PW-07f① 准备脚本结束（下面接 ② 发送回执 / ③ 兜底点击）----
+
+// ② 发送回执：URL 变化 / 出现新消息节点 ⇒ 判定「确实发出去了」（否则如实判「未生效」）
+//  * 为什么需要它：豆包 / Kimi 这类站点**静默忽略**不可信输入 ⇒ 旧代码「写完就当成功」会白等 60 秒
+//  * 锚点：`kPrepareScript` 写下的 `url_before` + 给基线候选打的 `__aiwritePreSend` 标
+constexpr const char* kSendVerifyScript = R"JS(
+(function () {
+  const cfg = window.__aiwriteDom || {};
+  const rt = window.__aiwriteDomRuntime || {};
+  const out = { sent: false, url_changed: false, new_nodes: 0, composer_len: -1,
+                composer_has_prompt: false, url: '', note: '' };
+  const norm = function (s) { return (s || '').replace(/\s+/g, ' ').trim(); };
+  const squash = function (s) {
+    return (s || '').replace(/\s+/g, '').replace(/[\u201c\u201d\u2018\u2019]/g, '"');
+  };
+  try {
+    out.url = location.href;
+    out.url_changed = !!rt.url_before && out.url !== rt.url_before;
+    const composer = rt.composer ||
+      (cfg.input_selector ? document.querySelector(cfg.input_selector) : null);
+    if (composer) {
+      const text = composer.isContentEditable
+        ? (composer.innerText || composer.textContent || '')
+        : (composer.value || '');
+      out.composer_len = norm(text).length;
+      const pk = squash(cfg.prompt || '');
+      out.composer_has_prompt = pk !== '' && squash(text).indexOf(pk) === 0;
+    }
+    const pool_sel = cfg.answer_pool || '';
+    if (pool_sel) {
+      document.querySelectorAll(pool_sel).forEach(function (el) {
+        if (el.__aiwritePreSend === true) { return; } // 发送前就有 ⇒ 不是本轮新消息
+        const t = norm(el.innerText || el.textContent || '');
+        if (t.length < 2) { return; }
+        if (composer && (el === composer || el.contains(composer))) { return; } // 输入区不算
+        out.new_nodes += 1;
+      });
+    }
+    out.sent = out.url_changed || out.new_nodes > 0;
+    out.note = 'URL' + (out.url_changed ? '已变化' : '未变化') + ' / 新节点 ' + out.new_nodes +
+               ' / 输入框 ' + out.composer_len + ' 字' + (out.composer_has_prompt ? '（含提示词）' : '');
+  } catch (e) { out.note = 'DOM 执行异常：' + (e && e.message ? e.message : String(e)); }
+  return out;
+})();
+)JS";
+// ---- PW-07f② 发送回执脚本结束（下面接 ③ 兜底点击）----
+
+// ③ 兜底：找可见发送按钮并点击（CDP 回车无效时；优先「send / 发送」类名 / aria）
+//  * 用途：`web.send.kind = click` 的站点；以及 key 模式下回执仍显示「未发出」时的最后一招
+constexpr const char* kClickSendScript = R"JS(
+(function () {
+  const cfg = window.__aiwriteDom || {};
+  const out = { clicked: false, selector: '', candidates: 0, declared: false, note: '' };
+  const visible = function (el) {
+    try { const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; } catch (e) { return false; }
+  };
+  const fingerprint = function (el) {
+    const cls = (typeof el.className === 'string') ? el.className.replace(/\s+/g, ' ').trim() : '';
+    const id = el.id || '';
+    const first = cls.split(' ')[0] || '';
+    return el.tagName.toLowerCase() + (id ? ('#' + id) : (first ? ('.' + first) : ''));
+  };
+  const looks_send = function (el) {
+    const blob = ((el.className || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' +
+                  (el.getAttribute('title') || '') + ' ' + (el.getAttribute('data-testid') || '')).toLowerCase();
+    return /send|submit|发送/.test(blob);
+  };
+  try {
+    // 声明值优先（`web.send.value` 命中的站点：直接用声明选择器，避免猜错按钮）
+    const declared = cfg.send_value || '';
+    if (declared) {
+      try {
+        const btn = document.querySelector(declared);
+        if (btn && visible(btn) && btn.disabled !== true) {
+          btn.click();
+          out.clicked = true;
+          out.declared = true;
+          out.selector = declared;
+          return out;
+        }
+      } catch (e) { }
+    }
+    const pool = document.querySelectorAll('button, [role="button"], [type="submit"]');
+    let chosen = null;
+    for (let i = pool.length - 1; i >= 0; i--) { // 倒序：发送按钮通常在文档**靠后**的输入区
+      if (!visible(pool[i]) || pool[i].disabled === true) { continue; }
+      out.candidates += 1;
+      if (looks_send(pool[i])) { chosen = pool[i]; break; }
+    }
+    if (!chosen) { out.note = '未找到「发送」按钮（候选 ' + out.candidates + ' 个）'; return out; }
+    chosen.click();
+    out.clicked = true;
+    out.selector = fingerprint(chosen);
+  } catch (e) { out.note = 'DOM 执行异常'; }
+  return out;
+})();
+)JS";
+// ---- PW-07f③ 兜底点击脚本结束 ----
+
 // 页面内「取答案 + 判结束」（读 window.__aiwriteDom / window.__aiwriteDomRuntime）
 //  M8-37（零开关）：声明值未命中 → 自动识别（基线差分；站点无关）
 constexpr const char* kPollScript = R"JS(
@@ -375,6 +587,10 @@ std::string dom_cfg_json(const DomChatRequest& request)
 }
 
 std::string dom_kickoff_script() { return std::string(kKickoffScript); }
+// PW-07f：真实发送链路的三段式脚本（与 dom_kickoff_script 同为**常量脚本**读取者）
+std::string dom_prepare_script() { return std::string(kPrepareScript); }
+std::string dom_send_verify_script() { return std::string(kSendVerifyScript); }
+std::string dom_click_send_script() { return std::string(kClickSendScript); }
 std::string dom_poll_script() { return std::string(kPollScript); }
 std::string dom_probe_script() { return std::string(kProbeScript); }
 
@@ -463,38 +679,183 @@ DomChatResult dom_chat(const DomChatRequest& request)
         result.error = "注入站点配置失败：" + script_error;
         return finish();
     }
-    if (!web::run_script_sync(site_request, dom_kickoff_script(), 15000, &raw, &script_error)) {
-        result.error = "站点页面交互失败：" + script_error;
+    // ---- 3a) 页面准备（JS）：发现输入框 + 聚焦 + 清空 + 记答案基线（**不写入、不发送**）----
+    //  * 旧写法（`kKickoffScript`）是「脚本自己写入 + 脚本自己发合成回车」⇒ 豆包 / Kimi 这类
+    //    富文本编辑器**忽略**不可信输入（真机 2026-10-08：连续三次 `候选池 0`、页面 60 秒无新消息）
+    if (!web::run_script_sync(site_request, dom_prepare_script(), 15000, &raw, &script_error)) {
+        result.error = "站点页面交互失败（准备阶段）：" + script_error;
         return finish();
     }
+    const bool send_by_click = (request.site.send_kind == "click");
     try {
-        const nlohmann::json kick       = nlohmann::json::parse(raw);
-        const bool           kicked     = kick.value("ok", false);
-        const int            input_hits = kick.value("input_hits", 0);
-        const int            send_hits  = kick.value("send_hits", 0);
-        // M8-37：把「自动识别」如实带出来（口径①：只打印不落盘 —— 不进配置、只进 Console / steps）
-        result.input_auto       = kick.value("input_auto", false);
-        result.input_used       = kick.value("input_selector", std::string());
-        const bool send_auto    = kick.value("send_auto", false);
-        result.steps = (upload_steps.empty() ? std::string() : ("上传：" + upload_steps + "｜")) +
-                       (result.input_auto ? ("自动识别输入框 " + kick.value("input_fingerprint", std::string("?")))
-                                          : ("input_selector 命中 " + std::to_string(input_hits) + " 个（" +
-                                             kick.value("input_tag", std::string("?")) + "）")) +
-                       "；send=" +
-                       kick.value("send_kind", std::string("key")) +
-                       (send_auto ? "（自动识别按钮）" : "") + " 命中 " +
-                       std::to_string(send_hits);
-        if (!kicked) {
-            result.error = kick.value("error", std::string("写入 / 发送失败")) +
+        const nlohmann::json prep = nlohmann::json::parse(raw);
+        if (!prep.value("ok", false)) {
+            result.error = prep.value("error", std::string("页面准备失败")) +
                            "（用 --web-adapter-selftest --provider " + request.provider_id +
                            " 复核选择器）";
             return finish();
         }
+        result.input_auto = prep.value("input_auto", false);
+        result.input_used = prep.value("input_selector", std::string());
+        result.steps      = (upload_steps.empty() ? std::string() : ("上传：" + upload_steps + "｜")) +
+                       (result.input_auto
+                            ? ("自动识别输入框 " + prep.value("input_fingerprint", std::string("?")))
+                            : ("input_selector 命中 " + std::to_string(prep.value("input_hits", 0)) +
+                               " 个（" + prep.value("input_tag", std::string("?")) + "）")) +
+                       "；发送前基线 " + std::to_string(prep.value("baseline", 0)) + " 个候选" +
+                       (prep.value("focused", false) ? "、已聚焦" : "、**未取得焦点**");
     }
     catch (const std::exception& ex) {
-        result.error = std::string("解析 kickoff 结果失败：") + ex.what() + "；原始返回：" +
+        result.error = std::string("解析准备结果失败：") + ex.what() + "；原始返回：" +
                        raw.substr(0, 200);
         return finish();
+    }
+
+    // ---- 3b) **真实输入**（CDP `Input` 域）：写入提示词（+ key 模式回车）----
+    //  * 为什么不能用合成事件：`execCommand('insertText')` / `el.textContent =` + `new
+    //    KeyboardEvent('keydown')` 的 `isTrusted=false` ⇒ 富文本编辑器用自己的 state 重渲染
+    //    ⇒ 提示词被抹掉、回车被忽略 ⇒ **消息根本没发出去**（而旧代码写完就 `ok=true`：假阳性）
+    //  * CDP `Input.insertText` / `Input.dispatchKeyEvent` = 浏览器**进程内**输入 ⇒ `isTrusted=true`
+    std::string cdp_detail;
+    std::string cdp_error;
+    std::string send_mode;
+    {
+        bool cdp_ok = false;
+        if (send_by_click) {
+            cdp_ok = web::cdp_input_text(site_request, request.prompt, /*press_enter=*/false, 15000,
+                                         &cdp_detail, &cdp_error);
+            send_mode = "click";
+        }
+        else {
+            cdp_ok = web::cdp_input_text(site_request, request.prompt, /*press_enter=*/true, 15000,
+                                         &cdp_detail, &cdp_error);
+            send_mode = cdp_ok ? "key(cdp)" : "key(synth-fallback)";
+        }
+        if (cdp_ok && send_by_click) {
+            // click 模式：CDP 只负责写入文本，发送交给「点发送按钮」（声明值优先）
+            std::string click_raw;
+            std::string click_err;
+            if (web::run_script_sync(site_request, dom_click_send_script(), 10000, &click_raw,
+                                     &click_err)) {
+                try {
+                    const nlohmann::json cj = nlohmann::json::parse(click_raw);
+                    cdp_detail += "｜" +
+                                  (cj.value("clicked", false)
+                                       ? ("点击发送按钮 " + cj.value("selector", std::string("?")))
+                                       : cj.value("note", std::string("未点击")));
+                }
+                catch (const std::exception&) { cdp_detail += "｜点击结果解析失败"; }
+            }
+            else {
+                cdp_detail += "｜点击脚本失败：" + click_err;
+            }
+        }
+        else if (!cdp_ok) {
+            // CDP 硬失败（窗口 / 焦点 / 页面就绪等）→ 回退**合成事件**（旧 kickoff：重新写入 + 发送）
+            result.steps += "｜CDP 真输入失败（" + cdp_error + "）→ 回退合成事件路径";
+            log::warn("[dom_chat] " + std::string(web::owner_tag(request.owner)) +
+                      " CDP 真输入失败，回退合成事件：" + cdp_error);
+            std::string fb_raw;
+            std::string fb_err;
+            if (!web::run_script_sync(site_request, dom_kickoff_script(), 15000, &fb_raw, &fb_err)) {
+                result.error = "站点页面交互失败：" + fb_err;
+                return finish();
+            }
+        }
+    }
+    result.steps += (cdp_detail.empty() ? std::string() : ("｜CDP：" + cdp_detail));
+
+    // ---- 3c) 发送回执校验（PW-07f）：URL 变化 / 出现新消息节点 ⇒ 才算「发出去了」----
+    //  * 不再「写完就当成功」——豆包 / Kimi 这类站点会**静默忽略**不可信输入；必须验证确实发出，
+    //    否则会白等 60 秒（真机 2026-10-08 16:37 / 16:50 / 16:56 连续三次 `候选池 0`，页面
+    //    60 秒内一条消息都没渲染，运行后 URL 仍停在 `https://www.doubao.com/chat/`）
+    bool        sent             = false;
+    bool        composer_has_txt = false;
+    int         composer_len     = -1; // -1 = 取不到输入框（无法判断）；0 = 输入框已空
+    std::string verify_note;
+    const auto  sample_sent      = [&](int rounds) {
+        for (int attempt = 0; attempt < rounds && !sent; ++attempt) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            std::string v_raw;
+            std::string v_err;
+            if (!web::run_script_sync(site_request, dom_send_verify_script(), 10000, &v_raw, &v_err)) {
+                verify_note = "发送回执采样失败：" + v_err;
+                continue;
+            }
+            try {
+                const nlohmann::json v = nlohmann::json::parse(v_raw);
+                sent                   = v.value("sent", false);
+                composer_has_txt       = v.value("composer_has_prompt", false);
+                composer_len           = v.value("composer_len", -1);
+                verify_note            = v.value("note", std::string());
+            }
+            catch (const std::exception&) { /* 下一轮重试 */ }
+        }
+    };
+    sample_sent(12);
+    // 兜底 A：提示词**根本没写进输入框**（该站忽略 CDP 输入）→ 回退合成事件（旧 kickoff）
+    if (!sent && !composer_has_txt) {
+        result.steps += "｜CDP 输入未落进输入框 → 回退合成事件";
+        std::string fb_raw;
+        std::string fb_err;
+        if (web::run_script_sync(site_request, dom_kickoff_script(), 15000, &fb_raw, &fb_err)) {
+            send_mode += "+synth";
+            sample_sent(12);
+        }
+        else {
+            result.steps += "（合成事件回退也失败：" + fb_err + "）";
+        }
+    }
+    // 兜底 B：文本已写但站点不发 → 点可见「发送」按钮（声明值优先）
+    if (!sent) {
+        std::string click_raw;
+        std::string click_err;
+        if (web::run_script_sync(site_request, dom_click_send_script(), 10000, &click_raw, &click_err)) {
+            try {
+                if (nlohmann::json::parse(click_raw).value("clicked", false)) {
+                    send_mode += "+click";
+                    sample_sent(6);
+                }
+            }
+            catch (const std::exception&) { /* 忽略：下面按未发送处理 */ }
+        }
+    }
+    result.steps += "；send=" + std::string(send_by_click ? "click" : "key") + "（" + send_mode +
+                    "）｜发送回执：" + (verify_note.empty() ? std::string("未取到采样") : verify_note);
+    if (!sent) {
+        // 歧义分支（防**误判**）：回执未取到，但输入框**已空**（提示词不在框里）⇒ 站点多半已经
+        //  收下并发出，只是「新消息节点」不在候选池里 / 是同文档跳转 ⇒ **不硬失败**：继续轮询，
+        //  但把「回执未取到」如实写进 steps / warning（若最终取不到答案，仍是**如实失败**）
+        if (composer_len == 0) {
+            result.steps += "｜回执未取到但输入框已空 → 按「已发出」继续轮询";
+            result.warning = "发送回执未取到（URL 未变化 / 无新消息节点），但输入框已空 ⇒ 按「已发出」"
+                             "继续轮询；若最终未取到答案，请复核 input / send 配置";
+            log::warn("[dom_chat] " + std::string(web::owner_tag(request.owner)) + " " + result.warning);
+        }
+        else {
+            result.error =
+                "**发送未生效**（提示词已按 CDP 真实输入写入页面，但站点未真正发出消息："
+                "URL 未变化 / 无新消息节点 / 提示词仍留在输入框）"
+                "—— 常见原因：站点忽略不可信输入、或编辑区未取得焦点。诊断：" +
+                result.steps + "；下一步：--web-adapter-selftest --provider " + request.provider_id +
+                " 复核 input / send 方式（click 模式的站点可回填发送按钮选择器）";
+            log::warn("[dom_chat] " + std::string(web::owner_tag(request.owner)) + " " + result.error);
+            return finish();
+        }
+    }
+
+    // ---- PW-07f：发送后、轮询前**重注入配置**（幂等）----
+    //  * 部分站点（真机 Kimi：首条消息整页导航到 `/chat/<id>`）会**换文档** ⇒ 清空页面注入的
+    //    `window.__aiwriteDom` / `__aiwriteDomRuntime`；轮询脚本每次都读它 ⇒ 不重注入会得到
+    //    「候选池 0 个」的**假象**（豆包等 SPA 站点是同文档跳转，此处为无副作用幂等调用）
+    {
+        std::string re_raw;
+        std::string re_err;
+        if (!web::run_script_sync(site_request, "window.__aiwriteDom = " + dom_cfg_json(request) + "; 'ok';",
+                                  10000, &re_raw, &re_err)) {
+            log::warn("[dom_chat] " + std::string(web::owner_tag(request.owner)) +
+                      " 轮询前重注入配置失败（继续按已注入配置轮询）：" + re_err);
+        }
     }
 
     // ---- 4) 轮询答案：done_when 命中 / 文本连续 N 轮稳定 / 到达上限（R13：如实返回 + 提示）----
@@ -563,10 +924,16 @@ DomChatResult dom_chat(const DomChatRequest& request)
     }
     if (result.text.empty()) {
         // PW-07：失败路径也要能一眼看出「为什么没取到」（旧日志只说「未取到候选」，看不出装饰 / 过短被拒）
+        // PW-07f：**并把发送链路的诊断（`result.steps`）带出来** —— 否则「发送未生效」与「站点没渲染」
+        //   这两件完全不同的事在日志里长得一样（真机 2026-10-08：三次失败都只有「候选池 0」一行）
         log::warn("[DOM 适配器] 未取到答案：站点=" + request.site.login_url +
-                  (last_poll_note.empty() ? std::string() : ("｜" + last_poll_note)));
+                  (last_poll_note.empty() ? std::string() : ("｜" + last_poll_note)) +
+                  (result.steps.empty() ? std::string() : ("｜发送链路：" + result.steps)));
         result.error = "未取到答案文本（answer_selector 未命中、自动识别也未取到候选，或站点仍在生成）"
                        "；可用 --web-adapter-selftest --provider <id> 诊断选择器";
+        if (!result.steps.empty()) {
+            result.error += "｜发送链路：" + result.steps;
+        }
         if (!last_poll_note.empty()) {
             result.error += "｜最后一轮自动识别体检：" + last_poll_note; // PW-07：命中明细（为什么没取到）
         }

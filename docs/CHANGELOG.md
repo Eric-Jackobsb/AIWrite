@@ -26,6 +26,29 @@
 
 ## [Unreleased] — M7（图片收口 + 节点精简）+ M5 核心切片（M5-C）已落地；**M7 第二轮 P7-a 已落地（v0.5.2）**；M7 第三轮 `M7B` 立项（网页通道整体迁 Pydoll —— 📦 已于 2026-10-05 退场归档）；**M7 第四轮 `M8` 立项（网页通道方案 E）**
 
+**📨 `PW-07f` 真实发送链路：CDP 可信输入 + **回执验证** + 兜底点击（2026-10-08 · 代码已改 · 真机待跑）**
+
+- **根因（真机物证）**：旧发送路径**在页面脚本里自己写 DOM**（`execCommand('insertText')` / `el.textContent =`）再派发 `new KeyboardEvent('keydown')` —— `isTrusted=false` ⇒ 豆包（tiptap / ProseMirror）按自己的 state 重渲染 ⇒ **提示词被抹掉、回车被忽略**；而旧代码**写完就 `ok=true`** ⇒ 白等 60 秒才报「未取到答案」（16:37 / 16:50 / 16:56 连续三次 `候选池 0`，运行后 URL 仍停在 `https://www.doubao.com/chat/`）。
+- **改法（三段链 + 回执 + 兜底）**：
+  1. **准备** `kPrepareScript`：**只聚焦 / 清残留 / 记基线**（`baseline` 计数 + `url_before` + 给池内候选打 `__aiwritePreSend` 锚点），**不写入**（写入只能由 ② 的 CDP 真实输入完成）；清残留**仅在确实聚焦时才做** —— 未聚焦时的 `selectAll` 选的是**整页** ⇒ 会清掉页面（新增守卫，夹具 ⑥ 专门守它）。
+  2. **真输入** `web::cdp_input_text`（`webview_host.cpp` · CDP `Input.insertText` / `Input.dispatchKeyEvent`，**`isTrusted=true`**）写提示词（key 模式再回车）⇒ `send_mode = key(cdp)` / `click`；CDP 硬失败才回退合成事件（`key(synth-fallback)`）。
+  3. **回执** `kSendVerifyScript`：500 ms 采样 ×12 —— **URL 变化 / 新消息节点 / 输入框残留**（`composer_len`、`composer_has_prompt`）⇒ 如实区分「发出去了」与「被静默忽略」，落进 `steps`：`send=key（key(cdp)）｜发送回执：URL未变化 / 新节点 0 / 输入框 0 字`。
+  4. **兜底**：输入框里**连提示词都没有** ⇒ 回退 `kKickoffScript()`（`+synth`，再采样 ×12）；仍未发出 ⇒ `kClickSendScript` 点可见发送按钮（`+click`，再采样 ×6），**声明 `web.send.value` 优先**（`out.declared=true`，且修掉 TDZ 崩溃），否则只点**可见**且像「send / 发送」的按钮。
+- **歧义分支（防把「判据看不到」当「没发出」）**：回执未取到但**输入框已空**（`composer_len == 0`）⇒ **不硬失败**：记 `warning` + `steps`，继续轮询；否则按「**发送未生效**…」失败 —— 且失败时把 `result.steps` 一并带进 `error` / `log::warn`（真机不再只看到一句「未取到答案」）。
+- **🆕 离线夹具** `source/tools/send_chain_test.js`（**入库** · 仅 node 内置 · 不联网 / 不写盘）：从源码**抽取真实的**三个脚本 + `kAnswerPoolSelector` / `kInputPoolSelector` / `kMinAutoAnswerChars`，在**迷你 DOM**（含 `focus` / `activeElement` / `execCommand(selectAll|delete)` 的**破坏性语义**建模）上真跑 17 条断言 ⇒ 正模式 **17 / 0**；`--old`（注入「无聚焦守卫 + 回执恒判已发送」两处旧写法）⇒ ⑥⑦⑧⑪ **如实 FAIL**、退出码 1 —— 证明夹具能吃住这段回归（不是「全绿而什么都没测到」）。
+- **回归基线**：构建 **0 error / 0 warning**；`api_probe --selftest` **423 / 0**；`poll_answer_gate_test.js` **10 / 0**。
+- **文件**：`source/src/web/webview_host.h` / `.cpp`（CDP 输入原语 `cdp_input_text`）、`source/src/ai/dom_web_client.h` / `.cpp`（三段脚本 + 三段链）、`source/tools/send_chain_test.js`（🆕 · 与 `poll_answer_gate_test.js` 同源的抽取式夹具）。
+- **真机待跑**：需登录豆包**文字**会话确认「发送成功 + 回执已取到 + 轮询池 > 0」；若仍失败，`steps` 里的「发送链路」串即第一手判据。
+
+**↩️ `PW-08` 答案归属门 v2「已回退」（2026-10-08 · 真机反馈「一行都拿不到」）**
+
+- **现象（真机）**：落 v2 后 `ImgPlusText` 工作流**取不到任何答案文本**（连原来那 45 字节都没有）⇒ 判定为**过度拒绝**（宁可不取也不取错 ⇒ 直接不可用）。
+- **动作（本机实测）**：`source/src/ai/dom_web_client.cpp` · `source/tools/poll_answer_gate_test.js` · `source/tools/api_probe.cpp` · 本文件共 4 处 `git checkout HEAD --` **整体回退到 `PW-07`（精简版）** ⇒ `git diff HEAD` **为空**；构建 **0 error / 0 warning**；夹具回到 **10 / 0**；`api_probe --selftest` 回到 **423 / 0**（`VB2-22⑦` 随之移除）。
+- **存档（可一键复原）**：🆕 `build/_backup/20261008_pw08/` —— `pw08.patch`（= 回退前的 `git diff HEAD` 全量 **38.7 KB**）+ `说明.md`（改动清单 / 复原命令 / 失败原因分析）。
+- **最可疑的根因（待真机日志确认，详见 `说明.md`）**：新增的 **③ 回声锚点（位置门）** 连「**锚点的祖先**」也拒 —— 而祖先类候选（整条消息列表 = 提问 + 回答；或回答容器内**包着**一条提问引用块）**本来就该收**，应由 **② 回声裁剪**把回声切掉；位置门**抢在裁剪之前**拒，可能把池内候选**全部**拒光 ⇒ `found=false` ⇒ 超时 ⇒ 一行都拿不到。**建议的缩小版 v2.1**：位置门**只拒锚点的后代**（回声自身 / 其后代），**不拒祖先**。
+- **教训（如实登记）**：**先拿真机日志再收紧判据** —— 「位置 / 顺序」类假设在无真机证据时不应进门；`PW-07` 那版（只按**文本形态**判、无位置门）虽然会放进 45 字节回声，但**至少可用**。
+- **下一步要看的那一行**：`steps` / `error` 里的体检串 `…｜最后一轮自动识别体检：自动识别：候选池 N 个；装饰文本拒 x；过短拒 y（< 8 字符）`（v2 会扩出 `回声锚点 / 回声拒 / 回声裁剪 / 锚点前拒`）。
+
 **🔒 `PW-07` 答案归属门（精简版）落地 + `PW-07b..n` 隔离存档（2026-10-08 · 代码已改 · 真机待跑）**
 
 - **问题**（真机物证：`M8.md` §13.7 · `网页版协议实测记录.md` §10.6③）：答案侧自动识别是「发送前基线差分」—— **差分 ≠ 归属** ⇒ 两次假成功：豆包布局容器 `div.bp5-overflow-list` 的**「今天 13:31」= 12 字节**、Kimi 操作条的**「Copy Share」= 10 字节**都被当成新答案写出；旧代码还有「**短候选也算成功**」的 `fallback` 分支（`ai/dom_web_client.cpp:209-212`），正是这类假成功的温床。

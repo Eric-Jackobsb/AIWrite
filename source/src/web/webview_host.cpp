@@ -18,6 +18,7 @@
 #include <condition_variable>
 #include <cstdio>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <exception>
 #include <filesystem>
@@ -42,6 +43,7 @@ constexpr UINT           kSolvePowMessage = WM_APP + 2; // 请求在页面内求
 constexpr UINT           kLogoutMessage   = WM_APP + 3; // 请求按站点注销（删该 origin 的 Cookie + 清 localStorage）
 constexpr UINT           kRunScriptMessage = WM_APP + 4; // L3：请求在页面内执行一段脚本并回传原始 JSON（任意线程 Post）
 constexpr UINT           kSetFilesMessage  = WM_APP + 5; // M8-14：请求把本地文件交给 input[type=file]（任意线程 Post）
+constexpr UINT           kCdpInputMessage = WM_APP + 6; // PW-07f：请求 CDP 真实输入 / 发送（任意线程 Post）
 // 页面加载完成后到开始协议探测的等待（给 SPA 一点就绪时间）
 constexpr DWORD kProbeDelayMs = 1500;
 
@@ -288,6 +290,18 @@ std::string              g_files_selector;
 std::vector<std::string> g_files_paths;
 std::string              g_files_detail;
 std::string              g_files_error;
+
+// ---- M_patchC（`PW-07f` · 2026-10-08）：CDP「真实输入 / 发送」跨线程同步状态 ----
+//  * 调用方（后台线程）写参 → PostMessage → 窗口线程执行 CDP → 回写结果 → notify
+//  * 真机证据与原因见 `webview_host.h` 的同名小节（豆包 ProseMirror 忽略合成事件）
+std::mutex               g_cdp_mutex;
+std::condition_variable  g_cdp_cv;
+bool                     g_cdp_done  = false;
+bool                     g_cdp_ok    = false;
+std::string              g_cdp_text;
+bool                     g_cdp_enter = false;
+std::string              g_cdp_detail;
+std::string              g_cdp_error;
 
 // ---- M8-14：网络回执采集（`ICoreWebView2_2::add_WebResourceResponseReceived`）----
 std::mutex                     g_net_mutex;
@@ -797,6 +811,118 @@ void run_set_files_in_window()
              });
 }
 
+// ---- M_patchC（`PW-07f` · 2026-10-08 · **自 `wip/pw07n-20261008` 移植回主分支**）-----------------
+//  CDP「真实输入 / 发送」（窗口线程执行；与 `run_set_files_in_window` 同形）
+//  为什么必须走 CDP：页面脚本写 contenteditable（`execCommand` / `textContent =`）再发
+//  `new KeyboardEvent('keydown', {key:'Enter'})` 时 `isTrusted=false` —— 豆包（tiptap /
+//  ProseMirror）用自己的 state 重渲染 ⇒ 直接改 DOM 的文本**被抹掉**、合成回车被忽略
+//  ⇒ **消息根本没发出去**（真机 2026-10-08 连续三次 `候选池 0`，页面 60 秒内一条消息都没渲染）。
+//  图片路径之所以「能用」：图片走 CDP `DOM.setFileInputFiles`（可信）先落进 composer。
+
+// 结束一次「CDP 真实输入」（窗口线程调用）
+void finish_cdp_input(bool ok, std::string detail, std::string error)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_cdp_mutex);
+        g_cdp_ok     = ok;
+        g_cdp_detail = std::move(detail);
+        g_cdp_error  = std::move(error);
+        g_cdp_done   = true;
+    }
+    g_cdp_cv.notify_all();
+}
+
+// 一步 CDP 调用（成功后把 `label` 追加进诊断串；任一步失败 → 立即如实收尾）
+struct CdpInputStep {
+    const wchar_t* method   = L"";
+    std::string    params;    // UTF-8 JSON 文本
+    std::string    label;     // 成功后写入 detail（空 = 中间步骤，不写）
+    std::string    fail_note; // 失败时写入 error 的前缀
+};
+
+void run_cdp_input_steps(const std::shared_ptr<std::vector<CdpInputStep>>& steps,
+                         const std::shared_ptr<std::size_t>&                index,
+                         const std::shared_ptr<std::string>&                detail)
+{
+    if (*index >= steps->size()) {
+        finish_cdp_input(true, *detail, {});
+        return;
+    }
+    const CdpInputStep step = (*steps)[*index];
+    call_cdp(step.method, step.params,
+             [steps, index, detail, label = step.label, fail_note = step.fail_note](
+                 HRESULT result, const std::string& /*json*/) {
+                 if (FAILED(result)) {
+                     finish_cdp_input(false, *detail,
+                                      fail_note + "（HRESULT " + std::to_string(result) + "）");
+                     return;
+                 }
+                 if (!label.empty()) {
+                     if (!detail->empty()) {
+                         *detail += "｜";
+                     }
+                     *detail += label;
+                 }
+                 *index += 1;
+                 run_cdp_input_steps(steps, index, detail);
+             });
+}
+
+void run_cdp_input_in_window()
+{
+    std::string text;
+    bool        press_enter = false;
+    {
+        std::lock_guard<std::mutex> lock(g_cdp_mutex);
+        text        = g_cdp_text;
+        press_enter = g_cdp_enter;
+    }
+    if (g_webview == nullptr) {
+        finish_cdp_input(false, {}, "CDP 真实输入：WebView 不可用（窗口已关闭？）");
+        return;
+    }
+
+    auto steps  = std::make_shared<std::vector<CdpInputStep>>();
+    auto detail = std::make_shared<std::string>();
+
+    if (!text.empty()) {
+        // `Input.insertText` = **组合输入**语义（等同输入法提交）：站点拿到 isTrusted=true 的
+        // 文本输入 ⇒ 富文本编辑器走自己的插入事务（DOM 与内部 state 同步，后续不会被抹掉）
+        nlohmann::json params;
+        params["text"] = text;
+        steps->push_back({L"Input.insertText", params.dump(),
+                          "CDP Input.insertText OK（" + std::to_string(text.size()) + " 字节）",
+                          "CDP Input.insertText 失败"});
+    }
+    if (press_enter) {
+        // 真实回车 = `keyDown`（带 `text="\r"`，与 Puppeteer `keyboard.press('Enter')` 等效）
+        //   + `keyUp`；`windowsVirtualKeyCode=13` ⇒ 站点按真实 Enter 处理（不是合成事件）
+        const auto enter_params = [](const char* type, const char* text_field) {
+            nlohmann::json p;
+            p["type"]                  = type;
+            p["key"]                   = "Enter";
+            p["code"]                  = "Enter";
+            p["windowsVirtualKeyCode"] = 13;
+            p["nativeVirtualKeyCode"]  = 13;
+            p["text"]                  = text_field;
+            p["unmodifiedText"]        = text_field;
+            return p.dump();
+        };
+        steps->push_back({L"Input.dispatchKeyEvent", enter_params("keyDown", "\r"), {},
+                          "CDP Input.dispatchKeyEvent(Enter keyDown) 失败"});
+        steps->push_back({L"Input.dispatchKeyEvent", enter_params("keyUp", "\r"),
+                          "CDP Input.dispatchKeyEvent Enter OK",
+                          "CDP Input.dispatchKeyEvent(Enter keyUp) 失败"});
+    }
+    if (steps->empty()) {
+        finish_cdp_input(false, {}, "CDP 真实输入：text 与 press_enter 均为空");
+        return;
+    }
+
+    const auto index = std::make_shared<std::size_t>(0);
+    run_cdp_input_steps(steps, index, detail);
+}
+
 // M8-14：网络回执挂钩（窗口线程；控制器就绪后调用一次）
 void hook_resource_capture()
 {
@@ -1218,6 +1344,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
 
     case kSetFilesMessage: // M8-14：把本地文件交给页面（CDP 三步）
         run_set_files_in_window();
+        return 0;
+
+    case kCdpInputMessage: // PW-07f：CDP 真实输入 / 发送（insertText + Enter）
+        run_cdp_input_in_window();
         return 0;
 
     case kProbeMessage:
@@ -2198,6 +2328,93 @@ bool set_file_input_files(const LoginRequest& site_request, const std::string& c
         *error = g_files_error;
     }
     return g_files_ok;
+}
+
+// ---- M_patchC（`PW-07f` · 2026-10-08 · **自 `wip/pw07n-20261008` 移植回主分支**）----
+//  CDP 真实输入 / 发送（公开 API）：详见头文件同名小节
+bool cdp_input_text(const LoginRequest& site_request, const std::string& text, bool press_enter,
+                    int timeout_ms, std::string* detail, std::string* error)
+{
+    if (text.empty() && !press_enter) {
+        if (error != nullptr) {
+            *error = "CDP 真实输入：text 与 press_enter 均为空";
+        }
+        return false;
+    }
+
+    // 前置与 run_script_sync / set_file_input_files 同策略（窗口已在该站点 → ensure_session → 离屏开窗）
+    const std::string site_key = site_key_of(site_request.url);
+    if (!window_on_site(site_key)) {
+        std::string boot_error;
+        if (!ensure_session(site_request, 15000, &boot_error) && !window_on_site(site_key)) {
+            LoginWindow& window = login_window();
+            if (window.running()) {
+                window.request_close(); // 串行复用（决策 D-20）
+                window.join();
+            }
+            LoginRequest request     = site_request;
+            request.offscreen        = true;  // 离屏：不抢焦点
+            request.probe_after_load = false; // 真输入不依赖 userToken
+            std::string start_error;
+            if (!window.start(request, &start_error)) {
+                if (error != nullptr) {
+                    *error = std::string(owner_tag(site_request.owner)) + " 打开登录窗口失败：" +
+                             start_error +
+                             (boot_error.empty() ? std::string() : ("（" + boot_error + "）"));
+                }
+                return false;
+            }
+            wait_page_ready(std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000));
+        }
+    }
+
+    // ---- M_patchC PW-03（不变量 I25）：前置 = L1 窗口 + L2 页面 + L3 输入框（**不要求**附件入口）----
+    const int   need_ready = kReadyScript;
+    std::string ready_error;
+    const int   reached = wait_ready(site_request, need_ready,
+                                     std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000), &ready_error);
+    if (!ready_satisfied(reached, need_ready)) {
+        if (error != nullptr) {
+            *error = ready_error.empty() ? std::string("页面未就绪（CDP 真实输入未执行）") : ready_error;
+        }
+        return false;
+    }
+
+    const HWND window = g_window.load();
+    if (window == nullptr || g_webview == nullptr) {
+        if (error != nullptr) {
+            *error = std::string(owner_tag(site_request.owner)) +
+                     " 登录窗口在就绪检查后被关闭（请重试）";
+        }
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_cdp_mutex);
+        g_cdp_text   = text;
+        g_cdp_enter  = press_enter;
+        g_cdp_done   = false;
+        g_cdp_ok     = false;
+        g_cdp_detail.clear();
+        g_cdp_error.clear();
+    }
+    ::PostMessageW(window, kCdpInputMessage, 0, 0);
+
+    std::unique_lock<std::mutex> lock(g_cdp_mutex);
+    const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 15000);
+    if (!g_cdp_cv.wait_for(lock, wait_ms, [] { return g_cdp_done; })) {
+        if (error != nullptr) {
+            *error = std::string(owner_tag(site_request.owner)) + " CDP 真实输入超时";
+        }
+        return false;
+    }
+    if (detail != nullptr) {
+        *detail = g_cdp_detail;
+    }
+    if (error != nullptr) {
+        *error = g_cdp_error;
+    }
+    return g_cdp_ok;
 }
 
 

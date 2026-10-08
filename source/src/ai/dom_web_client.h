@@ -81,6 +81,14 @@ void clamp_poll_params(const ProviderWebSpec& site, int* poll_ms, int* max_polls
 std::string dom_cfg_json(const DomChatRequest& request);
 // 常量脚本（读 `window.__aiwriteDom`）：kickoff = 写入提示词 + 触发发送；poll = 取答案 + 判结束
 std::string dom_kickoff_script();
+// PW-07f（**真实发送链路** · 自 `wip/pw07n-20261008` 移植）：三段式配套脚本
+//  * ① `dom_prepare_script`    发现输入框 + 聚焦 + 清空 + 记答案基线（**不写入、不发送**）
+//  * ② `dom_send_verify_script` 发送回执（URL 变化 / 出现新消息节点 ⇒ 才算发出去了）
+//  * ③ `dom_click_send_script`  兜底：点可见「发送」按钮（CDP 回车无效时）
+//  文本与回车由 `web::cdp_input_text`（CDP `Input.insertText` / `dispatchKeyEvent`）真实输入
+std::string dom_prepare_script();
+std::string dom_send_verify_script();
+std::string dom_click_send_script();
 std::string dom_poll_script();
 // PB2-15：选择器探测脚本（读 `window.__aiwriteDomProbe`；返回各选择器命中数 / 可见性 / done_when 现状 / token 形状）
 std::string dom_probe_script();

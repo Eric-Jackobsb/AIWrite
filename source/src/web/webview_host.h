@@ -117,6 +117,28 @@ bool set_file_input_files(const LoginRequest& site_request, const std::string& c
                           const std::vector<std::string>& absolute_paths, int timeout_ms,
                           std::string* detail, std::string* error);
 
+// ---- M_patchC（`PW-07f` · 2026-10-08 · **自 `wip/pw07n-20261008` 移植回主分支**）：CDP「真实输入 / 发送」----
+//  真机证据（2026-10-08）：
+//    * 15:42 图片理解「能用」—— 因为**图片**走 CDP（`DOM.setFileInputFiles`，可信）进了 composer，
+//      合成回车才有东西可发（该轮 `候选池 39 → 47`，回答在流式渲染）；
+//    * 16:37 / 16:50 / 16:56 纯文本路径连续三次 `候选池 0 个`（页面 60 秒内**一条消息都没渲染**），
+//      且运行后页面 URL 仍停在 `https://www.doubao.com/chat/`（**没有新会话**）⇒ 消息根本没发出去；
+//    * 13:22 文本路径唯一一次成功（753 字节）用的正是本 API（`CDP Input.insertText OK｜
+//      CDP Input.dispatchKeyEvent Enter OK`，产物见封存分支 `wip/pw07n-20261008`）。
+//  原因：`dom_chat` 原先用**合成事件**写入 contenteditable（`execCommand('insertText')`，
+//  失败回退 `el.textContent=`）并发 `new KeyboardEvent('...Enter')` —— `isTrusted=false`；
+//  豆包 tiptap/ProseMirror 用自身 state 重渲染 ⇒ 直接改 DOM 的文本**被抹掉**、内部 state 仍为空
+//  ⇒ 合成回车无内容可发，而旧代码 `out.ok=true` **不做任何校验**（假阳性 ⇒ 白等 60 秒）。
+//  本 API 走**进程内** `CallDevToolsProtocolMethod`（与 `set_file_input_files` 同一封装）：
+//    * `text` 非空 → `Input.insertText`（产生 **isTrusted=true** 的文本输入）
+//    * `press_enter` → `Input.dispatchKeyEvent`（rawKeyDown → char → keyUp，模拟真实回车）
+//  前置：调用方先聚焦编辑区（`kPrepareScript` 已 `el.focus()`）；需要已登录窗口
+//  （内部按站点 `ensure_session` / 离屏开窗，与 `run_script_sync` 同策略）。
+//  `*detail` 诊断（「CDP Input.insertText OK / dispatchKeyEvent Enter OK」等）；
+//  失败 → `*error` 为**可操作**原因（`I21`）。
+bool cdp_input_text(const LoginRequest& site_request, const std::string& text, bool press_enter,
+                    int timeout_ms, std::string* detail, std::string* error);
+
 // ---- M_patchC（`PW-03` · 不变量 `I25`）：**就绪三级**（窗口级 → 页面级 → 交互态级）----
 //  背景：真机实证「就绪 = 凭证级」导致 `113 ms` 假失败；「页面不在交互态」被误归因为
 //  「该站点用拖拽 / 粘贴入口」（`G2` / `G6`）。本 API 把「能不能动手」判到**页面级 / 交互态级**。
