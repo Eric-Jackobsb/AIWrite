@@ -1,0 +1,253 @@
+{
+  "site": "kimi-web",
+  "site_url": "https://www.kimi.com/",
+  "argv": [
+    "--inject"
+  ],
+  "env": {
+    "python": "3.12.1",
+    "pydoll": "2.27.0",
+    "browser_kind": "chrome",
+    "browser_exe": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "browser_version": "157.0.8081.0"
+  },
+  "started": "2026-10-07 21:11:33",
+  "recon": {
+    "readback_self_proof": "probe-ok",
+    "url": "https://www.kimi.com/",
+    "title": "Kimi AI with K3 | Built for Agentic Coding & Knowledge Work",
+    "body_len": 399,
+    "scan_ok": true,
+    "scan_error": "",
+    "entry_kind": "file_input",
+    "file_inputs": [
+      {
+        "selector": "input.hidden-input",
+        "tag": "input",
+        "visible": false,
+        "cls": "hidden-input",
+        "aria": "",
+        "title": "",
+        "ph": "",
+        "text": "",
+        "accept": "",
+        "multiple": true,
+        "disabled": false,
+        "parent": "div"
+      }
+    ],
+    "drop_zones": [
+      {
+        "selector": "div.next-sidebar__drag-slot",
+        "tag": "div",
+        "visible": true,
+        "cls": "next-sidebar__drag-slot",
+        "aria": "",
+        "title": "",
+        "ph": "",
+        "text": "My Kimi"
+      },
+      {
+        "selector": "div.next-sidebar__drag-slot",
+        "tag": "div",
+        "visible": true,
+        "cls": "next-sidebar__drag-slot",
+        "aria": "",
+        "title": "",
+        "ph": "",
+        "text": "Plugins"
+      },
+      {
+        "selector": "div.next-sidebar__drag-slot",
+        "tag": "div",
+        "visible": true,
+        "cls": "next-sidebar__drag-slot",
+        "aria": "",
+        "title": "",
+        "ph": "",
+        "text": "Scheduled"
+      },
+      {
+        "selector": "div.next-sidebar__drag-slot",
+        "tag": "div",
+        "visible": true,
+        "cls": "next-sidebar__drag-slot",
+        "aria": "",
+        "title": "",
+        "ph": "",
+        "text": "Inspiration"
+      },
+      {
+        "selector": "div.next-sidebar__drag-slot",
+        "tag": "div",
+        "visible": true,
+        "cls": "next-sidebar__drag-slot",
+        "aria": "",
+        "title": "",
+        "ph": "",
+        "text": "Slides"
+      },
+      {
+        "selector": "#v-0-1-menu-trigger",
+        "tag": "div",
+        "visible": true,
+        "cls": "next-sidebar__drag-slot",
+        "aria": "",
+        "title": "",
+        "ph": "",
+        "text": "More"
+      },
+      {
+        "selector": "div.header-right.desktop-no-drag",
+        "tag": "div",
+        "visible": true,
+        "cls": "header-right desktop-no-drag",
+        "aria": "",
+        "title": "",
+        "ph": "",
+        "text": "Log in\nDownload for "
+      }
+    ],
+    "editors": [
+      {
+        "selector": "div.chat-input-editor",
+        "tag": "div",
+        "visible": true,
+        "cls": "chat-input-editor",
+        "aria": "",
+        "title": "",
+        "ph": "",
+        "text": "",
+        "contenteditable": true
+      }
+    ],
+    "attach_hints": [
+      {
+        "selector": "div[data-testid=\"toolkit-trigger-btn\"]",
+        "tag": "div",
+        "visible": true,
+        "cls": "icon-button toolkit-trigger-btn",
+        "aria": "Upload files or use more tools",
+        "title": "",
+        "ph": "",
+        "text": "",
+        "hint": "Upload files or use more tools"
+      }
+    ],
+    "cookie_names_js_visible": [
+      "theme",
+      "next-sidebar-entry-order"
+    ],
+    "storage_keys": [
+      "A27B4917B0AD7E8B",
+      "kimi_work_oversea_upgrade_dismissed",
+      "9AD585D8A7CB034A",
+      "KIMI_LOCALE_DELTA_JSON_URL",
+      "KIMI_SIDEBAR_COLLAPSE",
+      "1735D64331DF397E",
+      "7A43B614B6407E37",
+      "selectReasoningEffortV2",
+      "2E9D3C8796BD158E",
+      "payment_gift_credit_modal_shown",
+      "__tea_cache_tokens_20001731",
+      "web-push:browser-notification",
+      "showNavList",
+      "selectContextLength",
+      "selectSearch",
+      "ONBOARDING_TASK_BAR_CLOSED_KEY",
+      "selectModelEntryV2",
+      "__tea_sdk_ab_version_20001731",
+      "KIMI_VIBE_EDIT_TOOLTIP",
+      "BB26C2E91BA08EFB",
+      "kimi_app_update_triggered_time",
+      "79F05CA5AF1CAE77",
+      "__tea_cache_refer_20001731",
+      "APMPLUS566559",
+      "kimi_app_update_check_interval_ms",
+      "__tea_cache_first_20001731",
+      "selectSpeedByModel",
+      "outbox-expanded"
+    ],
+    "hover": {},
+    "selector_hits": {
+      "div.chat-input-editor": 1,
+      "div[data-testid=\"toolkit-trigger-btn\"]": 1,
+      "div.next-sidebar__drag-slot": 6,
+      "input.hidden-input": 1,
+      "[class*=\"message\"]": 2,
+      "[class*=\"answer\"]": 0,
+      "[class*=\"reply\"]": 0,
+      "[class*=\"markdown\"]": 0
+    }
+  },
+  "inject": {
+    "entry_kind": "file_input",
+    "mode": "dom",
+    "image": "F:\\GameDao\\Tools\\AIwrite\\source\\python\\_probe\\out\\drive_files\\m7b28-kimi-256x256.png",
+    "image_bytes": 569,
+    "steps": [
+      {
+        "mode": "dom",
+        "selector": "input.hidden-input",
+        "node_id": 105,
+        "response": {}
+      }
+    ],
+    "network_new_total": 6,
+    "upload_requests": [
+      {
+        "url": "https://www.kimi.com/apiv2-files/file/upload",
+        "method": "POST",
+        "has_post_data": false,
+        "resource_type": "XHR"
+      }
+    ],
+    "upload_urls_heuristic": [
+      {
+        "url": "https://www.kimi.com/apiv2-files/file/upload",
+        "method": "POST",
+        "has_post_data": false,
+        "resource_type": "XHR"
+      }
+    ],
+    "upload_evidence_note": "`upload_requests` = **POST / 带 postData** 的真上传回执；`upload_urls_heuristic` = 仅 URL 子串命中的候选（含静态资源）",
+    "attach_before": {
+      "name_hit": false,
+      "attach_nodes": 0,
+      "img_nodes": 5,
+      "editor_text_len": 1
+    },
+    "attach_after": {
+      "name_hit": false,
+      "attach_nodes": 1,
+      "img_nodes": 5,
+      "editor_text_len": 1
+    },
+    "file_input_files": "",
+    "injected_ok": true,
+    "capture_s": 6.0
+  },
+  "shutdown": {
+    "mode": "close_wait",
+    "exit_code": 0,
+    "waited_s": 0.22,
+    "strays_after": []
+  },
+  "verdict": {
+    "B1_readback_self_proof_ok": true,
+    "B1_scan_ok": true,
+    "B1_entry_kind_determined": true,
+    "B1_has_file_input": true,
+    "B1_composer_found": true,
+    "B0_login_detected": null,
+    "B0_login_dom_positive": false,
+    "B0_login_auth_cookie_ok": false,
+    "B0_login_entry_present": false,
+    "B0_d30_diff_nonempty": false,
+    "B0_relaunch_still_logged_in": null,
+    "B2_injected_ok": true,
+    "B2_upload_request_seen": true,
+    "B3_sent": null,
+    "env_browser_kind": true
+  }
+}

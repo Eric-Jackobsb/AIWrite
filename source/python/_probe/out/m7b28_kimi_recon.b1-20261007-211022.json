@@ -1,0 +1,594 @@
+{
+  "site": "kimi-web",
+  "site_url": "https://www.kimi.com/",
+  "argv": [
+    "--login"
+  ],
+  "env": {
+    "python": "3.12.1",
+    "pydoll": "2.27.0",
+    "browser_kind": "chrome",
+    "browser_exe": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "browser_version": "157.0.8081.0"
+  },
+  "started": "2026-10-07 21:10:22",
+  "login": {
+    "readback_self_proof": "probe-ok",
+    "url": "https://www.kimi.com/",
+    "title": "Kimi AI with K3 | Built for Agentic Coding & Knowledge Work",
+    "cookie_domain_filter": ".kimi.com",
+    "cookie_rows_before": [
+      {
+        "name": "acw_tc",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": false,
+        "expires": 1791380428.687977,
+        "same_site": null
+      },
+      {
+        "name": "aliyungf_tc",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "next-sidebar-entry-order",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": false,
+        "secure": true,
+        "session": false,
+        "expires": 1822914630.970255,
+        "same_site": "Lax"
+      },
+      {
+        "name": "theme",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822914629,
+        "same_site": "Lax"
+      }
+    ],
+    "cookie_names_before": [
+      "acw_tc",
+      "aliyungf_tc",
+      "next-sidebar-entry-order",
+      "theme"
+    ],
+    "cookie_rows_all_before": [
+      {
+        "name": "NID",
+        "domain": ".google.com",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1807189826.408691,
+        "same_site": "None"
+      },
+      {
+        "name": "NID",
+        "domain": ".google.com.hk",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1806410384.077818,
+        "same_site": "None"
+      },
+      {
+        "name": "SEARCH_SAMESITE",
+        "domain": ".google.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1806151183.193351,
+        "same_site": "Strict"
+      },
+      {
+        "name": "acw_tc",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": false,
+        "expires": 1791380428.687977,
+        "same_site": null
+      },
+      {
+        "name": "aliyungf_tc",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "bd_sso_hi3jfd",
+        "domain": ".bytednsdoc.com",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1822221133.814084,
+        "same_site": "None"
+      },
+      {
+        "name": "bd_sso_hi3jfd",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1822221191.557894,
+        "same_site": "None"
+      },
+      {
+        "name": "biz_trace_id",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "conversation_list_v2_group_mode",
+        "domain": "www.doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822221190.116418,
+        "same_site": "Lax"
+      },
+      {
+        "name": "dbx-web-theme",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1825245190,
+        "same_site": null
+      },
+      {
+        "name": "flow_cur_user_sec_id",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1793277190,
+        "same_site": null
+      },
+      {
+        "name": "flow_user_country",
+        "domain": ".www.doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822221190,
+        "same_site": null
+      },
+      {
+        "name": "hook_slardar_session_id",
+        "domain": "www.doubao.com",
+        "path": "/chat",
+        "http_only": false,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "i18next",
+        "domain": "www.doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822221189,
+        "same_site": "Strict"
+      },
+      {
+        "name": "next-sidebar-entry-order",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": false,
+        "secure": true,
+        "session": false,
+        "expires": 1822914630.970255,
+        "same_site": "Lax"
+      },
+      {
+        "name": "passport_csrf_token",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": true,
+        "session": false,
+        "expires": 1795869135.151149,
+        "same_site": "None"
+      },
+      {
+        "name": "passport_csrf_token_default",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1795869135.151198,
+        "same_site": null
+      },
+      {
+        "name": "s_v_web_id",
+        "domain": "www.doubao.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1795869135,
+        "same_site": null
+      },
+      {
+        "name": "theme",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822914629,
+        "same_site": "Lax"
+      },
+      {
+        "name": "ttwid",
+        "domain": ".doubao.com",
+        "path": "/",
+        "http_only": true,
+        "secure": true,
+        "session": false,
+        "expires": 1821789189.827566,
+        "same_site": "None"
+      }
+    ],
+    "cookie_all_names_before": [
+      "NID",
+      "SEARCH_SAMESITE",
+      "acw_tc",
+      "aliyungf_tc",
+      "bd_sso_hi3jfd",
+      "biz_trace_id",
+      "conversation_list_v2_group_mode",
+      "dbx-web-theme",
+      "flow_cur_user_sec_id",
+      "flow_user_country",
+      "hook_slardar_session_id",
+      "i18next",
+      "next-sidebar-entry-order",
+      "passport_csrf_token",
+      "passport_csrf_token_default",
+      "s_v_web_id",
+      "theme",
+      "ttwid"
+    ],
+    "dom_before": {
+      "ok": true,
+      "url": "https://www.kimi.com/",
+      "title": "Kimi AI with K3 | Built for Agentic Coding & Knowledge Work",
+      "login_entry": [],
+      "logout_entry": [],
+      "avatar": [],
+      "nickname": [
+        {
+          "tag": "span.user-name",
+          "text": "Log in"
+        }
+      ],
+      "user_menu": [],
+      "candidates": [
+        "next-sidebar-history-list__login",
+        "next-sidebar__footer-content is-user-nav-open",
+        "user-area",
+        "user-info-container user-area__main",
+        "user-info",
+        "not-login-icon",
+        "darktimeline1icon-svg not-login-avatar-svg",
+        "user-name",
+        "user-nav",
+        "iconify user-nav-icon",
+        "kimi-menu-item-text user-nav-label",
+        "iconify user-nav-trailing-icon",
+        "user-download-wrapper",
+        "user-icon-button user-download-button",
+        "km-button km-button-secondary km-button-medium login-button",
+        "login-button-text"
+      ]
+    },
+    "dom_state_before": {
+      "logged_in": true,
+      "dom": {
+        "logged_in": true,
+        "hits": {
+          "nickname": 1
+        },
+        "login_entry_count": 0,
+        "scan_ok": true
+      },
+      "auth_cookie_hits": [],
+      "auth_cookie_ok": false
+    },
+    "auth_cookie_hits_before": [],
+    "already_logged_in_at_start": true,
+    "composer_before": 1,
+    "login_timeout_s": 600,
+    "criterion": "两腿并联（任一成立）—— ① DOM 正证据 avatar/nickname/user_menu/logout；② 鉴权 Cookie 白名单 ≥ 1 个；均需连续 2 次命中",
+    "dom_after": {
+      "ok": true,
+      "url": "https://www.kimi.com/",
+      "title": "Kimi AI with K3 | Built for Agentic Coding & Knowledge Work",
+      "login_entry": [],
+      "logout_entry": [],
+      "avatar": [],
+      "nickname": [
+        {
+          "tag": "span.user-name",
+          "text": "Log in"
+        }
+      ],
+      "user_menu": [],
+      "candidates": [
+        "next-sidebar-history-list__login",
+        "next-sidebar__footer-content is-user-nav-open",
+        "user-area",
+        "user-info-container user-area__main",
+        "user-info",
+        "not-login-icon",
+        "darktimeline1icon-svg not-login-avatar-svg",
+        "user-name",
+        "user-nav",
+        "iconify user-nav-icon",
+        "kimi-menu-item-text user-nav-label",
+        "iconify user-nav-trailing-icon",
+        "user-download-wrapper",
+        "user-icon-button user-download-button",
+        "km-button km-button-secondary km-button-medium login-button",
+        "login-button-text"
+      ]
+    },
+    "dom_state_after": {
+      "logged_in": true,
+      "dom": {
+        "logged_in": true,
+        "hits": {
+          "nickname": 1
+        },
+        "login_entry_count": 0,
+        "scan_ok": true
+      },
+      "auth_cookie_hits": [],
+      "auth_cookie_ok": false
+    },
+    "cookie_rows_after": [
+      {
+        "name": "acw_tc",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": false,
+        "expires": 1791380428.687977,
+        "same_site": null
+      },
+      {
+        "name": "aliyungf_tc",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": true,
+        "secure": false,
+        "session": true,
+        "expires": -1,
+        "same_site": null
+      },
+      {
+        "name": "next-sidebar-entry-order",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": false,
+        "secure": true,
+        "session": false,
+        "expires": 1822914630.970255,
+        "same_site": "Lax"
+      },
+      {
+        "name": "theme",
+        "domain": "www.kimi.com",
+        "path": "/",
+        "http_only": false,
+        "secure": false,
+        "session": false,
+        "expires": 1822914629,
+        "same_site": "Lax"
+      }
+    ],
+    "cookie_names_after": [
+      "acw_tc",
+      "aliyungf_tc",
+      "next-sidebar-entry-order",
+      "theme"
+    ],
+    "new_cookie_names": [],
+    "composer_after": 1,
+    "login_wait_s": 6,
+    "logged_in_detected": true
+  },
+  "shutdown_login": {
+    "mode": "close_wait",
+    "exit_code": 0,
+    "waited_s": 0.22,
+    "strays_after": []
+  },
+  "relaunch": {
+    "readback_self_proof": "probe-ok",
+    "cookie_domain_filter": ".kimi.com",
+    "cookie_count": 4,
+    "cookie_names": [
+      "acw_tc",
+      "aliyungf_tc",
+      "next-sidebar-entry-order",
+      "theme"
+    ],
+    "cookie_count_all": 21,
+    "new_names_still_present": [],
+    "composer_count": 1,
+    "dom": {
+      "ok": true,
+      "url": "https://www.kimi.com/",
+      "title": "Kimi AI with K3 | Built for Agentic Coding & Knowledge Work",
+      "login_entry": [],
+      "logout_entry": [],
+      "avatar": [],
+      "nickname": [
+        {
+          "tag": "span.user-name",
+          "text": "Log in"
+        }
+      ],
+      "user_menu": [],
+      "candidates": [
+        "next-sidebar-history-list__login",
+        "user-area",
+        "user-info-container user-area__main",
+        "user-info",
+        "not-login-icon",
+        "darktimeline1icon-svg not-login-avatar-svg",
+        "user-name",
+        "user-download-wrapper",
+        "user-icon-button user-download-button",
+        "km-button km-button-secondary km-button-medium login-button",
+        "login-button-text"
+      ]
+    },
+    "dom_state": {
+      "logged_in": true,
+      "hits": {
+        "nickname": 1
+      },
+      "login_entry_count": 0,
+      "scan_ok": true
+    },
+    "auth_cookie_hits": [],
+    "still_logged_in": true,
+    "storage_keys": [
+      "A27B4917B0AD7E8B",
+      "kimi_work_oversea_upgrade_dismissed",
+      "9AD585D8A7CB034A",
+      "KIMI_LOCALE_DELTA_JSON_URL",
+      "KIMI_SIDEBAR_COLLAPSE",
+      "1735D64331DF397E",
+      "7A43B614B6407E37",
+      "selectReasoningEffortV2",
+      "2E9D3C8796BD158E",
+      "payment_gift_credit_modal_shown",
+      "__tea_cache_tokens_20001731",
+      "web-push:browser-notification",
+      "showNavList",
+      "selectContextLength",
+      "selectSearch",
+      "ONBOARDING_TASK_BAR_CLOSED_KEY",
+      "selectModelEntryV2",
+      "__tea_sdk_ab_version_20001731",
+      "KIMI_VIBE_EDIT_TOOLTIP",
+      "BB26C2E91BA08EFB"
+    ]
+  },
+  "shutdown_relaunch": {
+    "mode": "close_wait",
+    "exit_code": 0,
+    "waited_s": 0.22,
+    "strays_after": []
+  },
+  "cookie_ttl": [
+    {
+      "name": "acw_tc",
+      "session": false,
+      "expires": 1791380428.687977,
+      "http_only": true,
+      "secure": false,
+      "domain": "www.kimi.com"
+    },
+    {
+      "name": "aliyungf_tc",
+      "session": true,
+      "expires": -1,
+      "http_only": true,
+      "secure": false,
+      "domain": "www.kimi.com"
+    },
+    {
+      "name": "next-sidebar-entry-order",
+      "session": false,
+      "expires": 1822914630.970255,
+      "http_only": false,
+      "secure": true,
+      "domain": "www.kimi.com"
+    },
+    {
+      "name": "theme",
+      "session": false,
+      "expires": 1822914629,
+      "http_only": false,
+      "secure": false,
+      "domain": "www.kimi.com"
+    }
+  ],
+  "d30_cookie_names_diff": {
+    "domain_filter": ".kimi.com",
+    "before": [
+      "acw_tc",
+      "aliyungf_tc",
+      "next-sidebar-entry-order",
+      "theme"
+    ],
+    "after": [
+      "acw_tc",
+      "aliyungf_tc",
+      "next-sidebar-entry-order",
+      "theme"
+    ],
+    "new": [],
+    "note": "登录后新增的**站点域** Cookie 名 = 候选 cookie_names（D-30 的豆包证据）；已按域过滤，Edge 自家的 `msn.cn` / `ntp.msn.cn` **不计入**；⚠️ 差集非空**不等于**已登录（匿名态也会种 `flow_cur_user_sec_id` 等）"
+  },
+  "verdict": {
+    "B1_readback_self_proof_ok": false,
+    "B1_scan_ok": false,
+    "B1_entry_kind_determined": false,
+    "B1_has_file_input": false,
+    "B1_composer_found": false,
+    "B0_login_detected": true,
+    "B0_login_dom_positive": true,
+    "B0_login_auth_cookie_ok": false,
+    "B0_login_entry_present": false,
+    "B0_d30_diff_nonempty": false,
+    "B0_relaunch_still_logged_in": true,
+    "B2_injected_ok": null,
+    "B2_upload_request_seen": null,
+    "B3_sent": null,
+    "env_browser_kind": true
+  }
+}
