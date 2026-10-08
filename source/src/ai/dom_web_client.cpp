@@ -35,6 +35,27 @@ constexpr const char* kInputPoolSelector =
     "[contenteditable=\"true\"], [contenteditable=\"\"], [role=\"textbox\"]";
 constexpr int kMinAutoAnswerChars = 8; // 自动识别的答案最小长度（更短的「新节点」多为包裹 / 装饰）
 
+// ---- PW-07（真机驱动 · 精简版 · 2026-10-08）：答案**装饰 / 布局文本**排除（`AW-04` 反例的根因修）----
+//  * 真机证据（同形两次）：差分判据（不在基线 + ≥ min_chars + 文档顺序最后）会命中**不是回答**的新节点：
+//    ① 豆包：布局容器 `div.bp5-overflow-list`，整串文本 = 时间条「今天 13:31」⇒ 输出 **12 字节**「假成功」
+//       （`docs/actionPlan/M8.md` §9.6 · `imgTest` 运行 1；2026-10-08 13:31 复现 —— 时间戳被当成答案写进
+//       `n8(VLMGenerate)` 与 `n2(PromptTemplate)` ⇒ 下游 `n3` 只能回答「你只给了个时间点」）；
+//    ② Kimi：用户消息操作条（整串 = `Copy Share`，**10 字节**）—— 同族。
+//  * 判据 = **整串形态**（`^(…)$` 全匹配）：纯时间戳 / 纯日期 / 纯 UI 控件词 ⇒ 该候选**不算答案**
+//    （继续轮询；超时则如实报错 —— `R13`：宁可失败，不许假成功）。
+//  * **不**做子串匹配、**不**做类名词表（`sidebar` / `overflow` 一类词表已被真机证伪：Kimi 应用根带**状态类**
+//    `has-sidebar` ⇒ 整页被判「侧栏内」⇒ 真答案全被误伤，见 `M_patchC` §6 `PW-07l`）—— 只有「整串就是装饰」
+//    才拒，故真答案里出现「今天」/「复制」**不受影响**（`AW-04` 的「不得误伤」侧）。
+constexpr const char* kAnswerChromeTextRe =
+    "^(?:(?:今天|昨天|前天|刚刚|上午|中午|下午|晚上|凌晨)\\s*)?\\d{1,2}[:：]\\d{2}(?:[:：]\\d{2})?$" // 13:31 / 今天 13:31
+    "|^(?:今天|昨天|前天|刚刚|上午|中午|下午|晚上|凌晨)$"                                            // 纯日期词
+    "|^\\d{4}\\s*[-/年]\\s*\\d{1,2}\\s*[-/月]\\s*\\d{1,2}\\s*日?(?:\\s*\\d{1,2}[:：]\\d{2})?$"       // 2026-10-08 / 2026年10月8日 13:31
+    "|^\\d{1,2}\\s*[-/月]\\s*\\d{1,2}\\s*日?(?:\\s*\\d{1,2}[:：]\\d{2})?$"                           // 10/8 / 10月8日
+    "|^(?:Copy|Share|Retry|Regenerate|Edit|Delete|Like|Dislike|Stop|Continue)"
+    "(?:\\s+(?:Copy|Share|Retry|Regenerate|Edit|Delete|Like|Dislike|Stop|Continue))*$"            // Copy Share
+    "|^(?:复制|分享|重试|重新生成|重新回答|编辑|删除|赞同|反对|停止|继续|朗读)"
+    "(?:\\s*(?:复制|分享|重试|重新生成|重新回答|编辑|删除|赞同|反对|停止|继续|朗读))*$";          // 复制 分享
+
 // 页面内「写入提示词 + 触发发送」（读 window.__aiwriteDom；返回诊断对象）
 //  M8-37（零开关）：声明值未命中 → **自动识别**输入框 / 发送按钮；并在发送前记录答案基线
 constexpr const char* kKickoffScript = R"JS(
@@ -186,30 +207,38 @@ constexpr const char* kPollScript = R"JS(
       const composer = rt.composer || null;
       const baseline = rt.baseline || [];
       const prompt = norm(cfg.prompt || '');
+      // PW-07：装饰 / 布局文本形态编译（**整串**匹配；编译失败 = 该门不生效，不阻断自动识别）
+      let chrome_text = null;
+      try { chrome_text = cfg.answer_chrome_text ? new RegExp(cfg.answer_chrome_text) : null; } catch (e) { chrome_text = null; }
+      const refuse = { chrome_text: 0, short: 0 }; // PW-07：命中明细（计数，进 note ⇒ steps / 日志）
       const is_new = function (el) {
         const t = norm(el.innerText || el.textContent || '');
         if (t.length < 2) { return false; }
         if (composer && (el === composer || el.contains(composer))) { return false; } // 排除输入区
         if (prompt && (t === prompt || t.indexOf(prompt) === 0)) { return false; }     // 排除自己那条回声
+        // PW-07：**装饰 / 布局文本**（整串 = 时间戳 / 日期 / 纯 UI 控件词）不算答案 ⇒ 继续轮询
+        //   真机证据：豆包 `div.bp5-overflow-list` 的「今天 13:31」（12 字节）与 Kimi 操作条的「Copy Share」（10 字节）
+        if (chrome_text && chrome_text.test(t)) { refuse.chrome_text++; return false; }
         return baseline.indexOf(t) < 0;
       };
       const pool_sel = cfg.answer_pool || '';
       const pool = pool_sel ? document.querySelectorAll(pool_sel) : [];
+      out.count = pool.length; // PW-07：候选池规模**始终**回显（原来只在命中时回显）
       const min_chars = cfg.answer_min_chars || 8;
-      let fallback = null;
       for (let i = pool.length - 1; i >= 0; i--) { // 逆序 = 文档顺序**最后**者优先（回答在用户消息之后）
         if (!is_new(pool[i])) { continue; }
         const t = norm(pool[i].innerText || pool[i].textContent || '');
         if (t.length >= min_chars) {
           out.text = t; out.chars = t.length; out.found = true; out.auto = true;
-          out.fingerprint = fingerprint(pool[i]); out.count = pool.length; break;
+          out.fingerprint = fingerprint(pool[i]); break;
         }
-        if (!fallback) { fallback = { el: pool[i], text: t }; }
+        // PW-07：**取消**「短候选也算成功」（旧口径正是 12 / 10 字节类假成功的温床）——
+        //   短候选只计数（`note` 里如实回显），不算 found ⇒ 继续轮询；超时由 C++ 侧如实报错（`R13`）
+        refuse.short++;
       }
-      if (!out.found && fallback) { // 只有短候选：仍如实返回（R13：不假装、不空手）
-        out.text = fallback.text; out.chars = fallback.text.length; out.found = true; out.auto = true;
-        out.fingerprint = fingerprint(fallback.el) + "（较短）"; out.count = pool.length;
-      }
+      out.note = '自动识别：候选池 ' + pool.length + ' 个'
+               + '；装饰文本拒 ' + refuse.chrome_text + '（整串 = 时间戳 / 控件词）'
+               + '；过短拒 ' + refuse.short + '（< ' + min_chars + ' 字符）';
     }
     const dsel = cfg.done_selector || '';
     if (out.done_kind === 'selector_present') { out.done = dsel ? document.querySelectorAll(dsel).length > 0 : false; }
@@ -340,6 +369,8 @@ std::string dom_cfg_json(const DomChatRequest& request)
     cfg["input_pool"]       = kInputPoolSelector;
     cfg["answer_pool"]      = kAnswerPoolSelector;
     cfg["answer_min_chars"] = kMinAutoAnswerChars;
+    // PW-07：装饰 / 布局文本形态（**整串**匹配）—— 与候选池同族：仍是**纯数据**，不落盘
+    cfg["answer_chrome_text"] = kAnswerChromeTextRe;
     return cfg.dump();
 }
 
@@ -469,6 +500,8 @@ DomChatResult dom_chat(const DomChatRequest& request)
     // ---- 4) 轮询答案：done_when 命中 / 文本连续 N 轮稳定 / 到达上限（R13：如实返回 + 提示）----
     std::string last_text;
     std::string last_poll_error;
+    // PW-07：最后一轮「自动识别」体检串（诊断：**为什么没取到** —— 装饰文本拒 / 过短拒 计数）
+    std::string last_poll_note;
     int         stable = 0;
     for (int attempt = 1; attempt <= max_polls; ++attempt) {
         std::this_thread::sleep_for(std::chrono::milliseconds(poll_ms));
@@ -484,6 +517,9 @@ DomChatResult dom_chat(const DomChatRequest& request)
             const bool           found  = poll.value("found", false);
             const bool           is_done = poll.value("done", false);
             const std::string    text   = found ? poll.value("text", std::string()) : std::string();
+            // PW-07：体检串（`note`）每轮留存 —— 成功 / 失败两条路径都要能一眼看出「拒了几个装饰 / 过短」
+            const std::string    note   = poll.value("note", std::string());
+            if (!note.empty()) { last_poll_note = note; }
             if (found && !text.empty()) {
                 if (result.text.empty()) {
                     // M8-37：声明值命中 → 原样；自动识别 → 如实标明（含页面指纹，供**可选**回填）
@@ -496,6 +532,9 @@ DomChatResult dom_chat(const DomChatRequest& request)
                                                 : result.answer_fingerprint))
                                         : ("；answer_selector 命中 " +
                                            std::to_string(poll.value("count", 0)) + " 个");
+                    if (!note.empty()) {
+                        result.steps += "；" + note; // PW-07：命中明细（装饰文本拒 / 过短拒）
+                    }
                 }
                 result.text = text;
             }
@@ -523,8 +562,14 @@ DomChatResult dom_chat(const DomChatRequest& request)
         }
     }
     if (result.text.empty()) {
+        // PW-07：失败路径也要能一眼看出「为什么没取到」（旧日志只说「未取到候选」，看不出装饰 / 过短被拒）
+        log::warn("[DOM 适配器] 未取到答案：站点=" + request.site.login_url +
+                  (last_poll_note.empty() ? std::string() : ("｜" + last_poll_note)));
         result.error = "未取到答案文本（answer_selector 未命中、自动识别也未取到候选，或站点仍在生成）"
                        "；可用 --web-adapter-selftest --provider <id> 诊断选择器";
+        if (!last_poll_note.empty()) {
+            result.error += "｜最后一轮自动识别体检：" + last_poll_note; // PW-07：命中明细（为什么没取到）
+        }
         if (!last_poll_error.empty()) {
             result.error += "（最后一次轮询错误：" + last_poll_error + "）";
         }
@@ -544,7 +589,8 @@ DomChatResult dom_chat(const DomChatRequest& request)
               std::to_string(result.elapsed_ms) + " ms，文本 " +
               std::to_string(result.text.size()) + " 字节" +
               (result.warning.empty() ? "" : ("；警告：" + result.warning)) +
-              (result.error.empty() ? "" : ("；错误：" + result.error)));
+              (result.error.empty() ? "" : ("；错误：" + result.error)) +
+              (last_poll_note.empty() ? "" : ("；轮询判据：" + last_poll_note)));
     return finish();
 }
 

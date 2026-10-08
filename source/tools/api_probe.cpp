@@ -3136,6 +3136,33 @@ int execution_selftest()
                    !no_site_result.ok &&
                        no_site_result.error.find("login_url") != std::string::npos,
                    "VB2-22⑤ dom_chat 前置校验（缺 web.login_url → 立即报错；不打开窗口、不发送）");
+
+            // ---- PW-07（2026-10-08 · `AW-04` 反例的根因修）：答案**归属**门 ----
+            //  * 真机反例（同形两次）：豆包布局容器 `div.bp5-overflow-list` 的「今天 13:31」（**12 字节**）
+            //    与 Kimi 操作条的「Copy Share」（**10 字节**）都被旧「差分判据」当成新答案；
+            //  * 本断言只查**静态口径**（装饰形态随 cfg 下发 + 页面脚本里真有这道门与体检串 +
+            //    旧「短候选也算成功」确已删除）；**行为级**验证在
+            //    `source/tools/poll_answer_gate_test.js`（node + 迷你 DOM 真跑该脚本：9 / 0，
+            //    `--old` 负向模式 ①②③b 如实 FAIL）。
+            bool gate_ok = false;
+            try {
+                const nlohmann::json cfg2 = nlohmann::json::parse(aiwrite::ai::dom_cfg_json(request));
+                const std::string    re2  = cfg2.value("answer_chrome_text", std::string());
+                gate_ok = re2.find("^") == 0 && re2.find("\\d{1,2}") != std::string::npos &&
+                          re2.find("Copy|Share") != std::string::npos &&
+                          re2.find("复制|分享") != std::string::npos;
+            }
+            catch (const std::exception&) {
+                gate_ok = false;
+            }
+            expect(check,
+                   gate_ok &&
+                       poll.find("answer_chrome_text") != std::string::npos &&  // 形态随 cfg 下发（纯数据）
+                       poll.find("chrome_text.test(t)") != std::string::npos && // 装饰 / 布局文本不算答案
+                       poll.find("装饰文本拒") != std::string::npos &&          // 体检串（进 steps / 日志）
+                       poll.find("过短拒") != std::string::npos &&
+                       poll.find("只有短候选：仍如实返回") == std::string::npos, // 旧「短候选也算成功」已删
+                   "VB2-22⑥ 答案归属门（PW-07）：装饰 / 布局文本不算答案 · 短候选不回落 · 体检串随 poll 回传");
         }
     }
 
