@@ -26,6 +26,17 @@
 
 ## [Unreleased] — M7（图片收口 + 节点精简）+ M5 核心切片（M5-C）已落地；**M7 第二轮 P7-a 已落地（v0.5.2）**；M7 第三轮 `M7B` 立项（网页通道整体迁 Pydoll —— 📦 已于 2026-10-05 退场归档）；**M7 第四轮 `M8` 立项（网页通道方案 E）**
 
+**🧵 `PW-07g` 答案文本保真：页面**无损搬运** + C++ 纯函数排版（2026-10-08 · 代码已改 · 真机复跑待办）**
+
+- **根因（真机物证 · 运行 `20261008-172758`）**：`kPollScript` 的 `norm()`（`replace(/\s+/g, ' ')`）**判据与产物同源** —— 同一个归一值既用于「长度够不够」判断，又**直接当答案写盘** ⇒ 豆包回答（答案容器 `div.container-qX9Csx`，日志 `文本 759 字节`，内容逐字完整）里的**段落 `\n` 全被压成空格**：`3-LLMGenerate.txt` 里出现「…结果。 我试着…」这种「句号 + 空格」指纹，输出文件整篇**只有 1 行**（LF 全在文件头）。同一轮日志**证明发送链路是好的**（`发送回执：URL已变化 / 新节点 10 / 输入框 0 字`）⇒ 问题**只在取值阶段**，与发送 / 网络无关。
+- **改法（方案 A：**判据与产物分离**）**：
+  1. **页面脚本**只做**无损搬运**：`out.text = raw`（原样，不再 `norm`）；判据（基线差分 / 装饰整串门 / 回声排除 / `min_chars`）**继续吃 `norm`**（`out.found = norm(raw).length > 0` / `const t = norm(raw);`）⇒ `PW-07` 的「12 字节假成功」防线不动；新增 `out.lf` = 页面原始换行数（**分段物证**，随 poll 回传 ⇒ 进 `steps` / 完成日志）。
+  2. **排版**交 🆕 C++ 纯函数 `ai::format_answer_text()`（`ai/dom_web_client.h` / `.cpp`）：`\r\n` / `\r` → `\n` · 清**行尾**空白 · 行内连续空白 → 单空格（**行首缩进保留**，不破坏代码块 / 引用）· **空行规范化（A2）**：**空行 = 段界** —— 连续 `\n{3,}` → `\n\n`（≥1 个空行 → 恰好 1 个空行；行内软换行保留 `\n`）· 首尾 trim · 纯空白 → 空串；**不改写** Markdown 语法。`dom_chat` 每轮对**原始**文本重算（幂等），完成日志新增 `；行 N（页面换行 k，折叠 R）`（R = 页面换行 − 产物换行，钳 0）。
+  3. **不加 base64**（传输层已实证逐字节无损：`ExecuteScript` 的 JSON 编码 + `nlohmann::json::parse`）—— 换编码只会掩盖问题；改用 `--debug` dump 取证。
+- **离线锁（可回归）**：`api_probe --selftest` 增 **`VB2-22⑦`**（静态：`kPollScript` 里产物**不得**再出现 `out.text = norm(` / `out.text = t;`，且 `lf` 随 poll 回传、判据仍归一）+ **`VB2-22⑧`**（`format_answer_text` **8 例**：多段保留 / CRLF / 空行规范化（A2） / 行内·行尾空白 / 缩进保留 / Markdown 原样 / trim / 空串 / 长文本无损 —— 失败时**打印逐例明细**）；夹具 `poll_answer_gate_test.js` 增 **⑯ 多段保真**（容器内 3 段 ⇒ 含 2 个 `\n`、`lf === 2`、逐段一字不差、无「句号+空格」压平指纹）+ **⑰ 页面侧原样搬运**（缩进 / 空行 / 行尾空格一律不动），`--old` 增**第二处注入**（产物换回 `norm`）⇒ ⑯⑰ **如实 FAIL**。
+- **回归基线**：构建 **0 error / 0 warning**；`api_probe --selftest` **425 / 0**（423 → **+2**）· `--exec-selftest` **425/0** · `--graph-selftest` **110/0**；`poll_answer_gate_test.js` **12 / 0**（`--old` 5/7，失败项 = 预期）· `send_chain_test.js` **17 / 0**（不受影响）。
+- **文件**：`source/src/ai/dom_web_client.h` / `.cpp`（`format_answer_text` + `kPollScript` 判据/产物分离 + `dom_chat` 接入与诊断）· `source/tools/api_probe.cpp`（`VB2-22⑦⑧`）· `source/tools/poll_answer_gate_test.js`（⑯⑰ + `--old` 第二注入）· `docs/actionPlan/M_patchC_web_node_bind.md`（v5）· `docs/actionPlan/M8.md`（§9.6）。
+
 **📨 `PW-07f` 真实发送链路：CDP 可信输入 + **回执验证** + 兜底点击（2026-10-08 · 代码已改 · 真机待跑）**
 
 - **根因（真机物证）**：旧发送路径**在页面脚本里自己写 DOM**（`execCommand('insertText')` / `el.textContent =`）再派发 `new KeyboardEvent('keydown')` —— `isTrusted=false` ⇒ 豆包（tiptap / ProseMirror）按自己的 state 重渲染 ⇒ **提示词被抹掉、回车被忽略**；而旧代码**写完就 `ok=true`** ⇒ 白等 60 秒才报「未取到答案」（16:37 / 16:50 / 16:56 连续三次 `候选池 0`，运行后 URL 仍停在 `https://www.doubao.com/chat/`）。

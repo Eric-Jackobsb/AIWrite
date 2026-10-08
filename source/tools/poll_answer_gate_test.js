@@ -15,11 +15,18 @@
 //    上列两条形态在夹具里**逐字复刻**：`今天` + `13:31` 两个子节点 ⇒ `innerText` 归一后
 //    = `今天 13:31`（**12 字节**）、`fingerprint` = `div.bp5-overflow-list`。
 //
+//  PW-07g（2026-10-08 真机驱动 · **文本保真**）追加断言：
+//    · ⑯ **段落保真**：容器内多段（`\n` 分隔）⇒ 产物**逐字符原样**（含 2 个 `\n`）、`lf` = 2
+//      —— 修的就是「`norm` 顺手把产物也归一 ⇒ 段落换行被压成空格、输出整篇 1 行」；
+//    · ⑰ **页面侧原样搬运**：缩进 / 空行 / 行尾空格一律**不动**（排版交 C++ 纯函数
+//      `format_answer_text`，其逐例断言在 `api_probe --selftest` 的 `VB2-22⑧`）。
+//    判据侧（基线差分 / 装饰整串门 / 回声排除 / `min_chars`）**继续吃 `norm`** ⇒ ⓪①④ 不变。
+//
 //  用法：node source\tools\poll_answer_gate_test.js
 //        node source\tools\poll_answer_gate_test.js --old   （= POLL_GATE_OLD=1）
-//          `--old`：把脚本还原成**本批之前**的写法（去掉装饰文本门）⇒ **①② 应如实 FAIL**
-//                   —— 证明夹具能**捕获回归**（负向模式是故意注入回归，退出码非 0 属预期；
-//                   替换**校验生效**，否则会「全绿而什么都没测到」）。
+//          `--old`：把脚本还原成**本批之前**的写法（去掉装饰文本门 + 产物换回归一）
+//                   ⇒ **①②③b⑯⑰ 应如实 FAIL** —— 证明夹具能**捕获回归**（负向模式是故意注入回归，
+//                   退出码非 0 属预期；替换**校验生效**，否则会「全绿而什么都没测到」）。
 //
 //  为什么放 `source/tools/`（**入库**）而不是 `build/`：2026-10-08 实测教训 ——
 //    `build/` 被 `cmake` **重新配置**（干净重建）时整个目录被覆盖清空，放在那里的
@@ -74,15 +81,21 @@ const m_min = SRC.match(/constexpr\s+int\s+kMinAutoAnswerChars\s*=\s*(\d+)/);
 if (!m_min) { throw new Error('抽取失败：kMinAutoAnswerChars'); }
 const MIN_CHARS = parseInt(m_min[1], 10);
 
-// 取真实脚本体；`--old` = 去掉**装饰文本门**（本批的根因修）⇒ ①② 必须如实 FAIL
+// 取真实脚本体；`--old` = 还原**本批之前**的写法（装饰文本门 + 产物归一）⇒ ①②⑯ 必须如实 FAIL
 let SCRIPT = extractPollScript();
 const GATE_LINE = 'if (chrome_text && chrome_text.test(t)) { refuse.chrome_text++; return false; }';
+// PW-07g：产物行（原样搬运）—— `--old` 注入点②：换回 `norm` ⇒ ⑯（多段保真）必须 FAIL
+const PROD_RAW = 'out.text = raw;';
 const OLD_MODE = process.argv.indexOf('--old') >= 0 || process.env.POLL_GATE_OLD === '1';
 if (OLD_MODE) {
   if (SCRIPT.indexOf(GATE_LINE) < 0) {
     throw new Error('--old 注入失败（源码字面量已变）：' + GATE_LINE);
   }
   SCRIPT = SCRIPT.replace(GATE_LINE, '');
+  if (SCRIPT.indexOf(PROD_RAW) < 0) {
+    throw new Error('--old 注入失败（PW-07g 产物行字面量已变）：' + PROD_RAW);
+  }
+  SCRIPT = SCRIPT.split(PROD_RAW).join('out.text = norm(raw);'); // 旧口径：归一值当产物
 }
 
 // ------------------------------------------------------------------ 迷你 DOM ----
@@ -230,8 +243,8 @@ const doubaoPost = (tip, answer) => {
   ]};
 };
 
-console.log('[' + (OLD_MODE ? '旧口径 --old（去掉装饰文本门）' : '当前源码') +
-            '] 运行 PW-07 答案归属门夹具 …');
+console.log('[' + (OLD_MODE ? '旧口径 --old（装饰文本门 + 产物归一）' : '当前源码') +
+            '] 运行 PW-07 / PW-07g 答案归属与文本保真夹具 …');
 
 // ---- ⓪ 夹具**保真度**：锁死「与真机日志逐字一致」的形态（否则用例会悄悄漂走）----
 {
@@ -330,8 +343,56 @@ console.log('[' + (OLD_MODE ? '旧口径 --old（去掉装饰文本门）' : '�
         r.found === true && r.text === answer && count(r.note, '装饰文本拒') === 0);
 }
 
-console.log('PW-07 答案归属门夹具：' + pass + ' / ' + fail +
-            (OLD_MODE ? '（负向模式 --old：①② 失败即**预期** —— 证明夹具能捕获回归）' : ''));
+// ---- ⑯ PW-07g：**段落保真** —— 多段答案 ⇒ 产物逐字符原样（含 `\n`）、`lf` 回显段数 ----
+//   真机形态：豆包回答容器（`div.container-qX9Csx`）**内部**多段 ⇒ `innerText` 段间为 `\n`；
+//   旧口径 `norm`（`\s+` → `' '`）把它压成空格 ⇒ 输出文件整篇 **1 行**（LF 全在文件头）。
+//   本用例锁「页面侧**不动**产物」：内容是完整的、**分段也在**。
+{
+  const p1 = '我不知道我到底错哪里了。';
+  const p2 = '我试着回想整件事的始末，可最后还是落得这样的结果。';
+  const p3 = '你想要偏伤感一点，还是克制平静一点的版本？';
+  const answer = p1 + '\n' + p2 + '\n' + p3; // 迷你 DOM：块级子节点各占一行 ⇒ 以 `\n` 分隔
+  const post = { tag: 'BODY', kids: [
+    { tag: 'DIV', cls: 'chat-content-container', kids: [
+      { tag: 'DIV', cls: 'bp5-overflow-list message-list', kids: [
+        // 单个**答案容器**内多段（段落节点自身不匹配候选池 ⇒ 取到的就是容器）
+        { tag: 'DIV', cls: 'markdown-body', kids: [
+          { tag: 'DIV', cls: 'md-line', text: p1 },
+          { tag: 'DIV', cls: 'md-line', text: p2 },
+          { tag: 'DIV', cls: 'md-line', text: p3 },
+        ]},
+      ]},
+    ]},
+    { tag: 'DIV', cls: 'composer-box', attrs: { contenteditable: 'true' } },
+  ]};
+  const { r } = scenario(PRE_DOUBAO, post, 'composer-box', { prompt: PROMPT });
+  check('⑯ 多段答案 ⇒ 产物**逐字符原样**（含 2 个 \\n）· `lf` = 2 · 无「句号+空格」压平指纹',
+        r.found === true && r.auto === true && r.text === answer && r.lf === 2 &&
+        r.fingerprint === 'div.markdown-body' &&
+        (r.text.match(/\n/g) || []).length === 2 && r.text.indexOf(p1 + ' ' + p2) < 0);
+}
+
+// ---- ⑰ PW-07g：**页面侧原样搬运** —— 缩进 / 空行 / 行尾空格一律**不动** ----
+//   （排版是 C++ 纯函数 `format_answer_text` 的职责：缩进保留、空行**规范化**（A2：空行 = 段界）、行尾空白清除）
+{
+  const messy = '  首段缩进保留\n\n\n第二段末尾有空格   ';
+  const pre = { tag: 'BODY', kids: [
+    { tag: 'DIV', cls: 'message-list' },
+    { tag: 'DIV', cls: 'composer-box', attrs: { contenteditable: 'true' } },
+  ]};
+  const post = { tag: 'BODY', kids: [
+    { tag: 'DIV', cls: 'message-list', kids: [
+      { tag: 'DIV', cls: 'markdown-block', text: messy },
+    ]},
+    { tag: 'DIV', cls: 'composer-box', attrs: { contenteditable: 'true' } },
+  ]};
+  const { r } = scenario(pre, post, 'composer-box', { prompt: PROMPT });
+  check('⑰ 页面侧原样搬运：缩进 / 空行 / 行尾空格**不动**（规整交 C++ 纯函数 · `VB2-22⑧`）',
+        r.found === true && r.text === messy && r.lf === 3);
+}
+
+console.log('PW-07 / PW-07g 答案归属与文本保真夹具：' + pass + ' / ' + fail +
+            (OLD_MODE ? '（负向模式 --old：①②③b⑯⑰ 失败即**预期** —— 证明夹具能捕获回归）' : ''));
 process.exit(fail === 0 ? 0 : 1);
 
 

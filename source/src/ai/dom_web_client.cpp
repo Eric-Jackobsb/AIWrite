@@ -389,13 +389,26 @@ constexpr const char* kClickSendScript = R"JS(
 
 // 页面内「取答案 + 判结束」（读 window.__aiwriteDom / window.__aiwriteDomRuntime）
 //  M8-37（零开关）：声明值未命中 → 自动识别（基线差分；站点无关）
+//
+//  ---- PW-07g（**文本保真** · 2026-10-08 真机驱动）：`norm` **只服务判据**，产物一律**原样**搬运 ----
+//  * 真机反例：豆包回答 `div.container-qX9Csx`（**759 字节**、内容完整）经 `norm` 后写盘 ⇒
+//    `4-TextOutput.txt` 只有 **1 行**（LF 全在文件头）—— 段落换行在**页面内**就被 `\s+ → ' '`
+//    压成了空格（内容一个字没丢，**分段没了**；`3-LLMGenerate.txt` 里可见「…结果。 我试着…」）。
+//  * 口径（用户拍板 · 方案 A）：页面只负责**逐字符搬出来**（保留 `\n` / `\r\n` / 缩进），
+//    排版交给 C++ 纯函数 `format_answer_text()`（**离线可断言**：`VB2-22⑦`）。
+//  * 判据（基线差分 / 装饰整串门 / 回声排除 / `min_chars`）继续吃 `norm` ⇒ PW-07 的
+//    「12 字节假成功」不会因本次改动复活（行为锁：`source/tools/poll_answer_gate_test.js` ⓪①④）。
 constexpr const char* kPollScript = R"JS(
 (function () {
   const cfg = window.__aiwriteDom || {};
   const rt = window.__aiwriteDomRuntime || {};
-  const out = { found: false, count: 0, chars: 0, text: '', done: false, done_kind: cfg.done_kind || '',
+  const out = { found: false, count: 0, chars: 0, lf: 0, text: '', done: false, done_kind: cfg.done_kind || '',
                 auto: false, answer_selector: cfg.answer_selector || '', fingerprint: '' };
+  // PW-07g：**判据专用**归一（`\s+` → 单空格）—— 绝不用于产物（否则段落换行被吃掉）
   const norm = function (s) { return (s || '').replace(/\s+/g, ' ').trim(); };
+  // PW-07g：**产物取值** = 原样搬运（不清理）；`lf` = 页面到底给了几个换行（= 分段物证）
+  const raw_text = function (el) { return el.innerText || el.textContent || ''; };
+  const lf_count = function (s) { const m = String(s).match(/\n/g); return m ? m.length : 0; };
   const fingerprint = function (el) {
     const cls = (typeof el.className === 'string') ? el.className.replace(/\s+/g, ' ').trim() : '';
     const id = el.id || '';
@@ -409,9 +422,11 @@ constexpr const char* kPollScript = R"JS(
     out.count = nodes.length;
     if (nodes.length > 0) {
       const last = nodes[nodes.length - 1];
-      out.text = norm(last.innerText || last.textContent || '');
-      out.chars = out.text.length;
-      out.found = out.text.length > 0;
+      const raw = raw_text(last);                 // PW-07g：原样（含 `\n`）
+      out.text = raw;                             //  * 产物**不**归一（段落换行不再被吃掉）
+      out.chars = raw.length;
+      out.lf = lf_count(raw);                     //  * 页面给的换行数（= 分段物证，进 steps / 日志）
+      out.found = norm(raw).length > 0;           //  * 判据仍用归一（空 / 纯空白不算命中）
       out.fingerprint = fingerprint(last);
     }
     // ---- ② 未声明 / 未命中 → 自动识别（发送前基线 → 取「新出现」且足够长的**最后**候选）----
@@ -439,9 +454,12 @@ constexpr const char* kPollScript = R"JS(
       const min_chars = cfg.answer_min_chars || 8;
       for (let i = pool.length - 1; i >= 0; i--) { // 逆序 = 文档顺序**最后**者优先（回答在用户消息之后）
         if (!is_new(pool[i])) { continue; }
-        const t = norm(pool[i].innerText || pool[i].textContent || '');
+        const raw = raw_text(pool[i]);             // PW-07g：原样（含 `\n`）
+        const t = norm(raw);                       //  * `t` **只判长度**（产物不吃归一）
         if (t.length >= min_chars) {
-          out.text = t; out.chars = t.length; out.found = true; out.auto = true;
+          out.text = raw; out.chars = raw.length;  //  * 产物 = 原样搬运（段落换行保住）
+          out.lf = lf_count(raw);
+          out.found = true; out.auto = true;
           out.fingerprint = fingerprint(pool[i]); break;
         }
         // PW-07：**取消**「短候选也算成功」（旧口径正是 12 / 10 字节类假成功的温床）——
@@ -593,6 +611,87 @@ std::string dom_send_verify_script() { return std::string(kSendVerifyScript); }
 std::string dom_click_send_script() { return std::string(kClickSendScript); }
 std::string dom_poll_script() { return std::string(kPollScript); }
 std::string dom_probe_script() { return std::string(kProbeScript); }
+
+// ---- PW-07g：答案文本排版（纯函数 · 离线断言 `VB2-22⑦`）--------------------------------
+//  为什么放在 C++ 侧：页面脚本只做「**无损搬运**」，排版必须是**确定性 + 可离线断言**的一步
+//  （仓库既有口径：纯函数进 `api_probe`）。历史上「判据需要归一 ⇒ 顺手把产物也归一」
+//  正是本次真机事故（段落换行丢失）的成因，故这里把两步**显式分开**。
+std::string format_answer_text(const std::string& raw)
+{
+    // ① `\r\n` / 单独 `\r` → `\n`（Windows 站点 innerText 常见）
+    std::string uni;
+    uni.reserve(raw.size());
+    for (std::size_t i = 0; i < raw.size(); ++i) {
+        if (raw[i] == '\r') {
+            uni.push_back('\n');
+            if (i + 1 < raw.size() && raw[i + 1] == '\n') {
+                ++i; // CRLF 的 LF 一并吃掉
+            }
+        }
+        else {
+            uni.push_back(raw[i]);
+        }
+    }
+    // ② 逐行：清行尾空白；行内连续空白（空格 / 制表 ≥2）→ 单空格；**行首缩进原样保留**
+    std::string lines;
+    lines.reserve(uni.size());
+    std::size_t pos = 0;
+    while (pos <= uni.size()) {
+        const std::size_t nl   = uni.find('\n', pos);
+        const std::size_t end  = (nl == std::string::npos) ? uni.size() : nl;
+        std::size_t       last = end; // 行尾空白起点 = 最后一个非空白字符 + 1
+        while (last > pos && (uni[last - 1] == ' ' || uni[last - 1] == '\t')) {
+            --last;
+        }
+        std::size_t first = pos; // 行首缩进区间 [pos, first) 原样保留
+        while (first < last && (uni[first] == ' ' || uni[first] == '\t')) {
+            ++first;
+        }
+        lines.append(uni, pos, first - pos);
+        bool prev_ws = false;
+        for (std::size_t i = first; i < last; ++i) {
+            const bool ws = (uni[i] == ' ' || uni[i] == '\t');
+            if (ws) {
+                if (prev_ws) { continue; } // 行内连续空白只留一个空格
+                prev_ws = true;
+                lines.push_back(' ');
+            }
+            else {
+                prev_ws = false;
+                lines.push_back(uni[i]);
+            }
+        }
+        if (nl == std::string::npos) {
+            break;
+        }
+        lines.push_back('\n');
+        pos = nl + 1;
+    }
+    // ④ 空行规范化（A2）：**≥1 个空行 → 恰好 1 个空行**（连续 `\n{3,}` → `\n\n`）
+    //  * 语义：行内软换行保留为 `\n`（同段）；**空行 = 段界** ⇒ 产物是规范 Markdown 分段
+    //    （下游若是 Markdown 预览 / 再喂 LLM，单 `\n` 只是软换行 ⇒ 段界必须靠空行表达）
+    //  * 实现：数**已写入尾部**的连续 `\n`，已有 1 个空行（= 2 个 `\n`）就丢弃多余的
+    std::string folded;
+    folded.reserve(lines.size());
+    std::size_t tail_nl = 0;
+    for (const char c : lines) {
+        if (c == '\n') {
+            if (tail_nl >= 2) { continue; }
+            ++tail_nl;
+        }
+        else {
+            tail_nl = 0;
+        }
+        folded.push_back(c);
+    }
+    // ⑤ 首尾 trim（空格 / 制表 / 换行）；纯空白 → 空串
+    const auto  is_ws = [](char c) { return c == ' ' || c == '\t' || c == '\n'; };
+    std::size_t b     = 0;
+    std::size_t e     = folded.size();
+    while (b < e && is_ws(folded[b])) { ++b; }
+    while (e > b && is_ws(folded[e - 1])) { --e; }
+    return folded.substr(b, e - b);
+}
 
 DomChatResult dom_chat(const DomChatRequest& request)
 {
@@ -863,6 +962,8 @@ DomChatResult dom_chat(const DomChatRequest& request)
     std::string last_poll_error;
     // PW-07：最后一轮「自动识别」体检串（诊断：**为什么没取到** —— 装饰文本拒 / 过短拒 计数）
     std::string last_poll_note;
+    // PW-07g：页面侧**原始换行数**（物证：`0` ⇒ 该站点本身只给一段，不是我们丢了换行）
+    int         last_raw_lf = 0;
     int         stable = 0;
     for (int attempt = 1; attempt <= max_polls; ++attempt) {
         std::this_thread::sleep_for(std::chrono::milliseconds(poll_ms));
@@ -881,6 +982,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
             // PW-07：体检串（`note`）每轮留存 —— 成功 / 失败两条路径都要能一眼看出「拒了几个装饰 / 过短」
             const std::string    note   = poll.value("note", std::string());
             if (!note.empty()) { last_poll_note = note; }
+            if (found) { last_raw_lf = poll.value("lf", 0); } // PW-07g：页面原始换行数（分段物证）
             if (found && !text.empty()) {
                 if (result.text.empty()) {
                     // M8-37：声明值命中 → 原样；自动识别 → 如实标明（含页面指纹，供**可选**回填）
@@ -897,7 +999,10 @@ DomChatResult dom_chat(const DomChatRequest& request)
                         result.steps += "；" + note; // PW-07：命中明细（装饰文本拒 / 过短拒）
                     }
                 }
-                result.text = text;
+                // PW-07g：**排版在 C++ 侧**（页面脚本只做无损搬运）—— 保留段落换行（`\n` 不丢）
+                //  * A2 口径：**空行 = 段界**（连续 `\n{3,}` → `\n\n`）
+                //  * 纯函数 `format_answer_text` ⇒ 可离线断言（`VB2-22⑦`）；每轮对**原始**文本重算（幂等）
+                result.text = format_answer_text(text);
             }
             if (is_done) {
                 break; // done_when 条件成立
@@ -948,6 +1053,12 @@ DomChatResult dom_chat(const DomChatRequest& request)
                          " 秒）到达：已取回文本，可能不完整";
     }
     result.ok = true;
+    // PW-07g（A2）：日志用的**行数 / 折叠数** —— 折叠 R = 页面换行 k − 产物换行（**钳 0**）
+    //  * 钳 0 的必要性：页面给孤立 `\r`（CR）时页面侧 `lf_count` **不数**它，而 `format_answer_text`
+    //    会把它归一成 `\n` ⇒ 产物换行可能**多于** k（差为负），如实报负数会误导排查
+    const long long text_lines =
+        static_cast<long long>(std::count(result.text.begin(), result.text.end(), '\n')) + 1;
+    const int folded_lf = std::max(0, last_raw_lf - static_cast<int>(text_lines - 1));
     log::info("[DOM 适配器] 站点=" + request.site.login_url +
               (request.image_values.empty()
                    ? std::string()
@@ -955,6 +1066,9 @@ DomChatResult dom_chat(const DomChatRequest& request)
               " 轮询=" + std::to_string(result.polls) + " 次 / " +
               std::to_string(result.elapsed_ms) + " ms，文本 " +
               std::to_string(result.text.size()) + " 字节" +
+              // PW-07g：**行数**（`\n` + 1；A2 后含空行 ⇒ 不再等于「段数」）+ 页面换行数 + **折叠数**
+              "；行 " + std::to_string(text_lines) + "（页面换行 " + std::to_string(last_raw_lf) +
+              "，折叠 " + std::to_string(folded_lf) + "）" +
               (result.warning.empty() ? "" : ("；警告：" + result.warning)) +
               (result.error.empty() ? "" : ("；错误：" + result.error)) +
               (last_poll_note.empty() ? "" : ("；轮询判据：" + last_poll_note)));

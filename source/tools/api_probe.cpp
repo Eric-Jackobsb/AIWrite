@@ -3163,6 +3163,72 @@ int execution_selftest()
                        poll.find("过短拒") != std::string::npos &&
                        poll.find("只有短候选：仍如实返回") == std::string::npos, // 旧「短候选也算成功」已删
                    "VB2-22⑥ 答案归属门（PW-07）：装饰 / 布局文本不算答案 · 短候选不回落 · 体检串随 poll 回传");
+
+            // ---- PW-07g（2026-10-08 · 「段落换行丢失」根因修）：判据/产物**分离** + 排版纯函数 ----
+            //  * 真机反例：豆包回答 `div.container-qX9Csx`（**759 字节**，内容完整）经页面侧
+            //    `norm`（`\s+` → `' '`）后写盘 ⇒ `4-TextOutput.txt` 整篇 **1 行**（LF 全在文件头）：
+            //    内容一个字没丢，**分段没了**（`3-LLMGenerate.txt` 里「…结果。 我试着…」就是指纹）。
+            //  * 修法（用户拍板 · 方案 A）：页面只**无损搬运**（产物 `out.text = raw`，判据继续吃 `norm`），
+            //    排版交给 C++ 纯函数 `format_answer_text`（本断言的下半段逐例锁住）。
+            //  * 行为级验证（真跑页面脚本 · 迷你 DOM）：`source/tools/poll_answer_gate_test.js`（含 `--old` 反向）。
+            expect(check,
+                   poll.find("out.text = norm(") == std::string::npos &&                // 产物**不得**再归一
+                       poll.find("out.text = t;") == std::string::npos &&               // 旧「归一值当产物」已删
+                       poll.find("out.text = raw;") != std::string::npos &&             // 产物 = 原样搬运
+                       poll.find("out.lf = lf_count(raw)") != std::string::npos &&      // 分段物证随 poll 回传
+                       poll.find("out.found = norm(raw).length > 0") != std::string::npos && // 判据仍用归一
+                       poll.find("const t = norm(raw);") != std::string::npos,          // 长度判定仍用归一
+                   "VB2-22⑦ 文本保真（PW-07g）：产物**不**归一（`out.text = raw`）· 判据仍归一 · `lf` 随 poll 回传");
+
+            // PW-07g：排版纯函数 —— 8 例（段落保留是**承重**项：修的就是它）
+            {
+                const auto fmt = [](const std::string& s) { return aiwrite::ai::format_answer_text(s); };
+                // ① 三段落（`\n` 分隔）⇒ 行内软换行保留、内容逐字保留（**本次事故的核心**）
+                const bool multi = (fmt("甲段。\n乙段。\n丙段？") == "甲段。\n乙段。\n丙段？");
+                // ② `\r\n` / 单独 `\r` → `\n`
+                const bool crlf = (fmt("甲。\r\n乙。\r丙。") == "甲。\n乙。\n丙。");
+                // ③ 空行规范化（A2）：连续 `\n{3,}` → `\n\n`；**恰好 1 个空行原样保留**（空行 = 段界）
+                const bool blank = (fmt("甲。\n\n\n乙。") == "甲。\n\n乙。") &&
+                                   (fmt("甲。\n\n乙。") == "甲。\n\n乙。");
+                // ④ 行尾空白清除 + 行内连续空白 → 单空格；**行首缩进原样保留**
+                //    （缩进放在**第 2 行**才有意义：整串首尾 trim 本就该去掉文首空白；`\t` 保留 ⇒ 不破坏代码块 / 引用）
+                const bool space = (fmt("甲   乙  \n\t丙   丁  ") == "甲 乙\n\t丙 丁");
+                // ⑤ Markdown 结构原样（标题 / 列表 / 引用：只规整空白，不改写语法 —— A2 下 `\n\n` 本就该在）
+                const bool markdown = (fmt("# 标题\n\n- 一\n- 二\n> 引用") == "# 标题\n\n- 一\n- 二\n> 引用");
+                // ⑥ 首尾空白 trim（含首尾空行）
+                const bool trim = (fmt("\n\n  甲。  \n\n") == "甲。");
+                // ⑦ 空串 / 纯空白 → 空串（不产生「假有内容」）
+                const bool empty = fmt("").empty() && fmt("   \n\t\r\n  ").empty();
+                // ⑧ **无损**：引号 / 反斜杠 / emoji / 制表 + 多段 ⇒ 除既定空白规整外逐字符不变
+                const std::string long_raw = "第一段 \"引号\" \\ 反斜杠 \xF0\x9F\x98\x80\n第二段\t制表\n\n第三段。";
+                const bool        lossless =
+                    (fmt(long_raw) == "第一段 \"引号\" \\ 反斜杠 \xF0\x9F\x98\x80\n第二段 制表\n\n第三段。");
+                // 失败时的**显式化**输出（`\n` / `\r` / `\t` 打成转义）—— 一眼对齐「实际 vs 期望」
+                const auto esc = [](const std::string& s) {
+                    std::string r;
+                    for (const char c : s) {
+                        if (c == '\n') { r += "\\n"; }
+                        else if (c == '\r') { r += "\\r"; }
+                        else if (c == '\t') { r += "\\t"; }
+                        else { r += c; }
+                    }
+                    return r;
+                };
+                if (!(multi && crlf && blank && space && markdown && trim && empty && lossless)) {
+                    std::printf(
+                        "     [VB2-22⑧ 明细] multi=%d crlf=%d blank=%d space=%d markdown=%d trim=%d empty=%d "
+                        "lossless=%d\n       crlf_got=[%s] blank_got=[%s] space_got=[%s] markdown_got=[%s] "
+                        "lossless_got=[%s]\n",
+                        multi ? 1 : 0, crlf ? 1 : 0, blank ? 1 : 0, space ? 1 : 0, markdown ? 1 : 0, trim ? 1 : 0,
+                        empty ? 1 : 0, lossless ? 1 : 0, esc(fmt("甲。\r\n乙。\r丙。")).c_str(),
+                        esc(fmt("甲。\n\n\n乙。")).c_str(), esc(fmt("甲   乙  \n\t丙   丁  ")).c_str(),
+                        esc(fmt("# 标题\n\n- 一\n- 二\n> 引用")).c_str(), esc(fmt(long_raw)).c_str());
+                }
+                expect(check, multi && crlf && blank && space && markdown && trim && empty && lossless,
+                       "VB2-22⑧ 排版纯函数 format_answer_text（PW-07g · A2）：多段保留 · CRLF · "
+                       "空行规范化（≥1 空行 → 恰好 1 个）· "
+                       "行内/行尾空白 · 缩进保留 · Markdown 原样 · trim · 空串 · 长文本无损");
+            }
         }
     }
 

@@ -22,7 +22,8 @@
 //      （不猜类名；自动排除输入区与「自己那条回声」）；识别结果只**打印**，不回写配置（口径①）
 //
 //  纯函数（离线可断言，见 `VB2-22`）：clamp_poll_params / dom_cfg_json /
-//  dom_kickoff_script / dom_poll_script / dom_probe_script
+//  dom_kickoff_script / dom_poll_script / dom_probe_script /
+//  format_answer_text（PW-07g：答案文本排版 —— 页面只做无损搬运，排版在我方纯函数里完成）
 // ============================================================================
 
 #include <cstddef>
@@ -76,6 +77,16 @@ struct DomChatResult {
 
 // 轮询参数钳制：poll_ms ∈ [200, 2000]、max_polls ∈ [10, 600]（R13：有硬上限）
 void clamp_poll_params(const ProviderWebSpec& site, int* poll_ms, int* max_polls);
+
+// ---- PW-07g（**答案文本排版** · 纯函数 · 离线可断言 `VB2-22⑦`）----
+//  真机反例：页面侧 `norm`（`\s+` → 单空格）把段落换行压成空格 ⇒ 输出文件整篇 1 行。
+//  修法（方案 A）：页面脚本只**原样搬运**，本函数做确定性排版 —— **保留段落**（`\n` 不丢）。
+//  规则：① `\r\n` / `\r` → `\n` ② 清每行**行尾**空白 ③ 行内连续空白（空格/制表 ≥2）→ 单空格
+//  （**行首缩进原样保留**，不破坏代码块 / 引用；仅整串**首尾**空白被 trim）
+//  ④ **空行规范化（A2）**：**空行 = 段界** —— 连续 `\n{3,}` → `\n\n`（≥1 个空行 → 恰好 1 个空行；
+//     行内软换行保留为 `\n`）⑤ 首尾 trim；纯空白 → 空串。
+//  **不改写** Markdown 语法（`- ` / `1. ` / `# ` / 代码围栏原样）。
+std::string format_answer_text(const std::string& raw);
 
 // 注入给页面的配置 JSON（**转义安全**：提示词含引号 / 换行也不会破坏脚本）
 std::string dom_cfg_json(const DomChatRequest& request);
