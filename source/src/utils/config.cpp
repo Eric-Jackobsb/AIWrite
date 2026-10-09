@@ -34,8 +34,8 @@ void set_app_config(Config config)
 std::vector<std::string> unwired_config_fields()
 {
     return {
-        "general.language",             // 界面语言切换（Patch D：设置面板）
-        "general.startup",              // 启动行为（依赖工作流变体保存 / 启动恢复）
+        // `PQ-18②`（2026-10-09）：general.language / general.startup **已移除** ——
+        //  「界面语言切换 / 启动行为」不做（i18n 决策见 roadmap.md §十）；旧 [general] 节被静默忽略
         "ui.grid_size",                 // 网格间距：vendored imgui-node-editor 的 Style 无此字段（PD-03 处理）
         "output.auto_open_on_complete", // 完成后自动打开（M5 / Patch C）
         "timeout.*",                    // 连接 / 首字节 / 流空闲超时（Patch B：PB-08）
@@ -56,12 +56,6 @@ void read_value(const toml::table& table, const char* key, T& target)
             target = *value;
         }
     }
-}
-
-void read_general(const toml::table& t, Config::General& s)
-{
-    read_value(t, "language", s.language);
-    read_value(t, "startup", s.startup);
 }
 
 void read_ui(const toml::table& t, Config::Ui& s)
@@ -131,10 +125,7 @@ toml::table to_table(const Config& c)
     toml::table root;
     write_value(root, "config_version", c.config_version);
 
-    toml::table general;
-    write_value(general, "language", c.general.language);
-    write_value(general, "startup", c.general.startup);
-    root.insert("general", std::move(general));
+    // `PQ-18②`（2026-10-09）：不再写 `[general]` 节（general.language / general.startup 已移除）
 
     toml::table ui;
     write_value(ui, "show_node_library", c.ui.show_node_library);
@@ -214,7 +205,6 @@ bool load_config(const std::filesystem::path& file, Config& out)
         const toml::table root = toml::parse_file(file.string());
         read_value(root, "config_version", out.config_version);
 
-        if (const toml::table* section = root["general"].as_table()) read_general(*section, out.general);
         if (const toml::table* section = root["ui"].as_table())      read_ui(*section, out.ui);
         if (const toml::table* section = root["output"].as_table())  read_output(*section, out.output);
         if (const toml::table* section = root["timeout"].as_table()) read_timeout(*section, out.timeout);

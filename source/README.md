@@ -2,7 +2,7 @@
 
 > 设计文档：`../docs/ai_writer_nodes.md`　Action Plan：`../docs/actionPlan/`（进行中：M3–M6 + 补丁；已完成归档 → [../docs/Archive/actionPlan/](../docs/Archive/actionPlan/)）
 > 验证报告：`../docs/Archive/M1_技术验证报告.md`　节点编辑器手册：`../docs/节点编辑器使用说明.md`
-> 变更记录：`../docs/CHANGELOG.md`　文档总览：`../docs/README.md`
+> 变更记录：`../docs/CHANGELOG.md`　文档总览：`../docs/DocMAP.md`
 > 技术栈：C++20 / MSVC 14.50（VS 2026 Insiders）/ CMake **4.4.3**（系统安装）/ VS 2026 生成器 / vcpkg / Dear ImGui 1.90.7(docking) / imgui-node-editor v0.9.3 / nativefiledialog-extended 1.3.0（overlay port）
 
 ---
@@ -111,6 +111,13 @@ M1 验证工具：
                               #    （**环境依赖，非代码问题**；改用下面 `--web` 变体可绕开）
 .\aiwrite.exe --run-selftest --web
                               # 同上，但 LLMGenerate 走网页版真实生成（需已登录过一次；实测 5/5 ≈10s）
+.\aiwrite.exe --upload-selftest [--provider <id>] [--image <路径>] [--timeout <秒>]
+                              # 站点上传模板自检（M8-14）：离线三组（图片准备 19 + 上传证据 32 + 站点上传模板 21
+                              # ⇒ 实测 **72/0 · exit 0**，见 docs/CHANGELOG.md）；带 --provider 且已登录时追加**真机一次**
+                              # （0=通过 / 1=失败 / 2=超时）；未给 --image 时只检查不上传
+                              # ⚠️ 离线三组共用 `%TEMP%\aiwrite-upload\selftest` ⇒ **不要并发跑多个实例**（会互相删目录 → 假失败）
+                              # ⚠️ aiwrite.exe 为 GUI 子系统：`>` 重定向捕不到 stdout，须
+                              #    Start-Process -RedirectStandardOutput（见 ../AI_README.md §3）
 .\aiwrite.exe --pydoll-selftest
                               # 【新通道 · step 6】起 Python 守护进程 → hello → ready{proto=4} → shutdown（**不开浏览器**）
                               # 退出码 0=通过 / 1=失败 / 2=依赖问题（无 Python / 无浏览器）；只验通道，不影响生产路径
@@ -133,7 +140,7 @@ M1 验证工具：
                               # 【step 9 换代】选择器**命中数**诊断（只读）：**已走新通道（Pydoll）**
 .\api_probe.exe --selftest                  # V-04 HTTP + V-05 SHA3 自检
 .\api_probe.exe --graph-selftest            # 图模型/注册表/撤销栈/序列化 自检（110 项断言，无需网络）
-.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 + 图片解码 自检（332 项断言，无需网络）
+.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 + 图片解码 自检（425 项断言，无需网络；2026-10-08 实测）
 .\api_probe.exe --image-decode D:\a.webp   # 图片诊断：内容嗅探 / MIME / 解码(stb|wic) / 尺寸 / WIC 能力（M7）
 .\api_probe.exe --sha3 "abc"                # 单次 SHA3-256
 $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 Key）

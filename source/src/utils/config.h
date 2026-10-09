@@ -11,10 +11,9 @@ namespace aiwrite {
 struct Config {
     int config_version = 1;
 
-    struct General {
-        std::string language = "zh-CN";
-        std::string startup  = "welcome";
-    };
+    // 界面语言 / 启动行为（原 `General`：`language` / `startup`）—— `PQ-18②`（2026-10-09）**已移除**：
+    //  * 决策 = i18n **不做**（见 roadmap.md §十），`config.toml` 不再有 `[general]` 节；归口 **M6** 再议
+    //  * 旧文件里的 `[general]` 被**静默忽略**（`read_value` 只读已知键），下次保存不再写回
 
     struct Ui {
         // P7a-12（UI A 档）：**新用户首屏即可见**节点库 + 参数面板（旧默认 false → true）
@@ -74,7 +73,6 @@ struct Config {
         std::string api_key_ref = "brain-ai/deepseek";
     };
 
-    General  general;
     Ui       ui;
     Output   output;
     Timeout  timeout;
@@ -111,6 +109,7 @@ void          set_app_config(Config config);
 //    output.ttl_days（PC-05 归档）
 //  * ui.grid_size：设计上属"网格间距"，但 vendored imgui-node-editor 的 Style 没有该字段，
 //    当前无法生效（如实登记，归口 PD-03 处理：升级库或自绘背景网格）
+//  * 已移除（`PQ-18②` · 2026-10-09）：general.language / general.startup —— 界面语言 / 启动行为不做
 //  * 节点参数为准：providers.deepseek.*（仅作默认值来源，实际以 ProviderConfig 节点参数为准）
 //  * 其余字段在加载时写 `[配置] 以下字段尚未生效：…` 日志，并在使用说明中标注归口补丁
 std::vector<std::string> unwired_config_fields();

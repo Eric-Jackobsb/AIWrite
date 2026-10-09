@@ -186,7 +186,6 @@ bool test_config_roundtrip()
     const bool generated = std::filesystem::exists(file);
 
     aiwrite::Config modified         = created;
-    modified.general.language        = "zh-CN-selftest";
     modified.ui.show_grid            = !created.ui.show_grid;
     modified.output.ttl_days         = 7;
     modified.deepseek.model          = "deepseek-reasoner";
@@ -213,12 +212,11 @@ bool test_config_roundtrip()
                                reloaded.ui.window_pos_y == modified.ui.window_pos_y &&
                                reloaded.ui.window_maximized == modified.ui.window_maximized;
     const bool same = generated && reloaded.config_version == modified.config_version &&
-                      reloaded.general.language == modified.general.language &&
                       reloaded.ui.show_grid == modified.ui.show_grid &&
                       reloaded.output.ttl_days == modified.output.ttl_days &&
                       reloaded.deepseek.model == modified.deepseek.model && geometry_same;
-    std::printf("   %-6s 默认生成=%s；字段往返一致=%s（language / show_grid / ttl_days / model / "
-                "窗口几何）\n",
+    std::printf("   %-6s 默认生成=%s；字段往返一致=%s（show_grid / ttl_days / model / 窗口几何；"
+                "`PQ-18②` 起 general.language 已移除、不再往返）\n",
                 same ? "PASS" : "FAIL", generated ? "是" : "否", same ? "是" : "否");
 
     // PA-07：进程级配置访问器（app_config / set_app_config）
@@ -371,14 +369,16 @@ bool test_config_roundtrip()
         }
         return false;
     };
-    const bool unwired_ok = has_unwired("general.language") && has_unwired("timeout.") &&
+    // 说明（`PQ-18②` · 2026-10-09）：general.* 已从配置表移除 ⇒ 断言改为「**不含** general.*」
+    //  * 本行是**单行 PASS/FAIL**（非逐项计数）⇒ 不影响 `--selftest` / `--exec-selftest` 的断言数字
+    const bool unwired_ok = !has_unwired("general.") && has_unwired("timeout.") &&
                             has_unwired("output.auto_open_on_complete") &&
                             has_unwired("ui.grid_size") && !has_unwired("console_height") &&
                             !has_unwired("running_animation") && !has_unwired("window_width");
-    std::printf("   %-6s PA-08 未接配置字段清单：%zu 项；含 general.language=%s；"
+    std::printf("   %-6s PA-08 未接配置字段清单：%zu 项；不含 general.*=%s；"
                 "不含 console_height/running_animation/window_*=%s\n",
                 unwired_ok ? "PASS" : "FAIL", unwired.size(),
-                has_unwired("general.language") ? "是" : "否",
+                !has_unwired("general.") ? "是" : "否",
                 (!has_unwired("console_height") && !has_unwired("running_animation") &&
                  !has_unwired("window_width"))
                     ? "是"

@@ -144,7 +144,7 @@
                 "children": [],
                 "todo": {
                   "id": 15,
-                  "content": "DBG-M6-01 仍未生效的配置：output.auto_open_on_complete / general.language / general.startup / advanced.log_ttl_days / timeout.* / error.*（归口 PB-06/PB-08/PD-03）；ui.grid_size 受 vendored imgui-node-editor 限制（PD-03）；已接线：console_height / running_animation / 窗口几何 / 归档 ｜ §3.2",
+                  "content": "DBG-M6-01 仍未生效的配置：output.auto_open_on_complete / advanced.log_ttl_days / timeout.* / error.*（归口 PB-06/PB-08/PD-03）；ui.grid_size 受 vendored imgui-node-editor 限制（PD-03）；已接线：console_height / running_animation / 窗口几何 / 归档；已移除：general.language / general.startup（2026-10-09 · PQ-18②：i18n 不做、config.toml 不再有 [general] 节）｜ §3.2",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
@@ -694,8 +694,8 @@
                 "children": [],
                 "todo": {
                   "id": 51,
-                  "content": "FEA-M6-05 i18n 决策与落地（最小字符串表）或从 config 移除 language/startup 并记入 M6 ｜ §6.1 PD-08",
-                  "done": false,
+                  "content": "FEA-M6-05 i18n 决策与落地（最小字符串表）或从 config 移除 language/startup 并记入 M6 ｜ §6.1 PD-08 ｜ ✅ 已结案（2026-10-09 · PQ-18②）：i18n 不做 ⇒ 选「从 config 移除」；config 侧 [general] 已移除（config.h / config.cpp + PA-08 断言改判），无需再落地",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -1041,7 +1041,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（63 项）",
+          "content": "Feature（65 项）",
           "done": false,
           "level": "default"
         }
@@ -1404,7 +1404,7 @@
         ],
         "todo": {
           "id": 54,
-          "content": "Test（22 项）",
+          "content": "Test（24 项）",
           "done": false,
           "level": "warning"
         }
@@ -2207,63 +2207,338 @@
         ],
         "todo": {
           "id": 189,
-          "content": "M7B（6 项 · 阶段 0 完成 / 未开工）",
+          "content": "M7B 📦 已退场 2026-10-05 · 未完成（7 项）",
+          "done": false,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 202,
+        "children": [
+          {
+            "key": 203,
+            "children": [
+              {
+                "key": 204,
+                "children": [],
+                "todo": {
+                  "id": 204,
+                  "content": "PQ-01 RQ-1 滚动发布的形态：内部滚动（不发布公开渠道）+ 每批内部版本号？正式交付是否只在 M6 安装包形态下发生 ｜ roadmap.md §十一 · DocMAP §5.3",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/roadmap.md"
+                }
+              },
+              {
+                "key": 205,
+                "children": [],
+                "todo": {
+                  "id": 205,
+                  "content": "PQ-02 RQ-2 安装包形态：MSI / NSIS / Inno Setup / 自解压 zip（建议 Inno Setup 或 NSIS，含 WebView2 Bootstrapper 检测与体积预算）｜ M6.md A-03 / M6-08 · roadmap.md §五/§十一｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M6.md"
+                }
+              },
+              {
+                "key": 206,
+                "children": [],
+                "todo": {
+                  "id": 206,
+                  "content": "PQ-03 RQ-4 P7-b 内部版本号 v0.5.3 是否仍留用（P7-b 主体已 📦 由方案 E 取代）｜ roadmap.md §十一 · M7.md §12",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M7.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 203,
+              "content": "路线 / 交付形态（待定 2 项 · 已拍板 1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 207,
+            "children": [
+              {
+                "key": 208,
+                "children": [],
+                "todo": {
+                  "id": 208,
+                  "content": "PQ-04 M8-Q2 合规口径：是否认可「页面产出 token + 自己 Cookie 调站点接口」；上传+发送是否对全部站点开放；是否需面板一次性告知 ｜ M8.md §7 · M7.md P7b-14｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M8.md"
+                }
+              },
+              {
+                "key": 209,
+                "children": [],
+                "todo": {
+                  "id": 209,
+                  "content": "PQ-05 M8-Q3 api_probe 数字下降的登记口径：显式登记（数字+原因成对）还是保留断言桩（现临时按①执行）｜ M8.md §7 / §9.3｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M8.md"
+                }
+              },
+              {
+                "key": 210,
+                "children": [],
+                "todo": {
+                  "id": 210,
+                  "content": "PQ-06 M8-Q4 版本号：沿用 v0.5.4（内部，从未发布）还是新开 v0.5.5 ｜ M8.md §7 · roadmap.md RQ-5",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M8.md"
+                }
+              },
+              {
+                "key": 211,
+                "children": [],
+                "todo": {
+                  "id": 211,
+                  "content": "PQ-07 M8-Q5 M7.md 是否进一步瘦身（只留指针 + P7-a；现行 = 保持现状 + 摘录归档）｜ M8.md §7 · M7.md §12｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M8.md"
+                }
+              },
+              {
+                "key": 212,
+                "children": [],
+                "todo": {
+                  "id": 212,
+                  "content": "PQ-08 M8-Q6 节点层接线与 capabilities.vision 声明是否同批（网页链路已按①落地；剩官方 API 路径 M7-10 / M8-21 的口径待拍）｜ M8.md §7 · M7.md §3 M7-10｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M8.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 207,
+              "content": "M8 网页通道 · 待拍板（待定 1 项 · 已拍板 4 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 213,
+            "children": [
+              {
+                "key": 214,
+                "children": [],
+                "todo": {
+                  "id": 214,
+                  "content": "PQ-09 D-26 站点条目的字段级回落是否收紧（建议②：login_url 缺失 = 明确报错不回落；window_title / probe_paths / token_expr 可回落 + 警告）｜ M_patchAB_rest.md §9",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 215,
+                "children": [],
+                "todo": {
+                  "id": 215,
+                  "content": "PQ-10 D-30 登录态判据收紧（cookie_names 命中优先，Cookie 非空降级为「未校验」；证据已到手：豆包登录前后差集 23 名 / 其中 14 个鉴权名）｜ M_patchAB_rest.md §9 · M7.md §12.1｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 216,
+                "children": [],
+                "todo": {
+                  "id": 216,
+                  "content": "PQ-11 D-31 网页版流式方案（建议③：明确不做 + 文案改「分段落定」+ 补 VB-03 离线断言；A′ 端点探查在拍板前不启动）｜ M_patchAB_rest.md §2.5/§9 · 网页版协议实测记录 附录 A｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 217,
+                "children": [],
+                "todo": {
+                  "id": 217,
+                  "content": "PQ-12 D-32 PB2-29 逐站选择器回填范围（①只做国内 7 站 / ②连境外 3 站）｜ M_patchAB_rest.md §3.4/§9",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 213,
+              "content": "补丁系列决策（D-26 / D-30 / D-31 / D-32）（待定 2 项 · 已拍板 2 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 218,
+            "children": [
+              {
+                "key": 219,
+                "children": [],
+                "todo": {
+                  "id": 219,
+                  "content": "PQ-13 W-D8 模板未填充占位符是否改为报错（PW-10；现为「未匹配原样保留」）｜ M_patchC_web_node_bind.md §4.6 / §6｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
+                }
+              },
+              {
+                "key": 220,
+                "children": [],
+                "todo": {
+                  "id": 220,
+                  "content": "PQ-14 PW-07g 待拍分叉：真机段间只有 1 个换行时是否加「2 行并 1 段」推断（默认不做；待真机物证：完成日志「行 N（页面换行 k，折叠 R）」+ --debug raw）｜ M_patchC_web_node_bind.md §4.5｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
+                }
+              },
+              {
+                "key": 221,
+                "children": [],
+                "todo": {
+                  "id": 221,
+                  "content": "PQ-15 PW-14 「复制」按钮取 Markdown 原文（候选 · 未排期；当前 innerText 已够用 ⇒ 不预先做）｜ M_patchC_web_node_bind.md §6｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 218,
+              "content": "网页版文本与上传口径（3 项 · 已拍板 2026-10-09）",
+              "done": true,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 222,
+            "children": [
+              {
+                "key": 223,
+                "children": [],
+                "todo": {
+                  "id": 223,
+                  "content": "PQ-16 §19.1 延后功能（14 项：视频/音频输入、本地模型、子工作流、循环、条件分支、节点搜索、快捷键、小地图、自动吸附、折叠、对齐线、多语言、浅色主题）去向：是否有任一项提到滚动发布 / 或转为「决定不做」｜ ai_writer_nodes.md §19.1 · roadmap.md §十｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/ai_writer_nodes.md"
+                }
+              },
+              {
+                "key": 224,
+                "children": [],
+                "todo": {
+                  "id": 224,
+                  "content": "PQ-17 M5-09（输出面板历史 = PD-07）与 M5-10（图片复制/导出）的范围：全做还是只做部分 ｜ M5.md §九 · M_patchAB_rest.md §1 第 23/25 行｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M5.md"
+                }
+              },
+              {
+                "key": 225,
+                "children": [],
+                "todo": {
+                  "id": 225,
+                  "content": "PQ-18 PD-08 i18n 决策：① 最小字符串表 + general.language 还是 ② 从 config.toml 移除并记入 M6（D-04 默认②）｜ M_patchAB_rest.md §5｜✅ 2026-10-09 已拍板｜✅ 代码已落地 2026-10-09（config 字段清理 + PA-08 断言改判「不含 general.*」；数字无变动：--exec-selftest 425/0）",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 226,
+                "children": [],
+                "todo": {
+                  "id": 226,
+                  "content": "PQ-19 FEA-M3-07 工作流变体保存（面板保存为独立 workflow / 当前变体）+「启动恢复上次工作流」（待设计）｜ M_patchAB_rest.md §7 · M3 唯一待办｜✅ 2026-10-09 已拍板",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 222,
+              "content": "设计文档开口项（4 项 · 已拍板 2026-10-09）",
+              "done": true,
+              "level": "secondary"
+            }
+          }
+        ],
+        "todo": {
+          "id": 202,
+          "content": "待定 · 未拍板（5 项 · 已拍板 14 项）",
           "done": false,
           "level": "secondary"
         }
       }
     ],
     "expandKeys": [
+      1,
+      2,
+      4,
       6,
       12,
       14,
+      17,
+      18,
+      22,
+      28,
+      41,
+      46,
+      54,
+      55,
+      58,
+      62,
+      65,
+      69,
       71,
+      74,
       75,
       77,
       79,
       81,
       83,
       85,
+      88,
       89,
       91,
       95,
       98,
       102,
       104,
+      132,
       136,
       139,
-      160,
-      161,
-      162,
+      153,
+      157,
       163,
-      164,
-      166,
-      167,
-      168,
+      165,
       169,
-      170,
-      171,
       172,
-      173,
       174,
-      175,
-      176,
-      177,
-      178,
-      179,
-      180,
-      181,
-      182,
-      183,
-      184,
-      185,
-      186,
-      187,
-      188,
-      18,
-      17,
-      22,
-      165
+      189,
+      202,
+      203,
+      207,
+      213,
+      218,
+      222
     ],
     "add_mode": "bottom",
     "virtual": false,
@@ -2274,7 +2549,7 @@
     "showEndTime": false,
     "simpleMode": false,
     "lang": "en",
-    "desc": "**当前基线（2026-09-27）**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS（V-11/V-12 随 PB-09）\n- graph_selftest: 110 通过 / 0 失败\n- exec_selftest: 251 通过 / 0 失败（执行器 + 运行信息 + 归档 + 配置表 / L4 断言）\n- provider_selftest: 50 通过 / 0 失败（--provider-dump 21 条：official 9 / web 12）\n- run_selftest: PASS（离线 3/5 为预期）· run_selftest_web: PASS（5/5；官网侧会话失效见 PB2-25）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n- docs_links: python vcpkg-cache/check_links.py → broken 0\n\n**M7（2026-09-27 落地）**\\n- 图片格式按内容嗅探（不看扩展名）+ 本地解码 stb/WIC 双后端 + 可操作报错；诊断：`api_probe --image-decode <路径>`\\n- 删图片输出节点（N-09）：节点 9→8\\n- **冻结区（I17）**：不得把合成/截断/未识别格式数据交给 WIC（曾致 CRT 断言崩溃，退出码 3）；见 source/README.md §4.2 / §6.1\\n\\n**M7 第二轮 P7（2026-09-27 会议决议 D1–D9 · 计划中，未开工）**\\n- P7-a（v0.5.2）：图片端口 variadic 多图（I19）+ 统一资源目录 + official 收口（超限拒 / 体积与耗时 / 错误分类）+ UI A 档\\n- P7-b（v0.5.3 待确认）：网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件（先做 P7b-01~05 前置验证，未过则回滚；方案 B′ 2026-09-29：网页版图片理解首个目标站 = 豆包 doubao-web，P7b-05b 只读侦察先行（上传入口 4 类 + 纯图无字视觉判别），审核通过后才动管道 M7B-02/04）\\n- 新增不变量 I18（无上传证据不得自动发送）/ I19（image 端口语义向后兼容）；开口项 Q1–Q8 见 M7.md §17\\n\\n**M7 第三轮 M7B（2026-09-28 立项 · 计划中未开工）**\n- 网页通道整体迁 Pydoll：WebView2 退场（source/ 内 17 文件 ≈184 处）+ 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态（~/.brain-ai/pydoll-profile）\n- 作废不变量 I2（不再承诺无参 CLI 逐字不变）→ 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2 / 保留字 --provider auto）/ I21（不静默降级）/ I22（流式降级标记非流式）；I15 → I15′（证据源改 CDP Cookie）；I16 升级为全局\n- 破坏性变更（计划）：--web-chat / --login-selftest 需 --provider；--web-probe 废弃；老用户需重新登录一次\n- 任务：前置验证 M7B-01~08 + 6 批 M7B-10~M7B-41（先建后拆，批 5 才删 WebView2）；基线 --exec-selftest 先降后升（删 VB2-17 前半 / VB2-25①③④，新增 VB2-28~VB2-36）\n- 计划全文：docs/actionPlan/M7B.md（WebView2 接触面 17 文件 ≈184 处清单见其 §1.3）｜ **阶段 0 已完成（2026-09-28）**：批 0 基线复测（exec 251/0 · graph 110/0 · provider 50/0 · run-selftest(--web) PASS · 断链 265/0）+ Pydoll 2.27.0 环境就绪（.venv 冒烟通过）+ 回滚锚点 pre-m7b 已推送；**仍未开工**\n\n**主要风险 / 待办**\n- 会话失效（40002/401/40003）缺界面引导（PB-07 / PB2-25）\n- 11 条内置站点仍缺 answer_selector（需人工登录一次 + 发一条消息 → PB2-29）\n- 流式数据源受 httplib 限制（PB-03/08 暂停 · D-31 待拍板）\n- 未接配置字段仍无效果（PD-03 / FEA-M6-01）\n- 补丁系列剩余项统一见 docs/actionPlan/M_patchAB_rest.md",
+    "desc": "**当前基线（2026-10-08 本机全量实测）**\n- build: 0 error / 0 warning（MSVC /W4）\n- api_probe --selftest：PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · 执行器 425/0）\n- exec_selftest: 425 / 0 · graph_selftest: 110 / 0\n- aiwrite --upload-selftest: 72 / 0（离线三组；真机加 --provider / --image，且该站点已登录过一次）\n- 夹具: poll_answer_gate 12/0（--old 5/7 · exit 1）· send_chain 17/0\n- 文档: python vcpkg-cache/check_links.py → checked 500 / broken 8（**全为既存**：7 条历史 actionPlan/M7B.md 路径 + 1 条反引号内文误判，非本轮引入）\n\n**文档口径（2026-10-08 全量梳理 · 定义见 docs/DocMAP.md §五）**\n- 标记三态：✅ 已固定 / 📦 已失效（**只标记不删除**）/ ⬜ 待定（必须登记到本分类 PQ-xx）\n- 本分类「待定 · 未拍板」= 全部未拍板项（PQ-01 ~ PQ-19）；拍板后同批：改计划文档 + DocMAP §5.3 + 本项置 done\n- ✅ **2026-10-09 拍板落盘**：**14 项**已拍板（`PQ-02` / `PQ-04` / `PQ-05` / `PQ-07` / `PQ-08` / `PQ-10` / `PQ-11` / `PQ-13` / `PQ-14` / `PQ-15` / `PQ-16` / `PQ-17` / `PQ-18` / `PQ-19`）⇒ 已置 done；**余 5 项待定**（`PQ-01` / `PQ-03` / `PQ-06` / `PQ-09` / `PQ-12`）\n- 里程碑：M1 / M2 / M4 / M5 与 M7 第一轮 + P7-a ✅ 已固定；**M7B / P7-b（Pydoll 路线）📦 已退场（2026-10-05 · 方案 E）**；现行网页通道 = M8（站点上传模板）\n- 未做（有任务号，**非**待定）：M8 Phase 3~6 · PW-02/04/05/06/08~12 · M_patchAB_rest §1–§3 残项 · M6 未开工\n- 待真机：AW-01 / AW-03 / AW-04 / AW-06（网页版多节点与取答案）· 有 Key 的 official 复跑\n\n**历史原文（2026-09-27 基线 · ⛔ 保留不删；其中 Pydoll / M7B 段落已 📦 退场）**\n\n**当前基线（2026-10-08 本机全量实测）**\n- build: 0 error / 0 warning（MSVC /W4）\n- api_probe --selftest：PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · 执行器 425/0）\n- exec_selftest: 425 / 0 · graph_selftest: 110 / 0\n- aiwrite --upload-selftest: 72 / 0（离线三组；真机加 --provider / --image，且该站点已登录过一次）\n- 夹具: poll_answer_gate 12/0（--old 5/7 · exit 1）· send_chain 17/0\n- 文档: python vcpkg-cache/check_links.py → checked 500 / broken 8（**全为既存**：7 条历史 actionPlan/M7B.md 路径 + 1 条反引号内文误判，非本轮引入）\n\n**文档口径（2026-10-08 全量梳理 · 定义见 docs/DocMAP.md §五）**\n- 标记三态：✅ 已固定 / 📦 已失效（**只标记不删除**）/ ⬜ 待定（必须登记到本分类 PQ-xx）\n- 本分类「待定 · 未拍板」= 全部未拍板项（PQ-01 ~ PQ-19）；拍板后同批：改计划文档 + DocMAP §5.3 + 本项置 done\n- 里程碑：M1 / M2 / M4 / M5 与 M7 第一轮 + P7-a ✅ 已固定；**M7B / P7-b（Pydoll 路线）📦 已退场（2026-10-05 · 方案 E）**；现行网页通道 = M8（站点上传模板）\n- 未做（有任务号，**非**待定）：M8 Phase 3~6 · PW-02/04/05/06/08~12 · M_patchAB_rest §1–§3 残项 · M6 未开工\n- 待真机：AW-01 / AW-03 / AW-04 / AW-06（网页版多节点与取答案）· 有 Key 的 official 复跑\n\n**历史原文（2026-09-27 基线 · ⛔ 保留不删；其中 Pydoll / M7B 段落已 📦 退场）**\n\n**当前基线（2026-09-27）**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS（V-11/V-12 随 PB-09）\n- graph_selftest: 110 通过 / 0 失败\n- exec_selftest: 251 通过 / 0 失败（执行器 + 运行信息 + 归档 + 配置表 / L4 断言）\n- provider_selftest: 50 通过 / 0 失败（--provider-dump 21 条：official 9 / web 12）\n- run_selftest: PASS（离线 3/5 为预期）· run_selftest_web: PASS（5/5；官网侧会话失效见 PB2-25）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n- docs_links: python vcpkg-cache/check_links.py → broken 0\n\n**M7（2026-09-27 落地）**\\n- 图片格式按内容嗅探（不看扩展名）+ 本地解码 stb/WIC 双后端 + 可操作报错；诊断：`api_probe --image-decode <路径>`\\n- 删图片输出节点（N-09）：节点 9→8\\n- **冻结区（I17）**：不得把合成/截断/未识别格式数据交给 WIC（曾致 CRT 断言崩溃，退出码 3）；见 source/README.md §4.2 / §6.1\\n\\n**M7 第二轮 P7（2026-09-27 会议决议 D1–D9 · 计划中，未开工）**\\n- P7-a（v0.5.2）：图片端口 variadic 多图（I19）+ 统一资源目录 + official 收口（超限拒 / 体积与耗时 / 错误分类）+ UI A 档\\n- P7-b（v0.5.3 待确认）：网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件（先做 P7b-01~05 前置验证，未过则回滚；方案 B′ 2026-09-29：网页版图片理解首个目标站 = 豆包 doubao-web，P7b-05b 只读侦察先行（上传入口 4 类 + 纯图无字视觉判别），审核通过后才动管道 M7B-02/04）\\n- 新增不变量 I18（无上传证据不得自动发送）/ I19（image 端口语义向后兼容）；开口项 Q1–Q8 见 M7.md §17\\n\\n**M7 第三轮 M7B（2026-09-28 立项 · 计划中未开工）**\n- 网页通道整体迁 Pydoll：WebView2 退场（source/ 内 17 文件 ≈184 处）+ 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态（~/.brain-ai/pydoll-profile）\n- 作废不变量 I2（不再承诺无参 CLI 逐字不变）→ 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2 / 保留字 --provider auto）/ I21（不静默降级）/ I22（流式降级标记非流式）；I15 → I15′（证据源改 CDP Cookie）；I16 升级为全局\n- 破坏性变更（计划）：--web-chat / --login-selftest 需 --provider；--web-probe 废弃；老用户需重新登录一次\n- 任务：前置验证 M7B-01~08 + 6 批 M7B-10~M7B-41（先建后拆，批 5 才删 WebView2）；基线 --exec-selftest 先降后升（删 VB2-17 前半 / VB2-25①③④，新增 VB2-28~VB2-36）\n- 计划全文：docs/actionPlan/M7B.md（WebView2 接触面 17 文件 ≈184 处清单见其 §1.3）｜ **阶段 0 已完成（2026-09-28）**：批 0 基线复测（exec 251/0 · graph 110/0 · provider 50/0 · run-selftest(--web) PASS · 断链 265/0）+ Pydoll 2.27.0 环境就绪（.venv 冒烟通过）+ 回滚锚点 pre-m7b 已推送；**仍未开工**\n\n**主要风险 / 待办**\n- 会话失效（40002/401/40003）缺界面引导（PB-07 / PB2-25）\n- 11 条内置站点仍缺 answer_selector（需人工登录一次 + 发一条消息 → PB2-29）\n- 流式数据源受 httplib 限制（PB-03/08 暂停 · D-31 待拍板）\n- 未接配置字段仍无效果（PD-03 / FEA-M6-01）\n- 补丁系列剩余项统一见 docs/actionPlan/M_patchAB_rest.md",
     "version": "1790614496988"
   }
 }
