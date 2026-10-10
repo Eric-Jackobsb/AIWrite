@@ -20,7 +20,7 @@ import sys
 from typing import Any, Dict, Optional, Tuple
 
 # ---- 跨语言常量（与 C++ `utils/paths.h::pydoll_profile()` / `M7B.md` §6.2 同值）----
-#  * 改动此处必须同步 `source/src/utils/paths.cpp`（step 5 落地后在 C++ 侧自检里复验）
+#  * 改动此处必须同步 `source/utils/src/paths.cpp`（step 5 落地后在 C++ 侧自检里复验）
 PROFILE = pathlib.Path.home() / ".brain-ai" / "pydoll-profile"
 #  * `--window-size` 写死：视口尺寸决定 DOM 形态（`P4`，B1 教训；与 `M7B-28` 同源）
 WINDOW_SIZE: Tuple[int, int] = (1440, 1000)

@@ -1,6 +1,6 @@
-#include "nodes/nodes.h"
+#include "nodes.h"
 
-#include "engine/executor.h"
+#include "executor.h"
 
 namespace aiwrite::nodes {
 

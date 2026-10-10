@@ -1,7 +1,7 @@
 // =============================================================================
 //  send_chain_test.js —— PW-07f「真实发送链路」行为夹具（prepare → CDP 输入 → 回执 → 兜底点击）
 //
-//  做什么：从源码 `source/src/ai/dom_web_client.cpp` **抽取真实的**三个页面脚本
+//  做什么：从源码 `source/ai/src/dom_web_client.cpp` **抽取真实的**三个页面脚本
 //          （`kPrepareScript` / `kSendVerifyScript` / `kClickSendScript`）+ 两个真判据常量
 //          （`kAnswerPoolSelector` / `kInputPoolSelector`），在 node 里用**迷你 DOM** 真跑，
 //          断言：
@@ -39,7 +39,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CPP = path.join(__dirname, '..', 'src', 'ai', 'dom_web_client.cpp');
+const CPP = path.join(__dirname, '..', 'ai', 'src', 'dom_web_client.cpp');
 const SRC = fs.readFileSync(CPP, 'utf8');
 
 // --------------------------------------------------------- 抽取（源码即真相）----

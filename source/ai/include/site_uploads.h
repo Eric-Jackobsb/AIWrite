@@ -3,13 +3,13 @@
 // ============================================================================
 //  每站上传单元的**入口声明**（M8-14）
 //
-//  * 每个站点 = 一个 `.cpp`（`ai/upload/sites/site_upload_<站>.cpp`），只导出**一个**入口
+//  * 每个站点 = 一个 `.cpp`（`ai/<站>/site_upload_<站>.cpp`（例 `ai/doubao/site_upload_doubao.cpp`）），只导出**一个**入口
 //  * 新增站点三步：① 新建该 .cpp ② 在本文件加一行声明 ③ 在 `upload_registry.cpp` 的
 //    `site_uploads()` 里挂上（并把 `web.upload_adapter` 写进 providers.json 的该条目）
 //  * 本文件**不含任何站点知识**（站点常量在各自的 .cpp 里 —— `I14`）
 // ============================================================================
 
-#include "ai/upload/upload_contract.h"
+#include "upload_contract.h"
 
 namespace aiwrite::ai {
 

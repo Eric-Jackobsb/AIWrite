@@ -1,0 +1,95 @@
+{
+  "_doc": [
+    "站点能力「实测证据」台账（TST-L05 · 站点状态台账的唯一人工维护点）。",
+    "用途：loop_verify.ps1 -StatusOnly / 每轮循环结束后，与 providers.json（声明：capabilities.vision / web.upload_adapter / verified）合并，生成『文字理解 / 图片理解』两列。",
+    "口径（I18 · PB2-26）：只写「真机实测过」的结论 + 物证指针 + 日期；没测过就写 false，不许写推测值。",
+    "两列的含义是【链路】不是【模型强弱】：文字理解 = 「文本 → 取回文本」真机通过（S3 三口径）；图片理解 = 「图片 → 取回文本」真机通过（上传双证据 + 取回正文）。",
+    "优先级：tested=true 归本台账；tested=false 只作说明，不覆盖 build/loop/*/report.json 里已实测出的『可用（匿名）』（轮次物证优先）。",
+    "冲突规则：tested=true 而 providers.json 的同名声明为假（如 vision=false）⇒ 台账输出『⚠ 声明未回填』（例：deepseek 官方 API 图片理解已实测通过，但条目 vision 仍是 false，见 M7-09 / M7-10）。",
+    "机器读版快照：build/loop/SITE_STATUS.json（易失，可由各轮 report.json 重建）；人读薄表：docs/loop_dev.md §2.2 的哨兵块（脚本回写，人工只审阅）。"
+  ],
+  "_legend": {
+    "tested_true": "有真机物证（evidence 必填）",
+    "tested_false": "无真机物证（why 说明缺什么）"
+  },
+  "deepseek": {
+    "text":  { "tested": true,  "evidence": "M7-09 实测（用户验证）+ providers.json verified=true", "date": "2026-09-29" },
+    "image": { "tested": true,  "evidence": "app.log 2026-09-29 01:03 · 模型 deepseek-flash · HTTP 200（759 字节）· 官方 API 真视觉（M7-10 剩声明回填）", "date": "2026-09-29" }
+  },
+  "deepseek-web": {
+    "text":  { "tested": true,  "evidence": "--web-chat 正文正确（网页版协议实测记录 §4 · builtin:deepseek）", "date": "2026-09-26" },
+    "image": { "tested": false, "why": "无 web.upload_adapter；§8.2 推断无真视觉、入口待实测" }
+  },
+  "zhipu": {
+    "text":  { "tested": true,  "evidence": "providers.json verified=true · 官方 API 文本链路已实测", "date": "2026-09-29" },
+    "image": { "tested": true,  "evidence": "E-02 真跑（智谱 glm-4v-flash · 图片理解节点）", "date": "2026-09-29" }
+  },
+  "siliconflow": {
+    "text":  { "tested": false, "why": "无 Key 实测（providers.json verified=false）" },
+    "image": { "tested": false, "why": "声明 vision=true 但未实测" }
+  },
+  "ollama": {
+    "text":  { "tested": false, "why": "本地服务未实测（verified=false）" },
+    "image": { "tested": false, "why": "声明 vision=true 但未实测" }
+  },
+  "openrouter": {
+    "text":  { "tested": false, "why": "无 Key 实测（verified=false）" },
+    "image": { "tested": false, "why": "声明 vision=true 但未实测" }
+  },
+  "openai": {
+    "text":  { "tested": false, "why": "无 Key 实测（verified=false）" },
+    "image": { "tested": false, "why": "声明 vision=true 但未实测" }
+  },
+  "anthropic": {
+    "text":  { "tested": false, "why": "protocol=anthropic 本版本未实现（选中即明确报错）" },
+    "image": { "tested": false, "why": "协议未实现 ⇒ 不可用" }
+  },
+  "gemini": {
+    "text":  { "tested": false, "why": "protocol=gemini 本版本未实现（选中即明确报错）" },
+    "image": { "tested": false, "why": "协议未实现 ⇒ 不可用" }
+  },
+  "custom-official": {
+    "text":  { "tested": false, "why": "未填 api_base（条目为占位）" },
+    "image": { "tested": false, "why": "待 base + Key" }
+  },
+  "kimi-web": {
+    "text":  { "tested": true,  "evidence": "R1 rc=0 + n3=done（VA-07 修复后）· SMOKE9 站侧限流（busy 串，非代码缺陷）", "date": "2026-10-09" },
+    "image": { "tested": false, "why": "web.upload_adapter=builtin:kimi 已接，但 attach_selector 仍是待侦察占位（M8-14 / 协议记录 §10.3）" }
+  },
+  "qwen-web": {
+    "text":  { "tested": false, "why": "S2 环境级失败（页面未就绪）⇒ S3 未跑" },
+    "image": { "tested": false, "why": "无 web.upload_adapter" }
+  },
+  "chatglm-web": {
+    "text":  { "tested": true,  "evidence": "R1 rc=0 + n3=done（开轮即绿）", "date": "2026-10-09" },
+    "image": { "tested": false, "why": "无 web.upload_adapter" }
+  },
+  "doubao-web": {
+    "text":  { "tested": true,  "evidence": "R1 修复 VA-07 后 rc=0 + n3=done", "date": "2026-10-09" },
+    "image": { "tested": true,  "evidence": "B3 真视觉（256×256 纯红 → 描述正确）+ upload_adapter=builtin:doubao 双证据 PASS（协议记录 §8.3/§9/§10.2）", "date": "2026-10-02" }
+  },
+  "yuanbao-web": {
+    "text":  { "tested": true,  "evidence": "T-L19 / T-L21 实测 n3=done + 归档正文为真答案（383 / 505 码点）· T-L17 曾取到站侧内部码 CONFLICT_LOG（12 字节假成功）⇒ PW-07m 修", "date": "2026-10-10" },
+    "image": { "tested": false, "why": "无 web.upload_adapter" }
+  },
+  "ernie-web": {
+    "text":  { "tested": true,  "evidence": "T-L20（2799 字节）/ T-L23（3247 字节）实测 n3=done + 归档正文为成篇续写 · T-L17/T-L18/T-L19 曾取到站侧「推荐追问」外壳与提示词派生短句列表 ⇒ PW-07o/p（T-L23 亦见「外壳剔 1」PW-07q 起效）· 残余：正文尾部仍带一行站点追问（待「尾随装饰行裁剪」独立议题）", "date": "2026-10-10" },
+    "image": { "tested": false, "why": "无 web.upload_adapter" }
+  },
+  "spark-web": {
+    "text":  { "tested": false, "why": "S2 需登录（输入候选 0 + 登录控件 ×2）⇒ S3 未跑" },
+    "image": { "tested": false, "why": "无 web.upload_adapter" }
+  },
+  "chatgpt-web": {
+    "text":  { "tested": false, "why": "S2 环境级失败（页面未就绪）⇒ S3 未跑" },
+    "image": { "tested": false, "why": "无 web.upload_adapter" }
+  },
+  "claude-web": {
+    "text":  { "tested": false, "why": "S2 环境级失败（条目跳 /login）⇒ S3 未跑" },
+    "image": { "tested": false, "why": "无 web.upload_adapter" }
+  },
+  "gemini-web": {
+    "text":  { "tested": true,  "evidence": "T-L16 实测（PW-07j/k 取答归属修复后）n3=done + 归档正文 431 字节真答案 · T-L23 复测干净真答案（`div#model-response-message-content*`，172 字节，无 `You said/Gemini said` 外壳）· T-L22 曾取到 `infinite-scroller.chat-history` 外壳 ⇒ PW-07q 修（T-L21 归档缺 n3/n4 ⇒ 正文自检退化，见 loop_dev §10.1）", "date": "2026-10-10" },
+    "image": { "tested": false, "why": "无 web.upload_adapter" }
+  }
+}

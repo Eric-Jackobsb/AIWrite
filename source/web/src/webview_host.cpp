@@ -1,8 +1,8 @@
-#include "web/webview_host.h"
+#include "webview_host.h"
 
-#include "utils/log.h"
-#include "utils/paths.h"
-#include "web/session_store.h"
+#include "log.h"
+#include "paths.h"
+#include "session_store.h"
 
 #include <windows.h>
 
@@ -2054,7 +2054,8 @@ bool peek_page_state(const LoginRequest& site_request, WebPageState* out, std::s
     try {
         const nlohmann::json parsed = nlohmann::json::parse(raw);
         out->url                  = parsed.value("url", std::string());
-        out->ready_state_complete = parsed.value("ready_state", std::string()) == "complete";
+        out->ready_state          = parsed.value("ready_state", std::string());
+        out->ready_state_complete = out->ready_state == "complete";
         out->composer_hits        = parsed.value("composer_hits", 0);
         out->file_inputs          = parsed.value("file_inputs", 0);
         return true;
@@ -2088,6 +2089,14 @@ int wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std::
     }
 
     int reached = kReadyNone;
+
+    // 观测缓存（2026-10-10 · 循环开发 `T-L06` 诊断补充）：失败时把**实时页面事实**写进 error
+    //  * 动机（真机）：`gemini-web` / `spark-web` 只报「页面未就绪（缺 页面级）」——
+    //    而「readyState 未完成」与「实时 URL 已不在目标站点（登录墙 / 反爬跳转）」是**两种病**，
+    //    没有实时事实 ⇒ 只能记「环境级 · 未定」，无法定性（[loop_dev](../../docs/loop_dev.md) §5.1 第③行）
+    WebPageState last_state;
+    bool         have_state       = false;
+    std::string  last_probe_error;
 
     // ---- L1 窗口级 ----
     if (!window_on_site(site)) {
@@ -2130,6 +2139,8 @@ int wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std::
         WebPageState state;
         std::string  why;
         if (peek_page_state(site_request, &state, &why)) {
+            last_state = state;   // 诊断缓存：无论达标与否都留最新事实
+            have_state = true;
             if ((reached & kReadyPage) == 0 && state.ready_state_complete &&
                 site_key_of(state.url) == site) {
                 reached |= kReadyPage;
@@ -2152,11 +2163,24 @@ int wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std::
                 return reached;
             }
         }
+        else {
+            last_probe_error = why; // 连状态都读不到（脚本未执行 / 页面无文档）⇒ 也是事实
+        }
         ::Sleep(200);
     }
 
     if (error != nullptr) {
         *error = tag + " " + ready_missing_text(need, reached);
+        // 诊断附加（2026-10-10）：把**实时页面事实**如实贴上 —— 判「等一等」还是「先登录」
+        if (have_state) {
+            *error += ready_detail_text(last_state.url, last_state.ready_state, last_state.composer_hits);
+        }
+        else {
+            *error += "｜实时页面：**取不到页面状态**" +
+                      (last_probe_error.empty() ? std::string() : ("（" + last_probe_error + "）"));
+        }
+        log::warn(tag + " 就绪失败（" + std::to_string(need) + " 位需求 / 已达 " +
+                  std::to_string(reached) + "）：" + *error);
     }
     return reached;
 }

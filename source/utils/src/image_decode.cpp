@@ -1,4 +1,4 @@
-#include "utils/image_decode.h"
+#include "image_decode.h"
 
 #include <cctype>
 #include <cstring>

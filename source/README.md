@@ -16,7 +16,11 @@ AIwrite/
 │   ├── aiwrite.slnx            可用 Visual Studio 2026 直接打开
 │   └── bin/                    产物：aiwrite.exe / api_probe.exe / webview2_login.exe
 ├── source/                     工程根（CMakeLists.txt 所在）
-│   ├── src/                    main.cpp、ui/、engine/、utils/（nodes/、ai/ 为 M4/M5）
+│   ├── ai/ engine/ nodes/ ui/ utils/ web/
+│   │                             ★ **每个模块自带 src/ + include/**（2026-10-09 · FEA-L05 起）
+│   │                             ├─ src/     .cpp 实现；`ai/src/<站点>/`（deepseek/、doubao/、kimi/）= **站点专属只在这里**
+│   │                             └─ include/ 该模块的头文件（**拍平**；引用写裸名：`#include "log.h"`）
+│   ├── app/src/main.cpp        程序入口（无头文件 ⇒ `app/` 只有 `src/`）
 │   ├── tools/                  api_probe.cpp（V-04/05/06 + 图模型自检）、webview2_login.cpp（V-03）
 │   ├── ports/                  overlay port（nativefiledialog-extended 1.3.0；vcpkg 快照缺此包）
 │   ├── third_party/            imgui-node-editor v0.9.3（源码集成 + 最小补丁）
@@ -54,7 +58,7 @@ AIwrite/
 ## 3. 构建（三选一）
 
 **① VS Code 任务（推荐）**：`Ctrl+Shift+B` 执行默认任务 **build**；`F5` 会先自动构建再调试；
-`Terminal → Run Task` 还有：`build (release)`、`build: 重新配置`、`vcpkg: 安装/更新依赖`、`run: aiwrite`、`verify: api_probe 自检`、`log: 查看 app.log`。
+`Terminal → Run Task` 还有：`build (release)`、`build: 重新配置`、`vcpkg: 安装/更新依赖`、`run: aiwrite`、`verify: api_probe 自检`、`log: 查看 app.log`、`log: 查看最新构建日志`。
 
 **② 命令行（无需任何开发者环境）**：
 
@@ -62,9 +66,22 @@ AIwrite/
 cd F:\GameDao\Tools\AIwrite\source
 .\build.ps1                      # Debug（默认）
 .\build.ps1 -Config release      # RelWithDebInfo
-.\build.ps1 -Reconfigure         # 清空 build 后重新配置
+.\build.ps1 -Reconfigure         # 清空 build 后重新配置（保留 build/logs/）
 .\build.ps1 -Target aiwrite      # 只编译主程序
+.\build.ps1 -LogName my.log      # 自定义日志文件名（仍落 build/logs/）
+.\build.ps1 -NoLog               # 本次不写日志
 ```
+
+**构建日志统一落 `build\logs\`（2026-10-09 起）**：`build.ps1` 把**整段输出**（`dev.ps1` 信息 + `cmake` / MSBuild 原生输出 + 成功/失败汇总）逐行写入
+
+```
+F:\GameDao\Tools\AIwrite\build\logs\build_<config>_<yyyyMMdd_HHmmss>.log      # UTF-8 无 BOM，一次构建一个文件
+```
+
+- **不再散落在仓库根**（2026-10-09 迁移：仓库根 15 个 `build_*.log` + `build\loop_build_b2.txt` + `.venv\m7b_smoke.log` 一次性移入 `build\logs\`）；`build\` 已被 `.gitignore` 整体忽略 ⇒ **日志不入库**。
+- `cmake` 的原生输出**同时**留在命令 stdout ⇒ `& .\build.ps1 > x.log` 重定向与 VS Code 任务的 `$msCompile` 问题匹配器照常工作（`[build]` 汇总行经 `Write-Host`，只上面板不进 stdout —— 与改动前一致）。
+- 看最新一份：VS Code 任务 **`log: 查看最新构建日志`**，或 `Get-ChildItem build\logs\*.log | Sort-Object LastWriteTime | Select-Object -Last 1`。
+- 实现缘由（踩坑留痕）：PS 5.1 的 `Tee-Object` **没有 `-Encoding`** 且默认写 **UTF-16LE**，直接 `| Tee-Object -FilePath` 会把日志写成 UTF-16 ⇒ 脚本改用 `StreamWriter`（UTF-8 无 BOM）。
 
 等价的纯 CMake 命令（脚本只是帮你设好 vcpkg 环境变量）：
 
@@ -92,7 +109,30 @@ cmake --build --preset release   # 编译 RelWithDebInfo
 cd F:\GameDao\Tools\AIwrite\build\bin
 .\aiwrite.exe                  # 主程序（停靠界面 + 节点画布 + Console + 工作流信息）
 .\aiwrite.exe --console        # 额外分配控制台，日志同时输出到 stdout
+.\aiwrite.exe --open "F:\GameDao\Tools\AIwrite\source\workflows\testAllAI.json"
+                               # 启动即打开指定工作流（默认用内置示例工作流；失败只 WARN 并回退）
+                               # 用途：①命令行 / 文件关联直接打开；②性能复现固定成一条命令（见下）
 ```
+
+**画布性能诊断行（2026-10-09 · 个位数 FPS 事故后新增）**：主循环每 2 秒往
+`%USERPROFILE%\.brain-ai\logs\app.log` 写一行 `[诊断] 画布 …`，形如
+
+```
+[诊断] 画布 节点=85 连线=84 缩放=1.33 帧=120 FPS=60 宽度重算=0.0ms/帧 节点循环=4.3ms/帧 连线自检=0.2ms/帧
+       | 纹理 近2.0s: 请求=1089 命中=1089 未命中=0 解码=0 上传=0 淘汰=0（每帧请求 9.0 次 / 解码 0.0 次）缓存 9/64 条 30.9MB
+```
+
+```powershell
+# 复现 / 复核（GUI 子系统：用 Start-Process 起，读 app.log）
+$log="$env:USERPROFILE\.brain-ai\logs\app.log"; $before=(Get-Item $log).Length
+Start-Process .\aiwrite.exe -ArgumentList '--open','F:\GameDao\Tools\AIwrite\source\workflows\testAllAI.json'
+Start-Sleep 16; Stop-Process -Name aiwrite -Force   # 随后读 $log 从 $before 起的增量
+```
+
+**判据**：稳态应是「`解码=0.0 次/帧`」+「`缓存 N/M` 的 N 稳定」+「`FPS≈60`」。
+若出现 `[画布] 纹理缓存**整周期 0 命中**` WARN ⇒ **同屏图片卡片数 > 纹理缓存容量**（或图片文件每帧都在变），
+必然每帧重解码 ⇒ 掉到个位数 FPS。处置：`ui/texture_cache.h` 的 `set_texture_capacity()` / `set_texture_byte_budget()`
+（默认 64 条 / 256 MB，且本帧用过的条目不会被淘汰）。
 
 M1 验证工具：
 
@@ -140,7 +180,7 @@ M1 验证工具：
                               # 【step 9 换代】选择器**命中数**诊断（只读）：**已走新通道（Pydoll）**
 .\api_probe.exe --selftest                  # V-04 HTTP + V-05 SHA3 自检
 .\api_probe.exe --graph-selftest            # 图模型/注册表/撤销栈/序列化 自检（110 项断言，无需网络）
-.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 + 图片解码 自检（425 项断言，无需网络；2026-10-08 实测）
+.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 + 图片解码 自检（452 项断言，无需网络；2026-10-09 实测）
 .\api_probe.exe --image-decode D:\a.webp   # 图片诊断：内容嗅探 / MIME / 解码(stb|wic) / 尺寸 / WIC 能力（M7）
 .\api_probe.exe --sha3 "abc"                # 单次 SHA3-256
 $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 Key）
@@ -176,35 +216,74 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 画布设置文件 `~/.brain-ai/node_editor.json` 保存节点坐标与视图；若被写坏会导致 CPU 打满 + 界面无响应，
 程序启动时会自动校验并备份为 `node_editor_bad_<时间>.json` 后重建（详见 `docs/节点编辑器使用说明.md` §9）。
 
+### 4.0 M6（非技术用户可安装化）：设置面板 / 诊断 / 依赖自检 / 一键自测 / 打包（2026-10-10）
+
+```powershell
+# —— 主程序内的新入口（GUI，纯鼠标）——
+#   菜单「文件 → 设置…」         = 设置面板（`config.toml` 可调项；「保存」才落盘，原文件自动备份 `.bak`）
+#   菜单「帮助 → 复制诊断信息」  = 一键把环境报告复制到剪贴板（版本/系统/依赖/路径/配置/站点表；**不含密钥**）
+#   菜单「帮助 → 首次使用引导」  = 重开三步引导（首次启动自动弹一次，可跳过；走过就写 `[ui] first_run_done`）
+#   菜单「帮助 → 打开日志目录 / 打开数据目录」
+
+# —— 诊断与依赖（控制台工具：stdout 可直接重定向）——
+.\build\bin\api_probe.exe --diag-dump        # 打印诊断报告（8 分节）
+.\build\bin\api_probe.exe --diag-assert      # 诊断报告离线断言（单行 PASS/FAIL；exit 0/1）
+.\build\bin\api_probe.exe --dep-check        # 依赖自检：Edge WebView2 运行时（缺失时打印安装指引；exit 0/1）
+.\build\bin\api_probe.exe --settings-assert  # 设置面板校验纯函数断言（默认通过 + 越界 8 例全拦截；exit 0/1）
+
+# —— 一键跑完所有离线自检（构建 + 8 项自检/夹具 + 站点台账重建）——
+powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1
+#   参数：-SkipBuild / -SkipGui / -SkipLoop / -OnlyBuild；打印汇总表 + exit 0/1
+#   物证：build\logs\check_all_<时间戳>.log（各项明细与 build 输出同目录）
+
+# —— 打包「一键安装包」（Inno Setup · `M6-08`）——
+powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [-Version 0.2.0] [-SkipBuild] [-SkipInstaller]
+#   ① 构建 → ② 收集 payload `build\dist\payload`（**Python 摘钩断言**：payload 内 `*.py` 必须为 0）
+#   → ③ 调 `ISCC.exe` 编译 `packaging\aiwrite.iss` → 产出 `build\dist\AIwrite-Setup-<版本>.exe`
+#   退出码：0 = payload + 安装包都成功 ｜ 2 = 只完成 payload（未装 ISCC，已打印获取方式）｜ 1 = 失败
+#   ⚠ 本机 2026-10-10 **未编译验证**（无 ISCC 且 winget 无网络 `0x80072efd`）；payload 阶段与
+#     `.iss ↔ payload` 一致性锁（4 条 Source 通配逐条核对）已实测 —— 见 `docs/CHANGELOG.md` `[Unreleased]`
+#   ⚠ 附带 WebView2 Bootstrapper（`PQ-02`）为**可选件**：把 `MicrosoftEdgeWebview2Setup.exe` 放进
+#     `packaging\webview2\` 即随包；没有则该行 `skipifsourcedoesntexist` 静默跳过（见该目录 README）
+
+# —— M6 新增配置键 / 新接线项 ——
+#   [ui] first_run_done            = false  # 首启引导是否已看过（**缺键 = false** ⇒ 老用户也会看一次，可跳过）
+#   [output] auto_open_on_complete = false  # ✅ **已接线**：归档成功后用资源管理器打开本次归档目录
+#   [advanced] log_ttl_days        = 30     # ✅ **已接线**：启动清理 logs/ 下超期日志（app.log / workflow.log 永不删）
+#   ⇒ `unwired_config_fields()` 由 6 项降为 **4 项**（余 `ui.grid_size` / `timeout.*` / `error.*` / `providers.deepseek.*`）
+```
+
 ### 4.1 网页版登录与多站点（2026-09-26 已支持 · ⚠️ **当前仍走 WebView2**，Pydoll 版见 §4.3）
 
 - **站点身份按「生效条目」**：登录页 / 窗口标题 / 探测路径 / Cookie 名全部取自条目的 `web.*`
-  （`src/web/webview_host.h` 的 `interactive_login_request(site,id)` 等）；无参重载 = 旧常量（逐字一致，兼容保留）。
+  （`web/include/webview_host.h` 的 `interactive_login_request(site,id)` 等）；无参重载 = 旧常量（逐字一致，兼容保留）。
   ✅ **已落地（v9 · `D-22②` + `D-26`）**：**站点不再回落** —— 条目不是网页版条目（或表外 id / `web.login_url` 为空）时，站点区给**错误块 + 三条引导**（开窗按钮禁用）、运行前校验提示「**本次运行必定失败**」（**不阻断**）、运行期直接 `NodeError`；适配器未实现（如 `dom`）→ 运行期**明确报错**（可登录 / 可探测，生成待 L3）。不变量 `I14`。
-- **加一个网页版站点**：把 `{"schema_version":1,"providers":[ … ]}` 写进 `~/.brain-ai/providers.d/<id>.json` 并**重启**（无 reload 入口 —— `PB2-24`）；`web` 段用**嵌套** `send{kind,value}` / `done_when{kind,selector}` —— 实测可用样例见 [../docs/actionPlan/M_patchAB_rest.md](../docs/actionPlan/M_patchAB_rest.md) **附录 D**（现行版本）。
-- **内置站点入口（v10 / `PB2-26`）**：配置表已内置 **11 个 AI 的网页版登录入口**（Kimi / 通义千问 / Qwen 国际站 / 智谱清言 / 豆包 / 腾讯元宝 / 文心一言 / 讯飞星火 / ChatGPT / Claude / Gemini）+ 原有 `deepseek-web`；条目为**登录型**（只配 `login_url` + `window_title`）：**能登录 / 能探测**，**生成**需先补齐选择器（DOM 执行器 L3 v11 **已就绪**；选择器由 L4 `PB2-29` 逐站实测回填）→ 未填时点运行会**明确报错**（不静默、不回落 DeepSeek）。完整清单见 [../docs/actionPlan/M_patchAB_rest.md](../docs/actionPlan/M_patchAB_rest.md) **附录 E**（现行版本）。
-- **L3（v11）：DOM 适配器已接线**（`src/ai/dom_web_client.{h,cpp}`）—— 条目补齐 **`web.input_selector` / `web.send` / `web.answer_selector`**（+ 建议 `web.done_when`）**重启即真正生成**（写入提示词 → 自动发送 → 轮询取答案；到上限/超时**如实返回已取文本 + 警告**）；不要求内存 `userToken`（登录态在浏览器 profile）；选择器不会写就用 **`--web-adapter-selftest --provider <id>`**（只读命中数 + 修复建议）。站点 = 纯数据，**无需改 C++**。
+- **加一个网页版站点**：把 `{"schema_version":1,"providers":[ … ]}` 写进 `~/.brain-ai/providers.d/<id>.json` 并**重启**；`web` 段用**嵌套** `send{kind,value}` / `done_when{kind,selector}` —— 实测可用样例见 [../docs/actionPlan/M_patchAB_rest.md](../docs/actionPlan/M_patchAB_rest.md) **附录 D**（现行版本）。
+  * **配置表重新加载入口（2026-10-10 · `M6`）**：设置面板 → 「提供商与站点表」→ 「**重新加载配置表**」会调 `ai::reload_provider_specs()`（`utils`/`ai` 侧只加载表，参数面板每帧按当前表渲染）⇒ **不必重启**即可看到新条目计数与摘要。
+  * ⚠ **仍未收口**（`PB2-24`：自建站点**闭环** = 新增站点 → 节点/参数即时可用 → 真机逐站验证，`RM-D4` 必做项）—— 本批只落地了「手动 reload 入口」，**闭环未验证**。
+- **内置站点入口（v10 / `PB2-26`）**：配置表已内置 **10 个 AI 的网页版登录入口**（Kimi / Qwen 国际站 / 智谱清言 / 豆包 / 腾讯元宝 / 文心一言 / 讯飞星火 / ChatGPT / Claude / Gemini）+ 原有 `deepseek-web`；条目为**登录型**（只配 `login_url` + `window_title`）：**能登录 / 能探测**，**生成**需先补齐选择器（DOM 执行器 L3 v11 **已就绪**；选择器由 L4 `PB2-29` 逐站实测回填）→ 未填时点运行会**明确报错**（不静默、不回落 DeepSeek）。完整清单见 [../docs/actionPlan/M_patchAB_rest.md](../docs/actionPlan/M_patchAB_rest.md) **附录 E**（现行版本）。
+- **L3（v11）：DOM 适配器已接线**（`ai/src/dom_web_client.cpp` + `ai/include/dom_web_client.h`）—— 条目补齐 **`web.input_selector` / `web.send` / `web.answer_selector`**（+ 建议 `web.done_when`）**重启即真正生成**（写入提示词 → 自动发送 → 轮询取答案；到上限/超时**如实返回已取文本 + 警告**）；不要求内存 `userToken`（登录态在浏览器 profile）；选择器不会写就用 **`--web-adapter-selftest --provider <id>`**（只读命中数 + 修复建议）。站点 = 纯数据，**无需改 C++**。
 - **L4（v12 · 文档先行，代码待 `B2-e`）：登录层去 DeepSeek 化 + 站点数据落地 + 自助闭环** —— ①**登录态判据站点无关**（`web_session_state()` 纯函数：按该 origin 的 Cookie / `cookie_names` 判，**不看** `userToken`；`userToken` 行仅当条目配了 `token_expr` 才显示）②**探测「不适用」语义**（条目未配 `probe_paths` / `token_expr` / `endpoints` 时不再注入 DeepSeek 端点 → 只读诊断分支；`deepseek-web` 与无参路径**逐字不变**）③**内置站点选择器逐站实测回填**（`--web-adapter-selftest --provider <id>` → 填条目 → `verified:true`）④**自建站点 UI 闭环**（新建条目 / **重新加载配置表** / 测试选择器；`PB2-24` 并入）。计划：**现行** [../docs/actionPlan/M_patchAB_rest.md](../docs/actionPlan/M_patchAB_rest.md) §2.2 / §3.3–§3.5（承接 `PB-07` / `PB2-25` / `PB2-29` / `PB2-30②` / `PB2-24`）；历史 §9.7 见归档 [../docs/Archive/actionPlan/M_patchB.md](../docs/Archive/actionPlan/M_patchB.md)。
 
-- **「模式」下拉恒两项**（`src/engine/provider_resolve.cpp` 的 `provider_mode_options`）：`official` / `web` **始终可选**
+- **「模式」下拉恒两项**（`engine/src/provider_resolve.cpp` 的 `provider_mode_options`）：`official` / `web` **始终可选**
   （决策 `D-21`：**网页版与官方 API 同等优先级**，**不按条目 `kind` 裁剪**）；切换「提供商」只带出**建议值**
   （网页版条目建议 `web`、官方条目建议 `official`），不一致时给橙色**提示**：非网页版条目 + `web` → 用内置默认站点；
   网页版条目 + `official` → 该条目没有官方 API 通道（按表内 `api_base` 解析，缺失则明确报错）。
   > ✅ **已修复（2026-09-26 · 任务 `PB2-20`）**：候选**恒两项**、`kind` 与 `mode` 不一致**只提示不改写**（守 `I13`）；
   > 参数面板 / 运行前校验改按 `resolve_display_provider()`（**该节点自身条目**）解析 —— 站点条目 / 登录页 / 提示不再误回落 DeepSeek（`VB2-18②③`）。
-- **会话按站点键控**（`src/web/session_store.h`，`site_key_of()` = origin）：`std::map<站点, Session>`，
+- **会话按站点键控**（`web/include/session_store.h`，`site_key_of()` = origin）：`std::map<站点, Session>`，
   旧无键 API 保留为「默认槽」薄封装 → `--login-selftest` / `--web-probe` / `--web-chat` / `--web-session-selftest` 行为不变。
 - **窗口串行复用**：同一时刻一个登录窗口；切站点时先关旧窗再按新站点开窗（页面内 PoW 求解依赖该站点页面）。
 - **注销按站点**（`web::logout_site()`）：清该站点内存会话 + 删该 origin 的 Cookie + 清同源 `localStorage`；
   「删除整个 profile（所有站点）」在参数面板「高级」里，需二次确认。
-- 内置配置表 `assets/providers.json` 共 **21 条**（official 9 / web 12），其中 `kind=web` 为 `deepseek-web`（**唯一已填选择器、可生成**）+ **11 条登录型站点**（v10 / `PB2-26`；**L4 `PB2-29` 逐站补选择器**）
+- 内置配置表 `assets/providers.json` 共 **20 条**（official 9 / web 11），其中 `kind=web` 为 `deepseek-web`（**唯一已填选择器、可生成**）+ **10 条登录型站点**（v10 / `PB2-26`；**L4 `PB2-29` 逐站补选择器**）
   （Kimi 等站点已作为**登录型条目**内置，不再是「仅模板」）；要接入**新**站点，把站点 JSON 放进
   `~/.brain-ai/providers.d/`（照 `_example_web_dom` 抄）。
 - **`config.toml` 多 provider 实例参数**（PB2-06）：`[providers.<id>]` 可多节（`deepseek` 旧节自动迁移，幂等）；
   保存前自动备份 `config.toml.bak`，写入采用 `.tmp` → 原子替换。**厂商元数据仍以配置表（JSON）为准**。
 - 计划与验收：`PB2-17`/`PB2-18`/`PB2-19`/`PB2-06`/`PB2-20`（`D-21` 修订）、`I11`/`I12`/`I13`、`AB2-13`/`AB2-14`/`AB2-15`、`VB2-16`/`VB2-17`/`VB2-18`、`R14`/`R15`/`R16`，
   见归档 [../docs/Archive/actionPlan/M_patchB.md](../docs/Archive/actionPlan/M_patchB.md)（§9「L1 收口」实测基线；**L4 立项见 §9.7**）与**现行承接** [../docs/actionPlan/M_patchAB_rest.md](../docs/actionPlan/M_patchAB_rest.md)（§3 `B2` 残项）与
-  [../docs/网页版协议实测记录.md](../docs/网页版协议实测记录.md) §7。
+  [../docs/网页版协议实测记录.md](../docs/Archive/网页版协议实测记录.md) §7。
 
 ### 4.2 图片诊断与「图片解码冻结区」（M7 · 2026-09-27）
 
@@ -229,12 +308,12 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 
 | 路径 | 实现 | 覆盖 |
 |---|---|---|
-| 发给模型（多模态） | `src/ai/deepseek_official_provider.cpp::image_mime_from_path`（**内容嗅探优先**、扩展名回退） | 只读文件字节 + 判类型，本地不解码；失败与否取决于后端 |
-| 本地预览 / 尺寸 | `src/utils/image_decode.cpp` | stb：PNG/JPEG/BMP/GIF/TGA/PSD/HDR/PNM；WIC：WebP/TIFF/ICO/JXR/HEIF/AVIF（需系统装了对应「图像扩展」） |
+| 发给模型（多模态） | `ai/src/deepseek/deepseek_official_provider.cpp::image_mime_from_path`（**内容嗅探优先**、扩展名回退） | 只读文件字节 + 判类型，本地不解码；失败与否取决于后端 |
+| 本地预览 / 尺寸 | `utils/src/image_decode.cpp` | stb：PNG/JPEG/BMP/GIF/TGA/PSD/HDR/PNM；WIC：WebP/TIFF/ICO/JXR/HEIF/AVIF（需系统装了对应「图像扩展」） |
 
 > ⇒ **本地预览失败 ≠ 模型读不到**。错误文案里会明确写这一点（「图片理解」按内容识别格式后发给模型）。
 
-**冻结区（FROZEN · 不变量 `I17`）** —— `src/utils/image_decode.cpp` 的 WIC 相关代码**冻结**，改动前必须遵守：
+**冻结区（FROZEN · 不变量 `I17`）** —— `utils/src/image_decode.cpp` 的 WIC 相关代码**冻结**，改动前必须遵守：
 
 1. **绝不把「合成 / 截断 / 未识别格式」的数据交给 WIC**。能力探测**只允许**用「解码器元数据枚举」
    （`IWICImagingFactory::CreateComponentEnumerator` + `IEnumUnknown` + `IWICComponentInfo::GetFriendlyName`）；
@@ -290,15 +369,15 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 
 | 入口 / 命令 | 现在**实际走** | 备注 |
 |---|---|---|
-| 面板「打开登录窗口（**Pydoll**）」/「关闭浏览器会话」/「按站点注销」 | **Pydoll** ⚠️ **step 11 已从 WebView2 切走** | `src/ui/property_panel.cpp`：`start_web_task(Login/Logout/Shutdown)` → `channel::login_site` / `logout_site` / `shutdown_session`（**后台线程 + 缓存状态**）·`Q4`：阻塞函数不得在 UI 线程调 |
-| ~~登录型节点 `ensure_session`~~ | **不切（订正）** | `src/nodes/local_nodes.cpp:545` 是 **`builtin:deepseek` → `web_chat()`** 的前置（要 `userToken` + PoW）⇒ **随协议栈在批 5 删除**（`M7B-42` 白名单收敛 `{dom}`）；**给它切新通道是白做**（2026-10-04 订正，原写「需单独切」有误） |
-| 网页版**文字生成**（`adapter=dom`） | **Pydoll** ⚠️ **step 10 切走 · step 15 内容路径改走 v4 命令**（`M7B-20` / `M7B-56`） | `src/ai/dom_web_client.cpp`：`channel::ensure_session` + **`channel::send_prompt`（真打字）+ `channel::read_answer`（取正文）** ⇒ **生产路径已无 `run_script`**（DOM 脚本常量降级为诊断资产）；**已断** `webview_host.h` include；会话请求 = `visible_login_request`（**有头** · step 11）；会话收尾在 `src/main.cpp` |
+| 面板「打开登录窗口（**Pydoll**）」/「关闭浏览器会话」/「按站点注销」 | **Pydoll** ⚠️ **step 11 已从 WebView2 切走** | `ui/src/property_panel.cpp`：`start_web_task(Login/Logout/Shutdown)` → `channel::login_site` / `logout_site` / `shutdown_session`（**后台线程 + 缓存状态**）·`Q4`：阻塞函数不得在 UI 线程调 |
+| ~~登录型节点 `ensure_session`~~ | **不切（订正）** | `nodes/src/local_nodes.cpp:545` 是 **`builtin:deepseek` → `web_chat()`** 的前置（要 `userToken` + PoW）⇒ **随协议栈在批 5 删除**（`M7B-42` 白名单收敛 `{dom}`）；**给它切新通道是白做**（2026-10-04 订正，原写「需单独切」有误） |
+| 网页版**文字生成**（`adapter=dom`） | **Pydoll** ⚠️ **step 10 切走 · step 15 内容路径改走 v4 命令**（`M7B-20` / `M7B-56`） | `ai/src/dom_web_client.cpp`：`channel::ensure_session` + **`channel::send_prompt`（真打字）+ `channel::read_answer`（取正文）** ⇒ **生产路径已无 `run_script`**（DOM 脚本常量降级为诊断资产）；**已断** `webview_host.h` include；会话请求 = `visible_login_request`（**有头** · step 11）；会话收尾在 `app/src/main.cpp` |
 | `--login-selftest` / `--web-probe` / `--web-chat` / `--run-selftest --web` | **WebView2**（**只有这一族仍是旧通道**） | 同上（协议栈族，批 5 退役） |
 | **`--pydoll-selftest`**（新 · step 6） | **Pydoll** | 起守护进程 → `hello` → `ready{proto=4}` → `shutdown`；**不开浏览器**；exit 0 |
 | **`--pydoll-login <id>`**（新 · step 6） | **Pydoll** | **独立** Edge 窗口 + profile `~/.brain-ai/pydoll-profile/`（WebView2 则是 `~/.brain-ai/webview2/`） |
 | **`--pydoll-script-selftest`**（新 · step 8） | **Pydoll** | **跨语言端到端**（词表 `run_script` + 本地 `file:///` 夹具）⇒ 实测 **4 / 0 · exit 0**（`proto=4`）；`run_script` 已用于诊断（`--web-dom-dump` 换代的地基） |
 | **`--pydoll-chat-selftest`**（新 · step 15） | **Pydoll** | **内容返回端到端**（`send_prompt` 真打字 + `read_answer` 取正文 + `I18` 拦截 + `attach_unsupported`）/ 本地 `file:///` 夹具 ⇒ 实测 **6 / 0 · exit 0**（`proto=4`）；验的是**生产内容路径** |
-| **`--web-dom-dump` / `--web-adapter-selftest`**（**step 9 换代**） | **Pydoll** ⚠️ **已从 WebView2 切走** | `src/ai/dom_web_client.cpp` 的两个诊断函数 → `web::channel::ensure_session` + `web::channel::run_script`（自起常驻会话 · RAII 收尾）；真站点 `kimi-web` 实测 **exit 0**（读到 `div.chat-input-editor`） |
+| **`--web-dom-dump` / `--web-adapter-selftest`**（**step 9 换代**） | **Pydoll** ⚠️ **已从 WebView2 切走** | `ai/src/dom_web_client.cpp` 的两个诊断函数 → `web::channel::ensure_session` + `web::channel::run_script`（自起常驻会话 · RAII 收尾）；真站点 `kimi-web` 实测 **exit 0**（读到 `div.chat-input-editor`） |
 
 **怎么分辨（Pydoll 底层也是 Edge，别比窗口长相）**：比 **profile 目录**（`pydoll-profile` vs `webview2`）、
 **是否独立任务栏窗口**、**是否有 `~/.brain-ai/logs/pydoll_channel_daemon.log`**。
@@ -343,9 +422,9 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 
 | 对象 | 处置 |
 |---|---|
-| `src/web/webview_host.{h,cpp}`（58 + 6 处） | **删除** → `src/web/pydoll_channel.{h,cpp}` + `web/pipe_client.{h,cpp}` |
+| `web/src/webview_host.cpp` + `web/include/webview_host.h`（58 + 6 处） | **删除** → `web/src/pydoll_channel.cpp` / `web/include/pydoll_channel.h` + `web/src/pipe_client.cpp` / `web/include/pipe_client.h` |
 | `tools/webview2_login.cpp`（60 处） | **删除** → `pydoll_login`（V-03 记录标注「已被 `M7B` 取代」） |
-| `ai/web_pow.{h,cpp}`、`ai/deepseek_web_client.cpp` 协议栈部分 | **退役**（PoW 由真实页面自行完成）—— **保留** `delta_text_of()` 与 `web_session_failure_hint()` 复用（数据源改为 CDP） |
+| `ai/src/web_pow.cpp` · `ai/include/web_pow.h`、`ai/src/deepseek/deepseek_web_client.cpp` 协议栈部分 | **退役**（PoW 由真实页面自行完成）—— **保留** `delta_text_of()` 与 `web_session_failure_hint()` 复用（数据源改为 CDP） |
 | `vcpkg.json` 的 `webview2` + `CMakeLists.txt` 的 `unofficial-webview2` | **移除**（`PM-01` WebView2 Runtime 检测**作废**；改 `M7B-14` 浏览器检测：Chrome 缺失 → Edge 兜底） |
 | `paths::webview2_profile()` | 退役 → `pydoll_profile()`（`~/.brain-ai/pydoll-profile`）；旧目录**保留为遗留、不自动删** |
 
@@ -441,26 +520,29 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 
 ## 7. 源码文件速览
 
+> **路径口径（2026-10-09 · `FEA-L05` · 现行）**：**每个模块自带 `src/` + `include/`** —— `.cpp` 在 `source/<模块>/src/**`、头文件在 `source/<模块>/include/**`（**模块内拍平**）；模块 = `ai` / `engine` / `nodes` / `ui` / `utils` / `web`；AI 专属实现按站点分目录（`ai/src/deepseek/`、`ai/src/doubao/`、`ai/src/kimi/`）；程序入口 = `app/src/main.cpp`。例：`ui/include/theme.h` ↔ `ui/src/theme.cpp`。规范全文见 [../AI_README.md](../AI_README.md) §11。
+
+
 | 文件 | 作用 |
 |---|---|
-| `src/main.cpp` | 入口：解析参数 → 初始化日志/目录 → 启动 UI |
-| `src/ui/app.cpp` | GLFW + OpenGL3 + ImGui、深色主题、中英文字体、DockSpace 布局、菜单栏、工具栏行、状态栏 |
-| `src/ui/editor_state.cpp` | 编辑器状态：唯一持有 `Graph` + `UndoStack`；创建/删除/复制/粘贴/清空/示例工作流（一律先压快照） |
-| `src/ui/node_canvas.cpp` | 节点画布：渲染 Graph（节点卡片/端口/连线/参数预览）、全部鼠标交互与三个右键菜单、视图导航 |
-| `src/ui/node_library.cpp` | 节点库面板：按分类列出 8 个节点，点击在画布中心创建 |
-| `src/ui/toolbar.cpp` | 工具栏：撤销/重做/复制/粘贴/删除选中/新建/示例 + 计数（无快捷键，纯鼠标） |
-| `src/ui/property_panel.cpp` | 参数面板：9 类参数控件 + 校验提示 + 文件/目录选择 + 密码框 |
-| `src/ui/theme.h` | 分类 / 端口类型 / 节点状态配色（设计 14.3 / 4.5 / 4.6） |
-| `src/ui/console_panel.cpp` | Console 面板（级别过滤 + 搜索 + 虚拟化 + 自动滚动，设计文档 12.4） |
-| `src/engine/graph.cpp` | 数据模型：Node/Port/Param/Edge/Graph、类型兼容矩阵、参数校验、增删与复制 |
-| `src/engine/node_registry.cpp` | 8 个 MVP 节点的注册表（类型/端口/参数/默认值与范围；M7 起 N-09 ImagePreview 已移除） |
-| `src/engine/undo_stack.cpp` | 快照式撤销/重做（深度 50） |
-| `src/utils/paths.cpp` | `~/.brain-ai` 数据目录与各子路径 |
-| `src/utils/log.cpp` | spdlog 双 sink（`app.log` 10MB×5 + 控制台）+ 内存环形缓冲（10000 条） |
-| `src/utils/config.cpp` | toml++ 读写 `config.toml`（字段与设计文档 20.2 一致，缺省自动生成） |
-| `src/utils/crypto.cpp` | SHA3-256（OpenSSL EVP，供 PoW 与自检使用） |
-| `src/utils/file_dialog.cpp` | 原生文件/目录对话框（nativefiledialog-extended，`NFD::Init/Quit` 配对） |
-| `src/utils/image_decode.cpp` | **图片格式嗅探 + 解码（M7 · 冻结区）**：魔数嗅探（内容优先）/ stb 与 WIC 双后端 / WIC 能力枚举 / 可操作错误文案 |
-| `src/utils/asset_store.cpp` | **统一资源目录（P7a-04）**：内容寻址归档 `<SHA3-256>.<ext>`（同内容一份）/ 令牌 `aiwrite-asset:<摘要>` 解析 / 缺失文案（`~/.brain-ai/assets/images/`） |
+| `app/src/main.cpp` | 入口：解析参数 → 初始化日志/目录 → 启动 UI |
+| `ui/src/app.cpp` | GLFW + OpenGL3 + ImGui、深色主题、中英文字体、DockSpace 布局、菜单栏、工具栏行、状态栏 |
+| `ui/src/editor_state.cpp` | 编辑器状态：唯一持有 `Graph` + `UndoStack`；创建/删除/复制/粘贴/清空/示例工作流（一律先压快照） |
+| `ui/src/node_canvas.cpp` | 节点画布：渲染 Graph（节点卡片/端口/连线/参数预览）、全部鼠标交互与三个右键菜单、视图导航 |
+| `ui/src/node_library.cpp` | 节点库面板：按分类列出 8 个节点，点击在画布中心创建 |
+| `ui/src/toolbar.cpp` | 工具栏：撤销/重做/复制/粘贴/删除选中/新建/示例 + 计数（无快捷键，纯鼠标） |
+| `ui/src/property_panel.cpp` | 参数面板：9 类参数控件 + 校验提示 + 文件/目录选择 + 密码框 |
+| `ui/include/theme.h` | 分类 / 端口类型 / 节点状态配色（设计 14.3 / 4.5 / 4.6） |
+| `ui/src/console_panel.cpp` | Console 面板（级别过滤 + 搜索 + 虚拟化 + 自动滚动，设计文档 12.4） |
+| `engine/src/graph.cpp` | 数据模型：Node/Port/Param/Edge/Graph、类型兼容矩阵、参数校验、增删与复制 |
+| `engine/src/node_registry.cpp` | 8 个 MVP 节点的注册表（类型/端口/参数/默认值与范围；M7 起 N-09 ImagePreview 已移除） |
+| `engine/src/undo_stack.cpp` | 快照式撤销/重做（深度 50） |
+| `utils/src/paths.cpp` | `~/.brain-ai` 数据目录与各子路径 |
+| `utils/src/log.cpp` | spdlog 双 sink（`app.log` 10MB×5 + 控制台）+ 内存环形缓冲（10000 条） |
+| `utils/src/config.cpp` | toml++ 读写 `config.toml`（字段与设计文档 20.2 一致，缺省自动生成） |
+| `utils/src/crypto.cpp` | SHA3-256（OpenSSL EVP，供 PoW 与自检使用） |
+| `utils/src/file_dialog.cpp` | 原生文件/目录对话框（nativefiledialog-extended，`NFD::Init/Quit` 配对） |
+| `utils/src/image_decode.cpp` | **图片格式嗅探 + 解码（M7 · 冻结区）**：魔数嗅探（内容优先）/ stb 与 WIC 双后端 / WIC 能力枚举 / 可操作错误文案 |
+| `utils/src/asset_store.cpp` | **统一资源目录（P7a-04）**：内容寻址归档 `<SHA3-256>.<ext>`（同内容一份）/ 令牌 `aiwrite-asset:<摘要>` 解析 / 缺失文案（`~/.brain-ai/assets/images/`） |
 | `tools/api_probe.cpp` | V-04/V-05/V-06 命令行验证工具 + `--graph-selftest` 图模型自检 + `--exec-selftest` 执行器自检 |
 | `tools/webview2_login.cpp` | V-03 WebView2 登录 + Cookie 提取（仅内存，脱敏打印）—— ⚠️ **计划删除**（`M7B-30`，改 `pydoll_login`） |

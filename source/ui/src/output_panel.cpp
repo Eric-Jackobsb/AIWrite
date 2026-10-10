@@ -1,13 +1,13 @@
-#include "ui/output_panel.h"
+#include "output_panel.h"
 
-#include "engine/executor.h"
-#include "engine/graph.h"
-#include "ui/editor_state.h"
-#include "ui/text_view.h"
-#include "ui/texture_cache.h"
-#include "utils/file_dialog.h"
-#include "utils/text_export.h"
-#include "utils/log.h"
+#include "executor.h"
+#include "graph.h"
+#include "editor_state.h"
+#include "text_view.h"
+#include "texture_cache.h"
+#include "file_dialog.h"
+#include "text_export.h"
+#include "log.h"
 
 #include <algorithm>
 #include <cstddef>

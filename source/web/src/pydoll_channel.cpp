@@ -5,7 +5,7 @@
 //    统一收口（抽公共函数）归 `M7B-18` 诊断换代 —— 本批各自独立，**不动既有自检路径**
 //  * 一切失败都返回**可操作原因**（`I21`）：无 Python / 无包目录 / 守护进程未起 / 命令超时
 
-#include "web/pydoll_channel.h"
+#include "pydoll_channel.h"
 
 #include <algorithm>
 #include <atomic>
@@ -21,12 +21,12 @@
 #include <nlohmann/json.hpp>
 #include <windows.h>
 
-#include "ai/provider_spec.h"
-#include "utils/log.h"
-#include "utils/paths.h"
-#include "web/channel_frames.h"
-#include "web/pipe_client.h"
-#include "web/session_store.h"
+#include "provider_spec.h"
+#include "log.h"
+#include "paths.h"
+#include "channel_frames.h"
+#include "pipe_client.h"
+#include "session_store.h"
 
 namespace aiwrite::web::channel {
 namespace {

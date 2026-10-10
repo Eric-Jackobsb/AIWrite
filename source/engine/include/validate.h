@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-#include "engine/graph.h"
+#include "graph.h"
 
 namespace aiwrite::engine {
 

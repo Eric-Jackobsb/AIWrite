@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-#include "ai/provider_spec.h"   // L4（PB2-27）：站点无关登录证据类型（ai::WebSessionEvidence / WebSessionState）
+#include "provider_spec.h"   // L4（PB2-27）：站点无关登录证据类型（ai::WebSessionEvidence / WebSessionState）
 
 namespace aiwrite::web {
 

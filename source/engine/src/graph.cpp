@@ -1,8 +1,8 @@
-#include "engine/graph.h"
+#include "graph.h"
 
-#include "engine/node_registry.h"
-#include "utils/asset_store.h" // P7a-04：File 参数的资源令牌解析
-#include "utils/paths.h"       // P7a-02：File 参数的多值路径解析
+#include "node_registry.h"
+#include "asset_store.h" // P7a-04：File 参数的资源令牌解析
+#include "paths.h"       // P7a-02：File 参数的多值路径解析
 
 #include <algorithm>
 #include <cctype>

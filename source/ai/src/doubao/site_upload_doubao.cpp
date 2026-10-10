@@ -1,4 +1,4 @@
-#include "ai/upload/site_uploads.h"
+#include "site_uploads.h"
 
 // ============================================================================
 //  豆包（doubao-web）站点上传单元 —— M8-14
@@ -17,9 +17,9 @@
 //     原生复刻站点一变即废。上传仍由**站点自己的页面 SDK** 完成，C++ 只负责注入 + 取证据。
 // ============================================================================
 
-#include "ai/upload/image_convert.h"
-#include "web/site_ref.h"
-#include "web/webview_host.h"
+#include "image_convert.h"
+#include "site_ref.h"
+#include "webview_host.h"
 
 #include <string>
 #include <vector>

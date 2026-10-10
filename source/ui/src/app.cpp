@@ -1,29 +1,43 @@
-#include "ui/app.h"
+#include "app.h"
 
-#include "ui/console_panel.h"
-#include "ui/editor_state.h"
-#include "ui/error_bar.h"
-#include "ui/node_canvas.h"
-#include "ui/node_library.h"
-#include "ui/output_panel.h"
-#include "ui/property_panel.h"
-#include "ui/texture_cache.h"
-#include "ui/toolbar.h"
-#include "utils/config.h"
-#include "utils/credential.h"
-#include "utils/diagnostics.h"
-#include "utils/log.h"
-#include "utils/paths.h"
-#include "utils/window_geometry.h"
-#include "web/session_store.h"
+#include "console_panel.h"
+#include "editor_state.h"
+#include "error_bar.h"
+#include "node_canvas.h"
+#include "node_library.h"
+#include "output_panel.h"
+#include "property_panel.h"
+#include "texture_cache.h"
+#include "toolbar.h"
+#include "config.h"
+#include "credential.h"
+#include "diagnostics.h"
+#include "file_dialog.h"   // M6：菜单「帮助 → 打开日志/数据目录」（utils::open_folder）
+#include "log.h"
+#include "paths.h"
+#include "text_view.h"     // M6：copy_text（菜单「帮助 → 复制诊断信息」）
+#include "window_geometry.h"
+#include "session_store.h"
 
-#include "engine/recent_files.h"
-#include "engine/provider_resolve.h"   // L4（PB2-27）：状态栏按生效条目站点判登录态
+#include "recent_files.h"
+#include "provider_resolve.h"   // L4（PB2-27）：状态栏按生效条目站点判登录态
+
+// ---- M6（非技术用户可安装化）----
+#include "app_version.h"          // 版本号单一来源（帮助 → 关于 / 诊断报告 / 安装包同源）
+#include "diagnostics_report.h"   // PM-04：一键复制诊断信息
+#include "settings_panel.h"       // M6-01：设置面板
+#include "webview2_runtime.h"     // PM-01：WebView2 运行时依赖自检
 
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+
+// ---- Windows 基础类型（M6）：首启引导的「打开下载页」用 ShellExecuteW
+//      （本工程全局 WIN32_LEAN_AND_MEAN：windows.h **不含** shellapi.h，须显式引入）
+#include <windows.h>
+
+#include <shellapi.h>
 
 #include <GLFW/glfw3.h>
 
@@ -315,6 +329,128 @@ void draw_info_panel(const char* title, bool* open)
     ImGui::End();
 }
 
+// ---- M6（PM-01 / PM-02）：依赖自检的「打开下载页」 + 首次使用引导 ----
+
+// 用系统默认浏览器打开链接（URL 为 ASCII；失败只写日志，不弹窗打断）
+void open_url(const std::string& url)
+{
+    const std::wstring wide(url.begin(), url.end());
+    const HINSTANCE    instance =
+        ShellExecuteW(nullptr, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(instance) <= 32) {
+        log::warn("[首启] 打开链接失败（ShellExecuteW）：" + url);
+    }
+    else {
+        log::info("[首启] 已在浏览器中打开：" + url);
+    }
+}
+
+// 首次使用引导（M6 `PM-02`）
+//  * 触发：`ui.first_run_done == false`（一次性；升级后的老用户也会看到一次），
+//    或菜单「帮助 → 首次使用引导」（force = true，重置会话内标记）
+//  * 结束方式（开始使用 / 跳过 / 右上角 ×）都会写 `first_run_done = true` 落盘
+//  * 窗口是**普通窗口**（不阻塞画布），一次只出现一次，可随时关掉
+void draw_first_run_guide(Config& config, EditorState& state,
+                          const utils::WebView2RuntimeInfo& detected, bool force)
+{
+    static bool                        g_done      = false;
+    static bool                        g_dep_ready = false;
+    static utils::WebView2RuntimeInfo  g_dep;
+
+    if (force) {
+        g_done = false; // 菜单手动打开：允许再次显示
+    }
+    if (!g_dep_ready) {
+        g_dep       = detected;
+        g_dep_ready = true;
+    }
+    if (g_done || (config.ui.first_run_done && !force)) {
+        return;
+    }
+
+    const auto finish = [&](bool started) {
+        g_done                   = true;
+        config.ui.first_run_done = true;
+        if (save_config(paths::config_file(), config)) {
+            set_app_config(config);
+            log::info("[首启] 引导已结束（" + std::string(started ? "开始使用" : "跳过") +
+                      "）；已写入 ui.first_run_done = true");
+        }
+        else {
+            log::warn("[首启] 引导结束但 config.toml 写入失败（下次启动会再显示）");
+        }
+        state.set_status(started ? "欢迎使用！建议先点工具栏「运行」跑一次示例"
+                                 : "已跳过首次引导（帮助 → 首次使用引导 可再看）");
+    };
+
+    bool open = true;
+    ImGui::SetNextWindowSize(ImVec2(700.0f, 560.0f), ImGuiCond_Appearing);
+    if (ImGui::Begin("首次使用引导##firstrun", &open, ImGuiWindowFlags_NoCollapse)) {
+        ImGui::TextColored(ImVec4(0.40f, 0.72f, 1.0f, 1.0f), "欢迎使用 AIwrite");
+        ImGui::TextWrapped("这个窗口只在首次使用时出现一次，带你把「能跑起来」的最小步骤走完（随时可关）。");
+        ImGui::Separator();
+
+        ImGui::Text("第 1 步 · 环境检查（网页版模型站点需要 Edge WebView2 运行时）");
+        ImGui::TextColored(g_dep.installed ? ImVec4(0.40f, 0.85f, 0.45f, 1.0f)
+                                          : ImVec4(1.0f, 0.35f, 0.35f, 1.0f),
+                           "    %s", utils::webview2_runtime_summary(g_dep).c_str());
+        if (!g_dep.installed) {
+            ImGui::TextWrapped("%s", utils::webview2_install_advice().c_str());
+            // PQ-02：安装包**附带** Bootstrapper 时给「随包安装」；未附带则只给官方下载页
+            const std::string bundled = utils::bundled_bootstrapper_path();
+            if (!bundled.empty()) {
+                if (ImGui::Button("安装 WebView2 运行时（随包附带）")) {
+                    open_url(bundled); // 交给对方安装程序；需要管理员时 Windows 会弹 UAC
+                    log::info("[首启] 已启动随包附带的 WebView2 引导程序：" + bundled);
+                }
+                ImGui::SameLine();
+            }
+            if (ImGui::Button("打开下载页")) {
+                open_url(utils::webview2_download_url());
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("（装完回来点「重新检测」；系统通常已自带）");
+        }
+        if (ImGui::Button("重新检测")) {
+            g_dep = utils::detect_webview2_runtime();
+            log::info("[首启] 重新检测依赖：" + utils::webview2_runtime_summary(g_dep));
+        }
+        ImGui::Separator();
+
+        ImGui::Text("第 2 步 · 用示例工作流试跑一次");
+        ImGui::TextWrapped("先不配任何 Key 也能看到界面与流程：点下面的按钮载入示例，再点工具栏「运行」。");
+        if (ImGui::Button("载入示例工作流")) {
+            state.create_sample_workflow();
+            state.set_status("已载入示例工作流：点工具栏「运行」试跑");
+        }
+        ImGui::Separator();
+
+        ImGui::Text("第 3 步 · 选择模型与凭据");
+        ImGui::TextWrapped(
+            "在画布上选中 ProviderConfig 节点 → 右侧「参数」面板里选提供商与模型。\n"
+            "官方 API 需要 Key（存进本地凭据库，加密保存、不写明文）；网页版站点用内嵌浏览器登录一次即可。");
+        if (ImGui::Button("打开设置面板")) {
+            open_settings_panel();
+        }
+        ImGui::Separator();
+
+        if (ImGui::Button("开始使用", ImVec2(140.0f, 0.0f))) {
+            finish(true);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("跳过", ImVec2(120.0f, 0.0f))) {
+            finish(false);
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("以后可从「帮助 → 首次使用引导」再看");
+    }
+    ImGui::End();
+
+    if (!open) {
+        finish(false); // 右上角 ×：等同「跳过」（否则窗口会一直挡住画布）
+    }
+}
+
 } // namespace
 
 int run(const AppOptions& options)
@@ -350,6 +486,30 @@ int run(const AppOptions& options)
         const int   removed = utils::purge_expired_credentials(30, &purge_error);
         if (removed > 0) {
             log::info("[凭据] 启动清理：已移除 " + std::to_string(removed) + " 个过期条目");
+        }
+    }
+
+    // ---- M6：依赖自检（WebView2 运行时）----
+    //  * 面向非技术用户：缺依赖时**日志写明「缺什么、去哪装」**，界面另有首启引导窗口
+    //  * 探测是只读的（不下载、不安装、不改配置）
+    const utils::WebView2RuntimeInfo webview2 = utils::detect_webview2_runtime();
+    log::info("[依赖] " + utils::webview2_runtime_summary(webview2));
+    if (!webview2.installed) {
+        log::warn("[依赖] 网页版站点不可用：请安装 WebView2 运行时"
+                  "（帮助 → 首次使用引导 里有下载链接与步骤）");
+    }
+
+    // ---- M6 接线：`advanced.log_ttl_days`（启动清理旧日志；活动文件永不删）----
+    {
+        std::string purge_error;
+        const int   removed = log::purge_old_files(config.advanced.log_ttl_days, &purge_error);
+        if (removed > 0) {
+            log::info("[日志] 已清理 " + std::to_string(removed) + " 个超过 " +
+                      std::to_string(config.advanced.log_ttl_days) + " 天的旧日志（" +
+                      paths::logs_dir().string() + "）");
+        }
+        if (!purge_error.empty()) {
+            log::warn("[日志] 旧日志清理未全部成功：" + purge_error);
         }
     }
 
@@ -453,6 +613,8 @@ int run(const AppOptions& options)
     bool show_info            = true; // 工作流信息面板不在 config 中：始终显示
     bool layout_ready         = false;
     bool request_layout_reset = false;
+    // M6：菜单「帮助 → 首次使用引导」置位（重置本会话「已看过」标记；不影响 first_run_done）
+    bool request_first_run_guide = false;
 
     log::info(std::string("界面可见性（config.toml [ui]）: 节点库=") +
               (show_library ? "显示" : "隐藏") + "，参数面板=" + (show_params ? "显示" : "隐藏") +
@@ -462,6 +624,21 @@ int run(const AppOptions& options)
 
     // 启动即创建示例工作流，便于直接验证节点操作（可用工具栏「新建（清空）」重来）
     editor().create_sample_workflow();
+
+    // --open <路径>：启动即打开指定工作流（覆盖上面的示例工作流）
+    //  * 存在性/解析失败只告警并保留示例工作流（不阻塞启动）
+    if (!options.open_workflow.empty()) {
+        std::string open_error;
+        if (editor().open_workflow_from(options.open_workflow, &open_error)) {
+            log::info("[启动] 已按 --open 打开工作流：" + options.open_workflow + "（节点 " +
+                      std::to_string(editor().graph.nodes.size()) + " / 连线 " +
+                      std::to_string(editor().graph.edges.size()) + "）");
+        }
+        else {
+            log::warn("[启动] --open 打开失败：" + options.open_workflow + "（" + open_error +
+                      "）—— 已回退到内置示例工作流");
+        }
+    }
 
     // 诊断：安装首异常计数器（VEH）——用于定位第三方依赖反复抛异常 / 内存增长问题，
     // 结果会以「[诊断]」行写入 app.log（带限流）
@@ -561,6 +738,10 @@ int run(const AppOptions& options)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // P0（2026-10-09）：纹理缓存「逐帧标记」——本帧用到的纹理本轮不淘汰。
+        // 必须紧跟 NewFrame()（在画布/面板开始取纹理之前），见 ui/texture_cache.h 说明。
+        ui::begin_frame();
+
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
         const float status_height     = ImGui::GetFrameHeight();
         EditorState& state            = editor();
@@ -619,6 +800,10 @@ int run(const AppOptions& options)
                         engine::clear_recent_files();
                     }
                     ImGui::EndMenu();
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("设置…")) { // M6-01：config.toml 的可调项集中在这里
+                    open_settings_panel();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("退出")) {
@@ -682,7 +867,38 @@ int run(const AppOptions& options)
             }
 
             if (ImGui::BeginMenu("帮助")) {
-                ImGui::MenuItem("关于 AIwrite 0.2.0（M1 + M2 P1/P2）", nullptr, false, false);
+                // M6：版本号取自 app_version.h（与诊断报告 / 安装包同源，避免三处不一致）
+                ImGui::MenuItem((std::string("关于 AIwrite ") + kAppVersionLabel).c_str(), nullptr,
+                                false, false);
+                ImGui::Separator();
+                if (ImGui::MenuItem("复制诊断信息")) { // PM-04：给非技术用户的一键求助入口
+                    copy_text(utils::diagnostics_report_text(), "[帮助] 诊断");
+                    state.set_status("诊断信息已复制到剪贴板（可直接粘贴给支持人员）");
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("版本 / 系统 / 依赖 / 路径 / 配置 / 站点表摘要\n"
+                                      "（**不含**任何密钥或 Cookie 内容）");
+                }
+                if (ImGui::MenuItem("首次使用引导")) {
+                    request_first_run_guide = true; // 重置「已看过」的会话内标记
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("打开日志目录")) {
+                    if (utils::open_folder(paths::logs_dir().string())) {
+                        state.set_status("已打开日志目录：" + paths::logs_dir().string());
+                    }
+                    else {
+                        state.set_status("打开日志目录失败（可能尚未创建）");
+                    }
+                }
+                if (ImGui::MenuItem("打开数据目录")) {
+                    if (utils::open_folder(paths::data_root().string())) {
+                        state.set_status("已打开数据目录：" + paths::data_root().string());
+                    }
+                    else {
+                        state.set_status("打开数据目录失败（可能尚未创建）");
+                    }
+                }
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
@@ -754,6 +970,25 @@ int run(const AppOptions& options)
             ImGui::PushFont(fonts.ui);
             draw_info_panel(kWindowInfo, &show_info);
             ImGui::PopFont();
+        }
+
+        // ---- M6：首次使用引导 + 设置面板（未打开时为空操作 / 零副作用）----
+        ImGui::PushFont(fonts.ui);
+        draw_first_run_guide(config, state, webview2, request_first_run_guide);
+        request_first_run_guide = false;
+        const SettingsPanelResult settings_result = draw_settings_panel(config);
+        ImGui::PopFont();
+        if (settings_result.saved) {
+            if (settings_result.visibility_changed) {
+                // 面板可见性 / 画布选项在 app.cpp 里另有 local 副本 ⇒ 保存后同步
+                show_library = config.ui.show_node_library;
+                show_params  = config.ui.show_property_panel;
+                show_console = config.ui.show_console;
+                show_output  = config.ui.show_output_window;
+                canvas_options.show_grid         = config.ui.show_grid;
+                canvas_options.running_animation = config.ui.running_animation;
+            }
+            state.set_status(settings_result.message);
         }
 
         // ---- 状态栏 ----

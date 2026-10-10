@@ -1,9 +1,10 @@
-#include "utils/credential.h"
+#include "credential.h"
 
-#include "utils/log.h"
-#include "utils/paths.h"
+#include "log.h"
+#include "paths.h"
 
 #include <cctype>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -12,6 +13,7 @@
 #include <system_error>
 #include <fstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #if defined(_WIN32)
@@ -26,6 +28,18 @@ namespace {
 
 constexpr const char* kMagic   = "BRNC";
 constexpr unsigned    kVersion = 1;
+
+// ---- 凭据可用性缓存（见 credential.h 的 credential_available）----
+// 只缓存「是否可解密出非空 Key」这个布尔，不驻留明文；TTL 30 秒 + 保存/删除/清理时立即失效。
+constexpr int kAvailabilityTtlSeconds = 30;
+
+struct AvailabilityEntry {
+    bool                                  loaded    = false;
+    bool                                  available = false;
+    std::chrono::steady_clock::time_point checked_at{};
+};
+
+std::unordered_map<std::string, AvailabilityEntry> g_availability;
 
 std::uint32_t crc32_of(const std::string& data)
 {
@@ -213,6 +227,7 @@ bool save_credential(const std::string& ref, const std::string& secret, std::str
     stream.close();
     harden_acl(path);
     log::info("[凭据] 已保存 ref=" + ref + "（长度 " + std::to_string(secret.size()) + "，密文仅落盘）");
+    invalidate_credential_cache(ref); // 可用性缓存立即刷新（界面提示同一帧就能变）
     return true;
 }
 
@@ -251,6 +266,40 @@ std::string load_credential(const std::string& ref, std::string* error)
     return plain;
 }
 
+void invalidate_credential_cache(const std::string& ref)
+{
+    if (ref.empty()) {
+        g_availability.clear();
+        return;
+    }
+    g_availability.erase(ref);
+}
+
+bool credential_available(const std::string& ref)
+{
+    if (ref.empty()) {
+        return false;
+    }
+    // 文件不存在（或刚被外部删掉）→ 直接否，不进缓存（下次存在时立刻能看见）
+    std::error_code ec;
+    if (!std::filesystem::exists(file_for(ref), ec)) {
+        invalidate_credential_cache(ref);
+        return false;
+    }
+
+    AvailabilityEntry& entry = g_availability[ref];
+    const auto         now   = std::chrono::steady_clock::now();
+    if (entry.loaded && now - entry.checked_at < std::chrono::seconds(kAvailabilityTtlSeconds)) {
+        return entry.available; // 命中：本帧不再读文件、不再 DPAPI 解密
+    }
+
+    // 判据与 load_credential 一致（magic/长度/CRC/DPAPI 任一失败或明文为空 → 不可用）
+    entry.available  = !load_credential(ref, nullptr).empty();
+    entry.loaded     = true;
+    entry.checked_at = now;
+    return entry.available;
+}
+
 bool erase_credential(const std::string& ref, std::string* error)
 {
     std::error_code ec;
@@ -265,6 +314,7 @@ bool erase_credential(const std::string& ref, std::string* error)
         return false;
     }
     log::info("[凭据] 已删除 ref=" + ref);
+    invalidate_credential_cache(ref);
     return true;
 }
 
@@ -349,6 +399,9 @@ int purge_expired_credentials(int ttl_days, std::string* error)
     }
     if (error != nullptr) {
         error->clear();
+    }
+    if (removed > 0) {
+        invalidate_credential_cache(std::string()); // 有删除 → 可用性缓存整体失效
     }
     return removed;
 }

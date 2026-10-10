@@ -1,0 +1,172 @@
+# ============================================================================
+#  check_all.ps1 —— 一键跑完「全部离线自检」并汇总（M6 `PM-03`）
+#
+#  用途：给「不熟悉命令行的人 / 每轮收尾」一条命令看全部结论。
+#  纪律（AI_README §3）：
+#   * 所有输出**重定向到文件**再读回（本机 shell 集成会吞管道输出）
+#   * GUI 程序（aiwrite.exe）stdout 必须用 Start-Process -RedirectStandardOutput 才抓得到
+#   * 日志统一落 build\logs\check_all_<时间戳>.log（UTF-8 无 BOM）
+#
+#  用法：
+#    powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1
+#       [-SkipBuild]     不重新构建（只跑自检）
+#       [-SkipGui]       跳过需要 GUI 的项（--upload-selftest）
+#       [-SkipLoop]      跳过 loop_verify.ps1 -StatusOnly（台账重建）
+#       [-OnlyBuild]     只构建
+# ============================================================================
+param(
+    [switch]$SkipBuild,
+    [switch]$SkipGui,
+    [switch]$SkipLoop,
+    [switch]$OnlyBuild
+)
+
+$ErrorActionPreference = 'Stop'
+
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)   # source\tools\..\.. = 仓库根
+$sourceDir = Join-Path $repoRoot 'source'
+$binDir    = Join-Path $repoRoot 'build\bin'
+$logDir    = Join-Path $repoRoot 'build\logs'
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+$logPath = Join-Path $logDir "check_all_$stamp.log"
+$writer  = New-Object System.IO.StreamWriter($logPath, $false, (New-Object System.Text.UTF8Encoding $false))
+$writer.AutoFlush = $true
+
+function Write-Both([string]$text) {
+    Write-Host $text
+    $writer.WriteLine($text)
+}
+
+$results = New-Object System.Collections.ArrayList
+
+function Add-Result([string]$name, [bool]$ok, [string]$detail) {
+    [void]$results.Add([pscustomobject]@{ Name = $name; Ok = $ok; Detail = $detail })
+    $flag = if ($ok) { 'PASS' } else { 'FAIL' }
+    Write-Both ("  {0,-6} {1,-34} {2}" -f $flag, $name, $detail)
+}
+
+# 跑一个程序，输出落文件后读回；返回 @{ Code; Text; File }
+function Invoke-Capture([string]$exe, [string]$arguments, [string]$tag) {
+    $outFile = Join-Path $logDir "check_all_$stamp`_$tag.txt"
+    if ($arguments -eq '') {
+        $p = Start-Process -FilePath $exe -NoNewWindow -Wait -PassThru -RedirectStandardOutput $outFile
+    } else {
+        $p = Start-Process -FilePath $exe -ArgumentList $arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $outFile
+    }
+    $text = ''
+    if (Test-Path $outFile) { $text = Get-Content $outFile -Raw -ErrorAction SilentlyContinue }
+    return [pscustomobject]@{ Code = $p.ExitCode; Text = $text; File = $outFile }
+}
+
+Write-Both "# check_all.ps1 · $stamp"
+Write-Both "# 仓库根: $repoRoot"
+Write-Both "# 日志:   $logPath"
+
+# ---- ① 构建 ----
+if (-not $SkipBuild) {
+    Write-Both "`n== ① 构建（Debug） =="
+    $buildOut = Join-Path $logDir "check_all_$stamp`_build.txt"
+    Push-Location $sourceDir
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $sourceDir 'build.ps1') *> $buildOut
+    $buildCode = $LASTEXITCODE
+    Pop-Location
+    $buildText = Get-Content $buildOut -Raw
+    $errCount  = ([regex]::Matches($buildText, 'error C\d+|error LNK\d+|error MSB\d+')).Count
+    $warnCount = ([regex]::Matches($buildText, 'warning C\d+')).Count
+    Add-Result '构建（0 error / 0 warning）' `
+        ($buildCode -eq 0 -and $errCount -eq 0 -and $warnCount -eq 0) `
+        "exit=$buildCode · error=$errCount · warning=$warnCount"
+} else {
+    Write-Both "`n== ① 构建：已跳过（-SkipBuild） =="
+}
+
+if ($OnlyBuild) {
+    Write-Both "`n（-OnlyBuild：到此结束）"
+    $writer.Close()
+    exit 0
+}
+
+
+$apiProbe = Join-Path $binDir 'api_probe.exe'
+$aiwrite  = Join-Path $binDir 'aiwrite.exe'
+
+# ---- ② api_probe 三组自检 + 三个 M6 断言 ----
+Write-Both "`n== ② api_probe 自检 =="
+
+$r = Invoke-Capture $apiProbe '--selftest' 'selftest'
+$summary = (($r.Text -split "`n") | Where-Object { $_ -match '=== 结果' } | Select-Object -First 1)
+Add-Result 'api_probe --selftest' ($r.Code -eq 0 -and ($summary -notmatch 'FAIL')) ($summary -replace '^.*=== 结果', '结果')
+
+$r = Invoke-Capture $apiProbe '--exec-selftest' 'exec'
+# 注：`--exec-selftest` 会打印**两行**「执行器自检结果」（executor 与 execution 各一行）
+# ⇒ 取**最后**一行 = 汇总（实测：73 / 464）
+$execLine = (($r.Text -split "`n") | Where-Object { $_ -match '执行器自检结果' } | Select-Object -Last 1)
+$execPass = 0; $execFail = 0
+if ($execLine -match '(\d+) 通过 / (\d+) 失败') { $execPass = [int]$Matches[1]; $execFail = [int]$Matches[2] }
+Add-Result 'api_probe --exec-selftest' ($r.Code -eq 0 -and $execFail -eq 0) "通过 $execPass / 失败 $execFail"
+
+$r = Invoke-Capture $apiProbe '--graph-selftest' 'graph'
+$graphLine = (($r.Text -split "`n") | Where-Object { $_ -match '图模型自检结果' } | Select-Object -Last 1)
+$graphPass = 0; $graphFail = 0
+if ($graphLine -match '(\d+) 通过 / (\d+) 失败') { $graphPass = [int]$Matches[1]; $graphFail = [int]$Matches[2] }
+Add-Result 'api_probe --graph-selftest' ($r.Code -eq 0 -and $graphFail -eq 0) "通过 $graphPass / 失败 $graphFail"
+
+$r = Invoke-Capture $apiProbe '--diag-assert' 'diag'
+Add-Result 'api_probe --diag-assert' ($r.Code -eq 0) `
+    (((($r.Text -split "`n") | Where-Object { $_ -match '诊断报告：' } | Select-Object -First 1) -replace '^\s+', ''))
+
+$r = Invoke-Capture $apiProbe '--dep-check' 'dep'
+Add-Result 'api_probe --dep-check' ($r.Code -eq 0) `
+    (((($r.Text -split "`n") | Where-Object { $_ -match 'WebView2 运行时' } | Select-Object -First 1) -replace '^\s+', ''))
+
+$r = Invoke-Capture $apiProbe '--settings-assert' 'settings'
+Add-Result 'api_probe --settings-assert' ($r.Code -eq 0) `
+    (((($r.Text -split "`n") | Where-Object { $_ -match '默认配置通过' } | Select-Object -First 1) -replace '^\s+', ''))
+
+# ---- ③ node 夹具（离线；直接读源码脚本）----
+Write-Both "`n== ③ 夹具（node） =="
+foreach ($fixture in @('poll_answer_gate_test.js', 'send_chain_test.js', 'dom_gate_test.js')) {
+    $outFile = Join-Path $logDir "check_all_$stamp`_fix_$fixture.txt"
+    Push-Location $repoRoot
+    & node (Join-Path $sourceDir "tools\$fixture") *> $outFile
+    $code = $LASTEXITCODE
+    Pop-Location
+    $text = Get-Content $outFile -Raw
+    $tail = (($text -split "`n") | Where-Object { $_ -match '\d+ / \d+' } | Select-Object -Last 1)
+    Add-Result "夹具 $fixture" ($code -eq 0) ($tail.Trim())
+}
+
+# ---- ④ GUI 自检（上传链路离线三组）----
+if (-not $SkipGui) {
+    Write-Both "`n== ④ GUI 自检（aiwrite.exe） =="
+    $r = Invoke-Capture $aiwrite '--upload-selftest' 'upload'
+    $uploadLine = (($r.Text -split "`n") | Where-Object { $_ -match '站点上传模板自检结果' } | Select-Object -First 1)
+    Add-Result 'aiwrite --upload-selftest' ($r.Code -eq 0) ($uploadLine.Trim())
+} else {
+    Write-Both "`n== ④ GUI 自检：已跳过（-SkipGui） =="
+}
+
+# ---- ⑤ 站点台账重建（零副作用；-SkipLoop 可跳过）----
+if (-not $SkipLoop) {
+    Write-Both "`n== ⑤ 站点台账（loop_verify.ps1 -StatusOnly） =="
+    $outFile = Join-Path $logDir "check_all_$stamp`_status.txt"
+    Push-Location $repoRoot
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $sourceDir 'tools\loop_verify.ps1') -StatusOnly *> $outFile
+    $code = $LASTEXITCODE
+    Pop-Location
+    Add-Result 'loop_verify -StatusOnly' ($code -eq 0) "exit=$code（台账重建见 $outFile）"
+}
+
+# ---- 汇总 ----
+$failed = @($results | Where-Object { -not $_.Ok })
+Write-Both "`n=== check_all 汇总：共 $($results.Count) 项 · 失败 $($failed.Count) 项 ==="
+if ($failed.Count -gt 0) {
+    foreach ($item in $failed) { Write-Both ("    FAIL  {0}  {1}" -f $item.Name, $item.Detail) }
+}
+Write-Both "日志：$logPath"
+$writer.Close()
+
+if ($failed.Count -gt 0) { exit 1 }
+exit 0

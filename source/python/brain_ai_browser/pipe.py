@@ -2,7 +2,7 @@
 
 方向与归属（`M7B.md` §3）
     **Python 守护进程 = 服务器**（`CreateNamedPipeW`），**C++ = 客户端**（`CreateFileW`，
-    见 `source/src/web/pipe_client.cpp`）。守护进程持有浏览器与生命周期，故由它持有管道实例。
+    见 `source/web/src/pipe_client.cpp`）。守护进程持有浏览器与生命周期，故由它持有管道实例。
     管道名带 pid（`\\\\.\\pipe\\aiwrite-browser-<pid>`）⇒ 多实例互不干扰（`M7B.md` §6.2 `P1`）。
 
 分帧

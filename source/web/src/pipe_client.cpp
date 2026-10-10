@@ -1,4 +1,4 @@
-#include "web/pipe_client.h"
+#include "pipe_client.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -8,7 +8,7 @@
 #include <chrono>
 #include <utility>
 
-#include "utils/log.h"
+#include "log.h"
 
 // 实现纪律：**不抛异常**（读线程里的任何失败 → 记日志 + 失败未完成调用），
 // 因为调用方可能是执行器工作线程，而 UI 只应看到"错误文本"（`I21`）。

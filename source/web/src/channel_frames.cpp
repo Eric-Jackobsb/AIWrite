@@ -1,4 +1,4 @@
-#include "web/channel_frames.h"
+#include "channel_frames.h"
 
 // 实现纪律：**不抛异常**（非法输入一律走 `bad = true` / 空结果），
 // 因为调用方是管道读循环 —— 一个坏帧不得让守护进程或 UI 线程崩掉（`VB2-29`）。

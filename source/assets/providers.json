@@ -275,22 +275,6 @@
       "docs_url": ""
     },
     {
-      "id": "tongyi-web",
-      "display": "通义千问（阿里网页版）",
-      "kind": "web",
-      "protocol": "dom",
-      "capabilities": { "vision": false, "seed": false, "system_role": false, "stream": false },
-      "models": [],
-      "web": {
-        "adapter": "dom",
-        "login_url": "https://www.qianwen.com/",
-        "window_title": "AIwrite · 通义千问网页版登录（登录后关闭窗口）"
-      },
-      "verified": false,
-      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`www.tongyi.com/qianwen` **重定向**到 `www.qianwen.com/?ch=tongyi_redirect`（标题「千问-阿里 AI 助手」）→ 本条目已改为**最终域** `www.qianwen.com`（旧域 tongyi.aliyun.com / tongyi.com 请勿使用）；页面可见 7 条匿名 Cookie。⚠️ 输入框 / 回答容器候选未取到（首屏为营销态，需登录后实测）",
-      "docs_url": ""
-    },
-    {
       "id": "qwen-web",
       "display": "Qwen（国际站网页版）",
       "kind": "web",
@@ -302,10 +286,10 @@
         "login_url": "https://chat.qwen.ai/",
         "window_title": "AIwrite · Qwen 网页版登录（登录后关闭窗口）",
         "input_selector": "textarea[placeholder=\"Ask Qwen\"]",
-        "send": { "kind": "click", "selector": "div.message-input-right-button-send" }
+        "send": { "kind": "key", "value": "Enter" }
       },
       "verified": false,
-      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`https://chat.qwen.ai/` 加载正常（标题 Qwen），**输入框实测** = `textarea[placeholder=\"Ask Qwen\"]`（可见），**发送按钮实测** = `div.message-input-right-button-send`（可见）。⚠️ 仍未实测：`answer_selector`（当前无会话 → 回答容器未出现）",
+      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`https://chat.qwen.ai/` 加载正常（标题 Qwen），**输入框实测** = `textarea[placeholder=\"Ask Qwen\"]`（可见，2026-10-10 `--web-dom-dump` 复测仍**唯一可见**候选）⚠️ **发送方式订正（2026-10-10 · 循环开发 `T-L06`）**：原声明的 `send=click div.message-input-right-button-send` 真机**未生效** —— CDP 真实输入 OK（提示词 67 字节写入页面），但点击后发送回执 = `URL 未变化 / 新节点 0 / 输入框 23 字（含提示词）`（n3 判定「**发送未生效**」）⇒ 已改为 `send = key Enter`（该站输入框为 textarea，Enter 发送 / Shift+Enter 换行）。⚠️ 仍未实测：`answer_selector`（当前无会话 → 回答容器未出现；由运行期自动识别 `M8-37` 兜底）",
       "docs_url": ""
     },
     {
@@ -406,10 +390,12 @@
       "web": {
         "adapter": "dom",
         "login_url": "https://chatgpt.com/",
-        "window_title": "AIwrite · ChatGPT 网页版登录（登录后关闭窗口）"
+        "window_title": "AIwrite · ChatGPT 网页版登录（登录后关闭窗口）",
+        "input_selector": "#mobile-composer-prompt",
+        "send": { "kind": "key", "value": "Enter" }
       },
       "verified": false,
-      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`https://chatgpt.com/` 在本机网络下**可直连**（标题「ChatGPT: Chat, Work, Create & Code with AI」，Cookie `oai-did` / `oai-mweb-origin`）。⚠️ 实测窗口为窄窗 → 渲染的是**移动版 DOM**（输入框候选 `#mobile-composer-prompt`）；登录后请在正常窗口尺寸下用 `--web-dom-dump --provider chatgpt-web` 复核桌面版选择器（预期 `#prompt-textarea`）",
+      "notes": "登录型站点条目（PB2-26）。✅ 直连已实测（2026-09-27）：`https://chatgpt.com/` 在本机网络下**可直连**（标题「ChatGPT: Chat, Work, Create & Code with AI」，Cookie `oai-did` / `oai-mweb-origin`）。✅ **选择器已实测（2026-10-10 · 循环开发 `T-L06`）**：`--web-dom-dump --provider chatgpt-web` 在**本站窗口 1000×760** 下枚举到**唯一可见**输入框 `#mobile-composer-prompt`（`textarea`，placeholder=Ask ChatGPT）⇒ 已回填 `input_selector` + `send=key Enter`；⚠️ 该尺寸下渲染的是**移动版 DOM**（`#prompt-textarea` 未出现）；若将来在更宽窗口下使用，用 `--web-dom-dump` 复核后按需改回桌面版选择器",
       "docs_url": ""
     },
     {

@@ -13,8 +13,8 @@
 #include <functional>
 #include <string>
 
-#include "ai/provider_spec.h"   // M_patchB L1（PB2-05）：站点端点来自配置表
-#include "web/session_store.h"
+#include "provider_spec.h"   // M_patchB L1（PB2-05）：站点端点来自配置表
+#include "session_store.h"
 
 namespace aiwrite::ai {
 

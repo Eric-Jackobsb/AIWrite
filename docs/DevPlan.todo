@@ -81,7 +81,7 @@
                   "content": "DBG-M4-03 网页版 PoW 依赖官方 worker chunk（已收敛，W2 方案 A）：ai/web_pow.cpp 作兜底 ｜ §3",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/网页版协议实测记录.md"
+                  "fileLink": "docs/Archive/网页版协议实测记录.md"
                 }
               },
               {
@@ -125,7 +125,7 @@
                   "content": "DBG-M5-01 网页版每次运行会在账号内新建/追加会话，正文进入 chat.deepseek.com 历史（副作用） ｜ §2 端点 ｜ ✅ 已收口（2026-09-28 核对）：结论为「登记（不修）」—— 属站点行为，不做自动化规避（见 M_patchAB_rest.md §7）",
                   "done": true,
                   "level": "default",
-                  "fileLink": "docs/网页版协议实测记录.md"
+                  "fileLink": "docs/Archive/网页版协议实测记录.md"
                 }
               }
             ],
@@ -212,11 +212,55 @@
               "done": false,
               "level": "secondary"
             }
+          },
+          {
+            "key": 239,
+            "children": [
+              {
+                "key": 240,
+                "children": [],
+                "todo": {
+                  "id": 240,
+                  "content": "DBG-L01 文档断链自检 8 条（2026-10-09 实测「检查 588 链接 / broken 8」）：全部来自本轮未改动的旧文档 —— actionPlan/M8.md · actionPlan/M_patchAB_rest.md · ai_writer_nodes.md ×3 · 节点编辑器使用说明.md ×3；疑为检查器把表格内斜杠文本误判为链接 —— 与 §0.4 基线「broken 0」不符，待核实后二选一：修链接 / 收敛检查器 ｜ loop_dev.md §4",
+                  "done": false,
+                  "level": "warning",
+                  "fileLink": "docs/loop_dev.md · §4"
+                }
+              }
+            ],
+            "todo": {
+              "id": 239,
+              "content": "Docs 断链与门禁（1 项）",
+              "done": false,
+              "level": "danger"
+            }
+          },
+          {
+            "key": 249,
+            "children": [
+              {
+                "key": 248,
+                "children": [],
+                "todo": {
+                  "id": 248,
+                  "content": "DBG-L02 VA-07 假阴性 + 退出码不充分（✅ 已修 2026-10-09 · 批 8 · 循环 R1 真机实证）：缺陷 A = 运行自检「工作流 JSON 不含运行结果」取样按 **24 字节**，CJK 一字 3 字节 ⇒ 只截到 8 个汉字「从前有座山，山里」，网页版模型复述工作流自身 text 参数即命中 ⇒ kimi-web / doubao-web / tongyi-web 三站 n3=done 却 rc=1（假阴性）；修法 = 按**码点**取样（utf8_length / utf8_prefix · kVa07ProbeChars=24）+ **运行前 JSON 基线**（命中文本若运行前已存在则不算泄漏）；缺陷 B = --run-selftest --web 退出码不区分生成失败（yuanbao-web n3=error 却 PASS + rc=0，需登录的 spark-web 同样）⇒ 判据层收紧为双口径（rc=0 且 n3=done），由 TST-L01 落实；**缺陷 C（SMOKE7 新暴露 · 判据层假阳性 · 非我方代码缺陷）** = rc=0 且 n3=done 仍不足：kimi-web 归档正文 49 码点＝站点自己的「System is currently busy. Please try again later.」（全仓 grep 该串 0 命中 ⇒ 站点返回）会被记成「可用」⇒ 判据再加第三口径（正文 ≤120 码点且命中已知错误短语 ⇒ 判「站侧忙碌/拒绝·未真生成」· 失败 · 重试 1 次照旧），SMOKE8/9 真机验证（均 exit 1）；离线锁 = 同一份物证上旧判据命中位置 947 / 新判据未命中（build/loop/R1-20261009-2055/va07_probe14.txt · va07_probe16.txt） ｜ loop_dev.md §5.1.1 · §10.1",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/loop_dev.md · §5.1.1 / §10.1"
+                }
+              }
+            ],
+            "todo": {
+              "id": 249,
+              "content": "循环判据缺陷（1 项 · 已修）",
+              "done": true,
+              "level": "secondary"
+            }
           }
         ],
         "todo": {
           "id": 1,
-          "content": "Debug（13 项）",
+          "content": "Debug（15 项）",
           "done": false,
           "level": "danger"
         }
@@ -397,7 +441,7 @@
                 "children": [],
                 "todo": {
                   "id": 31,
-                  "content": "FEA-M4-03 流式回调（PB-03）：**已暂停（用户决议 2026-09-24）** —— 链路已打通（on_delta → RunEvent::Delta → 读模型逐段追加），但 httplib v0.15.3 无 POST 响应流式重载，需先解决数据源（A′ 端点探测或 WinHTTP）；详见 docs/网页版协议实测记录.md 附录 A ｜ §4.1 PB-03",
+                  "content": "FEA-M4-03 流式回调（PB-03）：**已暂停（用户决议 2026-09-24）** —— 链路已打通（on_delta → RunEvent::Delta → 读模型逐段追加），但 httplib v0.15.3 无 POST 响应流式重载，需先解决数据源（A′ 端点探测或 WinHTTP）；详见 docs/Archive/网页版协议实测记录.md 附录 A ｜ §4.1 PB-03",
                   "done": false,
                   "level": "warning",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
@@ -576,7 +620,7 @@
                   "content": "FEA-M4-19 网页版会话自动引导修复（真 bug）：`ensure_session` 旧逻辑把「登录窗口已打开」当成「内存已有凭证」→ 从不探测、干等 25s 后报「未取得网页版凭证」（用户手动开的窗口 probe_after_load=false，内存里永远没有 userToken；实测与 Cookie 过期无关）。修复：纯逻辑决策 `plan_session_boot`（HaveToken / ReuseAndProbe / StartAndProbe）+ 等待期每 6s 补探测（≤3 次）+ 手动「打开登录窗口」改为自动探测 + 离线真值表断言 + 端到端 `--web-session-selftest` ｜ PB-07 前置",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/网页版协议实测记录.md · §6"
+                  "fileLink": "docs/Archive/网页版协议实测记录.md · §6"
                 }
               }
             ],
@@ -721,11 +765,33 @@
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
+              },
+              {
+                "key": 242,
+                "children": [],
+                "todo": {
+                  "id": 242,
+                  "content": "FEA-M6-08 画布渲染性能专项 Phase 0–1（CS-01…CS-03）：`[诊断] 画布` 指标行 + `--ui-bench` 基准开关（85 节点基准图 testAllAI.json）+ 昂贵计算按 EditorState::revision 缓存 + 视口剔除 / LOD ｜ M_canvas_snapshot.md §3 / §6 ｜ 状态：🟡 部分落地（2026-10-09）—— 指标行 ✅ 已落地（85 节点实测 FPS 59~60 / 解码 0.0 次/帧 / 缓存 9/64 条）＋ 计划外 P0 根因热修（纹理缓存容量 8→64 · 逐帧保护 · 字节预算 256MB；FPS 5~6 → 59~60）；仍待做：`--ui-bench` · `revision` 缓存 · 视口剔除 / LOD；`update_content_width` 实测 0.0ms/帧 ⇒ 该条收益≈0",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_canvas_snapshot.md"
+                }
+              },
+              {
+                "key": 243,
+                "children": [],
+                "todo": {
+                  "id": 243,
+                  "content": "FEA-M6-09 画布渲染性能专项 Phase 2（CS-04…CS-08 · 主线 = 每节点卡片快照）：GL 入口点自取 + FBO 离屏帧 + 同源布局烘焙（尺寸契约）+ 清晰度分档 + LRU 128MB + 每帧预算调度 + canvas_render_mode 回退开关 ｜ M_canvas_snapshot.md §5 / §9 ｜ 前置：FEA-M6-08",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_canvas_snapshot.md"
+                }
               }
             ],
             "todo": {
               "id": 46,
-              "content": "M6（7 项）",
+              "content": "M6（9 项）",
               "done": false,
               "level": "secondary"
             }
@@ -1037,11 +1103,77 @@
               "done": true,
               "level": "secondary"
             }
+          },
+          {
+            "key": 227,
+            "children": [
+              {
+                "key": 228,
+                "children": [],
+                "todo": {
+                  "id": 228,
+                  "content": "FEA-L01 网页站批量自检 + 结构化报告（✅ 已落地 2026-10-09 · 批 3 · 真机 11 站实测：可用 8 / 需登录 2 / 失败 1 · exit 1）：--web-adapter-selftest --provider all --json <路径>（dom_probe_all() 表驱动逐站独立）+ --json-diff <上一轮>（dom_report_diff()：五态变化 / 新增 / 消失 / URL 变化；旧报告无 state 按事实回推）+ 页面异常按 §5.1③ 重试 1 次（attempts 如实回传）；新增 needs_login / login_evidence 字段（判据见 §3.2）+ 27 项离线断言 dom_probe_selftest() ｜ loop_dev.md §6",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/loop_dev.md · §6"
+                }
+              },
+              {
+                "key": 229,
+                "children": [],
+                "todo": {
+                  "id": 229,
+                  "content": "FEA-L02 会话清单机器可读（✅ 已落地 2026-10-09 · 批 3）：aiwrite.exe --web-session-list [--json <路径>]（复用 source/include/web/session_store.h 落盘数据），把「登录态仅在界面可见」变为报告可直接读 —— ① 本进程内存会话 ② L2 登录态快照只读元数据（不解密）③ 12 条网页版条目登录判据；有没有会话都算成功（exit 0） ｜ loop_dev.md §6.2",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/loop_dev.md · §6.2"
+                }
+              },
+              {
+                "key": 230,
+                "children": [],
+                "todo": {
+                  "id": 230,
+                  "content": "FEA-L03 退出码 3（需人工介入）贯通（✅ 已落地 2026-10-09 · 批 3）：批量自检把「需登录 / 需过 WAF」归为 3（不阻塞循环、不算失败），不破坏 I20 既有 CLI 契约；聚合口径 = 有真失败 ⇒ 1，否则有需登录 ⇒ 3，否则 0（逐站结论在报告 sites[].state，不因聚合码丢失） ｜ loop_dev.md §6.3",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/loop_dev.md · §6.3"
+                }
+              },
+              {
+                "key": 231,
+                "children": [],
+                "todo": {
+                  "id": 231,
+                  "content": "FEA-L04 目录规范化重构（✅ 已落地 2026-10-09 · 纯结构变更 · 回归数字逐项不变）：53 个头文件 → source/include/**（镜像 source/src/**）+ source/src/ai/ 下按 AI 分目录（deepseek / doubao / kimi）+ CMake（include 为唯一头文件根）与连带文档同步 ｜ AI_README §11 / loop_dev.md §9",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/loop_dev.md · §9"
+                }
+              },
+              {
+                "key": 247,
+                "children": [],
+                "todo": {
+                  "id": 247,
+                  "content": "FEA-L05 目录再规范化 · 每个模块自带 src/ + include/（✅ 已落地 2026-10-09 · 纯结构变更 · 回归数字逐项不变）：source/<模块>/{src,include}/**（ai / engine / nodes / ui / utils / web）+ 头文件模块内拍平 + 引用改裸名（#include \"graph.h\"）+ 入口 source/app/src/main.cpp + source/{src,include} 旧根删除 + CMake 头文件根 1→6（逐模块列出）+ source/tools/*.js 夹具读源路径同步 ｜ AI_README §11 / loop_dev.md §9",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "AI_README.md · §11"
+                }
+              }
+            ],
+            "todo": {
+              "id": 227,
+              "content": "Loop Dev · 网页站循环（5 项 · 全落地 2026-10-09）",
+              "done": true,
+              "level": "success"
+            }
           }
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（65 项）",
+          "content": "Feature（72 项）",
           "done": false,
           "level": "default"
         }
@@ -1249,11 +1381,22 @@
                   "level": "default",
                   "fileLink": "docs/节点编辑器使用说明.md"
                 }
+              },
+              {
+                "key": 244,
+                "children": [],
+                "todo": {
+                  "id": 244,
+                  "content": "TST-CS-01 画布快照专项验证（CS-09）：VC-01…VC-08 清单 + 离线断言（revision 自增点 / 卡片键 / LRU 与预算 / 尺寸自检）+ `--ui-bench` 改前 vs 改后；真机项（清晰度 / 交互回归 / 切档重烘）如实登记 ｜ M_canvas_snapshot.md §7",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_canvas_snapshot.md"
+                }
               }
             ],
             "todo": {
               "id": 71,
-              "content": "M6（2 项）",
+              "content": "M6（3 项）",
               "done": false,
               "level": "secondary"
             }
@@ -1400,11 +1543,66 @@
               "done": false,
               "level": "secondary"
             }
+          },
+          {
+            "key": 232,
+            "children": [
+              {
+                "key": 233,
+                "children": [],
+                "todo": {
+                  "id": 233,
+                  "content": "TST-L01 循环总驱动 source/tools/loop_verify.ps1（✅ 已落地 2026-10-09 · 批 8 · 真机 R1 + SMOKE1~10 实测）：一键四段 = 轮次门禁（构建 / 五组自检 / check_links.py）→ S2 批量探测 → S3 逐站跑 → 报告落 build/loop/<轮次>-<时间戳>/（report.md 三块 + report.json）；**站点绿判据 = 三口径：rc=0 且 n3(LLMGenerate)=done 且归档正文非站侧错误/忙碌串**（n3 优先取磁盘 PC-05 归档 ⇒ stdout 整轮丢失也能判；正文 ≤120 码点且命中已知错误短语 ⇒ 判「站侧忙碌/拒绝·未真生成」· SMOKE7 假绿实证 → SMOKE8/9 生效 · SMOKE10 ernie-web 74 码点合法答案未误伤）；第 5 段离线复算 VA-07（正文＝站侧错误串时改判「不适用」）；退出码：有真失败或「未测」⇒ 1 / 需登录 ⇒ 3 / 全绿 ⇒ 0；GUI 程序用 Start-Process 重定向 stdout；取代手工 s3_driver.ps1 ｜ loop_dev.md §4 · §6.1",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/loop_dev.md · §4"
+                }
+              },
+              {
+                "key": 234,
+                "children": [],
+                "todo": {
+                  "id": 234,
+                  "content": "TST-L02 夹具打假 source/tools/dom_gate_test.js（✅ 已落地 2026-10-09 · 批 3）：抽真实源码里的 DOM 脚本（kProbeScript / kInputPoolSelector）在迷你 DOM 真跑 15 项断言；--old 负向注入（判据回退为只看 Cookie）如实 FAIL 6 / 15 且退出码 1（对齐 poll_answer_gate_test.js / send_chain_test.js） ｜ AI_README §3",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/loop_dev.md · §3"
+                }
+              },
+              {
+                "key": 235,
+                "children": [],
+                "todo": {
+                  "id": 235,
+                  "content": "TST-L03 物证目录与报告模板（🟡 部分落地 2026-10-09 · 批 8）：三块固定契约（本轮数字表 / 11 行站点矩阵 / needs_login[] 与待人工清单 + 附录物证索引）已由 TST-L01 逐轮生成（report.md 与 report.json 同数据）；**首份循环基线 = build/loop/R1-20261009-2055/**（S2 可用 6 / 需登录 1 / 失败 4 · exit 1；S3 可用 5 / 失败 1）—— 待办：跨轮 diff 段（对齐 --json-diff 口径）与「待人工清单」成熟化 ｜ loop_dev.md §6.1",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/loop_dev.md · §6.1"
+                }
+              },
+              {
+                "key": 241,
+                "children": [],
+                "todo": {
+                  "id": 241,
+                  "content": "TST-L04 全 AI「人工暂停 / 中止」测试工作流 source/workflows/testAllAI.json（✅ 已落地 2026-10-09 · **85 节点 / 84 连线**）：主干 6 层嵌套图文链（L0 输入 → L1 图片理解(智谱 glm-4v-flash) → L2 文本生成(DeepSeek 官方) → L3 网页版图片理解(豆包·2 图) → L4 网页版文本生成(DeepSeek 网页版) → L5 网页版图片理解(Kimi·3 图) → L6 文本合并 + 收束(智谱 glm-4-flash)）＋并联 16 支覆盖配置表全部 21 个 AI 条目（单支失败不连坐）；中止语义 = 「■ 停止」在**节点边界**生效（executor.cpp Cancelled 分支 · 未跑到的节点保持原状态）；离线自查 = 镜像校验器（validate.cpp / graph.cpp 规则：端口 / 类型 / 枚举 / 范围 / 文件存在性 / 必填连线 / 无环 / 坐标）全通过；**尚未真机加载** ｜ 节点编辑器使用说明 §10.9",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/节点编辑器使用说明.md · §10.9"
+                }
+              }
+            ],
+            "todo": {
+              "id": 232,
+              "content": "Loop Dev · 网页站循环（3 项 · TST-L01 ✅ 已落地 / TST-L03 🟡 部分）",
+              "done": false,
+              "level": "default"
+            }
           }
         ],
         "todo": {
           "id": 54,
-          "content": "Test（24 项）",
+          "content": "Test（28 项）",
           "done": false,
           "level": "warning"
         }
@@ -1546,11 +1744,33 @@
                   "level": "default",
                   "fileLink": "docs/DevPlan.todo"
                 }
+              },
+              {
+                "key": 245,
+                "children": [],
+                "todo": {
+                  "id": 245,
+                  "content": "DOCS-CS-01 画布快照文档收口（CS-10）：使用说明 §10.12 补实测与截图 + CHANGELOG 实测小节 + DocMAP §5.3 + 变量术语对照表 + source/README §4（`--ui-bench` 与配置键） ｜ M_canvas_snapshot.md §11",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_canvas_snapshot.md"
+                }
+              },
+              {
+                "key": 246,
+                "children": [],
+                "todo": {
+                  "id": 246,
+                  "content": "DOCS-BL-01 构建日志统一落 build\\logs\\（构建工具链）：build.ps1 自动写 build_<config>_<yyyyMMdd_HHmmss>.log（UTF-8 无 BOM · 含 dev.ps1 / cmake / MSBuild 全部输出）+ 新增 -LogName / -NoLog + -Reconfigure 改为「清空构建目录但保留 build\\logs\\」+ 历史 17 个散落日志迁入（仓库根 15 · build\\loop_build_b2.txt · .venv\\m7b_smoke.log）｜ ✅ 已落地（2026-10-09 实测：构建 exit 0 且日志落位 · 失败路径 exit=1 且日志记 [build] 失败）｜ source/README.md §3",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "source/README.md"
+                }
               }
             ],
             "todo": {
               "id": 85,
-              "content": "M6（2 项）",
+              "content": "M6（4 项）",
               "done": false,
               "level": "secondary"
             }
@@ -1686,11 +1906,44 @@
               "level": "default",
               "fileLink": "docs/Archive/actionPlan/M_patchB.md"
             }
+          },
+          {
+            "key": 236,
+            "children": [
+              {
+                "key": 237,
+                "children": [],
+                "todo": {
+                  "id": 237,
+                  "content": "DOC-L01 循环开发规则落盘 docs/loop_dev.md（启动闸 / 三层结构 / 匿名优先 8 步 / 轮次门禁 / 失败四分类 / 退出码 0-3 / 记录位唯一权威表 / 停止条件）+ AI_README §6 授权行 · §7 第 8 条 · §1/§8 指向 + DocMAP §一/§四/§5.3 登记 ｜ loop_dev.md",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "docs/loop_dev.md"
+                }
+              },
+              {
+                "key": 238,
+                "children": [],
+                "todo": {
+                  "id": 238,
+                  "content": "DOC-L02 代码组织规范条文（AI_README §11 + §6/§7）+ 重构连带文档同步（source/README §1/§7 · 变量术语对照表 · ai_writer_nodes §20）（✅ 已落地 2026-10-09 · 批 7 `FEA-L05` · 批 8 复核）：AI_README §11 定稿「每模块自带 src/ + include/ · 裸名引用」· source/README §1 目录结构 + §7 源码文件速览 · 变量术语对照表 模块路径列已按 source/<模块>/{src,include}/** 更新 · ai_writer_nodes 全文无路径引用 ⇒ 无需改；批 8 追加 AI_README §2 循环驱动命令行 + §8 工具路径行 ｜ AI_README §11",
+                  "done": true,
+                  "level": "success",
+                  "fileLink": "AI_README.md · §11"
+                }
+              }
+            ],
+            "todo": {
+              "id": 236,
+              "content": "Loop Dev · 网页站循环（2 项 · 全落地 2026-10-09）",
+              "done": false,
+              "level": "default"
+            }
           }
         ],
         "todo": {
           "id": 74,
-          "content": "Docs（16 项）",
+          "content": "Docs（14 项）",
           "done": false,
           "level": "secondary"
         }
@@ -1962,7 +2215,7 @@
                   "content": "ARC-M3-17 网页版会话自动引导修复（FEA-M4-19）：`ensure_session` 识别「窗口已开 → 补探测 ReuseAndProbe」（原来只会干等超时）+ 手动登录窗口自动探测（`interactive_login_request`）+ 离线真值表断言 + 端到端 `--web-session-selftest` PASS",
                   "done": true,
                   "level": "success",
-                  "fileLink": "docs/网页版协议实测记录.md · §6"
+                  "fileLink": "docs/Archive/网页版协议实测记录.md · §6"
                 }
               },
               {
@@ -2006,7 +2259,7 @@
                   "content": "ARC-M4-01 M4-06 网页版生成端到端（PoW 方案 A + 定制 SSE + LLMGenerate 接线）：--run-selftest --web 5/5",
                   "done": true,
                   "level": "secondary",
-                  "fileLink": "docs/网页版协议实测记录.md"
+                  "fileLink": "docs/Archive/网页版协议实测记录.md"
                 }
               },
               {
@@ -2525,7 +2778,6 @@
       132,
       136,
       139,
-      153,
       157,
       163,
       165,
@@ -2538,7 +2790,10 @@
       207,
       213,
       218,
-      222
+      222,
+      232,
+      236,
+      239
     ],
     "add_mode": "bottom",
     "virtual": false,
@@ -2550,6 +2805,6 @@
     "simpleMode": false,
     "lang": "en",
     "desc": "**当前基线（2026-10-08 本机全量实测）**\n- build: 0 error / 0 warning（MSVC /W4）\n- api_probe --selftest：PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · 执行器 425/0）\n- exec_selftest: 425 / 0 · graph_selftest: 110 / 0\n- aiwrite --upload-selftest: 72 / 0（离线三组；真机加 --provider / --image，且该站点已登录过一次）\n- 夹具: poll_answer_gate 12/0（--old 5/7 · exit 1）· send_chain 17/0\n- 文档: python vcpkg-cache/check_links.py → checked 500 / broken 8（**全为既存**：7 条历史 actionPlan/M7B.md 路径 + 1 条反引号内文误判，非本轮引入）\n\n**文档口径（2026-10-08 全量梳理 · 定义见 docs/DocMAP.md §五）**\n- 标记三态：✅ 已固定 / 📦 已失效（**只标记不删除**）/ ⬜ 待定（必须登记到本分类 PQ-xx）\n- 本分类「待定 · 未拍板」= 全部未拍板项（PQ-01 ~ PQ-19）；拍板后同批：改计划文档 + DocMAP §5.3 + 本项置 done\n- ✅ **2026-10-09 拍板落盘**：**14 项**已拍板（`PQ-02` / `PQ-04` / `PQ-05` / `PQ-07` / `PQ-08` / `PQ-10` / `PQ-11` / `PQ-13` / `PQ-14` / `PQ-15` / `PQ-16` / `PQ-17` / `PQ-18` / `PQ-19`）⇒ 已置 done；**余 5 项待定**（`PQ-01` / `PQ-03` / `PQ-06` / `PQ-09` / `PQ-12`）\n- 里程碑：M1 / M2 / M4 / M5 与 M7 第一轮 + P7-a ✅ 已固定；**M7B / P7-b（Pydoll 路线）📦 已退场（2026-10-05 · 方案 E）**；现行网页通道 = M8（站点上传模板）\n- 未做（有任务号，**非**待定）：M8 Phase 3~6 · PW-02/04/05/06/08~12 · M_patchAB_rest §1–§3 残项 · M6 未开工\n- 待真机：AW-01 / AW-03 / AW-04 / AW-06（网页版多节点与取答案）· 有 Key 的 official 复跑\n\n**历史原文（2026-09-27 基线 · ⛔ 保留不删；其中 Pydoll / M7B 段落已 📦 退场）**\n\n**当前基线（2026-10-08 本机全量实测）**\n- build: 0 error / 0 warning（MSVC /W4）\n- api_probe --selftest：PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · 执行器 425/0）\n- exec_selftest: 425 / 0 · graph_selftest: 110 / 0\n- aiwrite --upload-selftest: 72 / 0（离线三组；真机加 --provider / --image，且该站点已登录过一次）\n- 夹具: poll_answer_gate 12/0（--old 5/7 · exit 1）· send_chain 17/0\n- 文档: python vcpkg-cache/check_links.py → checked 500 / broken 8（**全为既存**：7 条历史 actionPlan/M7B.md 路径 + 1 条反引号内文误判，非本轮引入）\n\n**文档口径（2026-10-08 全量梳理 · 定义见 docs/DocMAP.md §五）**\n- 标记三态：✅ 已固定 / 📦 已失效（**只标记不删除**）/ ⬜ 待定（必须登记到本分类 PQ-xx）\n- 本分类「待定 · 未拍板」= 全部未拍板项（PQ-01 ~ PQ-19）；拍板后同批：改计划文档 + DocMAP §5.3 + 本项置 done\n- 里程碑：M1 / M2 / M4 / M5 与 M7 第一轮 + P7-a ✅ 已固定；**M7B / P7-b（Pydoll 路线）📦 已退场（2026-10-05 · 方案 E）**；现行网页通道 = M8（站点上传模板）\n- 未做（有任务号，**非**待定）：M8 Phase 3~6 · PW-02/04/05/06/08~12 · M_patchAB_rest §1–§3 残项 · M6 未开工\n- 待真机：AW-01 / AW-03 / AW-04 / AW-06（网页版多节点与取答案）· 有 Key 的 official 复跑\n\n**历史原文（2026-09-27 基线 · ⛔ 保留不删；其中 Pydoll / M7B 段落已 📦 退场）**\n\n**当前基线（2026-09-27）**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS（V-11/V-12 随 PB-09）\n- graph_selftest: 110 通过 / 0 失败\n- exec_selftest: 251 通过 / 0 失败（执行器 + 运行信息 + 归档 + 配置表 / L4 断言）\n- provider_selftest: 50 通过 / 0 失败（--provider-dump 21 条：official 9 / web 12）\n- run_selftest: PASS（离线 3/5 为预期）· run_selftest_web: PASS（5/5；官网侧会话失效见 PB2-25）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n- docs_links: python vcpkg-cache/check_links.py → broken 0\n\n**M7（2026-09-27 落地）**\\n- 图片格式按内容嗅探（不看扩展名）+ 本地解码 stb/WIC 双后端 + 可操作报错；诊断：`api_probe --image-decode <路径>`\\n- 删图片输出节点（N-09）：节点 9→8\\n- **冻结区（I17）**：不得把合成/截断/未识别格式数据交给 WIC（曾致 CRT 断言崩溃，退出码 3）；见 source/README.md §4.2 / §6.1\\n\\n**M7 第二轮 P7（2026-09-27 会议决议 D1–D9 · 计划中，未开工）**\\n- P7-a（v0.5.2）：图片端口 variadic 多图（I19）+ 统一资源目录 + official 收口（超限拒 / 体积与耗时 / 错误分类）+ UI A 档\\n- P7-b（v0.5.3 待确认）：网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件（先做 P7b-01~05 前置验证，未过则回滚；方案 B′ 2026-09-29：网页版图片理解首个目标站 = 豆包 doubao-web，P7b-05b 只读侦察先行（上传入口 4 类 + 纯图无字视觉判别），审核通过后才动管道 M7B-02/04）\\n- 新增不变量 I18（无上传证据不得自动发送）/ I19（image 端口语义向后兼容）；开口项 Q1–Q8 见 M7.md §17\\n\\n**M7 第三轮 M7B（2026-09-28 立项 · 计划中未开工）**\n- 网页通道整体迁 Pydoll：WebView2 退场（source/ 内 17 文件 ≈184 处）+ 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态（~/.brain-ai/pydoll-profile）\n- 作废不变量 I2（不再承诺无参 CLI 逐字不变）→ 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2 / 保留字 --provider auto）/ I21（不静默降级）/ I22（流式降级标记非流式）；I15 → I15′（证据源改 CDP Cookie）；I16 升级为全局\n- 破坏性变更（计划）：--web-chat / --login-selftest 需 --provider；--web-probe 废弃；老用户需重新登录一次\n- 任务：前置验证 M7B-01~08 + 6 批 M7B-10~M7B-41（先建后拆，批 5 才删 WebView2）；基线 --exec-selftest 先降后升（删 VB2-17 前半 / VB2-25①③④，新增 VB2-28~VB2-36）\n- 计划全文：docs/actionPlan/M7B.md（WebView2 接触面 17 文件 ≈184 处清单见其 §1.3）｜ **阶段 0 已完成（2026-09-28）**：批 0 基线复测（exec 251/0 · graph 110/0 · provider 50/0 · run-selftest(--web) PASS · 断链 265/0）+ Pydoll 2.27.0 环境就绪（.venv 冒烟通过）+ 回滚锚点 pre-m7b 已推送；**仍未开工**\n\n**主要风险 / 待办**\n- 会话失效（40002/401/40003）缺界面引导（PB-07 / PB2-25）\n- 11 条内置站点仍缺 answer_selector（需人工登录一次 + 发一条消息 → PB2-29）\n- 流式数据源受 httplib 限制（PB-03/08 暂停 · D-31 待拍板）\n- 未接配置字段仍无效果（PD-03 / FEA-M6-01）\n- 补丁系列剩余项统一见 docs/actionPlan/M_patchAB_rest.md",
-    "version": "1790614496988"
+    "version": "1791592464544"
   }
 }

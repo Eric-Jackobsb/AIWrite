@@ -637,7 +637,7 @@ nlohmann::json execute(
 
 所有节点抛出 `NodeError`，由执行引擎捕获并标记节点状态为 error。
 
-> **实现说明（M2）**：`{var}` 的现行替换规则见 `src/nodes/local_nodes.cpp` —— 命名输入用 `{端口id}`；
+> **实现说明（M2）**：`{var}` 的现行替换规则见 `nodes/src/local_nodes.cpp` —— 命名输入用 `{端口id}`；
 > 变长输入按边顺序用 `{1}`/`{2}`…（恰好 1 个值时额外提供 `{vars}`）；未匹配的 `{…}` **原样保留**
 > （便于用户看出名字写错）。注册表中 PromptTemplate 的默认模板已同步为 `请根据以下内容续写：\n{vars}`。
 > 节点执行函数统一注册在 `engine::NodeExecutorRegistry`（入口 `nodes::registerAllExecutors()`）。

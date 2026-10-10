@@ -1,7 +1,7 @@
-#include "utils/output_archive.h"
+#include "output_archive.h"
 
-#include "utils/log.h"
-#include "utils/paths.h"
+#include "log.h"
+#include "paths.h"
 
 #include <algorithm>
 #include <chrono>

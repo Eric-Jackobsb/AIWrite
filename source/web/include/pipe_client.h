@@ -29,7 +29,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "web/channel_frames.h"
+#include "channel_frames.h"
 
 namespace aiwrite::web {
 

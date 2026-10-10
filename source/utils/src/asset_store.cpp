@@ -1,9 +1,9 @@
-#include "utils/asset_store.h"
+#include "asset_store.h"
 
-#include "utils/crypto.h"        // SHA3-256（复用既有实现；无需新增依赖）
-#include "utils/image_decode.h"  // 内容嗅探 → 规范扩展名
-#include "utils/log.h"
-#include "utils/paths.h"
+#include "crypto.h"        // SHA3-256（复用既有实现；无需新增依赖）
+#include "image_decode.h"  // 内容嗅探 → 规范扩展名
+#include "log.h"
+#include "paths.h"
 
 #include <algorithm>
 #include <cctype>

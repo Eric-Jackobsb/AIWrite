@@ -1,4 +1,4 @@
-#include "ai/upload_supply_probe.h"
+#include "upload_supply_probe.h"
 
 #include <algorithm>
 #include <chrono>
@@ -12,11 +12,11 @@
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
-#include "ai/provider_spec.h"
-#include "utils/log.h"
-#include "utils/paths.h"
-#include "web/session_store.h"
-#include "web/webview_host.h"
+#include "provider_spec.h"
+#include "log.h"
+#include "paths.h"
+#include "session_store.h"
+#include "webview_host.h"
 
 namespace aiwrite::ai {
 namespace {

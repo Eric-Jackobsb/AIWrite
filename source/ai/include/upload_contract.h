@@ -12,7 +12,7 @@
 //
 //  分层（只有这三层，职责不重叠）：
 //    ① 公共契约（本文件）：**站点无关**的数据结构与每站实现的函数指针签名
-//    ② 每站独立实现（`ai/upload/sites/site_upload_*.cpp`）：选择器 / 白名单 / 判据 / 转换策略
+//    ② 每站独立实现（`ai/<站>/site_upload_*.cpp`）：选择器 / 白名单 / 判据 / 转换策略
 //       —— **站点知识只允许出现在这里**（`I14`：站点知识不散落到引擎）
 //    ③ 传输原语（`web/webview_host.*`）：CDP 文件注入 + 网络回执采集（站点无关）
 //
@@ -30,8 +30,8 @@
 #include <string>
 #include <vector>
 
-#include "ai/provider_spec.h" // ProviderWebSpec
-#include "web/web_owner.h"    // M_patchC（PW-01）：归属（纯数据；无 Win32 依赖）
+#include "provider_spec.h" // ProviderWebSpec
+#include "web_owner.h"    // M_patchC（PW-01）：归属（纯数据；无 Win32 依赖）
 
 namespace aiwrite::ai {
 

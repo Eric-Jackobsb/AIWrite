@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
-#include "ai/provider_spec.h"   // M_patchB L1：生效条目（表驱动）
-#include "engine/graph.h"
+#include "provider_spec.h"   // M_patchB L1：生效条目（表驱动）
+#include "graph.h"
 
 namespace aiwrite::engine {
 

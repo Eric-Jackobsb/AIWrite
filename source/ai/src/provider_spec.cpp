@@ -1,7 +1,7 @@
-#include "ai/provider_spec.h"
+#include "provider_spec.h"
 
-#include "utils/log.h"
-#include "utils/paths.h"
+#include "log.h"
+#include "paths.h"
 
 #include <algorithm>
 #include <cctype>

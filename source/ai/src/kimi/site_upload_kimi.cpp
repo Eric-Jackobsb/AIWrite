@@ -1,4 +1,4 @@
-#include "ai/upload/site_uploads.h"
+#include "site_uploads.h"
 
 // ============================================================================
 //  Kimi（kimi-web）站点上传单元 —— M8-14（**模板性验证站**）
@@ -17,9 +17,9 @@
 //  实现上与本模板的豆包单元**逐字段对齐**（同一套 prepare / deliver / expect 契约）。
 // ============================================================================
 
-#include "ai/upload/image_convert.h"
-#include "web/site_ref.h"
-#include "web/webview_host.h"
+#include "image_convert.h"
+#include "site_ref.h"
+#include "webview_host.h"
 
 #include <string>
 #include <vector>

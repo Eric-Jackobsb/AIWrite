@@ -23,8 +23,8 @@
 //
 //  快捷键（交互模式）：Ctrl+Alt+C 立即提取 Cookie，ESC 关闭窗口
 // =============================================================================
-#include "utils/log.h"
-#include "utils/paths.h"
+#include "log.h"
+#include "paths.h"
 
 #include <windows.h>
 

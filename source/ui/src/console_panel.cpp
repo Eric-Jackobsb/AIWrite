@@ -1,8 +1,8 @@
-#include "ui/console_panel.h"
+#include "console_panel.h"
 
-#include "ui/text_view.h"
-#include "utils/file_dialog.h"
-#include "utils/log.h"
+#include "text_view.h"
+#include "file_dialog.h"
+#include "log.h"
 
 #include <imgui.h>
 

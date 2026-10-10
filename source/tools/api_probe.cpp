@@ -18,39 +18,43 @@
 //
 //  说明：API Key 只从环境变量 DEEPSEEK_API_KEY 读取，不写入磁盘、不硬编码。
 // =============================================================================
-#include "utils/crypto.h"
-#include "utils/log.h"
-#include "utils/window_geometry.h"
-#include "utils/paths.h"
+#include "crypto.h"
+#include "log.h"
+#include "window_geometry.h"
+#include "paths.h"
 
-#include "engine/graph.h"
-#include "engine/node_registry.h"
-#include "engine/recent_files.h"
-#include "engine/undo_stack.h"
-#include "engine/validate.h"
-#include "engine/provider_resolve.h" // M5-02：生效提供商 / 模型名断言
-#include "engine/workflow_io.h"
-#include "nodes/nodes.h"
-#include "utils/config.h"
-#include "utils/output_archive.h"
-#include "utils/paths.h"
-#include "web/session_store.h"
-#include "web/web_owner.h"     // M_patchC（PW-01）：归属（纯函数断言）
-#include "web/ready_level.h"   // M_patchC（PW-03）：就绪三级（纯函数断言）
-#include "web/webview_host.h" // plan_session_boot / interactive_login_request（纯逻辑断言用）
-#include "ai/deepseek_official_provider.h" // M5-02：多模态请求体断言
-#include "ai/provider_spec.h"              // M_patchB L1：Provider 配置表断言
-#include "ai/dom_web_client.h"             // L3（PB2-13/15）：DOM 适配器纯函数断言（VB2-22）
-#include "web/webview_host.h"              // L4（PB2-28）：探测脚本适用性断言（VB2-25）
-#include "web/channel_frames.h"           // M7B 批 1：管道协议 v1 帧（VB2-29 / VB2-32 · §6.1）
-#include "web/session_snapshot.h"        // M7B 批 2：L2 快照只读视图（VB2-39⑥ · MB-D0-8）
-#include "web/pydoll_channel.h"          // M7B 批 2：新通道如实报错断言（VB2-40④⑤ · I21）
-#include "ai/deepseek_web_client.h"       // L4（PB2-28④）：会话失效识别断言（VB2-27）
-#include "utils/image_decode.h"           // M7-04/05：图片格式嗅探 + 解码 + 失败文案断言
-#include "ai/upload/image_convert.h"      // M8-14：图片准备（白名单 / 限额 → 缩放 + 转码）离线断言
-#include "ai/upload/upload_evidence.h"    // M8-14：上传双证据（I18）离线断言
-#include "ai/upload/upload_registry.h"    // M8-14：站点上传注册表 + 契约离线断言
-#include "utils/asset_store.h"            // P7a-04：统一资源目录（令牌 / 归档 / 解析）断言
+#include "graph.h"
+#include "node_registry.h"
+#include "recent_files.h"
+#include "undo_stack.h"
+#include "validate.h"
+#include "provider_resolve.h" // M5-02：生效提供商 / 模型名断言
+#include "workflow_io.h"
+#include "nodes.h"
+#include "config.h"
+#include "output_archive.h"
+#include "paths.h"
+#include "session_store.h"
+#include "web_owner.h"     // M_patchC（PW-01）：归属（纯函数断言）
+#include "ready_level.h"   // M_patchC（PW-03）：就绪三级（纯函数断言）
+#include "webview_host.h" // plan_session_boot / interactive_login_request（纯逻辑断言用）
+#include "deepseek_official_provider.h" // M5-02：多模态请求体断言
+#include "provider_spec.h"              // M_patchB L1：Provider 配置表断言
+#include "dom_web_client.h"             // L3（PB2-13/15）：DOM 适配器纯函数断言（VB2-22）
+#include "webview_host.h"              // L4（PB2-28）：探测脚本适用性断言（VB2-25）
+#include "channel_frames.h"           // M7B 批 1：管道协议 v1 帧（VB2-29 / VB2-32 · §6.1）
+#include "session_snapshot.h"        // M7B 批 2：L2 快照只读视图（VB2-39⑥ · MB-D0-8）
+#include "pydoll_channel.h"          // M7B 批 2：新通道如实报错断言（VB2-40④⑤ · I21）
+#include "deepseek_web_client.h"       // L4（PB2-28④）：会话失效识别断言（VB2-27）
+#include "image_decode.h"           // M7-04/05：图片格式嗅探 + 解码 + 失败文案断言
+#include "image_convert.h"      // M8-14：图片准备（白名单 / 限额 → 缩放 + 转码）离线断言
+#include "upload_evidence.h"    // M8-14：上传双证据（I18）离线断言
+#include "upload_registry.h"    // M8-14：站点上传注册表 + 契约离线断言
+#include "asset_store.h"            // P7a-04：统一资源目录（令牌 / 归档 / 解析）断言
+#include "app_version.h"        // M6：诊断报告断言（版本号单一来源）
+#include "diagnostics_report.h" // M6（PM-04）：诊断报告离线断言
+#include "settings_validation.h" // M6（M6-01）：设置面板校验纯函数断言
+#include "webview2_runtime.h"    // M6（PM-01）：依赖自检（WebView2 运行时）
 
 #include <fstream>
 #include <sstream>
@@ -86,6 +90,11 @@ struct Options {
     std::string model    = "deepseek-chat";
     std::string api_base = "https://api.deepseek.com";
     std::string image_path;   // --image-decode：诊断某一图片文件（格式嗅探 / 解码 / 尺寸）
+    // ---- M6（非技术用户可安装化）----
+    bool diag_dump       = false; // --diag-dump：打印诊断报告（支持用；可直接重定向到文件）
+    bool diag_assert     = false; // --diag-assert：诊断报告离线断言（单行 PASS/FAIL）
+    bool dep_check       = false; // --dep-check：依赖自检（WebView2 运行时；缺依赖 ⇒ exit 1）
+    bool settings_assert = false; // --settings-assert：设置面板校验纯函数断言（单行 PASS/FAIL）
 };
 
 // NIST FIPS 202 标准测试向量
@@ -105,6 +114,10 @@ void print_usage()
     std::printf("  api_probe --chat \"<prompt>\" [--model <name>] [--api-base <url>] [--insecure]\n");
     std::printf("     --dry-run   只打印请求（URL / Authorization 脱敏 / body）并做结构断言，不发起网络请求\n");
     std::printf("  自检 --selftest 覆盖: V-05 SHA3 / V-04 HTTP / V-06 请求构造 / V-08 配置往返 / V-09 会话与可见性\n");
+    std::printf("  api_probe --diag-dump               # 打印诊断报告（版本/系统/依赖/路径/配置/站点表；不含密钥）\n");
+    std::printf("  api_probe --diag-assert             # 诊断报告离线断言（单行 PASS/FAIL；exit 0/1）\n");
+    std::printf("  api_probe --dep-check               # 依赖自检：WebView2 运行时（缺失时打印安装指引；exit 0/1）\n");
+    std::printf("  api_probe --settings-assert         # 设置面板校验纯函数断言（单行 PASS/FAIL；exit 0/1）\n");
 
 }
 
@@ -371,10 +384,13 @@ bool test_config_roundtrip()
     };
     // 说明（`PQ-18②` · 2026-10-09）：general.* 已从配置表移除 ⇒ 断言改为「**不含** general.*」
     //  * 本行是**单行 PASS/FAIL**（非逐项计数）⇒ 不影响 `--selftest` / `--exec-selftest` 的断言数字
+    // 口径变更（2026-10-10 · M6）：`output.auto_open_on_complete` / `advanced.log_ttl_days`
+    //  **已接线** ⇒ 断言从「在清单里」改为「**不在**清单里」（接线点见 config.cpp 注释与 CHANGELOG）
     const bool unwired_ok = !has_unwired("general.") && has_unwired("timeout.") &&
-                            has_unwired("output.auto_open_on_complete") &&
                             has_unwired("ui.grid_size") && !has_unwired("console_height") &&
-                            !has_unwired("running_animation") && !has_unwired("window_width");
+                            !has_unwired("running_animation") && !has_unwired("window_width") &&
+                            !has_unwired("output.auto_open_on_complete") &&
+                            !has_unwired("advanced.log_ttl_days");
     std::printf("   %-6s PA-08 未接配置字段清单：%zu 项；不含 general.*=%s；"
                 "不含 console_height/running_animation/window_*=%s\n",
                 unwired_ok ? "PASS" : "FAIL", unwired.size(),
@@ -383,6 +399,14 @@ bool test_config_roundtrip()
                  !has_unwired("window_width"))
                     ? "是"
                     : "否");
+    if (!unwired_ok) { // §3：断言失败必须打印逐例明细
+        for (const std::string& field : unwired) {
+            std::printf("         未接字段: %s\n", field.c_str());
+        }
+        std::printf("         auto_open_on_complete 在清单=%s / log_ttl_days 在清单=%s\n",
+                    has_unwired("output.auto_open_on_complete") ? "是" : "否",
+                    has_unwired("advanced.log_ttl_days") ? "是" : "否");
+    }
 
     return same && cache_ok && fit_ok && unwired_ok && multi_ok;
 }
@@ -3164,6 +3188,154 @@ int execution_selftest()
                        poll.find("只有短候选：仍如实返回") == std::string::npos, // 旧「短候选也算成功」已删
                    "VB2-22⑥ 答案归属门（PW-07）：装饰 / 布局文本不算答案 · 短候选不回落 · 体检串随 poll 回传");
 
+            // ---- PW-07i（2026-10-10 · 真机驱动 · `T-L11` gemini-web）：**控件词拼接**不算答案 ----
+            //  * 真机反例：`gemini-web` 自动识别把操作条 / 工具提示的拼接（**85 字节**：
+            //    `Dictate (^⇧D)Close sidebarImagesSettingsEdit promptCopy promptCopy responseMoreRedo`）
+            //    当答案写进 `n3` / `n4` ⇒ 三口径全判「可用」= **假成功**；上面那道「整串门」抓不住它
+            //    （它**不等于**任一个控件词，而是**多个**控件词拼接 —— `Copy prompt` x2 这类按钮文本）；
+            //  * 本断言只查**静态口径**（控件词随 cfg 下发 + 页面脚本里真有这道门与计数）；**行为级**在
+            //    `source/tools/poll_answer_gate_test.js` ⑲a/⑲b（真机原文逐字）+ ⑲c（不得误伤）。
+            bool words_ok = false;
+            try {
+                const nlohmann::json cfg3 = nlohmann::json::parse(aiwrite::ai::dom_cfg_json(request));
+                const std::string    re3  = cfg3.value("answer_chrome_words", std::string());
+                words_ok = re3.find("Copy prompt") != std::string::npos &&
+                           re3.find("Close sidebar") != std::string::npos &&
+                           re3.find("复制") != std::string::npos;
+            }
+            catch (const std::exception&) {
+                words_ok = false;
+            }
+            expect(check,
+                   words_ok &&
+                       poll.find("answer_chrome_words") != std::string::npos &&  // 控件词随 cfg 下发（纯数据）
+                       poll.find("chrome_only(t)") != std::string::npos &&       // 剥离后残余近空 ⇒ 不算答案
+                       poll.find("控件词拼接拒") != std::string::npos,            // 计数进体检串（steps / 日志）
+                   "VB2-22⑨ 控件词拼接门（PW-07i）：操作条拼接（gemini-web 85 字节反例）不算答案");
+
+            // ---- PW-07j（2026-10-10 · 真机驱动 · `T-L12` gemini-web）：**工具提示 / 屏读宿主**不算候选 ----
+            //  * 真机反例（日志物证）：`答案容器**自动识别** div.cdk-describedby-message-container … 候选池 38 个`
+            //    —— Angular CDK 的 `aria-describedby` 文案容器，只因类名含 `message` 被池里
+            //    `[class*="message"]` 误吞 ⇒ 77 / 92 字节「假成功」（两道文本门都抓不住：池选的**不是**答案文本）。
+            //  * 本断言只查**静态口径**（排除选择器随 cfg 下发 + 页面脚本里真有池内剔除 + 体检串计数）；
+            //    **行为级**在 `source/tools/poll_answer_gate_test.js` ⑳a（剔完轮到真答案）+ ⑳b（计数）。
+            bool excl_ok = false;
+            try {
+                const nlohmann::json cfg4 = nlohmann::json::parse(aiwrite::ai::dom_cfg_json(request));
+                const std::string    ex4  = cfg4.value("answer_pool_exclude", std::string());
+                excl_ok = ex4.find("describedby") != std::string::npos &&
+                          ex4.find("tooltip") != std::string::npos &&
+                          ex4.find("sr-only") != std::string::npos;
+            }
+            catch (const std::exception&) {
+                excl_ok = false;
+            }
+            expect(check,
+                   excl_ok &&
+                       poll.find("answer_pool_exclude") != std::string::npos &&            // 排除项随 cfg 下发
+                       poll.find("el.matches && el.matches(pool_excl)") != std::string::npos && // 池内剔除自己
+                       poll.find("另剔非候选宿主") != std::string::npos,                    // 计数进体检串
+                   "VB2-22⑩ 候选池剔除工具提示 / 屏读宿主（PW-07j）：gemini-web 命中的 CDK 描述容器不算候选");
+
+            // ---- PW-07k（2026-10-10 · 真机驱动 · `T-L13` gemini-web）：**本方消息回声**不算答案 ----
+            //  * 真机反例：剔掉 CDK 描述容器后紧接着取到 `span.user-query-bubble-with-background`
+            //    （`You said <提示词>`，**172 字节**）⇒ `n3` / `n4` = **自己那条**（下游拿本方消息当回答）。
+            //    旧口径只拦「整串等于提示词 / 以提示词开头」⇒ 带前缀（`You said `）的回声漏网。
+            //  * 判据 = 含提示词且**围绕它的残余**（去空白 / 标点）< `min_chars` ⇒ 判回声（真答案残余够长）；
+            //    结构侧同时把 `user-query` / `query-text` / `user-message` 容器从池内剔除。
+            //  * **行为级**在 `source/tools/poll_answer_gate_test.js` ㉑a/㉑b（真机形态）+ ㉑c（不得误伤）+ ㉑d。
+            bool echo_ok = false;
+            try {
+                const nlohmann::json cfg5 = nlohmann::json::parse(aiwrite::ai::dom_cfg_json(request));
+                const std::string    ex5  = cfg5.value("answer_pool_exclude", std::string());
+                echo_ok = ex5.find("user-query") != std::string::npos &&
+                          ex5.find("query-text") != std::string::npos;
+            }
+            catch (const std::exception&) {
+                echo_ok = false;
+            }
+            expect(check,
+                   echo_ok &&
+                       poll.find("echo_only(t)") != std::string::npos &&     // 回声门（含提示词且残余近空）
+                       poll.find("回声拒") != std::string::npos,              // 计数进体检串
+                   "VB2-22⑪ 本方消息回声门（PW-07k）：`You said <提示词>`（gemini-web 172 字节反例）不算答案");
+
+            // ---- PW-07m / PW-07n（2026-10-10 · 真机驱动 · `T-L17` 回归扫描）：两个新的「假成功」形态 ----
+            //  ① PW-07m **站侧内部码**：`yuanbao-web` 的 `n3` / `n4` = `CONFLICT_LOG`（12 字节）——
+            //     元宝把内部诊断节点渲染进 DOM，且是文档序最后候选 ⇒ 三口径判「可用」。
+            //     判据 = 整串（去空白 / 标点）就是一个 `SNAKE_CASE` 常量名。
+            //  ② PW-07n **生成中占位**：`ernie-web` 的 `n3` / `n4` = 站侧自动标题 + `正在编写，请稍候...`
+            //     + `0%` + `改用对话直接回答` ⇒ 同样判「可用」。判据 = 占位 / 进度短语 **且** 裸百分比
+            //     （两个独立信号同时出现 ⇒ 真答案几乎不可能同时满足，只拒不猜）。
+            //  * **行为级**在 `source/tools/poll_answer_gate_test.js` ㉒a/㉒b 与 ㉓a/㉓b/㉓c。
+            expect(check,
+                   poll.find("internal_code_only(t)") != std::string::npos &&
+                       poll.find("内部码拒") != std::string::npos,
+                   "VB2-22⑫ 站侧内部码门（PW-07m）：`CONFLICT_LOG`（yuanbao-web 12 字节反例）不算答案");
+            expect(check,
+                   poll.find("progress_only(t)") != std::string::npos &&
+                       poll.find("生成中拒") != std::string::npos,
+                   "VB2-22⑬ 生成中占位门（PW-07n）：`正在编写…0%`（ernie-web 19 字节反例）不算答案");
+
+            // ---- PW-07o（2026-10-10 · 真机驱动 · `T-L18` ernie-web）：**站侧推荐追问外壳**不算候选 ----
+            //  * 真机反例：取到 `div._answer-ask-wrapper_16z1u_8`（文心 CSS-module 外壳），文本 = 4 条追问
+            //    （`用代码模拟… / 把这段描述精简成… / 用幽默风格重新描述… / 能否再续写一段…`，183 字节）
+            //    ⇒ 三口径判「可用」；真答案是同池内的 `div.cosd-markdown-content`。
+            //  * 判据 = **外壳身份**（`ask-wrapper`，节点自己匹配即剔，不看祖先）⇒ 内层真答案照常参与。
+            //  * **行为级**在 `source/tools/poll_answer_gate_test.js` ㉔a/㉔b（排除生效）+ ㉔c（不得误伤）。
+            bool ask_ok = false;
+            try {
+                const nlohmann::json cfg6 = nlohmann::json::parse(aiwrite::ai::dom_cfg_json(request));
+                ask_ok = cfg6.value("answer_pool_exclude", std::string()).find("ask-wrapper") != std::string::npos;
+            }
+            catch (const std::exception&) {
+                ask_ok = false;
+            }
+            expect(check,
+                   ask_ok && poll.find("推荐追问") != std::string::npos,
+                   "VB2-22⑭ 推荐追问外壳剔除（PW-07o）：`_answer-ask-wrapper_*`（ernie-web 183 字节反例）不算候选");
+
+            // ---- PW-07p（2026-10-10 · 真机驱动 · `T-L19` ernie-web）：**提示词派生短句列表**不算答案 ----
+            //  * 真机教训：`T-L19` 追问容器的**类名换了**（`_answer-ask-wrapper_16z1u_8` →
+            //    `ai-index-no-animation-icon`）⇒ PW-07o 的类名排除**打不完**（站侧一改版本就是新类名）。
+            //    ⇒ 改用**文本形态**判：≥3 行 · 每行 ≤ 24 字 · 整串无句末标点 · 每行都与提示词共享 ≥2 字片段。
+            //  * **行为级**在 `source/tools/poll_answer_gate_test.js` ㉕a（拒）+ ㉕b/㉕c（不得误伤）。
+            expect(check,
+                   poll.find("suggest_list(raw_el)") != std::string::npos &&
+                       poll.find("建议列表拒") != std::string::npos,
+                   "VB2-22⑮ 提示词派生短句列表门（PW-07p）：`ai-index-no-animation-icon` 追问（192 字节）不算答案");
+
+            // ---- PW-07q（2026-10-10 · 真机驱动 · `T-L22` gemini-web）：**外壳容器**不算候选 ----
+            //  * 真机反例：取到 `infinite-scroller.chat-history`（436 字节 = 历史各轮 `You said … / Gemini
+            //    said …` + 本轮），而本轮真答案是它内部的 `#model-response-message-content*`（同池候选）。
+            //    外壳中选的原因：内层「上一轮」答案文本早在基线里（`is_new` 为假）、内层「本轮」答案节点
+            //    当时还空 ⇒ 只有外壳的文本是「新」的。
+            //  * 判据 = 池内**包含关系**（`el.contains(other候选)`，与类名 / 文本无关）⇒ 外壳不算候选。
+            //  * **行为级**在 `source/tools/poll_answer_gate_test.js` ㉖a（外壳剔 / 继续轮询）+ ㉖b/㉖c（不得误伤）。
+            expect(check,
+                   poll.find("inner_of_some(pool[i])") != std::string::npos &&
+                       poll.find("外壳剔") != std::string::npos,
+                   "VB2-22⑯ 外壳容器剔除（PW-07q）：`infinite-scroller.chat-history`（gemini-web 436 字节反例）不算候选");
+
+            // ---- PW-07r（2026-10-10 · 真机驱动 · `T-L24` yuanbao-web）：**行内元素**不算候选 ----
+            //  * 真机反例：取到 `code.hyc-common-markdown__code__inline`（**13 字节** = `mode=悬疑`，
+            //    答案正文里的行内代码片段）—— 行内节点也带 markdown 字样类名 ⇒ 被池误吞，且是文档序
+            //    **最后**候选 ⇒ 外层块级真答案反而落选（三口径判「可用」）。
+            //  * 判据 = 元素形态（块级 vs 行内）：`code` / `span` 只承载片段 ⇒ 不进候选池。
+            //  * **行为级**在 `source/tools/poll_answer_gate_test.js` ㉗a/㉗b（行内剔除）+ ㉗c（消息项不误伤）。
+            bool inline_ok = false;
+            try {
+                const nlohmann::json cfg7 = nlohmann::json::parse(aiwrite::ai::dom_cfg_json(request));
+                const std::string ex7 = cfg7.value("answer_pool_exclude", std::string());
+                inline_ok = ex7.find("code") != std::string::npos && ex7.find("span") != std::string::npos;
+            }
+            catch (const std::exception&) {
+                inline_ok = false;
+            }
+            expect(check,
+                   inline_ok,
+                   "VB2-22⑰ 行内元素不入池（PW-07r）：`code` / `span` 不算候选（yuanbao-web 13 字节片段反例）");
+
             // ---- PW-07g（2026-10-08 · 「段落换行丢失」根因修）：判据/产物**分离** + 排版纯函数 ----
             //  * 真机反例：豆包回答 `div.container-qX9Csx`（**759 字节**，内容完整）经页面侧
             //    `norm`（`\s+` → `' '`）后写盘 ⇒ `4-TextOutput.txt` 整篇 **1 行**（LF 全在文件头）：
@@ -3902,6 +4074,32 @@ int execution_selftest()
         expect(check, miss_page.find("页面级") != std::string::npos &&
                           miss_window.find("窗口级") != std::string::npos,
                "PW-03 归因分离：缺哪一级就点哪一级（窗口级 / 页面级）");
+
+        // ---- ③b 诊断附加（2026-10-10 · 循环开发 `T-L06` 真机驱动）----
+        //  * 判据：`wait_ready` 失败时的文案必须**带上实时事实**（readyState / URL / 可见输入候选）
+        //    —— `gemini-web` / `spark-web` 的定性全靠它（URL 已跳到 accounts.google.com ⇒ 需登录；
+        //    readyState 停在 interactive ⇒ 页面本身没加载完）
+        const std::string detail_full =
+            web::ready_detail_text("https://gemini.google.com/app", "interactive", 3);
+        expect(check, detail_full.find("readyState=interactive") != std::string::npos &&
+                          detail_full.find("https://gemini.google.com/app") != std::string::npos &&
+                          detail_full.find("可见输入候选=3") != std::string::npos,
+               "PW-03 诊断附加：三要素齐全（readyState / URL / 可见输入候选）");
+        expect(check, web::ready_detail_text(std::string(), std::string(), 0).empty(),
+               "PW-03 诊断附加：**一条事实都没有** ⇒ 空串（不许编造）");
+        const std::string detail_partial = web::ready_detail_text(std::string(), "loading", 0);
+        expect(check, detail_partial.find("readyState=loading") != std::string::npos &&
+                          detail_partial.find("（取不到）") != std::string::npos,
+               "PW-03 诊断附加：只有 readyState 也照实写（URL 缺 ⇒ 「（取不到）」）");
+
+        // ---- ④ Loop Dev 批 3（`FEA-L01`）：DOM 探测**报告链路**的离线断言 ----
+        //  * 报告解析 / 状态映射 / diff（含旧报告按事实回推）—— 不开窗口、不联网
+        //  * 真机批量探测另有 `aiwrite.exe --provider all`（退出码 §6.3）
+        std::printf("   -- DOM 批量探测报告（loop_dev 批 3 · FEA-L01）--\n");
+        int dom_passed = 0;
+        const int dom_failed = aiwrite::ai::dom_probe_selftest(&dom_passed);
+        check.passed += dom_passed;
+        check.failed += dom_failed;
     }
 
     std::printf("=== 执行器自检结果: %d 通过 / %d 失败 ===\n", check.passed, check.failed);
@@ -3948,6 +4146,155 @@ int image_decode_report(const std::string& path)
 }
 
 } // namespace
+
+// ============================================================================
+//  M6（非技术用户可安装化）自检 —— 三个开关各自打印**单行 PASS/FAIL**
+//  * 说明：不计入 `--selftest` / `--exec-selftest` 的任何分组数字（口径同「窗口几何」行）
+//  * 不联网、不开窗口、不改用户数据（诊断报告本身是只读采集）
+// ============================================================================
+
+// PM-04：诊断报告离线断言（分节齐全 / 版本号同源 / 脱敏 / 关键键有值）
+bool test_diag_report()
+{
+    std::printf("[M6] 诊断报告自检\n");
+    const aiwrite::utils::DiagnosticsReport report = aiwrite::utils::collect_diagnostics();
+    const std::string                    text     = report.text();
+
+    const char* sections[] = {"[报告] AIwrite 诊断信息", "[系统]", "[依赖]",  "[路径]",
+                              "[配置]",                    "[站点表]", "[凭据]", "[归档与工作流]"};
+    bool        sections_ok = true;
+    for (const char* section : sections) {
+        const bool found = text.find(section) != std::string::npos;
+        if (!found) {
+            std::printf("         缺分节: %s\n", section);
+            sections_ok = false;
+        }
+    }
+
+    const std::string version   = report.key_value("程序版本");
+    const std::string webview2  = report.key_value("WebView2");
+    const std::string data_dir  = report.key_value("数据目录");
+    const std::string entries   = report.key_value("条目总数");
+    const std::string unwired   = report.key_value("未接配置字段");
+
+    const bool version_ok = version == aiwrite::kAppVersion;
+    const bool dep_ok     = webview2.find("WebView2 运行时") == 0;
+    const bool path_ok    = data_dir.find(".brain-ai") != std::string::npos;
+    const bool specs_ok   = entries.find("官方 API") != std::string::npos &&
+                            entries.find("网页版") != std::string::npos;
+    const bool unwired_ok = unwired.find("项（") != std::string::npos;
+    // 脱敏（硬要求）：报告里不得出现常见密钥/令牌形态
+    const bool redaction_ok = text.find("sk-") == std::string::npos &&
+                              text.find("token =") == std::string::npos &&
+                              text.find("api_key =") == std::string::npos;
+
+    const bool ok = sections_ok && version_ok && dep_ok && path_ok && specs_ok && unwired_ok &&
+                    redaction_ok;
+    std::printf("   %-6s 诊断报告：分节 %s / 版本号同源(%s) %s / 依赖行 %s / 数据目录 %s / "
+                "站点表 %s / 未接清单 %s / 脱敏 %s / 共 %zu 行\n",
+                ok ? "PASS" : "FAIL", sections_ok ? "齐全" : "缺", version.c_str(),
+                version_ok ? "是" : "否", dep_ok ? "是" : "否", path_ok ? "是" : "否",
+                specs_ok ? "是" : "否", unwired_ok ? "是" : "否", redaction_ok ? "是" : "否",
+                report.lines.size());
+    return ok;
+}
+
+// PM-01：依赖自检（**只读探测**；缺依赖 ⇒ 返回 false ⇒ exit 1，并打印安装指引）
+bool test_dep_check()
+{
+    std::printf("[M6] 依赖自检\n");
+    const aiwrite::utils::WebView2RuntimeInfo info = aiwrite::utils::detect_webview2_runtime();
+    std::printf("   %-6s %s\n", info.installed ? "PASS" : "FAIL",
+                aiwrite::utils::webview2_runtime_summary(info).c_str());
+    // `PQ-02`：安装包可附带 Evergreen Bootstrapper —— 有就报路径（便于支持人员核对）
+    const std::string bundled = aiwrite::utils::bundled_bootstrapper_path();
+    std::printf("   随包引导程序 = %s\n",
+                bundled.empty() ? "（未附带：界面/文档给官方下载页）" : bundled.c_str());
+    if (!info.installed) {
+        std::printf("%s", aiwrite::utils::webview2_install_advice().c_str());
+    }
+    return info.installed;
+}
+
+// M6-01：设置面板校验纯函数断言（默认通过 + 各类越界被拒）
+bool test_settings_assert()
+{
+    std::printf("[M6] 设置校验自检（utils::validate_settings）\n");
+    const aiwrite::Config good;
+
+    struct Case {
+        const char*  label;
+        aiwrite::Config config;
+    };
+    std::vector<Case> bad_cases;
+    {
+        aiwrite::Config c = good;
+        c.output.archive_dir.clear();
+        bad_cases.push_back({"归档目录为空", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.ui.console_height = 10;
+        bad_cases.push_back({"Console 高度 10（<60）", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.ui.grid_size = 1;
+        bad_cases.push_back({"网格间距 1（<4）", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.output.ttl_days = -1;
+        bad_cases.push_back({"归档清理阈值 -1", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.output.max_history = 0;
+        bad_cases.push_back({"归档保留份数 0", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.timeout.connect_ms = 10;
+        bad_cases.push_back({"连接超时 10ms（<1000）", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.advanced.log_ttl_days = 99999;
+        bad_cases.push_back({"logs 保留天数 99999", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.error.retry_count = 99;
+        bad_cases.push_back({"重试次数 99（>10）", c});
+    }
+
+    const std::string default_error = aiwrite::utils::validate_settings(good);
+    bool              bad_ok        = true;
+    for (const Case& item : bad_cases) {
+        const std::string error = aiwrite::utils::validate_settings(item.config);
+        if (error.empty()) {
+            std::printf("         未拦截: %s\n", item.label);
+            bad_ok = false;
+        }
+    }
+
+    // 边界值必须**通过**（不外扩误伤）
+    aiwrite::Config edge = good;
+    edge.ui.console_height  = 60;
+    edge.ui.grid_size       = 200;
+    edge.output.ttl_days    = 0;
+    edge.output.max_history = 1;
+    const bool edge_ok = aiwrite::utils::validate_settings(edge).empty();
+
+    const bool ok = default_error.empty() && bad_ok && edge_ok;
+    std::printf("   %-6s 默认配置通过=%s / 越界 %zu 例全部拦截=%s / 边界值通过=%s\n",
+                ok ? "PASS" : "FAIL", default_error.empty() ? "是" : "否", bad_cases.size(),
+                bad_ok ? "是" : "否", edge_ok ? "是" : "否");
+    if (!ok && !default_error.empty()) {
+        std::printf("         默认配置被误拒: %s\n", default_error.c_str());
+    }
+    return ok;
+}
 
 int main(int argc, char** argv)
 {
@@ -3996,6 +4343,18 @@ int main(int argc, char** argv)
         else if (arg == "--api-base") {
             options.api_base = next("--api-base");
         }
+        else if (arg == "--diag-dump") { // M6：打印诊断报告
+            options.diag_dump = true;
+        }
+        else if (arg == "--diag-assert") { // M6：诊断报告离线断言
+            options.diag_assert = true;
+        }
+        else if (arg == "--dep-check") { // M6：依赖自检（WebView2 运行时）
+            options.dep_check = true;
+        }
+        else if (arg == "--settings-assert") { // M6：设置面板校验断言
+            options.settings_assert = true;
+        }
         else if (arg == "--help" || arg == "-h") {
             print_usage();
             return 0;
@@ -4020,7 +4379,8 @@ int main(int argc, char** argv)
 
     if (options.sha3_text == "" && !options.selftest && !options.graph_selftest &&
         !options.exec_selftest && options.http_url.empty() && options.chat_prompt.empty() &&
-        options.image_path.empty()) {
+        options.image_path.empty() && !options.diag_dump && !options.diag_assert &&
+        !options.dep_check && !options.settings_assert) {
         print_usage();
         aiwrite::log::shutdown();
         return 2;
@@ -4091,6 +4451,26 @@ int main(int argc, char** argv)
     if (!options.chat_prompt.empty()) {
         const int chat_code = test_chat(options);
         if (chat_code == 1) {
+            exit_code = 1;
+        }
+    }
+
+    // ---- M6（非技术用户可安装化）：诊断 / 依赖 / 设置校验 ----
+    if (options.diag_dump) { // PM-04：诊断报告（只读采集；可直接 > 文件）
+        std::printf("%s", aiwrite::utils::diagnostics_report_text().c_str());
+    }
+    if (options.diag_assert) { // PM-04：报告离线断言
+        if (!test_diag_report()) {
+            exit_code = 1;
+        }
+    }
+    if (options.dep_check) { // PM-01：依赖自检（缺 WebView2 ⇒ 1）
+        if (!test_dep_check()) {
+            exit_code = 1;
+        }
+    }
+    if (options.settings_assert) { // M6-01：设置校验断言
+        if (!test_settings_assert()) {
             exit_code = 1;
         }
     }

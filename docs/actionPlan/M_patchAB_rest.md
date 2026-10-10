@@ -37,25 +37,28 @@
 
 沿用 `M_patchA` §0.3 五条（**运行态值不进文档** / **只读暴露** / **脱敏** / **一次提交一个补丁** / **不引入新依赖**）+ `M_patchB` §0.4 追加三条（**表数据优先于 C++ 常量** / **不静默回落** / **不实测不填值**），并守全部不变量 **`I1`…`I16`**（其中 `I2`「`deepseek-web` 与无参路径行为逐字不变」、`I15`「登录态判据不得依赖 `userToken`」、`I16`「探测不适用站点不得注入 DeepSeek 端点」在 L4 残项里最关键）。
 
-### 0.4 回归基线（**2026-09-27 实测** · 每次提交必须重跑并贴结果）
+### 0.4 回归基线（**2026-10-09 实测** · 每次提交必须重跑并贴结果）
 
 | 命令 | 期望（当前实测） |
 |---|---|
 | 构建（MSVC /W4，4 目标） | **0 error / 0 warning** |
-| `api_probe.exe --selftest` | 七组全 PASS |
-| `api_probe.exe --graph-selftest` | **111 通过 / 0 失败** |
-| `api_probe.exe --exec-selftest` | **237 通过 / 0 失败** |
+| `api_probe.exe --selftest` | 七组全 PASS · exit 0（含 执行器 **452 / 0**） |
+| `api_probe.exe --graph-selftest` | **110 通过 / 0 失败** |
+| `api_probe.exe --exec-selftest` | **452 通过 / 0 失败**（2026-10-09 批 3：**425 → 452**，新增 27 项 DOM 探测报告自检） |
 | `aiwrite.exe --provider-selftest` | **50 通过 / 0 失败** |
-| `aiwrite.exe --provider-dump` | **21 条**（official 9 / web 12） |
-| `aiwrite.exe --cred-selftest` | **8/8 PASS** |
-| `aiwrite.exe --export-selftest` | **7/7 PASS** |
+| `aiwrite.exe --provider-dump` | **20 条**（official 9 / web 11） |
+| `aiwrite.exe --cred-selftest` | **8/8 PASS**（本轮未复跑） |
+| `aiwrite.exe --export-selftest` | **7/7 PASS**（本轮未复跑） |
 | `aiwrite.exe --web-session-selftest` | PASS（会话自动引导：窗口已开 → 补探测） |
 | `aiwrite.exe --web-adapter-selftest --provider <id>` | 逐站命中数可达（诊断；有缺项时退出码 1） |
-| `aiwrite.exe --web-dom-dump --provider <id>` | 只读枚举候选元素（v15 新增；**12/12 条目直连各自站点**） |
+| `aiwrite.exe --web-adapter-selftest --provider all --timeout 30 --json <报告>` | 10 站一次跑完 · 退出码 **0 / 1 / 3 / 2**（`FEA-L01`/`FEA-L03` · 2026-10-09 实测：可用 **8** · 需登录 **2** · 失败 **1** · 未测 0 · **exit 1**） |
+| `aiwrite.exe --web-session-list [--json <路径>]` | 内存会话 / L2 快照元数据 / 网页版条目 **11 条** · **exit 0**（有没有会话都算成功 · `FEA-L02`） |
+| `aiwrite.exe --web-dom-dump --provider <id>` | 只读枚举候选元素（v15 新增；**11/11 条目直连各自站点**） |
 | `aiwrite.exe --run-selftest` | PASS（离线无 Key：**3/5 为预期**） |
 | `aiwrite.exe --run-selftest --web --provider <id>` | **exit 0 = 生成成功**（需该条目选择器就绪 + 会话有效） |
 | `aiwrite.exe --run-selftest --web`（内置 DeepSeek 路径） | 5/5 —— ⚠️ 受官网侧会话失效（`R19`）影响时需先解决 `PB2-25`/重登 |
-| 文档断链自检 `python vcpkg-cache/check_links.py` | **broken 0** |
+| 离线夹具 `node source/tools/*_test.js` | `poll_answer_gate_test` **12 / 0** · `send_chain_test` **17 / 0** · `dom_gate_test` **15 / 0**（各加 `--old` 负向**必须 FAIL**：**5 / 7** · **13 / 4** · **6 / 15** · 退出码 1） |
+| 文档断链自检 `python vcpkg-cache/check_links.py` | **本轮不得新增** —— 2026-10-09 实测 **checked 610 / broken 8**（8 条**全部为存量**、已登记 `DBG-L01`；判据**不是**「全库 0」） |
 
 ### 0.5 旧路径映射（归档后如何查历史）
 
@@ -64,7 +67,7 @@
 | `docs/actionPlan/M_patchA.md` | → [../Archive/actionPlan/M_patchA.md](../Archive/actionPlan/M_patchA.md)（📦 已归档 2026-09-27） |
 | `docs/actionPlan/M_patchB.md` | → [../Archive/actionPlan/M_patchB.md](../Archive/actionPlan/M_patchB.md)（📦 已归档 2026-09-27；§9.x 各批次实测记录与附录 B–E 的**快照**） |
 | 本文档里 `M_patchA §x` / `M_patchB §x` 的写法 | 指**归档文档**内的同名章节（**规格与实测原文**）；**现行版本**以本文对应章节与 §8 附录为准 |
-| 源码 / 数据里的历史引用（**本轮未改**） | `source/assets/providers.json` 的 `notes`、`source/src/ai/provider_spec.h` 注释里的 `docs/actionPlan/M_patchB.md`；`engine/executor.h`、`ui/output_panel.h`、`ai/deepseek_official_provider.h` 注释里的 `M_patchA §0.3` / `M_patchA PB-03/PB-08` —— 均指**归档文档**；如需路径精确，可另行批量修正（属代码注释/数据文本，需一次重建验证） |
+| 源码 / 数据里的历史引用（**本轮未改**） | `source/assets/providers.json` 的 `notes`、`source/include/ai/provider_spec.h` 注释里的 `docs/actionPlan/M_patchB.md`；`engine/executor.h`、`ui/output_panel.h`、`ai/deepseek/deepseek_official_provider.h` 注释里的 `M_patchA §0.3` / `M_patchA PB-03/PB-08` —— 均指**归档文档**；如需路径精确，可另行批量修正（属代码注释/数据文本，需一次重建验证） |
 
 
 ---
@@ -147,7 +150,7 @@
 
 ### 2.5 流式**数据源**（`B3-c` · 暂停项，需你定方案）· ✅ **已拍板（2026-10-09 · `PQ-11` = 决策 `D-31` 结案 = 选 ③）**：**明确不做**（网页版文案改「分段落定」）+ 补 `VB-03` 离线断言 —— 原文（拍板依据）保留：⬜ **待定（`PQ-11` = 决策 `D-31`）**
 
-- **现状**：链路已通（`on_delta` → `RunEvent::Delta` → 读模型逐段追加），但 **httplib v0.15.3 无「POST 响应体流式接收」重载** → 增量一次性到达，表现为「最后一下全出来」；官方 SSE 同理（归档 `M_patchA §4.1 PB-03/PB-08`、[网页版协议实测记录](../网页版协议实测记录.md) 附录 A）。
+- **现状**：链路已通（`on_delta` → `RunEvent::Delta` → 读模型逐段追加），但 **httplib v0.15.3 无「POST 响应体流式接收」重载** → 增量一次性到达，表现为「最后一下全出来」；官方 SSE 同理（归档 `M_patchA §4.1 PB-03/PB-08`、[网页版协议实测记录](../Archive/网页版协议实测记录.md) 附录 A）。
 - **三选一（待你拍板）**：① 升级/替换 httplib（风险中，需回归全部联网路径）；② 网页版改「POST 生成 + GET 轮询正文」（**需先探到 A′ 端点**，候选清单见实测记录附录 A.3）；③ 明确不做，把 UI 文案从「流式」改为「**分段落定**」并登记。
 - **验证**：`VB-03` —— 把「离线假增量断言」自动化（构造多段增量 → 断言**拼接结果 == 非流式结果**，`delta_bytes` 与正文长度一致）。
 - **注意**：`VB-03` 是**唯一被标 🚫** 的验证项，建议即使选 ③ 也把这条离线断言补上。
@@ -183,7 +186,7 @@
 
 ### 3.2 `PB2-07` 界面「测试连接」按钮（`B2-f`）
 
-- **现状**：CLI 侧早已 ✅（`--provider-selftest` **50/0**、`--provider-dump` 21 条）；**只差界面按钮**。
+- **现状**：CLI 侧早已 ✅（`--provider-selftest` **50/0**、`--provider-dump` 20 条）；**只差界面按钮**。
 - **要点**：参数面板加「测试连接」（**异步、不阻塞界面**；结果进 Console + 状态栏）：
   - API 条目：① 表校验 + 离线断言 ② 有 Key 时发一条 `ping`（「请只回复 pong」）→ 打印 `HTTP / 模型 / 耗时`；
   - web 条目：③ 登录态 + 生效 `endpoints`/`probe_paths` 与表是否一致；**不发送任何提示词**（避免误触发站点调用与风控）；
@@ -203,9 +206,9 @@
 
 ### 3.4 `PB2-29` / `PB2-30②` 逐站选择器（`B2-e2`）
 
-- **现状（v15/v16 实测）**：**12/12** 条目的「打开登录窗口」都真的打开**各自的站点** ✅；**4 条输入框选择器已实测回填**（`kimi-web` = `div.chat-input-editor`、`qwen-web` = `textarea[placeholder="Ask Qwen"]` + `div.message-input-right-button-send`、`yuanbao-web` = `div.ql-editor.ql-blank`、`ernie-web` = `#chat-textarea`，已进 `source/assets/providers.json`）；**11 条的 `answer_selector` 仍空**（回答容器必须先有一条回答才存在 —— **唯一人工关卡**）。
-- **单站标准流程**：① 界面「打开登录窗口」**手动登录**（不代填密码、不绕过验证）→ ② **手动发一条消息** → ③ `aiwrite.exe --web-dom-dump --provider <id>` 读出候选元素 + 建议 → ④ 填 `answer_selector`（必要时 `done_when` / `answer_poll_ms` / `answer_max_polls`）→ ⑤ `--web-adapter-selftest --provider <id>` 复核命中数（**可见**）→ ⑥ `aiwrite.exe --run-selftest --web --provider <id>` 端到端 → ⑦ 条目置 `verified: true` + `notes` 记实测日期与站点版本 → ⑧ 回填 **§8 附录 E** 两列 + [网页版协议实测记录](../网页版协议实测记录.md) 逐站追加。
-- **次序建议**：Kimi 先行（最终域 `www.kimi.com` 已修正、`contenteditable` 输入框已就绪）→ Qwen / 元宝 / 文心（输入框已就绪）→ 通义 / 豆包 / 星火 → `chatglm-web`（需人工过 WAF）→ 境外三站（本机可直连，可选做）。
+- **现状（v15/v16 实测）**：**12/12** 条目的「打开登录窗口」都真的打开**各自的站点** ✅（v15 当时的清单含 `tongyi-web` —— 该条目 2026-10-10 因与 `qwen-web` 重复而移除 ⇒ 现行 **11/11**，见下表）；**4 条输入框选择器已实测回填**（`kimi-web` = `div.chat-input-editor`、`qwen-web` = `textarea[placeholder="Ask Qwen"]` + `div.message-input-right-button-send`、`yuanbao-web` = `div.ql-editor.ql-blank`、`ernie-web` = `#chat-textarea`，已进 `source/assets/providers.json`）；**10 条的 `answer_selector` 仍空**（回答容器必须先有一条回答才存在 —— **唯一人工关卡**）。
+- **单站标准流程**：① 界面「打开登录窗口」**手动登录**（不代填密码、不绕过验证）→ ② **手动发一条消息** → ③ `aiwrite.exe --web-dom-dump --provider <id>` 读出候选元素 + 建议 → ④ 填 `answer_selector`（必要时 `done_when` / `answer_poll_ms` / `answer_max_polls`）→ ⑤ `--web-adapter-selftest --provider <id>` 复核命中数（**可见**）→ ⑥ `aiwrite.exe --run-selftest --web --provider <id>` 端到端 → ⑦ 条目置 `verified: true` + `notes` 记实测日期与站点版本 → ⑧ 回填 **§8 附录 E** 两列 + [网页版协议实测记录](../Archive/网页版协议实测记录.md) 逐站追加。
+- **次序建议**：Kimi 先行（最终域 `www.kimi.com` 已修正、`contenteditable` 输入框已就绪）→ Qwen / 元宝 / 文心（输入框已就绪）→ 豆包 / 星火 → `chatglm-web`（需人工过 WAF）→ 境外三站（本机可直连，可选做）。
 - **`PB2-30②`（面板「测试选择器」）**：复用 `ai::dom_adapter_selftest()`（**只读**），把**命中数 + 建议**显示在界面（不必再看 Console）→ 这是 `PB2-29` 的**配套工具**，建议先做它再逐站取选择器。
 - **原则**：**不实测不填值**（沿用 `PB2-26`）；站点改版 → 用户改 JSON 自助修复（`R21`）。
 - **验收**：`AB2-21`（逐站独立验收）/ `AB2-22`。
@@ -467,13 +470,12 @@
 ### 附录 E · 内置各 AI 网页版站点入口清单（**登录型** · 更新 2026-09-27）
 
 > 用法：「提供商配置 →『提供商』」下拉里直接选（official 条目在前、web 条目在后）→「打开登录窗口」登录一次 → 凭证按站点隔离（**仅内存**）。
-> **生成**：DOM 适配器（L3 `PB2-13…16`）**已落地**；下列 12 条里 **4 条输入框选择器已实测回填**，其余仍缺 `answer_selector` → 运行前用 `--web-adapter-selftest --provider <id>` 确认（缺项会**明确报错**，不静默、**不**用 DeepSeek 端点）。
+> **生成**：DOM 适配器（L3 `PB2-13…16`）**已落地**；下列 11 条里 **4 条输入框选择器已实测回填**，其余仍缺 `answer_selector` → 运行前用 `--web-adapter-selftest --provider <id>` 确认（缺项会**明确报错**，不静默、**不**用 DeepSeek 端点）。
 
 | 条目 id | 显示名 | 登录页（`web.login_url`） | 窗口可达（v15 实测） | 可登录（人工登录 · 待做） | 可生成（选择器） | 备注 |
 |---|---|---|---|---|---|---|
 | `deepseek-web` | DeepSeek（网页版） | `https://chat.deepseek.com/` | ✅（内置协议站点） | ✅ | ✅ | 唯一 `builtin:deepseek` 适配器条目 |
 | `kimi-web` | Kimi（Moonshot 网页版） | `https://www.kimi.com/` | ✅ | ⬜ | 🟡 **输入框 ✅** / 回答 ⬜ | 旧域 `kimi.moonshot.cn` **301** 到此（v11 实测）；`div.chat-input-editor` 已回填 |
-| `tongyi-web` | 通义千问 → **千问**（阿里网页版） | ⚠️ `https://www.qianwen.com/` | ✅（**已修正重定向**） | ⬜ | ⬜ | 旧域 `tongyi.com/qianwen` → `qianwen.com` |
 | `qwen-web` | Qwen（国际站网页版） | `https://chat.qwen.ai/` | ✅ | ⬜ | 🟡 **输入框 ✅** / 回答 ⬜ | `textarea[placeholder="Ask Qwen"]` + 发送按钮已回填 |
 | `chatglm-web` | 智谱清言（ChatGLM 网页版） | `https://chatglm.cn/main/alltoolsdetail` | ⚠️ 可达但被 **WAF** 挡 | ⬜ | ⬜ | 需人工过验证 + 登录后才能取选择器 |
 | `doubao-web` | 豆包（字节网页版） | `https://www.doubao.com/chat/` | ✅ | ⬜ | ⬜ | **未登录不渲染输入框**；**网页版图片理解首个目标站（方案 B′ · 2026-09-29）** —— 侦察先行（`P7b-05b`：人工登录一次取齐三项 + 上传入口侦察 + 视觉性质判别），「可生成」列保持 ⬜（**不填假值**） |
@@ -484,12 +486,13 @@
 | `claude-web` | Claude（claude.ai） | `https://claude.ai/` → 跳 `/login` | ✅（可直连） | ⬜ | ⬜ | 登录/注册前无 composer |
 | `gemini-web` | Gemini（gemini.google.com） | `https://gemini.google.com/app` | ✅（可直连） | ⬜ | ⬜ | 需 Google 账号登录后取选择器 |
 
-- **四列口径（L4 起）**：**窗口可达** = 「打开登录窗口」真的打开了**该 AI 自己的站点**（v15 实测 **12/12** ✅）；**可登录** = 「人工登录 → 抓取 Cookie」链路已实测通过（**待做**）；**可生成（选择器）** = `web.input_selector` / `send` / `answer_selector` **已实测填好**且端到端生成通过（⬜ = 尚未实测，**不填假值** —— 沿用 `PB2-26` 原则）。**L4 的目标就是把 11 行的「可生成」从 ⬜ 逐站变为 ✅**（`PB2-29`；每站需一次人工登录 + 选择器实测）—— 🟡 = **输入框已就绪、只差回答容器**。
-- **v15 逐站直连实测结果（2026-09-27，详见 [网页版协议实测记录 §7.9](../网页版协议实测记录.md)）**：
+- **四列口径（L4 起）**：**窗口可达** = 「打开登录窗口」真的打开了**该 AI 自己的站点**（v15 实测 **12/12** ✅）；**可登录** = 「人工登录 → 抓取 Cookie」链路已实测通过（**待做**）；**可生成（选择器）** = `web.input_selector` / `send` / `answer_selector` **已实测填好**且端到端生成通过（⬜ = 尚未实测，**不填假值** —— 沿用 `PB2-26` 原则）。**L4 的目标就是把 10 行的「可生成」从 ⬜ 逐站变为 ✅**（`PB2-29`；每站需一次人工登录 + 选择器实测）—— 🟡 = **输入框已就绪、只差回答容器**。
+- ⚠ **2026-10-10 清单变更（去重）**：`tongyi-web`（`https://www.qianwen.com/` · 通义千问/千问）与 `qwen-web`（`https://chat.qwen.ai/` · Qwen 国际站）是**同一家族的重复入口** ⇒ 按开发者指示**移除 `tongyi-web`、只保留 `qwen-web`**：现行 web 清单由 12 条（DOM 11 + `deepseek-web`）变为 **11 条**（DOM 10 + `deepseek-web`）、配置表 21 条 → **20 条**；下表已删行，`source/workflows/testAllAI.json` 随之 85 节点 / 84 连线 → **82 / 81**。上文 v15 的 `12/12` / `12 条` 等数字是**当时**的实测记录，**保持不变**（历史不改）；证据台账同步删块（`source/assets/site_capability_evidence.json`）。
+- **v15 逐站直连实测结果（2026-09-27，详见 [网页版协议实测记录 §7.9](../Archive/网页版协议实测记录.md)）**：
   - **「打开登录窗口」= 12/12 全部真的打开各自的站点** ✅（不再出现「不管选哪个都是 DeepSeek」）；其中 **3 条域名按实测修正为最终域**：`kimi-web`（→ `www.kimi.com`）、`tongyi-web`（→ **`www.qianwen.com`**）、`ernie-web`（→ `wenxin.baidu.com`）。
   - **输入框选择器已实测 4 条**（`kimi-web` = `div.chat-input-editor`；`qwen-web` = `textarea[placeholder="Ask Qwen"]` + 发送 `div.message-input-right-button-send`；`yuanbao-web` = `div.ql-editor.ql-blank`；`ernie-web` = `#chat-textarea`）→ 已写回 `source/assets/providers.json`，`--provider-dump` 确认这 4 条**只剩 `answer_selector` 未就绪**。
   - `chatgpt-web` / `claude-web` / `gemini-web` 在本机网络下**均可直连**（境外三站不再是「未核实」）；`chatglm-web` 首屏为 **WAF 挑战页**（需人工过验证）。
-  - **仍未就绪**：11 条的 `answer_selector`（回答容器必须**先有一条回答**才存在 → 需人工登录 + 手动发一条消息后再跑 `--web-dom-dump` 取回）。
+  - **仍未就绪**：10 条的 `answer_selector`（回答容器必须**先有一条回答**才存在 → 需人工登录 + 手动发一条消息后再跑 `--web-dom-dump` 取回）。
 
 
 - **为什么没有选择器**：`adapter=dom` 的生成字段（`input_selector` / `send` / `answer_selector`）与 `cookie_names` / `token_expr` **必须实测**；本轮**不填假值**（避免 L3 落地后误判「已适配」）→ 采用**登录型条目**（`PB2-26`：可加载 + 生成未就绪如实标记）。
@@ -516,7 +519,7 @@
 | **`D-29`** | L4 归口 | ① `PB2-24` 并入 L4 本批；`PB2-25` 一并 ② 保持分散 | ✅ **已按 ① 收编**到本文（`B2-e2`）—— ✅ **已固定（2026-10-08）** |
 | **`D-30`** | **登录态判据收紧**（v15 实测：**未登录页面已有匿名 Cookie** → 「Cookie 非空 = 已登录」会**误报**） | ① **`cookie_names` 命中优先**，Cookie 非空降级为「**未校验**」 ② 保持现状（Cookie 非空 = 已登录，接受误报） | ✅ **已拍板（2026-10-09 · `PQ-10` 结案 = 选 ①）**：**`cookie_names` 命中优先**，Cookie 非空降级为「**未校验**」；**⚠️ 代码落地项（非待定 · 本轮未动代码）** = `web_session_state()` 判据收紧 + 逐站补 `cookie_names`（数据回填归 `D-32` / `PQ-12` 范围）。原文（拍板依据）：⬜ **待定（`PQ-10`）**（建议 ①）；**证据已到手（2026-10-02）**：豆包登录前后 Cookie 名差集 = 净新增 **23 名**，其中 **14 个鉴权名**（`M7.md` §12.1 ⑤ / [Archive/actionPlan/M7B.md](../Archive/actionPlan/M7B.md) §10）⇒ **只差拍板 + 逐站补 `cookie_names`** |
 | **`D-31`** | **流式方案**（§2.5） | ① 升级/替换 httplib ② 网页版改「POST + GET 轮询正文」（需先探 A′ 端点）③ 明确不做、文案改「分段落定」 | ✅ **已拍板（2026-10-09 · `PQ-11` 结案 = 选 ③）**：**明确不做**（网页版文案改「分段落定」）+ 补 `VB-03` 离线断言；A′ 端点探查**确定不启动**（原文保留：⬜ 待定（`PQ-11`）（建议 ③ + 补 `VB-03` 离线断言）） |
-| **`D-32`** | `PB2-29` 逐站回填的**范围** | ① 只做国内 7 站（Kimi / 通义 / Qwen / 豆包 / 元宝 / 文心 / 星火）② 连境外 3 站（ChatGPT / Claude / Gemini，本机可直连） | ⬜ **待定（`PQ-12`）**（建议 ① 先做，② 可选） |
+| **`D-32`** | `PB2-29` 逐站回填的**范围** | ① 只做国内 6 站（Kimi / Qwen / 豆包 / 元宝 / 文心 / 星火）② 连境外 3 站（ChatGPT / Claude / Gemini，本机可直连） | ⬜ **待定（`PQ-12`）**（建议 ① 先做，② 可选） |
 
 **已定但需留痕**：`D-04` i18n 默认 ②（移除并记 M6；**`config` 侧已于 2026-10-09 移除 · `PQ-18②`**）；`D-08` 范围 = L1+L2+L3（L4 追加立项）；`D-09` `InferenceProvider` 不新开 `generateStream`/`generateWithImage` 虚函数；`D-19` 多站点会话键 = **站点 origin**；`D-20` 多站点窗口策略 = **串行复用单窗口**（并发后置）。
 
@@ -527,9 +530,10 @@
 | 日期 | 版本 | 变更 |
 |---|---|---|
 | 2026-09-27 | **v1** | **建立本文（文档拆分）**：① 收编 `M_patchA`（Patch B 残项 / 原 Patch C / 原 Patch D / PM）与 `M_patchB`（L2 的 `PB2-04…12`、`PB2-07` 界面按钮、`PB2-25`、`PB2-29`/`PB2-30②`、`PB2-24`）的**全部未完成项**；② 刷新回归基线（构建 0/0 · `--exec-selftest` **237/0** · `--provider-selftest` 50/0 · `--graph-selftest` 111/0 · 文档断链 0）；③ 附录 B/C/D/E 复制为**现行版本**并在附录 E 就地维护「可登录 / 可生成」两列；④ 承接决策 `D-25`…`D-30` 并新增 `D-31`（流式方案）/ `D-32`（逐站范围）；⑤ 同批把 `M_patchA.md` / `M_patchB.md` **归档**到 [../Archive/actionPlan/](../Archive/actionPlan/)（已归档部分见其顶部横幅）。 |
-| 2026-09-29 | **v2** | **方案 B′ 口径同步（只改文档 · 零代码改动）**：① §9 **`D-30`** 补**证据计划** —— 豆包「登录前后 Cookie 名差集」随 `M7.md` 新增的 `P7b-05b`（`source/python/_probe/m7b28_doubao_recon.py` B0 段）一并取证；② **附录 E** `doubao-web` 行补注「**网页版图片理解首个目标站（方案 B′ · 2026-09-29）**、`P7b-05b` 侦察先行」，**「可生成」列保持 ⬜**（不填假值）；③ 背景：`M7.md` 新增决策 `D10`（首个目标站 = `doubao-web`；`deepseek-web` 保持文字主线）+ 前置验证 `P7b-05b` + 任务 `M7-10`（DeepSeek 官方 API 视觉跟进），站点多模态能力公开证据核查见 [../网页版协议实测记录.md](../网页版协议实测记录.md) §8。**未改任何产品代码与配置表** |
+| 2026-09-29 | **v2** | **方案 B′ 口径同步（只改文档 · 零代码改动）**：① §9 **`D-30`** 补**证据计划** —— 豆包「登录前后 Cookie 名差集」随 `M7.md` 新增的 `P7b-05b`（`source/python/_probe/m7b28_doubao_recon.py` B0 段）一并取证；② **附录 E** `doubao-web` 行补注「**网页版图片理解首个目标站（方案 B′ · 2026-09-29）**、`P7b-05b` 侦察先行」，**「可生成」列保持 ⬜**（不填假值）；③ 背景：`M7.md` 新增决策 `D10`（首个目标站 = `doubao-web`；`deepseek-web` 保持文字主线）+ 前置验证 `P7b-05b` + 任务 `M7-10`（DeepSeek 官方 API 视觉跟进），站点多模态能力公开证据核查见 [../网页版协议实测记录.md](../Archive/网页版协议实测记录.md) §8。**未改任何产品代码与配置表** |
 | 2026-10-09 | **v3** | **待定项拍板落盘（只改文档 · 零代码改动）**：`D-30`（`PQ-10` = ① `cookie_names` 命中优先）· `D-31`（`PQ-11` = ③ 明确不做 + 文案改「分段落定」）就地改 ✅ 并留「原文（拍板依据）」；`D-26`（`PQ-09`）· `D-32`（`PQ-12`）**维持待定**。同批：§1 第 23/30 行、§2.5、§5 第 24/25 行、§7 `FEA-M3-07` 行同步改 ✅；[../DocMAP.md](../DocMAP.md) §5.3 · [../DevPlan.todo](../DevPlan.todo) · [../CHANGELOG.md](../CHANGELOG.md)。**⚠️ 已登记但未落地的代码项**：`D-30` ① 的判据收紧（`web_session_state()`）、`PQ-18` ② 的配置字段移除与断言登记。**（订正（2026-10-09 · v4）：其中 `PQ-18②` 已同日落地 ⇒ 见 v4 行；`D-30` ① 仍待。）** |
 | 2026-10-09 | **v4** | **`PQ-18②` 代码落地（`config` 字段清理 · 代码 + 文档；含 §5「明确不做」补 `PD-08`/i18n）**：① `utils/config.h` 删 `General` 结构体与 `Config::general` 成员（并注明「旧 `[general]` 节静默忽略、保存不再写回」）；② `utils/config.cpp` 删 `read_general()`、写入端 `[general]` 节、加载端读取，未接清单 **8 → 6 项**；③ `tools/api_probe.cpp` 配置往返不再拿 `general.language` 当探针字段、`PA-08` 断言由「清单须含 `general.language`」改为「**不含** `general.*`」并同步打印文案。**实测（2026-10-09 本机）**：构建 **0 error / 0 warning**；`--selftest` 七组全 PASS · exit **0**（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 上传模板 21/0 · 执行器 **425 / 0**）；`--exec-selftest` **425 / 0** · `--graph-selftest` **110 / 0** · `--upload-selftest` **72 / 0** —— **数字全无变动**（`PA-08` 为单行 PASS/FAIL，非计数断言 ⇒ `PQ-05` 契约下无需新增登记行）。运行时物证（临时 `USERPROFILE`，未碰用户 `~/.brain-ai`）：新生成 `config.toml` **无 `[general]` 节**；含 `[general]` 的旧配置**加载正常**（`aiwrite.exe --upload-selftest` exit 0）。同批：[../CHANGELOG.md](../CHANGELOG.md) · [../DevPlan.todo](../DevPlan.todo) · [M6.md](M6.md) · [../DocMAP.md](../DocMAP.md)（§5.3 表 3 行）· [../ai_writer_nodes.md](../ai_writer_nodes.md)（§19.1 多语言行）。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6）。 |
+| 2026-10-09 | **v5** | **批 3 · 网页站批量探测报告链路落地（代码 + 测试 + 文档）· 本文只动 §0.4 基线**：刷新为 2026-10-09 实测 —— `--exec-selftest` **425 → 452**（新增 27 项 DOM 探测报告自检）· `--graph-selftest` **110 / 0**（未变）· 新增三行（批量探测 `--provider all`（`FEA-L01`/`FEA-L03`：11 站 = 可用 8 / 需登录 2 / 失败 1 · exit 1）· 会话清单 `--web-session-list`（`FEA-L02`）· 离线夹具含 `dom_gate_test`（15/0；`--old` 6/15））；断链口径由「broken 0」改为「**本轮不得新增**」（实测 checked 610 / broken 8，8 条全部为存量）。逐项背景 / 物证见 [../CHANGELOG.md](../CHANGELOG.md) 批 3 条目与 [../loop_dev.md](../loop_dev.md) §3.1 · §4 · §6.2 · §6.3 · §10。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。
 
 
 

@@ -1,7 +1,7 @@
-#include "engine/validate.h"
+#include "validate.h"
 
-#include "engine/node_registry.h"
-#include "engine/provider_resolve.h"
+#include "node_registry.h"
+#include "provider_resolve.h"
 
 #include <algorithm>
 #include <cstdlib>

@@ -1,4 +1,4 @@
-#include "ai/upload/image_convert.h"
+#include "image_convert.h"
 
 // ============================================================================
 //  实现说明（与 image_convert.h 头注释配套）
@@ -8,7 +8,7 @@
 //  * 转换只在必要时发生：白名单不含 / 体积超限 / 长边超限
 // ============================================================================
 
-#include "utils/paths.h"
+#include "paths.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>

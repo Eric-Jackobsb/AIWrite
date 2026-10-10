@@ -12,10 +12,10 @@
 #include <utility>
 #include <vector>
 
-#include "engine/executor.h"
-#include "engine/graph.h"
-#include "engine/recent_files.h"
-#include "engine/undo_stack.h"
+#include "executor.h"
+#include "graph.h"
+#include "recent_files.h"
+#include "undo_stack.h"
 
 namespace aiwrite::ui {
 

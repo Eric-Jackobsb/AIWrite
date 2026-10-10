@@ -1,21 +1,22 @@
-#include "ui/node_canvas.h"
+#include "node_canvas.h"
 
-#include "engine/node_registry.h"
-#include "engine/provider_resolve.h"
-#include "ui/editor_state.h"
-#include "ui/output_panel.h"
-#include "ui/theme.h"
-#include "utils/config.h"
-#include "utils/asset_store.h" // P7a-16：图片卡片解析资源令牌
-#include "utils/log.h"
-#include "utils/paths.h"
-#include "ui/texture_cache.h"  // P7a-16：节点卡片缩略图 + 格式徽标
+#include "node_registry.h"
+#include "provider_resolve.h"
+#include "editor_state.h"
+#include "output_panel.h"
+#include "theme.h"
+#include "config.h"
+#include "asset_store.h" // P7a-16：图片卡片解析资源令牌
+#include "log.h"
+#include "paths.h"
+#include "texture_cache.h"  // P7a-16：节点卡片缩略图 + 格式徽标
 
 #include <imgui.h>
 #include <imgui_node_editor.h>
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -1115,6 +1116,106 @@ bool update_alt_left_pan()
     return alt;
 }
 
+// --------------------------------------------------- CS-01：画布逐帧诊断（2 秒一行）----
+// 为什么要有这一行：2026-10-09 的「个位数 FPS」事故（纹理缓存容量 8 < 同屏卡片图 9 →
+// 每帧 100% 未命中、每帧重解码 9 张 ≈ 166 ms）在日志里**完全看不见**——
+// 旧心跳 3600 帧才一条（短会话采不到），而纹理失败路径才写日志（成功路径静默）。
+// 这里把「帧预算归因」直接打出来：节点循环 / 宽度重算 / 连线 + 纹理请求·命中·解码·上传。
+struct CanvasDiagnostic {
+    std::chrono::steady_clock::time_point last = std::chrono::steady_clock::now();
+    double      nodes_ms = 0.0;
+    double      width_ms = 0.0;
+    double      links_ms = 0.0;
+    std::size_t frames   = 0;
+    ui::TextureCacheStats prev;
+    bool        has_prev = false;
+};
+
+CanvasDiagnostic& canvas_diagnostic()
+{
+    static CanvasDiagnostic diag;
+    return diag;
+}
+
+double ms_between(const std::chrono::steady_clock::time_point& from,
+                  const std::chrono::steady_clock::time_point& to)
+{
+    return std::chrono::duration<double, std::milli>(to - from).count();
+}
+
+// 纯格式化（不参与绘制；避免 std::to_string 输出 6 位小数刷屏）
+std::string fmt_num(double value, int decimals)
+{
+    char buffer[48] = {};
+    std::snprintf(buffer, sizeof(buffer), "%.*f", decimals, value);
+    return buffer;
+}
+
+void log_canvas_diagnostic(const EditorState& state, float zoom, double width_ms, double nodes_ms,
+                           double links_ms)
+{
+    CanvasDiagnostic& diag = canvas_diagnostic();
+    diag.width_ms += width_ms;
+    diag.nodes_ms += nodes_ms;
+    diag.links_ms += links_ms;
+    ++diag.frames;
+
+    const auto now = std::chrono::steady_clock::now();
+    if (now - diag.last < std::chrono::seconds(2)) {
+        return; // 2 秒一行（够密，能覆盖「只有 17 秒的短会话」；够疏，不刷屏）
+    }
+
+    const double elapsed = std::chrono::duration<double>(now - diag.last).count();
+    const double frames  = (diag.frames > 0) ? static_cast<double>(diag.frames) : 1.0;
+
+    const ui::TextureCacheStats stats = ui::texture_cache_stats();
+    const auto delta = [&diag, &stats](std::size_t TextureCacheStats::*member) {
+        return stats.*member - (diag.has_prev ? diag.prev.*member : 0);
+    };
+    const std::size_t requests  = delta(&ui::TextureCacheStats::requests);
+    const std::size_t hits      = delta(&ui::TextureCacheStats::hits);
+    const std::size_t misses    = delta(&ui::TextureCacheStats::misses);
+    const std::size_t decodes   = delta(&ui::TextureCacheStats::decodes);
+    const std::size_t uploads   = delta(&ui::TextureCacheStats::uploads);
+    const std::size_t evictions = delta(&ui::TextureCacheStats::evictions);
+
+    log::info("[诊断] 画布 节点=" + std::to_string(state.graph.nodes.size()) +
+              " 连线=" + std::to_string(state.graph.edges.size()) +
+              " 缩放=" + fmt_num(static_cast<double>(zoom), 2) +
+              " 帧=" + std::to_string(diag.frames) + " FPS=" +
+              std::to_string(static_cast<int>(ImGui::GetIO().Framerate)) +
+              " 宽度重算=" + fmt_num(diag.width_ms / frames, 1) + "ms/帧" +
+              " 节点循环=" + fmt_num(diag.nodes_ms / frames, 1) + "ms/帧" +
+              " 连线自检=" + fmt_num(diag.links_ms / frames, 1) + "ms/帧" +
+              " | 纹理 近" + fmt_num(elapsed, 1) + "s: 请求=" + std::to_string(requests) +
+              " 命中=" + std::to_string(hits) + " 未命中=" + std::to_string(misses) +
+              " 解码=" + std::to_string(decodes) + " 上传=" + std::to_string(uploads) +
+              " 淘汰=" + std::to_string(evictions) + "（每帧请求 " +
+              fmt_num(static_cast<double>(requests) / frames, 1) + " 次 / 解码 " +
+              fmt_num(static_cast<double>(decodes) / frames, 1) + " 次）缓存 " +
+              std::to_string(stats.entries) + "/" + std::to_string(stats.capacity) + " 条 " +
+              fmt_num(static_cast<double>(stats.bytes) / (1024.0 * 1024.0), 1) + "MB");
+
+    // 不变量告警：本周期有请求却一次没命中 ⇒ 容量/预算相对「同屏卡片图数」过小
+    // （或图片文件每帧都在变）→ 每帧重解码，FPS 必然掉到个位数。
+    if (requests > 0 && hits == 0) {
+        log::warn("[画布] 纹理缓存**整周期 0 命中**（请求 " + std::to_string(requests) +
+                  " 次 / 解码 " + std::to_string(decodes) + " 次；容量 " +
+                  std::to_string(stats.capacity) + " 条 / 预算 " +
+                  fmt_num(static_cast<double>(stats.byte_budget) / (1024.0 * 1024.0), 0) +
+                  "MB）：每帧重解码是 FPS 掉到个位数的直接原因，见 CHANGELOG 2026-10-09");
+    }
+
+    // 换周期：清空累加器，记下本周期末的累计值（下周期用它算差值）
+    diag.nodes_ms = 0.0;
+    diag.width_ms = 0.0;
+    diag.links_ms = 0.0;
+    diag.frames   = 0;
+    diag.prev     = stats;
+    diag.has_prev = true;
+    diag.last     = now;
+}
+
 } // namespace
 
 void draw_node_canvas(const char* title, CanvasOptions& options)
@@ -1148,6 +1249,8 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
     ImGui::Separator();
 
     ed::SetCurrentEditor(g_context);
+    // CS-01：诊断用的缩放值（必须在 ed::Begin 内取；ed::End() 之后打印整行）
+    float diag_zoom = 1.0f;
     ed::Begin("##NodeCanvas", ImVec2(0.0f, 0.0f));
 
     // 视图自愈：损坏的设置文件可能残留 ±3e9 视图 / 2e-7 缩放，会让网格与剔除计算爆量
@@ -1170,15 +1273,20 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         ed::PushStyleColor(ed::StyleColor_Grid, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     }
 
+    diag_zoom = ed::GetCurrentZoom(); // CS-01：视图自愈之后再取，避免拿到被重置前的旧值
+
     // 位置同步：新建 / 粘贴的节点在这里落到 Graph 记录的位置
     for (const Node& node : state.graph.nodes) {
         ed::SetNodePosition(node_handle(node.id), ImVec2(node.x, node.y));
     }
     // 宽度自适应：按当前图的「输入/输出标签实测最宽」算出**全画布共用的内容区宽度**（每帧重算，代价可忽略）
+    const auto diag_t0 = std::chrono::steady_clock::now();
     update_content_width(state.graph);
+    const auto diag_t1 = std::chrono::steady_clock::now();
     for (const Node& node : state.graph.nodes) {
         draw_node_body(node);
     }
+    const auto diag_t2 = std::chrono::steady_clock::now();
     log_wrap_selftest();                   // 折行自检（一次性：每条输出行都必须放得下）
     check_uniform_node_width(state.graph); // 固定宽度自检（不变量：全部节点等宽）
     for (const Edge& edge : state.graph.edges) {
@@ -1195,6 +1303,7 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         ed::Link(link_handle(edge.id), pin_handle(*from, PortDirection::Output, from_index),
                  pin_handle(*to, PortDirection::Input, to_index));
     }
+    const auto diag_t3 = std::chrono::steady_clock::now();
 
     handle_create_link();
     handle_delete_items();
@@ -1294,6 +1403,11 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
     }
 
     ed::End();
+
+    // CS-01：画布诊断（每 2 秒一行；把「帧预算归因 + 纹理请求/解码」写进 app.log）
+    // 参数顺序必须与签名一致：(宽度重算 t0→t1, 节点循环 t1→t2, 连线+自检 t2→t3)
+    log_canvas_diagnostic(state, diag_zoom, ms_between(diag_t0, diag_t1), ms_between(diag_t1, diag_t2),
+                          ms_between(diag_t2, diag_t3));
 
     // P7a-14：空画布引导（新用户第一眼就知道下一步做什么）
     if (state.graph.nodes.empty()) {

@@ -1,4 +1,4 @@
-#include "utils/window_geometry.h"
+#include "window_geometry.h"
 
 #include <algorithm>
 

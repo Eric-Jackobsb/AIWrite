@@ -2,7 +2,7 @@
 
 > 本目录存放**已完成**的文档：里程碑 Action Plan、功能补丁计划、验证报告。
 > 归档原则：**只增不改** —— 归档后内容保持原样（仅允许修正链接与补归档标记）；当前计划与任务看板见 [../actionPlan/](../actionPlan/) 与 [../DevPlan.todo](../DevPlan.todo)。
-> 首次归档：2026-09-26；**最近归档：2026-10-05**（`M7B` · `M7_P7b_pydollRoute` —— **网页通道路线退场**：`M7B` 的 Pydoll 路线被 **方案 E** 取代，现行计划 [../actionPlan/M8.md](../actionPlan/M8.md)）
+> 首次归档：2026-09-26；**最近归档：2026-10-10**（`网页版协议实测记录.md` —— **停止维护**：M4/M7 时期的网页版协议取证（DeepSeek 取值 · 豆包 / Kimi 站点证据）冻结，现行「站点能不能用」的结论改由 `TST-L05` 台账（[../AI_Status.md](../AI_Status.md) §二）+ [../loop_dev.md](../loop_dev.md) 承载；上一批 **2026-10-05** = `M7B` · `M7_P7b_pydollRoute`，**网页通道路线退场**：`M7B` 的 Pydoll 路线被 **方案 E** 取代，现行计划 [../actionPlan/M8.md](../actionPlan/M8.md)）
 
 ---
 
@@ -19,6 +19,7 @@
 | [actionPlan/M7B.md](actionPlan/M7B.md) | 里程碑计划（第三轮 · **未完成即退场**） | 2026-10-05 | **网页通道整体迁 Pydoll**（WebView2 退场 · Python 守护进程 + 命名管道 · 协议词表 v4 · 登录态 L1~L4）—— **于 2026-10-05 被方案 E 取代**（文字生成**回退 WebView2** · 图片上传改走 **C++ native HTTP** · Python / 管道 / 守护进程退场）。**用途 = 决策追溯 + 资料取用**（协议词表 §6.1 / 站点清单与选择器回填 §10 / 各批实测结论）；**内容取用终点 = `git cdf6d40`** |
 | [actionPlan/M7_P7b_pydollRoute.md](actionPlan/M7_P7b_pydollRoute.md) | **摘录归档**（`M7.md` 的 Pydoll 章节） | 2026-10-05 | `M7.md` §9 `D5`/`D6` · §12.1 全表（含 B0~B3 实测结论）· §12.2 通道类条目 · §16 旧实施顺序 · §17 `Q2`/`Q3` 的**原文照录**（`M7.md` 正本原位保留 + 📦 指针） |
 | [M1_技术验证报告.md](M1_技术验证报告.md) | 验证报告 | 2026-09-23 | M1 实测环境、分层验证结果、V/A 验收对照、问题与解决记录 |
+| [网页版协议实测记录.md](网页版协议实测记录.md) | 实测记录（**停止维护**） | 2026-10-10 | 网页版协议取值取证（M4-06/08/09 · DeepSeek 取值 / 豆包真视觉 / Kimi 站点证据）；**方案 E 取代后不再维护** ⇒ 只作**追溯资料**（新实测证据改记 `source/assets/site_capability_evidence.json` + [../AI_Status.md](../AI_Status.md) §二 台账） |
 
 ---
 
@@ -36,6 +37,7 @@
 2. **动作**：`git mv` 到 `docs/Archive/` 下**镜像原路径**（`docs/X` → `docs/Archive/X`），保留 git 历史；
 3. **必须同步**：① 顶部加 `📦 已归档` 标记行；② 状态行改为 ✅；③ 修正相对链接层级（归档后在更深一层）；④ 更新索引 —— [../DocMAP.md](../DocMAP.md)、[../CHANGELOG.md](../CHANGELOG.md)、[../DevPlan.todo](../DevPlan.todo)、[../../source/README.md](../../source/README.md)；
 4. **归档后修订范围**：仅链接修正与归档标记；后续变更写入当前计划文档（`actionPlan/M*.md`）与 [../CHANGELOG.md](../CHANGELOG.md)。
+5. **指令式归档（2026-10-10 新增口径）**：开发者明确要求「**该文档不再维护**」时，可按本页规则**直接归档**（不必等 §三 1 的「阶段全部收尾」）—— 归档后其结论的**承接位**必须同时指定（例：`网页版协议实测记录.md` ⇒ 承接位 = `source/assets/site_capability_evidence.json` + [../AI_Status.md](../AI_Status.md) §二（总览 ⇒ 分通道明细 [../AI_Status_web.md](../AI_Status_web.md) / [../AI_Status_api.md](../AI_Status_api.md)）+ [../loop_dev.md](../loop_dev.md)）。
 
 ---
 

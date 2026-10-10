@@ -3,13 +3,13 @@
 //  * **只碰元数据**：`exists` / `file_size` / `last_write_time` —— **永不打开文件读内容**（`I23③`）
 //  * 任何失败都**如实回报**（`exists=false`），不假装、不抛异常到 UI 线程
 
-#include "web/session_snapshot.h"
+#include "session_snapshot.h"
 
 #include <chrono>
 #include <ctime>
 #include <system_error>
 
-#include "utils/paths.h"
+#include "paths.h"
 
 namespace aiwrite::web {
 namespace {

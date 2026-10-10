@@ -1,6 +1,6 @@
-#include "utils/file_dialog.h"
+#include "file_dialog.h"
 
-#include "utils/log.h"
+#include "log.h"
 
 #include <nfd.hpp>
 
@@ -231,6 +231,42 @@ bool open_in_explorer(const std::string& path)
     return true;
 #else
     log::error("[文件对话框] open_in_explorer 仅支持 Windows: " + path);
+    return false;
+#endif
+}
+
+// M6：打开目录（自动打开归档目录用）
+//  * 目录 → 直接打开；文件 → 打开其所在目录；两者都不存在 → 报错返回 false
+bool open_folder(const std::string& path)
+{
+    if (path.empty()) {
+        return false;
+    }
+#if defined(_WIN32)
+    std::error_code             code;
+    const std::filesystem::path target = std::filesystem::path(path).lexically_normal();
+    std::filesystem::path       dir;
+    if (std::filesystem::is_directory(target, code)) {
+        dir = target;
+    }
+    else if (std::filesystem::is_directory(target.parent_path(), code)) {
+        dir = target.parent_path();
+    }
+    else {
+        log::error("[文件对话框] 打开目录失败（路径不存在）: " + path);
+        return false;
+    }
+
+    const HINSTANCE instance =
+        ShellExecuteW(nullptr, L"open", dir.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(instance) <= 32) {
+        log::error("[文件对话框] 打开目录失败（ShellExecuteW）: " + dir.string());
+        return false;
+    }
+    log::info("[文件对话框] 已打开目录: " + dir.string());
+    return true;
+#else
+    log::error("[文件对话框] open_folder 仅支持 Windows: " + path);
     return false;
 #endif
 }

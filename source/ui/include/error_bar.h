@@ -8,7 +8,7 @@
 //  * 右侧 × 关闭；下次运行成功会自动清空（EditorState::refresh_last_error）
 // ============================================================================
 
-#include "ui/editor_state.h"
+#include "editor_state.h"
 
 namespace aiwrite::ui {
 

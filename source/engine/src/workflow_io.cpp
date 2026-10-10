@@ -1,7 +1,7 @@
-#include "engine/workflow_io.h"
+#include "workflow_io.h"
 
-#include "engine/node_registry.h"
-#include "utils/log.h"
+#include "node_registry.h"
+#include "log.h"
 
 #include <algorithm>
 #include <cmath>

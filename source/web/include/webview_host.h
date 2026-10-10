@@ -17,10 +17,10 @@
 #include <thread>
 #include <vector>
 
-#include "ai/provider_spec.h"     // M_patchB L1 续（PB2-17）：站点参数来自配置表条目
-#include "web/ready_level.h"      // M_patchC（PW-03）：就绪三级（纯函数：位 / 文案）
-#include "web/session_store.h"    // 站点键（origin）/ 会话归档
-#include "web/site_ref.h"         // M7B 批 2：站点描述 + 纯函数**已搬迁到此**（零语义；见该文件头注释）
+#include "provider_spec.h"     // M_patchB L1 续（PB2-17）：站点参数来自配置表条目
+#include "ready_level.h"      // M_patchC（PW-03）：就绪三级（纯函数：位 / 文案）
+#include "session_store.h"    // 站点键（origin）/ 会话归档
+#include "site_ref.h"         // M7B 批 2：站点描述 + 纯函数**已搬迁到此**（零语义；见该文件头注释）
 
 namespace aiwrite::web {
 
@@ -152,6 +152,9 @@ int  wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std:
 // 页面状态探针（只读；供诊断 / 断言 / `wait_ready` 内部使用）
 struct WebPageState {
     std::string url;
+    std::string ready_state;         // 原始串（`loading` / `interactive` / `complete`；取不到 = 空）
+                                     //  * 2026-10-10（循环开发 `T-L06`）：**只读诊断**用 ——
+                                     //    `ready_state_complete` 只够判「过没过」，过不了时要**说清**卡在哪
     bool        ready_state_complete = false;
     int         composer_hits        = 0; // **可见**输入候选数（textarea / contenteditable / textbox …）
     int         file_inputs          = 0; // `input[type=file]` 命中数（含隐藏）

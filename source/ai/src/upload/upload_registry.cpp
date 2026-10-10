@@ -1,12 +1,12 @@
-#include "ai/upload/upload_registry.h"
+#include "upload_registry.h"
 
-#include "ai/upload/image_convert.h"
-#include "ai/upload/site_uploads.h"
-#include "ai/upload/upload_evidence.h"
-#include "utils/asset_store.h"
-#include "utils/log.h"
-#include "web/site_ref.h"
-#include "web/webview_host.h"
+#include "image_convert.h"
+#include "site_uploads.h"
+#include "upload_evidence.h"
+#include "asset_store.h"
+#include "log.h"
+#include "site_ref.h"
+#include "webview_host.h"
 
 #include <chrono>
 #include <filesystem>

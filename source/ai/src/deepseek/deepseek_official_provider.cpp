@@ -1,7 +1,7 @@
-#include "ai/deepseek_official_provider.h"
+#include "deepseek_official_provider.h"
 
-#include "utils/image_decode.h" // M7-05：图片格式按内容嗅探（扩展名可能骗人）
-#include "utils/log.h"
+#include "image_decode.h" // M7-05：图片格式按内容嗅探（扩展名可能骗人）
+#include "log.h"
 
 #include <algorithm>
 #include <chrono>

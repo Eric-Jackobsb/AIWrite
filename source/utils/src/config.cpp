@@ -1,6 +1,6 @@
-#include "utils/config.h"
+#include "config.h"
 
-#include "utils/log.h"
+#include "log.h"
 
 #include <toml++/toml.hpp>
 
@@ -37,10 +37,11 @@ std::vector<std::string> unwired_config_fields()
         // `PQ-18②`（2026-10-09）：general.language / general.startup **已移除** ——
         //  「界面语言切换 / 启动行为」不做（i18n 决策见 roadmap.md §十）；旧 [general] 节被静默忽略
         "ui.grid_size",                 // 网格间距：vendored imgui-node-editor 的 Style 无此字段（PD-03 处理）
-        "output.auto_open_on_complete", // 完成后自动打开（M5 / Patch C）
+        // 口径变更（2026-10-10 · M6）：以下两项**已接线**，故从清单移除（不再是「改了没效果」）——
+        //  * `output.auto_open_on_complete` → EditorState::archive_run_outputs() 归档成功后打开该目录
+        //  * `advanced.log_ttl_days`        → 启动时清理 logs/ 下超过该天数的旧日志（不含 app.log / workflow.log）
         "timeout.*",                    // 连接 / 首字节 / 流空闲超时（Patch B：PB-08）
         "error.*",                      // 重试开关 / 次数 / 间隔（Patch B：PB-08）
-        "advanced.log_ttl_days",        // 日志清理（Patch D：PD-06）
         "providers.deepseek.*",     // 仅作默认值来源：实际以 ProviderConfig 节点参数为准
                                     // （PB2-06 起支持 [providers.<id>] 多节；厂商元数据以配置表为准）
     };
@@ -73,6 +74,7 @@ void read_ui(const toml::table& t, Config::Ui& s)
     read_value(t, "window_pos_x", s.window_pos_x);
     read_value(t, "window_pos_y", s.window_pos_y);
     read_value(t, "window_maximized", s.window_maximized);
+    read_value(t, "first_run_done", s.first_run_done); // M6 首启引导（缺键 → 保持默认 false）
 }
 
 void read_output(const toml::table& t, Config::Output& s)
@@ -141,6 +143,7 @@ toml::table to_table(const Config& c)
     write_value(ui, "window_pos_x", c.ui.window_pos_x);
     write_value(ui, "window_pos_y", c.ui.window_pos_y);
     write_value(ui, "window_maximized", c.ui.window_maximized);
+    write_value(ui, "first_run_done", c.ui.first_run_done); // M6 首启引导标记
     root.insert("ui", std::move(ui));
 
     toml::table output;

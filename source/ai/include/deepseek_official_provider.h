@@ -22,7 +22,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "ai/provider_spec.h"   // M_patchB L1 / PB2-04：按表取端点·认证·env·超时
+#include "provider_spec.h"   // M_patchB L1 / PB2-04：按表取端点·认证·env·超时
 
 namespace aiwrite::ai {
 

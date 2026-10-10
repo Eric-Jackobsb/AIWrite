@@ -1,16 +1,16 @@
-#include "ui/editor_state.h"
+#include "editor_state.h"
 
-#include "engine/node_registry.h"
-#include "engine/validate.h"
-#include "engine/workflow_io.h"
-#include "nodes/nodes.h"
-#include "ui/output_panel.h"
-#include "utils/config.h"
-#include "utils/file_dialog.h"
-#include "utils/log.h"
-#include "utils/text_export.h"
-#include "utils/output_archive.h"
-#include "utils/paths.h"
+#include "node_registry.h"
+#include "validate.h"
+#include "workflow_io.h"
+#include "nodes.h"
+#include "output_panel.h"
+#include "config.h"
+#include "file_dialog.h"
+#include "log.h"
+#include "text_export.h"
+#include "output_archive.h"
+#include "paths.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -682,6 +682,18 @@ void EditorState::archive_run_outputs()
         log::info("[归档] 运行输出已写入 " + result.dir + "（" + std::to_string(result.files) +
                   " 个文件）");
         log::workflow("[归档] " + result.dir + "（" + std::to_string(result.files) + " 个文件）");
+
+        // ---- M6 接线：`output.auto_open_on_complete`（完成后自动打开归档目录）----
+        //  * 默认 false ⇒ 行为与改造前**逐字一致**（零副作用）
+        //  * 打开失败只写日志（不打断运行结束流程，也不改归档结果）
+        if (config.output.auto_open_on_complete) {
+            if (utils::open_folder(result.dir)) {
+                log::info("[归档] 已按配置自动打开归档目录（output.auto_open_on_complete = true）");
+            }
+            else {
+                log::warn("[归档] 自动打开归档目录失败：" + result.dir);
+            }
+        }
     }
     else {
         log::warn("[归档] 失败：" + result.error);

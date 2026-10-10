@@ -1,16 +1,20 @@
-#include "ai/dom_web_client.h"
+#include "dom_web_client.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <ctime>
+#include <iomanip>
+#include <map>
+#include <sstream>
 #include <thread>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
-#include "utils/log.h"
-#include "ai/upload/upload_registry.h" // M8-14：站点上传模板（图片先上传再发送）
-#include "web/webview_host.h"
+#include "log.h"
+#include "upload_registry.h" // M8-14：站点上传模板（图片先上传再发送）
+#include "webview_host.h"
 
 namespace aiwrite::ai {
 namespace {
@@ -30,6 +34,37 @@ constexpr const char* kAnswerPoolSelector =
     "[class*=\"markdown\"], [class*=\"message\"], [class*=\"answer\"], [class*=\"reply\"], "
     "[class*=\"chat-content\"], [class*=\"response\"], [class*=\"bubble\"], "
     "[data-testid*=\"message\"], [data-message-author-role], article, [role=\"listitem\"]";
+// PW-07j（2026-10-10 · 真机驱动 · `T-L12` gemini-web 实证）：**工具提示 / 屏读宿主**排除（**结构判据**）
+//  * 真机反例：`gemini-web` 命中的是 `div.cdk-describedby-message-container` —— Angular CDK 的
+//    **工具提示宿主**（`Dictate (^⇧D)` / `Close sidebar` / `Copy prompt` / `Stop response` 这些
+//    `aria-describedby` 文案的容器），只因类名含 `message` 被池里 `[class*="message"]` **误吞**，
+//    且它是文档顺序**最后**的候选 ⇒ 被当成答案（两轮 **77 / 92 字节**「假成功」，日志物证：
+//    `答案容器**自动识别** div.cdk-describedby-message-container … 候选池 38 个`）。
+//  * 判据 = **节点身份**（不是文本）：`describedby`（CDK 工具提示宿主）/ `tooltip` / `sr-only` /
+//    `visually-hidden`（屏读专用文案）⇒ 这些节点**根本不算候选**（池内**剔除自己**，不看祖先）。
+//  * 与 `PW-07l`「不做类名词表」的区别：那条禁的是**布局状态类**（`has-sidebar` 一类会误伤整页）；
+//    这里是**工具提示 / 屏读专用**词，且只剔自己 ⇒ 不碰回答容器（钉子用例见夹具 ⑳）。
+constexpr const char* kAnswerPoolExclude =
+    "[class*=\"describedby\"], [id*=\"describedby\"], [class*=\"tooltip\"], [role=\"tooltip\"], "
+    "[class*=\"sr-only\"], [class*=\"visually-hidden\"], "
+    // PW-07k（2026-10-10 · 真机驱动 · `T-L13` gemini-web）：**本方消息**容器不算候选 ——
+    //   剔掉 CDK 描述容器后，真机紧接着取到 `span.user-query-bubble-with-background`（**自己那条**
+    //   `You said <提示词>`，172 字节）。对方回答的容器是 `model-response` / `message-content` 一族，
+    //   与 `user-query` / `query-text` / `user-message` 这些**本方**专属词互斥 ⇒ 剔自己式排除安全。
+    "[class*=\"user-query\"], [class*=\"query-text\"], [class*=\"user-message\"], [class*=\"query-bubble\"], "
+    // PW-07o（2026-10-10 · 真机驱动 · `T-L18` ernie-web）：**站侧推荐追问**容器不算候选 ——
+    //   真机反例：`div._answer-ask-wrapper_16z1u_8`（文心的 CSS-module 类）文本 = 4 条「用代码模拟… /
+    //   把这段描述精简成… / 用幽默风格重新描述… / 能否再续写一段…」（183 字节）⇒ 被当答案；
+    //   而真答案是它**内部**的 `div.cosd-markdown-content`（同池内、文档序在后）⇒ 剔掉 `ask` 追问外壳，
+    //   内层真答案照常参与（夹具 ㉔ 钉子）。`ask-wrapper` 是**外壳身份**，回答容器不会叫这个名字。
+    "[class*=\"ask-wrapper\"], [class*=\"ask_wrapper\"], "
+    // PW-07r（2026-10-10 · 真机驱动 · `T-L24` yuanbao-web）：**行内元素**不算候选 ——
+    //   真机反例：取到 `code.hyc-common-markdown__code__inline`（**13 字节** `mode=悬疑`，答案正文里的
+    //   行内代码片段）—— 行内节点也带 markdown 字样类名 ⇒ 被池里的 markdown 类误吞，且它是
+    //   文档序**最后**的候选 ⇒ 真答案（外层块级容器）反而落选。
+    //   判据 = **元素形态**：答案容器是**块级**（`div` / `article` / `section`…），`code` / `span` 只承载
+    //   **片段**（行内代码、气泡、标签）。注：`li[role=listitem]` 不在剔除之列（消息项仍照常参与）。
+    "code, span";
 constexpr const char* kInputPoolSelector =
     "textarea, input[type=\"text\"], input[type=\"search\"], input:not([type]), "
     "[contenteditable=\"true\"], [contenteditable=\"\"], [role=\"textbox\"]";
@@ -55,6 +90,24 @@ constexpr const char* kAnswerChromeTextRe =
     "(?:\\s+(?:Copy|Share|Retry|Regenerate|Edit|Delete|Like|Dislike|Stop|Continue))*$"            // Copy Share
     "|^(?:复制|分享|重试|重新生成|重新回答|编辑|删除|赞同|反对|停止|继续|朗读)"
     "(?:\\s*(?:复制|分享|重试|重新生成|重新回答|编辑|删除|赞同|反对|停止|继续|朗读))*$";          // 复制 分享
+
+// PW-07i（2026-10-10 · 真机驱动 · `T-L11` gemini-web 实证）：**chrome-only 门**（与上面的「整串门」互补）
+//  * 真机反例：`gemini-web` 自动识别把**操作条 / 工具提示的拼接**当答案 ——
+//    `Dictate (^⇧D)Close sidebarImagesSettingsEdit promptCopy promptCopy responseMoreRedo`（**77 字节**、
+//    写进 `n3` 与 `n4`，被三口径判「可用」⇒ **假成功**）。整串门抓不住它：它**不等于**任一个控件词，
+//    而是**多个**控件词的拼接（`Copy prompt` + `Copy response` 这类**每轮回答都有**的操作按钮文本）。
+//  * 口径（**只拒、不猜**）：把已知控件词**逐词剥离**（大小写无关），再抹掉空白 / 标点 / 符号，
+//    残余若 `< answer_min_chars` ⇒ 该候选**不算答案**（继续轮询；超时如实失败 —— `R13`）。
+//    ⇒ 真答案**不可能**被误伤：残余必然 ≥ `answer_min_chars`（与上面的整串门同一「不得误伤」侧，`AW-04`）。
+//  * 与 `PW-07l`「不做类名词表」的区别：那条禁的是**节点类名**词表（`sidebar` 一类状态类会误伤整页）；
+//    这里剥的是**可见文本里的控件词**，且**只用于「残余近空」判否**，不做节点归属判断。
+constexpr const char* kAnswerChromeWordsRe =
+    "Dictate\\s*\\([^)]*\\)|Close sidebar|Open sidebar|Edit prompt|Copy prompt|Copy response|Copy code|"
+    "Regenerate response|Stop response|Stop generating|See plans and pricing|Temporary chat|Voice mode|Attach files|"
+    "New chat|Deep research|Sign up|Log in|Log out|Share|Redo|Undo|Retry|Regenerate|Delete|Dislike|Like|"
+    "Download|Upload|Settings|Images|Sidebar|Search|Send|Microphone|More|Help|Copy|Stop|"
+    "侧栏|设置|图片|复制|分享|重试|重新生成|重新回答|朗读|编辑|删除|赞同|反对|停止生成|停止|新建对话|"
+    "登录|注册|退出|下载|上传|发送|麦克风|更多|帮助";
 
 // 页面内「写入提示词 + 触发发送」（读 window.__aiwriteDom；返回诊断对象）
 //  M8-37（零开关）：声明值未命中 → **自动识别**输入框 / 发送按钮；并在发送前记录答案基线
@@ -402,7 +455,30 @@ constexpr const char* kPollScript = R"JS(
 (function () {
   const cfg = window.__aiwriteDom || {};
   const rt = window.__aiwriteDomRuntime || {};
+  // PW-07h（2026-10-10 · 真机驱动）：轮询回执**带上实时 URL** —— 「明明发出去了却取不到答案」
+  //   这类归因全靠它：URL 跳到 `/auth/login` ⇒ 需登录（疑似 chatgpt-web 的形态），
+  //   URL 仍是目标站点 ⇒ 站侧没渲染答案。`location` 在 Node 夹具里不存在 ⇒ 安全取空串。
+  const href = function () {
+    try { return (typeof location !== 'undefined' && location.href) ? location.href : ''; }
+    catch (e) { return ''; }
+  };
   const out = { found: false, count: 0, chars: 0, lf: 0, text: '', done: false, done_kind: cfg.done_kind || '',
+                url: href(),
+                ready: (typeof document !== 'undefined' && document.readyState) ? document.readyState : '',
+                body_chars: (function () {
+                  try { return (document.body && document.body.innerText) ? document.body.innerText.length : 0; }
+                  catch (e) { return 0; }
+                })(),
+                // 「正文很长却 0 候选」时，光看长度分不清**登录墙 / 限额页**还是**正常外壳但没渲染消息**
+                //   ⇒ 带回首 80 字（页面自己的可见文本，仅**失败路径**写进 error）—— 一眼定性，不靠猜
+                body_head: (function () {
+                  try {
+                    // 内联归一（`norm` 在本对象**之后**才声明 ⇒ 此处不能引用，否则 TDZ 恒空）
+                    const t = String(document.body ? (document.body.innerText || '') : '')
+                                  .replace(/\s+/g, ' ').trim();
+                    return t.length > 80 ? t.slice(0, 80) : t;
+                  } catch (e) { return ''; }
+                })(),
                 auto: false, answer_selector: cfg.answer_selector || '', fingerprint: '' };
   // PW-07g：**判据专用**归一（`\s+` → 单空格）—— 绝不用于产物（否则段落换行被吃掉）
   const norm = function (s) { return (s || '').replace(/\s+/g, ' ').trim(); };
@@ -415,6 +491,10 @@ constexpr const char* kPollScript = R"JS(
     const first = cls.split(' ')[0] || '';
     return el.tagName.toLowerCase() + (id ? ('#' + id) : (first ? ('.' + first) : ''));
   };
+)JS"
+// ⚠ MSVC C2026（单字面量 ≤ 16380 字节）：本脚本按**顶层语句边界**切成多个相邻字面量拼接，
+//   脚本内容**不变**（切点处正好一个 `\n`，拼接后与未切分时逐字符一致 —— 夹具的抽取器同样支持多段）。
+R"JS(
   try {
     // ---- ① 声明值优先（语义不变：**最后**一个匹配节点 = 本轮回答）----
     const sel = cfg.answer_selector || '';
@@ -437,22 +517,137 @@ constexpr const char* kPollScript = R"JS(
       // PW-07：装饰 / 布局文本形态编译（**整串**匹配；编译失败 = 该门不生效，不阻断自动识别）
       let chrome_text = null;
       try { chrome_text = cfg.answer_chrome_text ? new RegExp(cfg.answer_chrome_text) : null; } catch (e) { chrome_text = null; }
-      const refuse = { chrome_text: 0, short: 0 }; // PW-07：命中明细（计数，进 note ⇒ steps / 日志）
+      // PW-07i（真机驱动 · gemini-web 实证）：**控件词剥离门** —— 抓「**多个**控件词拼接」这一形态
+      //   真机反例：`Dictate (^⇧D)Close sidebarImagesSettingsEdit promptCopy promptCopy responseMoreRedo`
+      //   （77 字节，写进 n3/n4 ⇒ 假成功）。剥离控件词后残余近空 ⇒ 判**不算答案**（只拒，不猜）。
+      let chrome_words = null;
+      try { chrome_words = cfg.answer_chrome_words ? new RegExp(cfg.answer_chrome_words, 'gi') : null; } catch (e) { chrome_words = null; }
+      const chrome_only = function (t) {
+        if (!chrome_words) { return false; }
+        const s = String(t);
+        const stripped = s.replace(chrome_words, ' ');
+        if (stripped === s) { return false; } // **一个控件词都没剥到** ⇒ 不是「控件词拼接」（纯短文本归 `min_chars` 管）
+        const rest = stripped.replace(/[\s\p{P}\p{S}]+/gu, '');
+        return rest.length < (cfg.answer_min_chars || 8); // 残余近空 ⇒ 拼的是控件词（真答案残余必然够长）
+      };
+      const refuse = { chrome_text: 0, chrome_only: 0, echo: 0, internal: 0, progress: 0, suggest: 0, shell: 0, short: 0 }; // PW-07：命中明细（计数，进 note ⇒ steps / 日志）
+      // PW-07k（真机驱动 · T-L13 gemini-web）：**本方消息回声**门 —— 文本里含提示词、且**围绕它的残余很短**
+      //   真机反例：`span.user-query-bubble-with-background` 的 `You said <提示词>`（172 字节，前缀
+      //   `You said ` + 整条提示词）⇒ 被当成「新答案」（下游把**自己那条**当回答）。旧口径只拦「整串等于
+      //   提示词 / 以提示词开头」⇒ 带前缀的回声漏网。残余 < `min_chars` 判「回声 / 夹带」；真答案残余必然够长。
+      const echo_only = function (t) {
+        if (!prompt) { return false; }
+        const s = String(t);
+        if (s.indexOf(prompt) < 0) { return false; }
+        // 真机 T-L14 形态：提示词在**回声里出现两次**（`You said <提示词> <提示词>` = 172 字节）
+        //   ⇒ 只剥一次会留下整条提示词、残余变长而漏网 ⇒ **剥掉全部出现**再量残余。
+        const rest = s.split(prompt).join('').replace(/[\s\p{P}\p{S}]+/gu, '');
+        return rest.length < (cfg.answer_min_chars || 8);
+      };
+      // PW-07m（真机驱动 · T-L17 回归扫描 yuanbao-web）：**站侧内部码**不算答案 ——
+      //   真机反例：`CONFLICT_LOG`（**12 字节**）被当答案写进 `n3` / `n4`（元宝把内部诊断节点渲染进了
+      //   DOM，且是文档序最后候选）。整串（去空白 / 标点 / 符号后）就是**一个** `SNAKE_CASE` 常量名
+      //   ⇒ 判「站侧内部码」（真答案不会是单独一个大写下划线常量；纯代码答案通常多行 / 带围栏）。
+      const internal_code_only = function (t) {
+        // 注意：`_` 属 Unicode 标点类 `Pc`，用 `[\s\p{P}\p{S}]` 一并剥会把常量名的下划线也吃掉
+        //   ⇒ 这里用**白名单**（只留字母 / 数字 / 下划线）再判。
+        const s = String(t).replace(/[^\p{L}\p{N}_]+/gu, '');
+        if (!s || s.length > 40) { return false; }
+        return /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(s);
+      };
+      // PW-07n（真机驱动 · T-L17 回归扫描 ernie-web）：**生成中占位**不算答案（继续轮询）——
+      //   真机反例：`P1C参数驱动续写故事 / 正在编写，请稍候... / 0% / 改用对话直接回答`
+      //   （站侧**自动标题** + 占位文案 + 进度条）。剥离占位词后残余 = 站侧自动标题（9 字）⇒ 单靠
+      //   剥离门（PW-07i）拦不住 ⇒ 用「**两个独立信号同时出现**」判：占位 / 进度短语 **且** 裸百分比。
+      //   判据刻意保守（真答案同时出现「请稍候」与「37%」的概率极低 ⇒ 只拒、不猜，超时如实失败）。
+      const progress_words = /(正在编写|正在生成|正在思考|正在回答|生成中|思考中|回答中|请稍候|请稍等|改用对话直接回答|Generating|Thinking|Loading)/;
+      const progress_only = function (t) {
+        const s = String(t);
+        if (!/\d{1,3}\s*%/.test(s)) { return false; }
+        return progress_words.test(s);
+      };
+      // PW-07p（真机驱动 · T-L19 ernie-web）：**提示词派生短句列表**（站侧「推荐追问 / 猜你想问」）不算答案 ——
+      //   真机两轮反例，且容器类名**换了**（`_answer-ask-wrapper_16z1u_8` → `ai-index-no-animation-icon`）
+      //   ⇒ 类名词表**打不完**（站侧一改版本就是新类名）⇒ 改用「**文本形态**」判：
+      //     ① `用代码模拟P1C参数驱动流程 / 把这段描述精简成一句话总结核心 / 用幽默风格重新描述P1C参数驱动过程 /
+      //        能否再续写一段关于P1C参数驱动的描述`（183 字节）
+      //     ② `把这段逻辑精简成一段话 / 换个风格重写这段P1C参数驱动描述 / 能否再详细描述一下P1C参数驱动的过程 /
+      //        把P1C参数驱动逻辑改成可直接落地的操作说明`（192 字节）
+      //   判据 = **四条同时**成立：① ≥3 行；② 每行 ≤ 24 字；③ 整串**无句末标点**（`。！？；`）；
+      //          ④ **≥ 半数行**与提示词共享 ≥2 字片段（= 从提示词派生的短句）。四条**全部**成立才算
+      //          ⇒ 正文只要出现一处句末标点即放行（夹具 ㉕b / ㉕c 钉「不得误伤」）。
+      //   真机 T-L22 ernie-web 修正（㉕d）：④ 原为「**每行**都含提示词片段」，被站侧第 4 条
+      //   `用日常产品视角写一段完整故事`（与提示词无共享片段）绕过 ⇒ 放宽为「**≥ 半数行**」。
+      //   代价（如实记录）：极短的「三行无标点清单」式回答会被判失败 —— 取「宁可失败、不许假成功」（`R13`）。
+      const prompt_frags = (function () {
+        const s = prompt.replace(/[\s\p{P}\p{S}]+/gu, '');
+        const out = [];
+        for (let i = 0; i + 2 <= s.length; i++) { out.push(s.substr(i, 2)); }
+        return out;
+      })();
+      const suggest_list = function (raw_t) {
+        const s = String(raw_t || '');
+        if (!s || /[。！？!?；;]/u.test(s)) { return false; } // ③ 有句末标点 ⇒ 正文
+        const lines = s.split(/\n+/).map(function (x) { return x.replace(/\s+/g, ''); })
+                                .filter(function (x) { return x.length > 0; });
+        if (lines.length < 3) { return false; }              // ① ≥3 行
+        let derived = 0;
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].length > 24) { return false; }        // ② 每行 ≤ 24 字
+          for (let j = 0; j < prompt_frags.length; j++) {    // ④ 行与提示词共享 ≥2 字片段（计「派生行」数）
+            if (prompt_frags[j] && lines[i].indexOf(prompt_frags[j]) >= 0) { derived++; break; }
+          }
+        }
+        return derived * 2 >= lines.length;                  // ④ ≥ 半数行是「提示词派生」
+      };
+)JS"
+R"JS(
       const is_new = function (el) {
-        const t = norm(el.innerText || el.textContent || '');
+        const raw_el = raw_text(el);                            // PW-07p 要看**行结构** ⇒ 用原样文本
+        const t = norm(raw_el);
         if (t.length < 2) { return false; }
         if (composer && (el === composer || el.contains(composer))) { return false; } // 排除输入区
         if (prompt && (t === prompt || t.indexOf(prompt) === 0)) { return false; }     // 排除自己那条回声
         // PW-07：**装饰 / 布局文本**（整串 = 时间戳 / 日期 / 纯 UI 控件词）不算答案 ⇒ 继续轮询
         //   真机证据：豆包 `div.bp5-overflow-list` 的「今天 13:31」（12 字节）与 Kimi 操作条的「Copy Share」（10 字节）
         if (chrome_text && chrome_text.test(t)) { refuse.chrome_text++; return false; }
+        if (chrome_only(t)) { refuse.chrome_only++; return false; } // PW-07i：控件词拼接（gemini-web 反例）
+        if (echo_only(t)) { refuse.echo++; return false; }         // PW-07k：本方消息回声（`You said <提示词>`）
+        if (internal_code_only(t)) { refuse.internal++; return false; } // PW-07m：站侧内部码（`CONFLICT_LOG`）
+        if (progress_only(t)) { refuse.progress++; return false; }     // PW-07n：生成中占位（`正在编写…0%`）
+        if (suggest_list(raw_el)) { refuse.suggest++; return false; }   // PW-07p：推荐追问（提示词派生短句列表）
         return baseline.indexOf(t) < 0;
       };
       const pool_sel = cfg.answer_pool || '';
-      const pool = pool_sel ? document.querySelectorAll(pool_sel) : [];
+      const pool_excl = cfg.answer_pool_exclude || '';
+      let pool = pool_sel ? Array.prototype.slice.call(document.querySelectorAll(pool_sel)) : [];
+      // PW-07j（真机驱动 · T-L12 gemini-web）：**工具提示 / 屏读宿主**不算候选（**剔除自己**，不看祖先）
+      //   真机反例：`div.cdk-describedby-message-container`（CDK 工具提示宿主）被 `[class*="message"]` 误吞，
+      //   又是文档序**最后**的候选 ⇒ 77 / 92 字节「假成功」。剔除后**回答容器照常参与**（夹具 ⑳ 钉子）。
+      let excl_n = 0;
+      if (pool_excl) {
+        pool = pool.filter(function (el) {
+          try { if (el.matches && el.matches(pool_excl)) { excl_n++; return false; } } catch (e) { /* 选择器不支持 ⇒ 该节点不剔 */ }
+          return true;
+        });
+      }
       out.count = pool.length; // PW-07：候选池规模**始终**回显（原来只在命中时回显）
+      // PW-07q（真机驱动 · T-L22 gemini-web）：**外壳容器**不算候选 —— 「**内含其他候选**」者 = 聊天记录 /
+      //   消息外壳（里面装着每条消息节点）。真机反例：取到 `infinite-scroller.chat-history`（436 字节 =
+      //   历史各轮的 `You said … / Gemini said …` + 本轮），而本轮真答案是它内部的
+      //   `#model-response-message-content*`（同池候选）—— 该次轮询只跑了 4 次 ⇒ 真答案节点当时还空 ⇒
+      //   外壳（装着**上一轮**回答）抢先中选（下游拿到的是历史记录，不是本轮答案）。
+      //   判据 = **池内包含关系**（看的是「有没有别的候选装在它里面」，与类名 / 文本无关）⇒ 外壳继续轮询，
+      //   等内层真答案渲染出来；内层候选照常参与（夹具 ㉖ 钉子：外壳剔 + 内层取到）。
+      const inner_of_some = function (el) {
+        for (let i = 0; i < pool.length; i++) {
+          if (pool[i] !== el && el.contains && el.contains(pool[i])) { return true; }
+        }
+        return false;
+      };
       const min_chars = cfg.answer_min_chars || 8;
       for (let i = pool.length - 1; i >= 0; i--) { // 逆序 = 文档顺序**最后**者优先（回答在用户消息之后）
+        if (inner_of_some(pool[i])) { refuse.shell++; continue; } // PW-07q：外壳（内含其他候选）不算候选
         if (!is_new(pool[i])) { continue; }
         const raw = raw_text(pool[i]);             // PW-07g：原样（含 `\n`）
         const t = norm(raw);                       //  * `t` **只判长度**（产物不吃归一）
@@ -467,7 +662,14 @@ constexpr const char* kPollScript = R"JS(
         refuse.short++;
       }
       out.note = '自动识别：候选池 ' + pool.length + ' 个'
+               + (excl_n > 0 ? ('（另剔非候选宿主 ' + excl_n + ' 个：工具提示 / 屏读 / 本方消息 / 推荐追问 · PW-07j/k/o）') : '')
                + '；装饰文本拒 ' + refuse.chrome_text + '（整串 = 时间戳 / 控件词）'
+               + '；控件词拼接拒 ' + refuse.chrome_only + '（PW-07i：剥离后残余近空）'
+               + '；回声拒 ' + refuse.echo + '（PW-07k：含提示词且残余近空）'
+               + '；内部码拒 ' + refuse.internal + '（PW-07m：整串 = SNAKE_CASE 常量）'
+               + '；生成中拒 ' + refuse.progress + '（PW-07n：占位词 + 百分比进度）'
+               + '；建议列表拒 ' + refuse.suggest + '（PW-07p：提示词派生短句）'
+               + '；外壳剔 ' + refuse.shell + '（PW-07q：内含其他候选）'
                + '；过短拒 ' + refuse.short + '（< ' + min_chars + ' 字符）';
     }
     const dsel = cfg.done_selector || '';
@@ -488,7 +690,9 @@ constexpr const char* kProbeScript = R"JS(
                 answer_selector: cfg.answer_selector || '', answer_hits: 0, answer_chars: 0,
                 done_kind: cfg.done_kind || '', done_now: null,
                 token_expr: cfg.token_expr || '', token_len: -1, token_json: false,
-                cookies_wanted: cfg.cookie_names || [], cookies_present: [], error: '' };
+                cookies_wanted: cfg.cookie_names || [], cookies_present: [],
+                input_candidates: 0, login_controls: 0, login_evidence: '',
+                needs_login: false, page_abnormal: false, error: '' };
   try {
     const q = function (s) { try { return s ? document.querySelectorAll(s) : []; } catch (e) { return []; } };
     const inputs = q(out.input_selector);
@@ -518,6 +722,30 @@ constexpr const char* kProbeScript = R"JS(
     (out.cookies_wanted || []).forEach(function (n) {
       if (jar.indexOf(n + '=') >= 0) { out.cookies_present.push(n); }
     });
+    // ---- Loop Dev（FEA-L01/L03）：**需登录判据** —— 只用页面事实（DOM），**不看 Cookie** ----
+    //  §3.2：① 输入区候选 > 0（或声明值命中）→ 匿名可用；② 候选 = 0 且有登录迹象 → 需强制登录；
+    //        ③ 候选 = 0 且无任何登录迹象 → 页面异常（归失败，**不**当成「需登录」）
+    //  判据只在本脚本里算一次（C++ 侧只搬运结果）⇒ 夹具抽同一段脚本真跑（TST-L02）
+    const cands = q(cfg.input_pool || 'textarea, input[type="text"], input[type="search"], input:not([type]),' +
+                    ' [contenteditable="true"], [contenteditable=""], [role="textbox"]');
+    out.input_candidates = cands.length;
+    const pw = q('input[type="password"]');
+    const lg = q('[class*="login"], [class*="signin"], [class*="sign-in"],' +
+                 ' [id*="login"], [id*="signin"], [href*="login"], [href*="signin"]');
+    out.login_controls = pw.length + lg.length;
+    const ev = [];
+    if (pw.length > 0) { ev.push('password-input x' + pw.length); }
+    if (lg.length > 0) { ev.push('login-node x' + lg.length); }
+    const lpath = ((typeof location !== 'undefined' && location)
+                     ? ((location.pathname || '') + (location.search || '') + (location.hash || ''))
+                     : '').toLowerCase();
+    if (/(login|signin|sign-in|passport|signup|register|auth|sso)/.test(lpath)) {
+      ev.push('login-url:' + (location.pathname || ''));
+    }
+    out.login_evidence = ev.join(' + ');
+    if (out.input_hits > 0 || out.input_candidates > 0) { out.needs_login = false; }
+    else if (ev.length > 0) { out.needs_login = true; }
+    else { out.page_abnormal = true; }
   } catch (e) { out.error = (e && e.message) ? e.message : String(e); }
   return out;
 })();
@@ -598,9 +826,13 @@ std::string dom_cfg_json(const DomChatRequest& request)
     cfg["auto_answer"]      = true;
     cfg["input_pool"]       = kInputPoolSelector;
     cfg["answer_pool"]      = kAnswerPoolSelector;
+    // PW-07j：**工具提示 / 屏读宿主**从候选池里**剔除自己**（结构判据，真机 gemini-web 命中物）
+    cfg["answer_pool_exclude"] = kAnswerPoolExclude;
     cfg["answer_min_chars"] = kMinAutoAnswerChars;
     // PW-07：装饰 / 布局文本形态（**整串**匹配）—— 与候选池同族：仍是**纯数据**，不落盘
     cfg["answer_chrome_text"] = kAnswerChromeTextRe;
+    // PW-07i：装饰**控件词**（**逐词剥离**后残余近空 ⇒ 拒）—— 抓「多个控件词拼接」这一形态
+    cfg["answer_chrome_words"] = kAnswerChromeWordsRe;
     return cfg.dump();
 }
 
@@ -919,6 +1151,41 @@ DomChatResult dom_chat(const DomChatRequest& request)
             catch (const std::exception&) { /* 忽略：下面按未发送处理 */ }
         }
     }
+    // 兜底 C（2026-10-10 · 真机驱动 · 循环开发 `T-L06` · **qwen-web 实证**）：
+    //  * 现象：CDP `Input.insertText` 成功（提示词**确实在输入框 DOM 里**：回执
+    //    `composer_has_prompt=true`），但站点**没发** —— URL 未变化 / 新节点 0 / 提示词仍在框内。
+    //    真机 `send=key` 与 `send=click` **两种都试过**仍不发（`CDP Input.dispatchKeyEvent Enter OK`
+    //    + 点击 `div.message-input-right-button-send` 均无效果）⇒ 病根不是「哪种发送方式」，
+    //    而是**受控组件（React state）没吃到「仅 DOM 值变化」的输入**：按钮 `disabled`、回车不提交。
+    //  * 与兜底 A 的区别：A 只处理「文本**根本没进**框」，这里文本在框里但**站点不认**。
+    //  * 做法：再走一次**合成事件**（原生 setter + input/change + 声明发送）把内部 state 同步过去，
+    //    重新取回执；仍不发 ⇒ 按未发送**如实失败**（`R13`：宁可失败，不许假成功）。
+    if (!sent && composer_has_txt) {
+        result.steps += "｜CDP 输入已在框内但站点未发 → 合成事件同步内部 state 重试";
+        std::string fb_raw;
+        std::string fb_err;
+        if (web::run_script_sync(site_request, dom_kickoff_script(), 15000, &fb_raw, &fb_err)) {
+            send_mode += "+synth2";
+            sample_sent(12);
+            if (!sent) { // 同步后再点一次可见「发送」按钮（声明值优先）
+                std::string click_raw;
+                std::string click_err;
+                if (web::run_script_sync(site_request, dom_click_send_script(), 10000, &click_raw,
+                                         &click_err)) {
+                    try {
+                        if (nlohmann::json::parse(click_raw).value("clicked", false)) {
+                            send_mode += "+click2";
+                            sample_sent(6);
+                        }
+                    }
+                    catch (const std::exception&) { /* 忽略：下面按未发送处理 */ }
+                }
+            }
+        }
+        else {
+            result.steps += "（合成事件同步失败：" + fb_err + "）";
+        }
+    }
     result.steps += "；send=" + std::string(send_by_click ? "click" : "key") + "（" + send_mode +
                     "）｜发送回执：" + (verify_note.empty() ? std::string("未取到采样") : verify_note);
     if (!sent) {
@@ -962,6 +1229,13 @@ DomChatResult dom_chat(const DomChatRequest& request)
     std::string last_poll_error;
     // PW-07：最后一轮「自动识别」体检串（诊断：**为什么没取到** —— 装饰文本拒 / 过短拒 计数）
     std::string last_poll_note;
+    // PW-07h：最后一轮**实时 URL**（诊断：「发出去了却没答案」到底是**跳走了**还是**站侧没答**）
+    std::string last_poll_url;
+    // PW-07h：最后一轮 `readyState` + 正文长度（区分「页面还在加载（正文 0 字）」与
+    //   「页面已渲染但候选池不匹配（正文很长却 0 候选）」—— 前者等一会儿，后者要回填选择器）
+    std::string last_poll_ready;
+    int         last_poll_body = 0;
+    std::string last_poll_head;
     // PW-07g：页面侧**原始换行数**（物证：`0` ⇒ 该站点本身只给一段，不是我们丢了换行）
     int         last_raw_lf = 0;
     int         stable = 0;
@@ -982,6 +1256,15 @@ DomChatResult dom_chat(const DomChatRequest& request)
             // PW-07：体检串（`note`）每轮留存 —— 成功 / 失败两条路径都要能一眼看出「拒了几个装饰 / 过短」
             const std::string    note   = poll.value("note", std::string());
             if (!note.empty()) { last_poll_note = note; }
+            // PW-07h：实时 URL（每轮留存，失败时写进 error ⇒ 一眼分清「跳走了」还是「站侧没答」）
+            const std::string    poll_url = poll.value("url", std::string());
+            if (!poll_url.empty()) { last_poll_url = poll_url; }
+            // PW-07h：`readyState` + 正文长度（页面还在加载 vs 已渲染但池不匹配）
+            const std::string    poll_ready = poll.value("ready", std::string());
+            if (!poll_ready.empty()) { last_poll_ready = poll_ready; }
+            if (poll.contains("body_chars")) { last_poll_body = poll.value("body_chars", 0); }
+            const std::string    poll_head = poll.value("body_head", std::string());
+            if (!poll_head.empty()) { last_poll_head = poll_head; }
             if (found) { last_raw_lf = poll.value("lf", 0); } // PW-07g：页面原始换行数（分段物证）
             if (found && !text.empty()) {
                 if (result.text.empty()) {
@@ -1041,6 +1324,16 @@ DomChatResult dom_chat(const DomChatRequest& request)
         }
         if (!last_poll_note.empty()) {
             result.error += "｜最后一轮自动识别体检：" + last_poll_note; // PW-07：命中明细（为什么没取到）
+        }
+        if (!last_poll_url.empty()) { // PW-07h：实时页面（URL 跳走 = 需登录 / 被重定向；仍在目标站 = 站侧没答）
+            result.error += "｜实时页面：" + last_poll_url;
+            if (!last_poll_ready.empty()) {
+                result.error += "（readyState=" + last_poll_ready + " · 正文 " +
+                                std::to_string(last_poll_body) + " 字）";
+            }
+            if (!last_poll_head.empty()) { // 页面自己的可见文本（首 80 字）—— 登录墙 / 限额页一眼可辨
+                result.error += "｜页面正文开头：「" + last_poll_head + "」";
+            }
         }
         if (!last_poll_error.empty()) {
             result.error += "（最后一次轮询错误：" + last_poll_error + "）";
@@ -1273,6 +1566,433 @@ int dom_selector_dump(const std::string& provider_id, int timeout_ms)
   }
 }
 
+namespace {
+
+// 报告时间戳（"YYYY-MM-DD HH:MM:SS"，与其它落盘报告同口径）
+std::string probe_timestamp()
+{
+    const std::time_t now = std::time(nullptr);
+    std::tm           tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &now);
+#else
+    localtime_r(&now, &tm);
+#endif
+    std::ostringstream stream;
+    stream << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+    return stream.str();
+}
+
+// 站点状态（5 态中的 4 态；「新增 / 消失」由 diff 判定）—— 判据与 §3.2 一一对应
+std::string probe_state_of(const DomSiteProbe& p)
+{
+    if (!p.site_error.empty()) {
+        return "未测"; // 条目不可用：根本没测
+    }
+    if (!p.probe_ok || p.page_abnormal) {
+        return "失败"; // 探测没跑通，或页面既无输入区候选也无登录迹象
+    }
+    return p.needs_login ? "需登录" : "可用";
+}
+
+// 状态文案（人类可读，附一句原因）
+std::string probe_state_text(const DomSiteProbe& p)
+{
+    const std::string state = probe_state_of(p);
+    if (state == "未测") {
+        return "未测（" + p.site_error + "）";
+    }
+    if (state == "失败") {
+        const std::string why =
+            p.page_abnormal ? std::string("页面异常：既无输入区候选也无登录迹象")
+                            : (p.error.empty() ? std::string("原因不明") : p.error);
+        return "失败（" + why + "）";
+    }
+    if (state == "需登录") {
+        return "需登录（" + p.login_evidence + "）";
+    }
+    return "可用（匿名）";
+}
+
+// 一行判据（机器可读版进 JSON；这里给人看）：输入区候选 / 登录控件 / 登录证据
+std::string probe_criteria_text(const DomSiteProbe& p)
+{
+    return "输入区候选 " + std::to_string(p.input_candidates) + " · 登录控件 " +
+           std::to_string(p.login_controls) + " · 登录证据 " +
+           (p.login_evidence.empty() ? std::string("无") : p.login_evidence);
+}
+
+// 每站紧凑块（2–4 行；命令输出即报告素材）
+void print_probe_block(int index, int total, const DomSiteProbe& p)
+{
+    std::printf("[%2d/%2d] %s（%s）\n", index, total, p.id.c_str(), p.display.c_str());
+    std::printf("         状态    : %s\n", probe_state_text(p).c_str());
+    std::printf("         判据    : %s\n", probe_criteria_text(p).c_str());
+    if (p.probe_ok) {
+        std::printf("         页面    : %s\n", p.url.empty() ? "?" : p.url.c_str());
+        std::printf("         命中    : input %d（%s）· send %d · answer %d（末条 %d 字）"
+                    "· token 长度 %d · Cookie %d/%d\n",
+                    p.input_hits, p.input_visible ? "可见" : "不可见", p.send_hits, p.answer_hits,
+                    p.answer_chars, p.token_len, p.cookies_present, p.cookies_wanted);
+    }
+    else if (!p.error.empty()) {
+        std::printf("         原因    : %s\n", p.error.c_str());
+    }
+    if (p.needs_login) {
+        std::printf("         → 人工介入：在该窗口内手动登录一次，然后重跑本命令\n");
+    }
+    if (p.attempts > 1) {
+        std::printf("         重试    : 已按 loop_dev §3.2/§5.1③ 重试 1 次（本站本轮共 %d 次尝试）\n",
+                    p.attempts);
+    }
+    std::fflush(stdout);
+}
+
+} // namespace
+
+// 单站探测的共用实现（`dom_adapter_selftest` 与批量探测都走这里跑脚本）
+//  * 只读：注入配置 + 执行探测脚本；**不写入、不发送、不读任何值**
+static bool run_site_probe_script(const ProviderWebSpec& site, const std::string& site_id,
+                                  int timeout_ms, DomSiteProbe* out)
+{
+    const web::LoginRequest request = web::interactive_login_request(site, site_id);
+    std::string             boot_error;
+    const int               boot_timeout =
+        std::max(10000, std::min(timeout_ms > 0 ? timeout_ms * 1000 : 30000, 60000));
+    out->session_ok = web::ensure_session(request, boot_timeout, &boot_error);
+    if (!out->session_ok) {
+        out->session_hint = boot_error;
+    }
+
+    nlohmann::json probe_cfg;
+    probe_cfg["input_selector"]  = site.input_selector;
+    probe_cfg["send_kind"]       = site.send_kind;
+    probe_cfg["send_value"]      = site.send_value;
+    probe_cfg["answer_selector"] = site.answer_selector;
+    probe_cfg["done_kind"]       = site.done_kind;
+    probe_cfg["done_selector"]   = site.done_selector;
+    probe_cfg["token_expr"]      = site.token_expr;
+    probe_cfg["cookie_names"]    = site.cookie_names;
+    // 输入区候选池：与运行期自动识别**同源**（`kInputPoolSelector`）—— 口径不复制
+    probe_cfg["input_pool"]      = kInputPoolSelector;
+
+    std::string raw;
+    std::string script_error;
+    if (!web::run_script_sync(request, "window.__aiwriteDomProbe = " + probe_cfg.dump() + "; 'ok';",
+                              10000, &raw, &script_error) ||
+        !web::run_script_sync(request, dom_probe_script(), 15000, &raw, &script_error)) {
+        out->error = "探测脚本执行失败：" + script_error;
+        return false;
+    }
+    if (!dom_probe_result_from_json(raw, out)) {
+        out->error = "探测结果解析失败（前 200 字符）：" + raw.substr(0, 200);
+        return false;
+    }
+    return true;
+}
+
+int dom_site_probe(const std::string& provider_id, int timeout_ms, DomSiteProbe* out)
+{
+    if (out == nullptr) {
+        return 2;
+    }
+    *out    = DomSiteProbe();
+    out->id = provider_id;
+
+    const ProviderSpec* spec = provider_specs().find(provider_id);
+    if (spec == nullptr) {
+        out->site_error = "表里没有该条目（id 未知）";
+        return 2;
+    }
+    out->display = spec->display;
+    out->adapter = spec->web.adapter;
+
+    const std::string site_error = web_site_error(spec);
+    if (!site_error.empty()) {
+        out->site_error = site_error;
+        return 2;
+    }
+    if (spec->web.adapter != "dom") {
+        out->site_error = "适配器是 " + spec->web.adapter + "（本探测只诊断 adapter=dom 的条目）";
+        return 2;
+    }
+
+    const ProviderWebSpec site    = strict_web_spec_for(spec);
+    const std::string     site_id = strict_web_provider_id_for(spec);
+    if (!run_site_probe_script(site, site_id, timeout_ms, out)) {
+        return 1;
+    }
+    return 0;
+}
+
+bool dom_probe_result_from_json(const std::string& raw, DomSiteProbe* out)
+{
+    if (out == nullptr) {
+        return false;
+    }
+    nlohmann::json r;
+    try {
+        r = nlohmann::json::parse(raw);
+    }
+    catch (const std::exception&) {
+        return false;
+    }
+    if (!r.is_object()) {
+        return false;
+    }
+    const auto str_of = [&r](const char* key) -> std::string {
+        return (r.contains(key) && r[key].is_string()) ? r[key].get<std::string>() : std::string();
+    };
+    // 数值缺失 → 回调默认值；**不把缺失当事实**（页面事实要么有要么没有）
+    const auto num_of = [&r](const char* key, int fallback) -> int {
+        return (r.contains(key) && r[key].is_number()) ? r[key].get<int>() : fallback;
+    };
+    const auto bool_of = [&r](const char* key, bool fallback) -> bool {
+        return (r.contains(key) && r[key].is_boolean()) ? r[key].get<bool>() : fallback;
+    };
+    const auto size_of = [&r](const char* key) -> int {
+        return (r.contains(key) && r[key].is_array()) ? static_cast<int>(r[key].size()) : 0;
+    };
+
+    DomSiteProbe p         = *out; // 保留调用方填好的入口字段（id / display / adapter）
+    p.url                  = str_of("url");
+    p.title                = str_of("title");
+    p.input_hits           = num_of("input_hits", 0);
+    p.input_visible        = bool_of("input_visible", false);
+    p.send_hits            = num_of("send_hits", 0);
+    p.answer_hits          = num_of("answer_hits", 0);
+    p.answer_chars         = num_of("answer_chars", 0);
+    p.token_len            = num_of("token_len", -1);
+    p.token_json           = bool_of("token_json", false);
+    p.cookies_wanted       = size_of("cookies_wanted");
+    p.cookies_present      = size_of("cookies_present");
+    p.input_candidates     = num_of("input_candidates", 0);
+    p.login_controls       = num_of("login_controls", 0);
+    p.login_evidence       = str_of("login_evidence");
+    p.needs_login          = bool_of("needs_login", false);
+    p.page_abnormal        = bool_of("page_abnormal", false);
+    const std::string serr = str_of("error"); // 脚本自身抛错 ⇒ 事实可能不完整 ⇒ 不算探测成功
+    if (!serr.empty()) {
+        p.error = "页面脚本报错：" + serr;
+    }
+    p.probe_ok = serr.empty();
+    *out       = p;
+    return true;
+}
+
+int dom_probe_all(int timeout_ms, nlohmann::json* report, std::vector<DomSiteProbe>* probes)
+{
+    // 站点集合：`kind=web 且 web.adapter=dom` —— 表驱动，**不写死站点清单**
+    std::vector<const ProviderSpec*> targets;
+    for (const ProviderSpec& spec : provider_specs().items) {
+        if (spec.kind == "web" && spec.web.adapter == "dom") {
+            targets.push_back(&spec);
+        }
+    }
+
+    std::printf("\n===== 网页版 DOM 站点批量只读探测（loop_dev 批 3 · FEA-L01）=====\n");
+    std::printf("条目 %zu 个（kind=web 且 adapter=dom）· 超时 %d s/站"
+                "· 只读：不写入、不发送、不读任何值\n",
+                targets.size(), timeout_ms);
+    if (targets.empty()) {
+        std::printf("[批量探测] 表里没有可诊断的 DOM 站点（检查 providers.json / 覆盖链）\n");
+        return 2;
+    }
+
+    nlohmann::json rep;
+    rep["schema"]       = "aiwrite.web_adapter_report/1";
+    rep["generated_at"] = probe_timestamp();
+    rep["timeout_ms"]   = timeout_ms;
+    rep["sites"]        = nlohmann::json::array();
+
+    int                       usable = 0, need_login = 0, failed = 0, skipped = 0;
+    std::vector<DomSiteProbe> all;
+    all.reserve(targets.size());
+    int index = 0;
+    for (const ProviderSpec* spec : targets) {
+        DomSiteProbe p;
+        dom_site_probe(spec->id, timeout_ms, &p);
+        // ---- 环境级失败 ⇒ **重试 1 次**（`loop_dev` §3.2 行 3 + §5.1③；§3.3：同轮同站上限 2 次）----
+        //  * 只对「探测没跑通（窗口 / 页面未就绪）」与「页面异常」重试 —— 二者可能是重站首屏慢；
+        //  * **不**对「需登录」重试（登录墙不会自己消失；重试只会白等一轮）
+        if (p.site_error.empty() && (!p.probe_ok || p.page_abnormal)) {
+            std::printf("[%2d/%2d] %s 环境级失败（%s）⇒ 按 §3.2 重试 1 次\n", index + 1,
+                        static_cast<int>(targets.size()), p.id.c_str(),
+                        p.page_abnormal ? "页面异常" : "探测未跑通");
+            std::fflush(stdout);
+            DomSiteProbe again;
+            dom_site_probe(spec->id, timeout_ms, &again);
+            again.attempts = 2;
+            p              = again;
+        }
+        print_probe_block(++index, static_cast<int>(targets.size()), p);
+
+        const std::string state = probe_state_of(p);
+        if (state == "可用") {
+            ++usable;
+        }
+        else if (state == "需登录") {
+            ++need_login;
+        }
+        else if (state == "失败") {
+            ++failed;
+        }
+        else {
+            ++skipped;
+        }
+
+        nlohmann::json item;
+        item["id"]               = p.id;
+        item["display"]          = p.display;
+        item["adapter"]          = p.adapter;
+        item["state"]            = state;
+        item["probe_ok"]         = p.probe_ok;
+        item["session_ok"]       = p.session_ok;
+        item["url"]              = p.url;
+        item["title"]            = p.title;
+        item["input_hits"]       = p.input_hits;
+        item["input_visible"]    = p.input_visible;
+        item["input_candidates"] = p.input_candidates;
+        item["login_controls"]   = p.login_controls;
+        item["login_evidence"]   = p.login_evidence;
+        item["needs_login"]      = p.needs_login;
+        item["page_abnormal"]    = p.page_abnormal;
+        item["send_hits"]        = p.send_hits;
+        item["answer_hits"]      = p.answer_hits;
+        item["answer_chars"]     = p.answer_chars;
+        item["token_len"]        = p.token_len;
+        item["token_json"]       = p.token_json;
+        item["cookies_wanted"]   = p.cookies_wanted;
+        item["cookies_present"]  = p.cookies_present;
+        item["error"]            = p.error;
+        item["site_error"]       = p.site_error;
+        item["attempts"]         = p.attempts;
+        rep["sites"].push_back(item);
+        all.push_back(p);
+    }
+
+    rep["counts"] = {{"total", static_cast<int>(targets.size())},
+                     {"usable", usable},
+                     {"needs_login", need_login},
+                     {"failed", failed},
+                     {"skipped", skipped}};
+
+    std::printf("----- 汇总 -----\n");
+    std::printf("可用 %d · 需登录 %d · 失败 %d · 未测 %d（共 %zu 站）\n", usable, need_login, failed,
+                skipped, targets.size());
+    if (need_login > 0) {
+        std::printf("需人工介入（退出码 3）：上列「需登录」站点 —— 在窗口里手动登录一次后重跑本命令\n");
+    }
+    if (failed > 0) {
+        std::printf("**真失败**（退出码 1）：上列「失败」站点 —— 待修清单，需人读原因后处置\n");
+    }
+    std::fflush(stdout);
+
+    if (report != nullptr) {
+        *report = rep;
+    }
+    if (probes != nullptr) {
+        *probes = all;
+    }
+    if (failed > 0) {
+        return 1; // 真失败优先（比「需登录」更需要人手）
+    }
+    return need_login > 0 ? 3 : 0;
+}
+
+bool dom_report_diff(const nlohmann::json& previous, const nlohmann::json& current,
+                     std::vector<std::string>* lines)
+{
+    if (!previous.is_object() || !previous.contains("sites") || !previous["sites"].is_array() ||
+        !current.is_object() || !current.contains("sites") || !current["sites"].is_array()) {
+        return false;
+    }
+    // 状态口径与 `probe_state_of` 一一对应；旧版报告没有 `state` 字段时按事实字段回推
+    const auto state_of = [](const nlohmann::json& item) -> std::string {
+        if (item.contains("state") && item["state"].is_string()) {
+            return item["state"].get<std::string>();
+        }
+        if (!item.value("site_error", std::string()).empty()) {
+            return "未测";
+        }
+        if (item.contains("probe_ok") && !item.value("probe_ok", false)) {
+            return "失败";
+        }
+        if (item.value("page_abnormal", false)) {
+            return "失败";
+        }
+        if (item.value("needs_login", false)) {
+            return "需登录";
+        }
+        // 与页面脚本共用同一条 §3.2 判据：既无输入区候选、也无登录迹象 ⇒ 页面异常（失败）
+        if (item.value("input_hits", 0) == 0 && item.value("input_candidates", 0) == 0 &&
+            item.value("login_evidence", std::string()).empty()) {
+            return "失败";
+        }
+        return "可用";
+    };
+
+    std::map<std::string, const nlohmann::json*> before;
+    for (const nlohmann::json& item : previous["sites"]) {
+        if (item.is_object() && item.contains("id") && item["id"].is_string()) {
+            before[item["id"].get<std::string>()] = &item;
+        }
+    }
+
+    std::vector<std::string>    out;
+    std::map<std::string, bool> seen;
+    int                         unchanged = 0;
+    for (const nlohmann::json& item : current["sites"]) {
+        if (!item.is_object() || !item.contains("id") || !item["id"].is_string()) {
+            continue;
+        }
+        const std::string id        = item["id"].get<std::string>();
+        const std::string now_state = state_of(item);
+        seen[id]                    = true;
+        const auto it               = before.find(id);
+        if (it == before.end()) {
+            out.push_back("新增      " + id + "：" + now_state + "（上一轮报告里没有这个条目）");
+            continue;
+        }
+        const nlohmann::json& old_item      = *it->second;
+        const std::string     old_state     = state_of(old_item);
+        const std::string     now_ev        = item.value("login_evidence", std::string());
+        const std::string     old_ev        = old_item.value("login_evidence", std::string());
+        const std::string     now_url       = item.value("url", std::string());
+        const std::string     old_url       = old_item.value("url", std::string());
+        const bool            state_changed = (old_state != now_state);
+        const bool            ev_changed    = (now_ev != old_ev);
+        const bool            url_changed   = (now_url != old_url);
+        if (!state_changed && !ev_changed && !url_changed) {
+            ++unchanged;
+            continue;
+        }
+        if (state_changed) {
+            out.push_back("状态变化  " + id + "：" + old_state + " → " + now_state);
+        }
+        if (ev_changed) {
+            out.push_back("判据变化  " + id + "：登录证据「" + (old_ev.empty() ? "无" : old_ev) +
+                          "」→「" + (now_ev.empty() ? "无" : now_ev) + "」");
+        }
+        if (url_changed) {
+            out.push_back("页面变化  " + id + "：" + (old_url.empty() ? "?" : old_url) + " → " +
+                          (now_url.empty() ? "?" : now_url));
+        }
+    }
+    for (const auto& kv : before) {
+        if (seen.count(kv.first) == 0) {
+            out.push_back("消失      " + kv.first + "：上一轮有、本轮没有（条目被删 / 改名？）");
+        }
+    }
+    if (out.empty()) {
+        out.push_back("无变化（" + std::to_string(unchanged) + " 站逐项一致）");
+    }
+    if (lines != nullptr) {
+        *lines = out;
+    }
+    return true;
+}
+
 int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
 {
     const ProviderSpec* spec       = provider_specs().find(provider_id);
@@ -1332,6 +2052,7 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
     probe_cfg["done_selector"]   = site.done_selector;
     probe_cfg["token_expr"]      = site.token_expr;
     probe_cfg["cookie_names"]    = site.cookie_names;
+    probe_cfg["input_pool"]      = kInputPoolSelector; // 候选池与运行期自动识别同源
 
     std::string raw;
     std::string script_error;
@@ -1399,6 +2120,30 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
     std::printf("Cookie      : 期望 %zu 个 / 可读 %zu 个（HttpOnly 不计入）\n",
                 site.cookie_names.size(), cookies_ok);
 
+    // 2b) 需登录判据（loop_dev §3.2）：只用页面事实 → 「可用 / 需登录 / 页面异常」三分类
+    //     单一真相源：判据在页面脚本里算（此处只搬运结果）
+    DomSiteProbe facts;
+    facts.id      = spec->id;
+    facts.display = spec->display;
+    facts.adapter = site.adapter;
+    if (!dom_probe_result_from_json(raw, &facts)) {
+        std::printf("\n需登录判据  : **解析失败**（探测结果不是 JSON 对象）—— 归失败\n");
+        return 1;
+    }
+    std::printf("\n需登录判据  : 输入区候选 %d · 登录控件 %d · 登录证据 %s\n",
+                facts.input_candidates, facts.login_controls,
+                facts.login_evidence.empty() ? "无" : facts.login_evidence.c_str());
+    if (facts.needs_login) {
+        std::printf("            → **需登录**（退出码 3）：在窗口里手动登录一次后重跑本命令\n");
+    }
+    else if (facts.page_abnormal) {
+        std::printf("            → **页面异常**：既无输入区候选也无登录迹象（可能是加载中 / 反爬"
+                    "拦截页）—— 归失败\n");
+    }
+    else {
+        std::printf("            → 匿名可用（无需登录即可发送）\n");
+    }
+
     // 3) 可操作建议
     bool                     ok = true;
     std::vector<std::string> tips;
@@ -1441,7 +2186,193 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
         std::printf("  提示：实测可用后请把 %s 的 verified 置 true，并回填 M_patchB 附录 E\n",
                     spec->id.c_str());
     }
+    // 退出码（loop_dev §6.3）：3 = 需人工介入（需登录）**优先于** 1 —— 登录墙下选择器缺项是
+    // 「没法测」而不是「真失败」，两者处置不同（前者人手登录，后者改选择器）
+    if (facts.needs_login) {
+        std::printf("\n[选择器探测] 需人工介入：先在该窗口内登录一次，再重跑本命令（退出码 3）\n");
+        return 3;
+    }
+    if (facts.page_abnormal) {
+        std::printf("\n[选择器探测] 页面异常：既无输入区候选也无登录迹象（反爬 / 加载中？）"
+                    "—— 归失败（退出码 1）\n");
+        return 1;
+    }
     return ok ? 0 : 1;
+}
+
+// ----------------------------------------------------------------------------
+//  Loop Dev（批 3）：**离线自检** —— 报告解析 / diff / 状态映射的纯函数断言
+//  * 不开窗口、不联网、不写文件（`FEA-L01` 的回归资产；真机走 `--web-adapter-selftest`）
+//  * 断言口径 = `docs/loop_dev.md` §3.2（判据）+ §6.2（五态）+ §6.3（退出码）
+// ----------------------------------------------------------------------------
+int dom_probe_selftest(int* passed_out)
+{
+    int passed = 0;
+    int failed = 0;
+    const auto check = [&passed, &failed](bool ok, const std::string& what) {
+        if (ok) {
+            ++passed;
+            std::printf("  ✓ %s\n", what.c_str());
+        }
+        else {
+            ++failed;
+            std::printf("  ✗ %s\n", what.c_str());
+        }
+    };
+
+    // ---- ① `dom_probe_result_from_json`：事实搬运（不重算判据）----
+    const std::string full = R"({"url":"https://x/login","title":"T","input_hits":0,)"
+                             R"("input_visible":false,"send_hits":0,"answer_hits":2,"answer_chars":7,)"
+                             R"("token_len":64,"token_json":true,"cookies_wanted":["a","b"],)"
+                             R"("cookies_present":["a"],"input_candidates":0,"login_controls":3,)"
+                             R"("login_evidence":"password-input x1 + login-node x2",)"
+                             R"("needs_login":true,"page_abnormal":false,"error":""})";
+    DomSiteProbe p;
+    p.id      = "kimi-web";
+    p.display = "Kimi";
+    p.adapter = "dom";
+    check(dom_probe_result_from_json(full, &p), "解析：合法 JSON 对象 ⇒ true");
+    check(p.url == "https://x/login" && p.title == "T" && p.answer_hits == 2 &&
+              p.answer_chars == 7,
+          "解析：页面事实逐项搬运（url / title / answer）");
+    check(p.token_len == 64 && p.token_json && p.cookies_present == 1 && p.cookies_wanted == 2,
+          "解析：token / Cookie 计数搬运（长度而非值 —— 守 I15）");
+    check(p.needs_login && !p.page_abnormal &&
+              p.login_evidence == "password-input x1 + login-node x2" && p.login_controls == 3,
+          "解析：**需登录判据来自页面**（needs_login / login_evidence 只搬运、不重算）");
+    check(p.probe_ok && p.error.empty(), "解析：无 error ⇒ probe_ok（事实完整）");
+    check(p.id == "kimi-web" && p.display == "Kimi" && p.adapter == "dom" && p.attempts == 1,
+          "解析：入口字段（id / display / adapter）与 attempts 不被脚本结果覆盖");
+
+    DomSiteProbe bare;
+    check(dom_probe_result_from_json(R"({"url":"https://y/"})", &bare) &&
+              bare.input_hits == 0 && bare.input_candidates == 0 && bare.token_len == -1 &&
+              !bare.needs_login && !bare.page_abnormal && bare.login_evidence.empty(),
+          "解析：字段缺失 = 「无事实」（不猜、不默认成功；token_len 回 -1）");
+
+    DomSiteProbe bad;
+    bad.input_hits = 9;
+    check(!dom_probe_result_from_json("{not json", &bad) && bad.input_hits == 9,
+          "解析：非法 JSON ⇒ false（**不改**调用方结构体）");
+    check(!dom_probe_result_from_json("[1,2,3]", &bad), "解析：JSON 数组（非对象）⇒ false");
+    check(!dom_probe_result_from_json(full, nullptr), "解析：空指针 ⇒ false（不崩）");
+
+    DomSiteProbe err;
+    check(dom_probe_result_from_json(R"({"url":"https://z/","error":"boom"})", &err) &&
+              !err.probe_ok && err.error.find("boom") != std::string::npos,
+          "解析：脚本自身报错 ⇒ probe_ok = false（事实可能不完整）");
+
+    // ---- ② `probe_state_of`：§6.2 五态中的 4 态（第 5 态由 diff 判「新增 / 消失」）----
+    {
+        DomSiteProbe ok_p;
+        ok_p.probe_ok = true;
+        check(probe_state_of(ok_p) == "可用", "状态：探测跑通且无登录迹象 ⇒ 可用");
+        ok_p.needs_login = true;
+        check(probe_state_of(ok_p) == "需登录", "状态：needs_login ⇒ 需登录（退出码 3，**不是**失败）");
+        ok_p.page_abnormal = true;
+        check(probe_state_of(ok_p) == "失败", "状态：页面异常 ⇒ 失败（优先级高于需登录）");
+        DomSiteProbe bad_p;
+        check(probe_state_of(bad_p) == "失败", "状态：探测没跑通（probe_ok = false）⇒ 失败");
+        bad_p.site_error = "表里没有该条目（id 未知）";
+        check(probe_state_of(bad_p) == "未测", "状态：条目不可用 ⇒ 未测（根本没测，不算失败）");
+    }
+
+    // ---- ③ `dom_report_diff`：五态 + 旧报告回推（§6.2）----
+    const auto site = [](const std::string& id, const std::string& state, bool ok = true,
+                         bool need = false, bool abnormal = false,
+                         const std::string& ev = "", const std::string& url = "",
+                         int hits = 1, int cands = 1) {
+        nlohmann::json item;
+        item["id"]               = id;
+        item["state"]            = state;
+        item["probe_ok"]         = ok;
+        item["needs_login"]      = need;
+        item["page_abnormal"]    = abnormal;
+        item["login_evidence"]   = ev;
+        item["url"]              = url;
+        item["input_hits"]       = hits;
+        item["input_candidates"] = cands;
+        return item;
+    };
+    const auto report_of = [](const std::vector<nlohmann::json>& sites) {
+        nlohmann::json doc;
+        doc["schema"] = "aiwrite.web_adapter_report/1";
+        doc["sites"]  = nlohmann::json::array();
+        for (const nlohmann::json& s : sites) {
+            doc["sites"].push_back(s);
+        }
+        return doc;
+    };
+    const auto join = [](const std::vector<std::string>& lines) {
+        std::string text;
+        for (const std::string& line : lines) {
+            text += line + "\n";
+        }
+        return text;
+    };
+
+    {
+        const nlohmann::json prev = report_of({site("a", "可用", true, false, false, "", "u1"),
+                                               site("b", "需登录", true, true, false, "login-node x1",
+                                                    "u2")});
+        std::vector<std::string> lines;
+        check(dom_report_diff(prev, prev, &lines) && lines.size() == 1 &&
+                  lines[0].find("无变化") != std::string::npos,
+              "diff：两轮逐项一致 ⇒ 「无变化（2 站逐项一致）」");
+        check(!dom_report_diff(nlohmann::json::object(), prev, &lines),
+              "diff：上一轮缺 sites ⇒ false（如实报错，**不**假装无变化）");
+        check(!dom_report_diff(nlohmann::json("[1]"), prev, &lines), "diff：非对象报告 ⇒ false");
+    }
+    {
+        const nlohmann::json prev =
+            report_of({site("gone", "可用", true, false, false, "", "u1"),
+                       site("stay", "可用", true, false, false, "", "u1"),
+                       site("shift", "需登录", true, true, false, "login-node x1", "u2")});
+        const nlohmann::json now =
+            report_of({site("stay", "可用", true, false, false, "", "u1"),
+                       site("shift", "可用", true, false, false, "", "u3", 1, 2),
+                       site("fresh", "失败", false)});
+        std::vector<std::string> lines;
+        const bool               ok = dom_report_diff(prev, now, &lines);
+        const std::string        text = join(lines);
+        check(ok && text.find("新增      fresh：失败") != std::string::npos,
+              "diff：本轮新增条目 ⇒ 「新增」（含其当前状态）");
+        check(text.find("消失      gone") != std::string::npos,
+              "diff：上一轮有、本轮没有 ⇒ 「消失」（条目被删 / 改名）");
+        check(text.find("状态变化  shift：需登录 → 可用") != std::string::npos,
+              "diff：状态变化逐行给出「旧 → 新」");
+        check(text.find("页面变化  shift：u2 → u3") != std::string::npos,
+              "diff：页面 URL 变化 ⇒ 单独一行（不掩在状态里）");
+        check(text.find("stay") == std::string::npos, "diff：逐项一致的站**不**出现在输出里");
+    }
+    {
+        // 旧版报告（无 `state`）⇒ 按事实字段回推 §3.2 判据（含「候选 0 且无登录迹象 ⇒ 失败」）
+        nlohmann::json old_abnormal = site("legacy1", "", true, false, false, "", "u", 0, 0);
+        old_abnormal.erase("state");
+        nlohmann::json old_untested = site("legacy2", "", false);
+        old_untested.erase("state");
+        old_untested["site_error"] = "表里没有该条目（id 未知）";
+        nlohmann::json old_need = site("legacy3", "", true, true, false, "login-url:/login");
+        old_need.erase("state");
+        const nlohmann::json prev = report_of({old_abnormal, old_untested, old_need});
+        const nlohmann::json now  = report_of({site("legacy1", "可用"),
+                                               site("legacy2", "可用"),
+                                               site("legacy3", "可用")});
+        std::vector<std::string> lines;
+        check(dom_report_diff(prev, now, &lines) &&
+                  join(lines).find("状态变化  legacy1：失败 → 可用") != std::string::npos,
+              "diff：旧报告无 state ⇒ 回推「候选 0 + 无 Login 迹象 = 失败」（§3.2 同一判据）");
+        check(join(lines).find("状态变化  legacy2：未测 → 可用") != std::string::npos,
+              "diff：旧报告 site_error ⇒ 回推「未测」");
+        check(join(lines).find("状态变化  legacy3：需登录 → 可用") != std::string::npos,
+              "diff：旧报告有登录证据 ⇒ 回推「需登录」");
+    }
+
+    if (passed_out != nullptr) {
+        *passed_out = passed;
+    }
+    std::printf("  → DOM 探测报告自检：%d 通过 / %d 失败\n", passed, failed);
+    return failed;
 }
 
 } // namespace aiwrite::ai

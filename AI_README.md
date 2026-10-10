@@ -2,17 +2,21 @@
 
 > 本文是**给 AI 助手与新协作者的行为契约**：只写「读取顺序 + 命令 + 纪律 + 禁止项」，技术细节一律指向权威文档。
 > 接手任何改动前，请按 §1 顺序读文档，并遵守 §3 取证纪律、§4 改动伴随义务、§6 提交纪律、§7 禁止项、§9 表达规范（写给人类的文字）。
-> **本文 §2 的数字 = 最近一次全量实测（2026-10-08 本机）**；各任务**落地当时**的验收数字以对应计划文档为准（例：[docs/actionPlan/M_patchC_web_node_bind.md](docs/actionPlan/M_patchC_web_node_bind.md) §7.1 的历史行**不追溯改写**）。
+> **本文 §2 的数字 = 最近一次全量实测（2026-10-09 本机）**；各任务**落地当时**的验收数字以对应计划文档为准（例：[docs/actionPlan/M_patchC_web_node_bind.md](docs/actionPlan/M_patchC_web_node_bind.md) §7.1 的历史行**不追溯改写**）。
 
 ---
 
-## 1. 读取顺序（按序读 4 处）
+## 1. 读取顺序（按序读 5 处）
 
 1. **[docs/DocMAP.md](docs/DocMAP.md)** —— 文档地图：什么改动读哪份文档。
    > 更名记录：`docs/README.md` → `docs/DocMAP.md`（2026-10-08 · `git mv` 保留历史）。历史条目（含 `docs/Archive/**`）里出现的**旧文件名与旧自链写法**均指本文。
 2. **[docs/actionPlan/](docs/actionPlan/)** 中**现行**的那一份（`M6.md` / `M7.md` / `M8.md` / `M_patchAB_rest.md` / `M_patchC_web_node_bind.md` / `milestone_plan.md`）—— 不变量 `Ixx`、决策 `D-xx`、计划 `PW-xx`/`M*-xx`、§7 验收标准都在这。
 3. **[docs/CHANGELOG.md](docs/CHANGELOG.md)** 最近条目 —— 最后一次改了什么、上一轮验证数字是多少。
 4. 搜不到代码里的名字（类 / 函数 / 配置键） ⇒ 先查 **[docs/变量术语对照表.md](docs/变量术语对照表.md)**（§12 已知文档≠代码 · §13 新增功能检索入口）。
+5. **[docs/AI_Status.md](docs/AI_Status.md)** —— **一页状态（总览）**：门禁基线 + 台账汇总 + 循环轮次 + 下一步（接手 / 每轮开始与收尾时先扫一眼；§二 由 `loop_verify.ps1` 回写，勿手改）；**分通道明细** = [docs/AI_Status_web.md](docs/AI_Status_web.md)（网页版 11 站）/ [docs/AI_Status_api.md](docs/AI_Status_api.md)（官方 API 9 条）。
+
+> **做「网页站逐站转可用」或自动化循环时**：先读 **[docs/loop_dev.md](docs/loop_dev.md)**（循环开发规则：启动闸 §1 · 三层结构 §2 · 站级 8 步 §3 · 轮次门禁 §4 · 失败分类 §5 · 退出码 §6 · 记录位 §7 · 停止条件 §8）。
+> ⛔ **未获开发者「开始循环开发」的明确授权时，不得启动自动循环**（见 §6 授权表 · §7 禁止项第 8 条）。
 
 **动手前先自问并写下答案**：这属于哪个里程碑/补丁？对应计划里的哪一条？验收标准是什么？需不需要真机验证？
 
@@ -20,20 +24,27 @@
 
 ## 2. 命令表（都在仓库根执行；产物在 `build\bin\`）
 
-| 目的 | 命令 | 基线（**2026-10-08 本机实测**） |
+| 目的 | 命令 | 基线（**2026-10-09 本机实测**） |
 |---|---|---|
-| 构建（Debug） | `cd source; .\build.ps1`（= `cmake --preset default` + `cmake --build --preset debug`） | **0 error / 0 warning** |
-| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===` · exit **0**；含 配置表 **50/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **执行器 425/0** |
-| 执行器自检 | `api_probe.exe --exec-selftest` | **425 / 0** · exit 0 |
+| 构建（Debug） | `cd source; .\build.ps1`（= `cmake --preset default` + `cmake --build --preset debug`）｜**日志自动落 `build\logs\build_debug_<yyyyMMdd_HHmmss>.log`**（`-LogName` 改名 / `-NoLog` 关闭） | **0 error / 0 warning** |
+| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===` · exit **0**；含 配置表 **50/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **执行器 452/0**（2026-10-09 批 3 新增 27 项 DOM 自检：425 → 452） |
+| 执行器自检 | `api_probe.exe --exec-selftest` | **464 / 0** · exit 0（2026-10-10 实测；与旧记 **452** 差 12 = **上一批未提交改动**（`source/nodes/src/local_nodes.cpp` 等），本批未改执行器断言 —— 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]`） |
 | 图模型自检 | `api_probe.exe --graph-selftest` | **110 / 0** · exit 0 |
 | 上传链路自检（离线三组；真机加 `--provider <id> --image <图>`） | `aiwrite.exe --upload-selftest` | **72 / 0** · exit 0（⚠️ 见 §3「GUI 子系统 stdout」；**不要并发跑**，共用 `%TEMP%\aiwrite-upload\selftest`） |
-| 运行时（真实工作流） | `aiwrite.exe --run-selftest` / `--run-selftest --web` | PASS（`official` 需 `~/.brain-ai/config.toml` 凭据；`--web` 需已登录一次）· 本轮未复跑 |
+| 运行时（真实工作流） | `aiwrite.exe --run-selftest` / `--run-selftest --web` | **PASS · exit 0**（**2026-10-09 复跑**：完成 3/5、失败 1、跳过 1 —— official 占位分支缺 Key 属预期；`official` 需 `~/.brain-ai/config.toml` 凭据；`--web` 需已登录一次） |
+| 画布性能（**GUI** · 读日志判据） | `Start-Process .\build\bin\aiwrite.exe -ArgumentList '--open','<工作流>'` ⇒ 读 `%USERPROFILE%\.brain-ai\logs\app.log` 的 `[诊断] 画布` 行 | 85 节点基准图（**2026-10-09 实测** · 该图 2026-10-10 去重后为 **82 节点**）：`FPS 59~60` · `解码 0.0 次/帧` · `缓存 9/64 条 30.9MB`；修复前同图为 `FPS 5~6` · `解码 9.0 次/帧` |
 | 网页登录自检 | `webview2_login.exe --selftest --timeout 30` | 退出码 **0** = PASS / 1 = FAIL / 2 = 超时 |
 | 选择器诊断（**只读**） | `aiwrite.exe --web-adapter-selftest --provider <id>` · `--web-dom-dump --provider <id>` | 打印命中数 / 候选与建议选择器 |
-| 夹具（抽真实源码脚本，迷你 DOM 真跑） | `node source\tools\poll_answer_gate_test.js` · `node source\tools\send_chain_test.js` | **12 / 0** · **17 / 0** |
-| 夹具**负向**打假（必须 FAIL） | 上两条加 `--old` | 门夹具 **5 / 7** · **exit 1**（失败项 = 预期） |
+| 网页站批量探测 + 报告 + 上轮对比（`FEA-L01` · **只读**） | `aiwrite.exe --web-adapter-selftest --provider all --timeout 30 --json <报告路径> [--json-diff <上一轮报告>]` | 10 站一次跑完 · **退出码 0 / 1 / 2 / 3**（2026-10-09 实测：可用 8 · 需登录 2 · 失败 1 · exit 1） |
+| 会话 / 登录态清单（`FEA-L02`） | `aiwrite.exe --web-session-list [--json <路径>]` | 内存会话 / L2 快照元数据 / 11 条网页版条目判据 · **exit 0**（有没有会话都算成功） |
+| **循环「一键一轮」（`TST-L01` · `loop_dev.md` §4/§6.1）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\loop_verify.ps1 [-Round R2] [-Providers kimi-web,doubao-web] [-SkipGates] [-SkipProbe] [-StatusOnly] [-UpdateDocs:$false]` | 门禁 → S2 探测 → S3 逐站 → 报告（**四块**）+ 台账（`TST-L05`）落 `build\loop\<轮次>-<时间戳>\`（`report.md` **四块** + `report.json`）；**站点台账（`TST-L05`）**：**20 站**（web 11 / official 9）×「文字理解 / 图片理解」两列跨轮累积 ⇒ `build\loop\SITE_STATUS.json` + 回写 `docs\loop_dev.md` §2.2 哨兵块（`-StatusOnly` 零副作用重建）；**站点绿判据 = 三口径：`rc=0` 且 `n3(LLMGenerate)=done` 且归档正文非站侧错误/忙碌串**（`n3` 取磁盘 PC-05 归档 ⇒ stdout 丢失也能判）；轮次退出码：有真失败或「未测」⇒ **1** · 需登录 ⇒ **3** · 全绿 ⇒ **0**（2026-10-09 R1 实测：S3 6 站 · 可用 5 · 失败 1 ⇒ 1；`SMOKE8/9` 实测：`kimi-web` 站侧繁忙 ⇒ **失败** · 1） |
+| 夹具（抽真实源码脚本，迷你 DOM 真跑） | `node source\tools\poll_answer_gate_test.js` · `send_chain_test.js` · **`dom_gate_test.js`** | **44 / 0** · **17 / 0** · **15 / 0** |
+| 夹具**负向**打假（必须 FAIL） | 上三条加 `--old` | 门夹具 **18 / 26** · 链路 **13 / 4** · **DOM 判据 9 / 6** · **exit 1**（失败项 = 预期） |
 | 日志 | `%USERPROFILE%\.brain-ai\logs\app.log`（每 2 秒落盘，可直接 tail） | `[诊断]` 行限流输出 |
-| VS Code | `Ctrl+Shift+B` 构建 · `F5` 调试 · Run Task：`build` / `build (release)` / `verify: api_probe 自检` / `verify: 图模型自检` / `log: 查看 app.log` | — |
+| **一键自检（`PM-03`）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1 [-SkipBuild] [-SkipGui] [-SkipLoop]` | 构建 + 6 项自检/夹具 + `--upload-selftest` + 台账重建 ⇒ **12/12 PASS · exit 0**（**2026-10-10 实测** · 物证 `build\logs\check_all_<时间戳>.log`） |
+| **诊断 / 依赖（`PM-01`·`PM-04`）** | `api_probe.exe --diag-dump` ｜ `--diag-assert` ｜ `--dep-check` ｜ `--settings-assert` | 前两者 = 诊断报告（**8 分节 39 行**）打印/断言；`--dep-check` = `WebView2 运行时 152.0.4191.66（api）`（**2026-10-10 实测**）；`--settings-assert` = 默认通过 + 越界 **8 例全拦** + 边界值通过。均为**单行 PASS/FAIL**（不进 §2 分组数字） |
+| **安装包（`M6-08`）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [-Version 0.2.0] [-SkipBuild] [-SkipInstaller]` | ①构建 ②payload `build\dist\payload`（**18 文件 / 28.7 MB** · **Python 摘钩** `*.py=0` · `.iss ↔ payload` 一致性锁 PASS）③`ISCC` 编译。exit **0 / 2（未装 ISCC：已打印获取方式）/ 1**。⚠ **本机未编译验证**（无 ISCC + winget 无网络 `0x80072efd`）⇒ 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]` |
+| VS Code | `Ctrl+Shift+B` 构建 · `F5` 调试 · Run Task：`build` / `build (release)` / `verify: api_probe 自检` / `verify: 图模型自检` / `log: 查看 app.log` / **`log: 查看最新构建日志`** | — |
 
 > 完整开关清单（含 `--image-decode` / `--sha3` / `--pydoll-*` / `--login-selftest` 等）见 [source/README.md](source/README.md) §4。
 > 数字变动时：先在 `CHANGELOG` 记本轮实测 + 同步相关计划行的验收数字，**再**回来改本文这一栏（§4 义务 6）。
@@ -44,6 +55,8 @@
 
 - **输出一律重定向**：`& .\build\bin\api_probe.exe --selftest > $env:TEMP\x.txt 2>&1` 再 `Get-Content $env:TEMP\x.txt` 读回。
   *为什么*：本机 VS Code 的 shell 集成会**吞掉管道的输出**，`| Select-String` / `| Tee-Object` 会得到空结果 ⇒ 曾导致三套 selftest 被误判为「失败」。
+- **构建日志有固定去处**：`source\build.ps1` 自动把**整段输出**写 `build\logs\build_<config>_<时间戳>.log`（UTF-8 无 BOM）⇒ **不要**再往仓库根写 `build_xxx.log`；自建的取证输出（selftest / 探针 / 性能复现）也请落到 `build\logs\`（例：`> build\logs\selftest.txt 2>&1`）或 `$env:TEMP`。快速取最新一份：`Get-ChildItem build\logs\*.log | Sort-Object LastWriteTime | Select-Object -Last 1`（VS Code 任务 `log: 查看最新构建日志`）。
+  *踩坑留痕*：PS 5.1 的 `Tee-Object` **无 `-Encoding`**，默认写 **UTF-16LE** ⇒ 用 `| Tee-Object -FilePath build\logs\x.log` 落盘会得到 UTF-16（并混排乱码）；脚本内改用 `StreamWriter`（UTF-8 无 BOM）。
 - **两种进程，两种捕获方式**：`api_probe.exe` / `node` 是**控制台程序** ⇒ `> file 2>&1` 有效；**`aiwrite.exe` 是 GUI 子系统** ⇒ `>` 捕**不到** stdout（实测 0 行，极易误判「没输出」）⇒ 必须用
   `Start-Process -FilePath .\build\bin\aiwrite.exe -ArgumentList '--upload-selftest' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $env:TEMP\a.txt` 再 `Get-Content $env:TEMP\a.txt`（读 `$p.ExitCode` 取退出码）。
 - **不凭旧记录下结论**：数字必须来自本轮 txt 物证（含退出码）；PASS 行的**文案**也要对（应含本轮新措辞 ⇒ 证明跑的是新二进制）。
@@ -67,7 +80,7 @@
 
 ## 5. 编号与登记约定
 
-- **编号空间**：`Ixx`（不变量）/ `D-xx` / `W-Dx`（修正）/ `PW-xx`（补丁 C 任务）/ `M*-xx`（里程碑任务）/ `B*-xx`（批次）/ `AB*-xx`（验收）/ `VB*-xx` / `VB2-xx` / `A*-xx`（验证）/ `PB2-xx` / `R*-xx`（风险）/ `RM-D*`（路线决策）。
+- **编号空间**：`Ixx`（不变量）/ `D-xx` / `W-Dx`（修正）/ `PW-xx`（补丁 C 任务）/ `M*-xx`（里程碑任务）/ `B*-xx`（批次）/ `AB*-xx`（验收）/ `VB*-xx` / `VB2-xx` / `A*-xx`（验证）/ `PB2-xx` / `R*-xx`（风险）/ `RM-D*`（路线决策）/ **`CS-xx`**（画布快照任务 · [docs/actionPlan/M_canvas_snapshot.md](docs/actionPlan/M_canvas_snapshot.md)）/ **`VC-xx`**（画布快照验证项）/ **`AC-xx`**（画布快照验收项）。
 - **状态词白名单**（只用这几个，别自创）：**已拍板 / 已落地 / 部分落地 / 计划中 / 已归档 / 已退场 / 待真机**。
 - **文档三态标记**（全库统一 · 定义见 [docs/DocMAP.md](docs/DocMAP.md) §五）：✅ **已固定**（已落地视为契约）/ 📦 **已失效**（⛔ **只标记不删除**，必须给「现行指向」）/ ⬜ **待定**（未拍板 ⇒ **必须**在 `DevPlan.todo` 的「**待定 · 未拍板**」分类里有同名 `PQ-xx` 项；拍板后同批置 done）。
 - 新事项先**登记**（计划文档 + `DevPlan.todo`），再开工；收口时回填**实测数字**，不写「应该没问题」。
@@ -87,6 +100,7 @@
 | 「改版本」/「升版本」/「发版」 | 改版本号 + `CHANGELOG` 版本小节 + `tag` |
 | 「建分支 / 切分支 / 合并 / 推」 | 对应分支或远程操作 |
 | 「回滚 / 撤销」 | `revert` / `reset` / `checkout`（**先确认范围与后果**） |
+| 「开始循环开发」（或同义明确指令） | 启动 [docs/loop_dev.md](docs/loop_dev.md) §1 定义的**无人监管循环**（默认上限 **3 轮** / 10 站；只在该文档授权范围内「跑 + 记录」，不夹带产品代码改动） |
 
 **未获指令时禁止**：`git commit`（含 `--amend`）· `git tag` · `git push` · `git merge` · `git reset` · `git checkout`（切分支/回滚）· 改动 `CHANGELOG` 的版本号小节 · 把 `[Unreleased]` 条目版本化。
 
@@ -105,6 +119,7 @@
 5. **删除 / 移动用户数据**：`~/.brain-ai/**`（含登录态、图片资源）只读诊断，禁止清理；`source/python/_probe/out/**` 等未跟踪探针产物不擅自删。
 6. **只改代码不修文档**（违反 §4），或反过来「文档先行但不登记」。
 7. **猜测式结论**：不确定就写「**待真机/待验证**」并登记到对应文档，不许编数字、编路径、编 API 行为。
+8. **未获授权就启动自动循环 / 在循环里夹带代码改动**：不得自行开始 [docs/loop_dev.md](docs/loop_dev.md) 的循环开发（连续多站自动跑、自动回填站点结论）；循环内只允许改站点数据（`providers.json` 的 `verified` / `notes` / 选择器）与文档，**产品代码改动必须出循环**、走正常计划流程。
 
 ---
 
@@ -115,12 +130,15 @@
 | 行为契约（本文） | `AI_README.md` |
 | 文档地图 / 进度 | `docs/DocMAP.md` |
 | 变更日志 | `docs/CHANGELOG.md` |
-| 现行计划 | `docs/actionPlan/M6.md` · `M7.md` · `M8.md` · `M_patchAB_rest.md` · `M_patchC_web_node_bind.md` · `milestone_plan.md` |
+| 现行计划 | `docs/actionPlan/M6.md` · `M7.md` · `M8.md` · `M_patchAB_rest.md` · `M_patchC_web_node_bind.md` · `M_canvas_snapshot.md`（画布渲染性能专项 · **计划中**）· `milestone_plan.md` |
 | 开发看板（JSON） | `docs/DevPlan.todo` |
+| 循环开发规则 | `docs/loop_dev.md`（网页站逐站转可用：启动闸 / 三层结构 / 站级 8 步 / 轮次门禁 / 失败分类 / 退出码 / 记录位 / 停止条件） |
 | 术语对照 | `docs/变量术语对照表.md` |
 | 归档（只读追溯） | `docs/Archive/**`（含 `Archive/README.md` 归档规则） |
-| 源码 / 构建 | `source/src/**` · `source/tools/**` · `source/build.ps1` · 产物 `build/bin/**` |
-| 离线夹具 | `source/tools/poll_answer_gate_test.js` · `source/tools/send_chain_test.js` |
+| 源码 / 构建 | `source/<模块>/{src,include}/**`（模块 = ai / engine / nodes / ui / utils / web；入口 `source/app/src/main.cpp`）· `source/tools/**` · `source/build.ps1` · 产物 `build/bin/**` |
+| 离线夹具 | `source/tools/poll_answer_gate_test.js` · `source/tools/send_chain_test.js` · `source/tools/dom_gate_test.js` |
+| 循环「一键一轮」驱动 | `source/tools/loop_verify.ps1`（`TST-L01` + `TST-L05` 站点台账 · 门禁 + S2 探测 + S3 逐站 + 报告落 `build\loop\<轮次>-<时间戳>\`） |
+| 项目 / 站点状态页 | `docs/AI_Status.md`（**接手先看**：门禁基线 + 循环轮次 + 下一步；§二 = `TST-L05` 台账**汇总**，由 `loop_verify.ps1` 每轮 / `-StatusOnly` 机器回写 · **勿手改**）；分通道明细 `docs/AI_Status_web.md`（web 11 站）+ `docs/AI_Status_api.md`（official 9 条） |
 | 运行期数据 / 日志 | `~/.brain-ai/`（`config.toml` · `assets/images/` · `logs/app.log`） |
 
 ---
@@ -132,7 +150,7 @@
 
 1. **用人类易读的语言**：先讲清「做了什么 / 为什么 / 影响什么」，再给细节；能用一句话说明白的，不要用缩写与代号堆砌。
 2. **不裸用 magic number（魔法数字 · 含义不明的裸数值）/ magic symbol（魔法符号 · 含义不明的生僻符号）**：
-   - 裸数值必须写清它是什么，例：`退出码 3`（`0x80000003`，CRT 断言中断）、`425 / 0`（执行器断言通过数 / 失败数）。
+   - 裸数值必须写清它是什么，例：`退出码 3`（`0x80000003`，CRT 断言中断）、`452 / 0`（执行器断言通过数 / 失败数）。
    - 生僻符号同样要写清，例：`335 → 397`（断言数由 335 增到 397，即 **+62**）；`≥2`（至少 2 个）。
 3. **链接与代号一律紧随括号注明内容**（**就地可读**，不必回查定义）：
    - 代号：`D-26`（网页版站点条目的**字段级回落**是否收紧）、`VB2-22⑧`（`format_answer_text` 排版纯函数的 **8 例**断言）、`PQ-09`（看板「待定 · 未拍板」分类里的编号，拍板后同批置 done）。
@@ -145,7 +163,44 @@
 
 ## 10. 本文的维护
 
-- 本文**只放**：读取顺序、命令、纪律、表达规范、禁止项、路径。**技术细节一律外链**权威文档，杜绝双份维护。
+- 本文**只放**：读取顺序、命令、纪律、**代码组织规范**、表达规范、禁止项、路径。**技术细节一律外链**权威文档，杜绝双份维护。
 - 与 [docs/DocMAP.md](docs/DocMAP.md) 的分工：**本文 = 行为契约**；**DocMAP = 文档地图**。
 - 基线数字会过期：本文数字**带实测日期**；变动时同步本文 + `CHANGELOG`（§4 义务 6），历史任务的数字留在原计划文档里、不追溯改写。
 - 已知取舍：本文**不会被 VS Code / AI 工具自动加载**（无钩子），所以任务开始时请显式要求「先读 `AI_README.md`」。
+
+---
+
+## 11. 代码组织规范（**新增文件必须遵守** · 2026-10-09 定稿 · `FEA-L05`）
+
+> 起因（两轮）：① `FEA-L04` **之前**头文件与 `.cpp` 混放、`ai/` 下站点专属与通用件混放；② `FEA-L04` 只做到"头 / 实现分离"，但**左右两棵镜像树**（`source/src/**` + `source/include/**`）让「改一个模块」仍要跨两处跳转。
+> 适用范围：`source/` 下的 C++ 源码（`source/python/**` 与 `source/third_party/**` **不受本规范约束**）。
+
+### 11.1 两条硬规则
+
+1. **每个模块目录自带 `src/` + `include/`**：实现 `.cpp` 放 `source/<模块>/src/**`，头文件放 `source/<模块>/include/**`（**模块内拍平**，不再镜像 `src/` 的子目录）。
+   - 例：`source/engine/src/graph.cpp` ↔ `source/engine/include/graph.h`；`source/utils/src/log.cpp` ↔ `source/utils/include/log.h`。
+   - **新文件落位判据**：先定它属于哪个模块（`ai` / `engine` / `nodes` / `ui` / `utils` / `web`），再接 `src/`（实现）或 `include/`（头文件）；程序入口 = `source/app/src/main.cpp`。
+   - **引用写法 = 裸文件名**（`#include "graph.h"`，**不写**模块前缀）—— 因为 `source/CMakeLists.txt` 把**每个模块的 `include/`** 都挂成头文件根（`target_include_directories(aiwrite_core PUBLIC ...)` 逐行列 6 行）。
+   - **前提与代价（如实说明）**：裸名成立的前提是「全仓的头文件**互不同名**」（2026-10-09 实测：53 个头文件无重名）；将来若真撞名，**改文件名**即可 —— 不要退回「模块前缀 + 单一 include 根」的双写形态。
+2. **`source/ai/src/` 下按站点分目录**：只服务某一个站点的实现，放 `ai/src/<站点>/`（站点名取 `providers.json` 的条目名去掉 `-web`，例：`ai/src/deepseek/`、`ai/src/doubao/`、`ai/src/kimi/`）；**通用件不动**（配置表 `provider_spec` · DOM 适配器 `dom_web_client` · PoW `web_pow` · 供料探针 `upload_supply_probe` · 上传**框架** `upload/image_convert` / `upload_contract` / `upload_evidence` / `upload_registry` —— 直接放 `ai/src/`，不建站点子目录）；**站点上传单元** `site_upload_<站>.cpp` 属站点知识 ⇒ 归 `ai/src/<站>/`。
+   - **判据**：改这个文件会只影响**一个**网页站 → 进 `ai/src/<站点>/`；会影响**任意**站 → 留 `ai/src/`。
+   - **头文件不再跟着分站点**：站点专属头文件也放 `ai/include/` 平铺（例：`source/ai/src/deepseek/deepseek_web_client.cpp` ↔ `source/ai/include/deepseek_web_client.h`）—— 因为引用写裸名，站点子目录已无区分作用。
+
+### 11.2 现状与迁移（诚实说明）
+
+- 本规则**自 2026-10-09 起对"新增 / 修改的文件"生效**；
+- **第 1 步 `FEA-L04`（2026-10-09 · 已被取代）**：53 个头文件 → `source/include/**`（镜像 `source/src/**`）、`source/src/ai/` 下按站点分目录、CMake 与连带文档同步；当时回归数字逐项不变。
+- **第 2 步 `FEA-L05`（2026-10-09 · ✅ 已完成 · 现行）**：改成**每个模块自带 `src/` + `include/`**：**104 个文件** `git mv`（53 头 + 51 `.cpp`；其中入口 `source/src/main.cpp` → `source/app/src/main.cpp`），`source/src/` 与 `source/include/` 两个旧根**已删除**；**~250 处 `#include` 去掉模块前缀**；CMake 头文件根由 1 个改为 **6 个**（逐模块列出）；`source/tools/*.js`（三个夹具**直接从源码读页面脚本**）与 `.py` 注释里的路径一并同步。
+  - **验证（2026-10-09 实测 · 逐项与旧基线一致）**：构建 **0 error / 0 warning**（`build/logs/build_debug_20261009_203915.log`）· `api_probe --selftest` **exit 0 · 七组全 PASS** · 执行器 **452/0** · 图模型 **110/0** · `aiwrite --upload-selftest` **72/0** · 夹具 **12/0 · 17/0 · 15/0**（夹具**直接读** `source/ai/src/dom_web_client.cpp`，路径改对才算过）。
+- **搬迁已完成**（2026-10-09）⇒ 仓库里**只有新位置**：后续任何改动都必须按 §11.1 落位（**不要**再建 `source/{src,include}/**` 这种全局两根树）。
+
+### 11.3 其他落位（既有约定 · 重申）
+
+| 类型 | 位置 |
+|---|---|
+| 程序入口（GUI 主程序） | `source/app/src/main.cpp`（无头文件 ⇒ `app/` 只有 `src/`） |
+| 命令行工具（`api_probe` / `webview2_login`） | `source/tools/*.cpp`（单文件，无头） |
+| 离线夹具 / 驱动脚本 | `source/tools/*.js` · `source/tools/*.ps1` |
+| 第三方源码（**禁止本地改造**） | `source/third_party/**` |
+| Python 运行代码 | `source/python/**`（**不受 §11.1/11.2 约束**） |
+| 站点数据 / 资产 | `source/assets/**`（`providers.json` 是站点数据的**唯一权威位**） |

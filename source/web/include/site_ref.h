@@ -16,9 +16,9 @@
 #include <string>
 #include <vector>
 
-#include "ai/provider_spec.h"     // 站点参数来自配置表条目（ProviderWebSpec）
-#include "web/session_store.h"    // 站点键（origin）= site_key_of
-#include "web/web_owner.h"        // M_patchC（PW-01）：归属标识（纯数据）
+#include "provider_spec.h"     // 站点参数来自配置表条目（ProviderWebSpec）
+#include "session_store.h"    // 站点键（origin）= site_key_of
+#include "web_owner.h"        // M_patchC（PW-01）：归属标识（纯数据）
 
 namespace aiwrite::web {
 

@@ -48,4 +48,11 @@ std::string file_path_string();
 // workflow.log 路径（用于 UI 展示 / 自检断言）
 std::string workflow_file_path_string();
 
+// ---- 旧日志清理（M6 接线 `advanced.log_ttl_days` · 归口 PD-06）----
+//  * 删除 `~/.brain-ai/logs/` 下**超过 ttl_days 天**的日志文件（含 spdlog 轮转件 app.log.1 …）
+//  * **保留**当前活动文件 `app.log` / `workflow.log`（它们是正在写的文件，不按年龄删）
+//  * `ttl_days <= 0` ⇒ 不删任何东西（返回 0）；目录不存在也返回 0（不报错）
+//  * 返回删除个数（失败原因写入 *error，不抛异常；单项失败不影响其余项）
+int purge_old_files(int ttl_days, std::string* error = nullptr);
+
 } // namespace aiwrite::log

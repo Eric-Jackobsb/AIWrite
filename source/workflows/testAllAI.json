@@ -1,0 +1,2134 @@
+{
+  "version": "1.0",
+  "name": "testAllAI · 全 AI 嵌套图文 · 人工暂停/中止测试",
+  "description": "【用途】人类「暂停 / 中止」测试场景（testAllAI）：一次运行把「主干 6 层嵌套图文链」与「并联 15 支（覆盖配置表里全部 20 个 AI 条目）」都跑一遍，方便人工在运行中途观察、暂停查看、随时中止，检查界面 / 引擎是否出现卡死、状态错乱、结果串台等 bug。\n【结构 · 一层套一层】主干自左向右层层承接：L0 输入（1 条总任务 + 3 个图片输入，其中 2 处为多选）→ L1 图片理解（智谱 glm-4v-flash）→ L2 文本生成（DeepSeek 官方 API）→ L3 网页版图片理解（豆包 · 含上传单元，2 图）→ L4 网页版文本生成（DeepSeek 网页版）→ L5 网页版图片理解（Kimi · 含上传单元，3 图）→ L6 文本合并 + 收束成稿（智谱 glm-4-flash）。每层都带一个「文本输出」节点 —— 输出面板里每个分段就是该层的可见结果。\n【并联 15 支】每支 = 1 个提供商配置 + 1 个生成节点 + 1 个文本输出（视觉支多 1 个图片输入）；提示词来自同一个「P 统一提示词模板」（输出端口扇出）。官方 API（8）：deepseek / zhipu / siliconflow / ollama / openrouter / openai / anthropic / gemini；网页版（11）：deepseek-web / doubao-web / kimi-web / qwen-web / chatglm-web / yuanbao-web / ernie-web / spark-web / chatgpt-web / claude-web / gemini-web；另有 custom-official（自定义官方 API，需自填）。\n【怎么用（人工测试步骤）】\n1. 打开应用 →「打开工作流」→ 选中本文件（source/workflows/testAllAI.json）→ 画布应显示 82 节点 / 81 连线；Console 出现「[工作流-加载]」而不是「加载拒绝」。\n2. 中止测试：点「▶ 运行」→ 在主干 L3 / L4（网页版节点，单节点最耗时）运行中点「■ 停止」→ 预期：状态栏「正在停止…」→ 当前节点跑完当前步骤 → 之后不再开始新节点（没跑到的节点保持原状态）→ Console 打印「[执行器] 已取消：完成 x / 82，失败 f，跳过 s，耗时 …」。\n3. 暂停观察：运行中随时切「输出面板 / 参数面板 / 控制台」看：① 界面是否仍可交互（不卡死）；② 当前节点摘要与耗时是否滚动正确；③ 已完成节点的结果是否被后续节点覆盖（不应覆盖）；④ 图片节点的缩略图与尺寸是否正常。\n4. 不点停止跑到底：失败节点变红、其下游标「跳过」，与失败无关的分支继续跑（失败传播只影响下游）。\n5. ⚠️ 主干是**串行承接**：任一层失败会把它**下游层**一起跳过（正好是「失败传播」的可见样本）；并联 15 支互不影响 ⇒ 只想看「层层套」的中止行为时，可直接在主干的层与层之间点停止。\n【预期失败项（不是 bug）】① ollama 未启动本地服务；② 官方 API 没配 Key（deepseek / zhipu / siliconflow / openrouter / openai / anthropic / gemini 各自独立，可用节点参数或环境变量或凭据库提供）；③ 网页版条目没在弹出的登录窗口登录过（网页版会话按站点独立、只存内存，重启进程即失效）；④ custom-official 没自填 API 地址与模型（留空 = 该节点必定失败）。\n【图片说明】图片全部取自仓库 source/assets/images/，路径为**本机绝对路径**（换机 / 换目录后请在「图片路径」里重新多选，或点参数面板「迁移到资源目录」存为资源令牌，工作流只留令牌、换目录也不失效）；L0 图2·3 = 2 张、L0 图4~6 = 3 张、gemini 支 = 3 张，用于验证多选与多图送模。\n【产物】全部「文本输出」节点的「运行后自动导出」= 关（跑测试不落盘）；需要留档时在对应节点点「导出为文档…」。",
+  "nodes": [
+    {
+      "id": "n1",
+      "type": "TextInput",
+      "title": "L0 总任务（文字输入）",
+      "position": {
+        "x": -4560.0,
+        "y": -1500.0
+      },
+      "params": {
+        "text": "把这几张图写成一个小说开头：先看图说话，再层层加细节，最后收束成一段成稿。全程只输出正文。"
+      }
+    },
+    {
+      "id": "n2",
+      "type": "ImageInput",
+      "title": "L0 图1（单张）",
+      "position": {
+        "x": -4560.0,
+        "y": -1200.0
+      },
+      "params": {
+        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/f65764c991a50a4a61c7fa2be6f80ac3.jpg"
+      }
+    },
+    {
+      "id": "n3",
+      "type": "ImageInput",
+      "title": "L0 图2·3（多选 2 张）",
+      "position": {
+        "x": -4560.0,
+        "y": -900.0
+      },
+      "params": {
+        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/887e6aee9da1527eee1ebe547120abe1.jpg\nF:/GameDao/Tools/AIwrite/source/assets/images/a66d513417b7707ea25530b1cff09d41.jpg"
+      }
+    },
+    {
+      "id": "n4",
+      "type": "ImageInput",
+      "title": "L0 图4~6（多选 3 张）",
+      "position": {
+        "x": -4560.0,
+        "y": -600.0
+      },
+      "params": {
+        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/b862006a085cf2bb8048233c1c01565a.jpg\nF:/GameDao/Tools/AIwrite/source/assets/images/flamingo.png\nF:/GameDao/Tools/AIwrite/source/assets/images/4e3fee91784015c9e248340dbac9a2b3.jpg"
+      }
+    },
+    {
+      "id": "n5",
+      "type": "PromptTemplate",
+      "title": "L1 提示词（图文任务）",
+      "position": {
+        "x": -4000.0,
+        "y": -1500.0
+      },
+      "params": {
+        "template": "【L1 图文任务】{1}\n\n请观察随本条消息附上的图片，用 80 字以内说明：① 画面主体是什么 ② 场景与时间线索 ③ 一个可以继续写下去的细节。只输出正文，不要客套话。"
+      }
+    },
+    {
+      "id": "n6",
+      "type": "ProviderConfig",
+      "title": "配置：智谱 GLM（视觉 · glm-4v-flash）",
+      "position": {
+        "x": -4000.0,
+        "y": -1200.0
+      },
+      "params": {
+        "provider": "zhipu",
+        "mode": "official",
+        "api_base": "",
+        "model": "deepseek-chat",
+        "model_custom": "glm-4v-flash",
+        "api_key_ref": ""
+      }
+    },
+    {
+      "id": "n7",
+      "type": "VLMGenerate",
+      "title": "L1 图片理解（智谱 glm-4v-flash）",
+      "position": {
+        "x": -4000.0,
+        "y": -900.0
+      },
+      "params": {
+        "system_prompt": "你是细心的图片观察员。",
+        "temperature": 0.7,
+        "max_tokens": 1024,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n8",
+      "type": "TextOutput",
+      "title": "L1 输出：图片理解",
+      "position": {
+        "x": -4000.0,
+        "y": -600.0
+      },
+      "params": {
+        "label": "L1 输出：图片理解",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n9",
+      "type": "PromptTemplate",
+      "title": "L2 提示词（承接 L1）",
+      "position": {
+        "x": -3440.0,
+        "y": -1500.0
+      },
+      "params": {
+        "template": "【L2 承接上一轮】上一轮对图片的观察：\n{1}\n\n请把它扩写成 120 字以内的场景描写：保留上一轮的关键细节，语言克制、有画面感。"
+      }
+    },
+    {
+      "id": "n10",
+      "type": "ProviderConfig",
+      "title": "配置：DeepSeek（官方 API）",
+      "position": {
+        "x": -3440.0,
+        "y": -1200.0
+      },
+      "params": {
+        "provider": "deepseek",
+        "mode": "official",
+        "api_base": "",
+        "model": "deepseek-chat",
+        "model_custom": "",
+        "api_key_ref": ""
+      }
+    },
+    {
+      "id": "n11",
+      "type": "LLMGenerate",
+      "title": "L2 文本生成（DeepSeek 官方 API）",
+      "position": {
+        "x": -3440.0,
+        "y": -900.0
+      },
+      "params": {
+        "system_prompt": "你是小说作家，擅长克制的场景描写。",
+        "mode": "official",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 1024,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n12",
+      "type": "TextOutput",
+      "title": "L2 输出：文本生成",
+      "position": {
+        "x": -3440.0,
+        "y": -600.0
+      },
+      "params": {
+        "label": "L2 输出：文本生成",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n13",
+      "type": "PromptTemplate",
+      "title": "L3 提示词（图文核对）",
+      "position": {
+        "x": -2880.0,
+        "y": -1500.0
+      },
+      "params": {
+        "template": "【L3 图文核对】上一轮文字：\n{1}\n\n请结合随本条消息附上的 2 张图片，判断「文字描述」与「图片内容」是否一致，并用 100 字以内给出更准确的画面描述。"
+      }
+    },
+    {
+      "id": "n14",
+      "type": "ProviderConfig",
+      "title": "配置：豆包（字节网页版）",
+      "position": {
+        "x": -2880.0,
+        "y": -1200.0
+      },
+      "params": {
+        "provider": "doubao-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n15",
+      "type": "VLMGenerate",
+      "title": "L3 图片理解（豆包网页版 · 2 图）",
+      "position": {
+        "x": -2880.0,
+        "y": -900.0
+      },
+      "params": {
+        "system_prompt": "你是图文校对助手，只依据图片内容做判断。",
+        "temperature": 0.7,
+        "max_tokens": 1024,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n16",
+      "type": "TextOutput",
+      "title": "L3 输出：网页版图片理解",
+      "position": {
+        "x": -2880.0,
+        "y": -600.0
+      },
+      "params": {
+        "label": "L3 输出：网页版图片理解",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n17",
+      "type": "PromptTemplate",
+      "title": "L4 提示词（承接 L3）",
+      "position": {
+        "x": -2320.0,
+        "y": -1500.0
+      },
+      "params": {
+        "template": "【L4 承接上一轮】图文核对结论：\n{1}\n\n请用 100 字以内续写一个具体动作片段（有人做事、有声音或光线变化），不要重复已有描述。"
+      }
+    },
+    {
+      "id": "n18",
+      "type": "ProviderConfig",
+      "title": "配置：DeepSeek（网页版）",
+      "position": {
+        "x": -2320.0,
+        "y": -1200.0
+      },
+      "params": {
+        "provider": "deepseek-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n19",
+      "type": "LLMGenerate",
+      "title": "L4 文本生成（DeepSeek 网页版）",
+      "position": {
+        "x": -2320.0,
+        "y": -900.0
+      },
+      "params": {
+        "system_prompt": "你是小说作家，擅长写具体动作。",
+        "mode": "web",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 1024,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n20",
+      "type": "TextOutput",
+      "title": "L4 输出：网页版文本生成",
+      "position": {
+        "x": -2320.0,
+        "y": -600.0
+      },
+      "params": {
+        "label": "L4 输出：网页版文本生成",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n21",
+      "type": "PromptTemplate",
+      "title": "L5 提示词（环境补写）",
+      "position": {
+        "x": -1760.0,
+        "y": -1500.0
+      },
+      "params": {
+        "template": "【L5 环境补写】已有片段：\n{1}\n\n请结合随本条消息附上的 3 张图片，用 100 字以内补一段环境描写（空间 + 光影 + 气味 / 温度）。"
+      }
+    },
+    {
+      "id": "n22",
+      "type": "ProviderConfig",
+      "title": "配置：Kimi（Moonshot 网页版）",
+      "position": {
+        "x": -1760.0,
+        "y": -1200.0
+      },
+      "params": {
+        "provider": "kimi-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n23",
+      "type": "VLMGenerate",
+      "title": "L5 图片理解（Kimi 网页版 · 3 图）",
+      "position": {
+        "x": -1760.0,
+        "y": -900.0
+      },
+      "params": {
+        "system_prompt": "你是小说作家，擅长环境与感官描写。",
+        "temperature": 0.7,
+        "max_tokens": 1024,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n24",
+      "type": "TextOutput",
+      "title": "L5 输出：网页版图片理解",
+      "position": {
+        "x": -1760.0,
+        "y": -600.0
+      },
+      "params": {
+        "label": "L5 输出：网页版图片理解",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n25",
+      "type": "TextMerge",
+      "title": "L6 合并（L2 + L5）",
+      "position": {
+        "x": -1200.0,
+        "y": -1800.0
+      },
+      "params": {
+        "separator": "\\n---\\n",
+        "ignore_empty": true
+      }
+    },
+    {
+      "id": "n26",
+      "type": "PromptTemplate",
+      "title": "L6 提示词（收束成稿）",
+      "position": {
+        "x": -1200.0,
+        "y": -1500.0
+      },
+      "params": {
+        "template": "【L6 收束成稿】上下文（合并后的 L2 + L5）：\n{1}\n\n请收拢成一段 150 字以内的成稿：开头点出时间与地点，结尾留一个悬念。"
+      }
+    },
+    {
+      "id": "n27",
+      "type": "ProviderConfig",
+      "title": "配置：智谱 GLM（文本 · glm-4-flash）",
+      "position": {
+        "x": -1200.0,
+        "y": -1200.0
+      },
+      "params": {
+        "provider": "zhipu",
+        "mode": "official",
+        "api_base": "",
+        "model": "deepseek-chat",
+        "model_custom": "glm-4-flash",
+        "api_key_ref": ""
+      }
+    },
+    {
+      "id": "n28",
+      "type": "LLMGenerate",
+      "title": "L6 收束成稿（智谱 glm-4-flash）",
+      "position": {
+        "x": -1200.0,
+        "y": -900.0
+      },
+      "params": {
+        "system_prompt": "你是编辑，负责把多段素材收束成成稿。",
+        "mode": "official",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 1024,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n29",
+      "type": "TextOutput",
+      "title": "L6 最终输出",
+      "position": {
+        "x": -1200.0,
+        "y": -600.0
+      },
+      "params": {
+        "label": "L6 最终输出",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n30",
+      "type": "TextInput",
+      "title": "P 统一测试提示词",
+      "position": {
+        "x": -640.0,
+        "y": -1800.0
+      },
+      "params": {
+        "text": "请用一句话（40 字以内）说明你能做什么，并给出今天的日期。"
+      }
+    },
+    {
+      "id": "n31",
+      "type": "PromptTemplate",
+      "title": "P 统一提示词模板",
+      "position": {
+        "x": -640.0,
+        "y": -1500.0
+      },
+      "params": {
+        "template": "【统一测试提示】{1}\n\n请用 40 字以内回答，不要展开。"
+      }
+    },
+    {
+      "id": "n32",
+      "type": "ImageInput",
+      "title": "P 图：siliconflow",
+      "position": {
+        "x": -80.0,
+        "y": -1800.0
+      },
+      "params": {
+        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/37cdcceca6124983b0e58828a30c171a.jpg"
+      }
+    },
+    {
+      "id": "n33",
+      "type": "ProviderConfig",
+      "title": "配置：硅基流动 SiliconFlow",
+      "position": {
+        "x": -80.0,
+        "y": -1500.0
+      },
+      "params": {
+        "provider": "siliconflow",
+        "mode": "official",
+        "api_base": "",
+        "model": "deepseek-chat",
+        "model_custom": "Qwen/Qwen2.5-VL-72B-Instruct",
+        "api_key_ref": ""
+      }
+    },
+    {
+      "id": "n34",
+      "type": "VLMGenerate",
+      "title": "P 图片理解：硅基流动 SiliconFlow",
+      "position": {
+        "x": -80.0,
+        "y": -1200.0
+      },
+      "params": {
+        "system_prompt": "",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n35",
+      "type": "TextOutput",
+      "title": "P 输出：siliconflow",
+      "position": {
+        "x": -80.0,
+        "y": -900.0
+      },
+      "params": {
+        "label": "P 输出：siliconflow",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n36",
+      "type": "ImageInput",
+      "title": "P 图：ollama",
+      "position": {
+        "x": -80.0,
+        "y": -600.0
+      },
+      "params": {
+        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/42cbda5bc7d75dc3ef07c2f4de95c3f3.jpg"
+      }
+    },
+    {
+      "id": "n37",
+      "type": "ProviderConfig",
+      "title": "配置：本地 Ollama",
+      "position": {
+        "x": -80.0,
+        "y": -300.0
+      },
+      "params": {
+        "provider": "ollama",
+        "mode": "official",
+        "api_base": "",
+        "model": "deepseek-chat",
+        "model_custom": "llava:latest",
+        "api_key_ref": ""
+      }
+    },
+    {
+      "id": "n38",
+      "type": "VLMGenerate",
+      "title": "P 图片理解：本地 Ollama",
+      "position": {
+        "x": -80.0,
+        "y": 0.0
+      },
+      "params": {
+        "system_prompt": "",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n39",
+      "type": "TextOutput",
+      "title": "P 输出：ollama",
+      "position": {
+        "x": -80.0,
+        "y": 300.0
+      },
+      "params": {
+        "label": "P 输出：ollama",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n40",
+      "type": "ImageInput",
+      "title": "P 图：openrouter",
+      "position": {
+        "x": -80.0,
+        "y": 600.0
+      },
+      "params": {
+        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/5572cb7a2401f85b083146df82d61390.jpg"
+      }
+    },
+    {
+      "id": "n41",
+      "type": "ProviderConfig",
+      "title": "配置：OpenRouter（聚合）",
+      "position": {
+        "x": -80.0,
+        "y": 900.0
+      },
+      "params": {
+        "provider": "openrouter",
+        "mode": "official",
+        "api_base": "",
+        "model": "deepseek-chat",
+        "model_custom": "openai/gpt-4o-mini",
+        "api_key_ref": ""
+      }
+    },
+    {
+      "id": "n42",
+      "type": "VLMGenerate",
+      "title": "P 图片理解：OpenRouter（聚合）",
+      "position": {
+        "x": -80.0,
+        "y": 1200.0
+      },
+      "params": {
+        "system_prompt": "",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n43",
+      "type": "TextOutput",
+      "title": "P 输出：openrouter",
+      "position": {
+        "x": -80.0,
+        "y": 1500.0
+      },
+      "params": {
+        "label": "P 输出：openrouter",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n44",
+      "type": "ImageInput",
+      "title": "P 图：openai",
+      "position": {
+        "x": 480.0,
+        "y": -1800.0
+      },
+      "params": {
+        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/5930b4948e157b1d9640fe0d2929b795.jpg"
+      }
+    },
+    {
+      "id": "n45",
+      "type": "ProviderConfig",
+      "title": "配置：OpenAI（官方）",
+      "position": {
+        "x": 480.0,
+        "y": -1500.0
+      },
+      "params": {
+        "provider": "openai",
+        "mode": "official",
+        "api_base": "",
+        "model": "deepseek-chat",
+        "model_custom": "gpt-4o-mini",
+        "api_key_ref": ""
+      }
+    },
+    {
+      "id": "n46",
+      "type": "VLMGenerate",
+      "title": "P 图片理解：OpenAI（官方）",
+      "position": {
+        "x": 480.0,
+        "y": -1200.0
+      },
+      "params": {
+        "system_prompt": "",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n47",
+      "type": "TextOutput",
+      "title": "P 输出：openai",
+      "position": {
+        "x": 480.0,
+        "y": -900.0
+      },
+      "params": {
+        "label": "P 输出：openai",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n48",
+      "type": "ImageInput",
+      "title": "P 图：anthropic",
+      "position": {
+        "x": 480.0,
+        "y": -600.0
+      },
+      "params": {
+        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/87895fd7edfb27f66c98c71e56168321.jpg"
+      }
+    },
+    {
+      "id": "n49",
+      "type": "ProviderConfig",
+      "title": "配置：Anthropic Claude（Messages API）",
+      "position": {
+        "x": 480.0,
+        "y": -300.0
+      },
+      "params": {
+        "provider": "anthropic",
+        "mode": "official",
+        "api_base": "",
+        "model": "deepseek-chat",
+        "model_custom": "claude-3-5-sonnet-latest",
+        "api_key_ref": ""
+      }
+    },
+    {
+      "id": "n50",
+      "type": "VLMGenerate",
+      "title": "P 图片理解：Anthropic Claude（Messages API）",
+      "position": {
+        "x": 480.0,
+        "y": 0.0
+      },
+      "params": {
+        "system_prompt": "",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n51",
+      "type": "TextOutput",
+      "title": "P 输出：anthropic",
+      "position": {
+        "x": 480.0,
+        "y": 300.0
+      },
+      "params": {
+        "label": "P 输出：anthropic",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n52",
+      "type": "ImageInput",
+      "title": "P 图：gemini",
+      "position": {
+        "x": 480.0,
+        "y": 600.0
+      },
+      "params": {
+        "path": "F:/GameDao/Tools/AIwrite/source/assets/images/12da6083f7034f0708d75ee0e5999286.jpg\nF:/GameDao/Tools/AIwrite/source/assets/images/2e180b445c34c06c06206e36578a27e0.jpg\nF:/GameDao/Tools/AIwrite/source/assets/images/3440d30d8157e5f9250b4aa47ec687f8.jpg"
+      }
+    },
+    {
+      "id": "n53",
+      "type": "ProviderConfig",
+      "title": "配置：Google Gemini（generateContent）",
+      "position": {
+        "x": 480.0,
+        "y": 900.0
+      },
+      "params": {
+        "provider": "gemini",
+        "mode": "official",
+        "api_base": "",
+        "model": "deepseek-chat",
+        "model_custom": "gemini-2.0-flash",
+        "api_key_ref": ""
+      }
+    },
+    {
+      "id": "n54",
+      "type": "VLMGenerate",
+      "title": "P 图片理解：Google Gemini（generateContent）",
+      "position": {
+        "x": 480.0,
+        "y": 1200.0
+      },
+      "params": {
+        "system_prompt": "",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n55",
+      "type": "TextOutput",
+      "title": "P 输出：gemini",
+      "position": {
+        "x": 480.0,
+        "y": 1500.0
+      },
+      "params": {
+        "label": "P 输出：gemini",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n56",
+      "type": "ProviderConfig",
+      "title": "配置：自定义（OpenAI 兼容）",
+      "position": {
+        "x": 1040.0,
+        "y": -1800.0
+      },
+      "params": {
+        "provider": "custom-official",
+        "mode": "official",
+        "api_base": "",
+        "model": "deepseek-chat",
+        "model_custom": "",
+        "api_key_ref": ""
+      }
+    },
+    {
+      "id": "n57",
+      "type": "LLMGenerate",
+      "title": "P 文本生成：自定义（OpenAI 兼容）",
+      "position": {
+        "x": 1040.0,
+        "y": -1500.0
+      },
+      "params": {
+        "system_prompt": "",
+        "mode": "official",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n58",
+      "type": "TextOutput",
+      "title": "P 输出：custom-official",
+      "position": {
+        "x": 1040.0,
+        "y": -1200.0
+      },
+      "params": {
+        "label": "P 输出：custom-official",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n62",
+      "type": "ProviderConfig",
+      "title": "配置：Qwen（国际站网页版）",
+      "position": {
+        "x": 1040.0,
+        "y": 600.0
+      },
+      "params": {
+        "provider": "qwen-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n63",
+      "type": "LLMGenerate",
+      "title": "P 文本生成：Qwen（国际站网页版）",
+      "position": {
+        "x": 1040.0,
+        "y": 900.0
+      },
+      "params": {
+        "system_prompt": "",
+        "mode": "web",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n64",
+      "type": "TextOutput",
+      "title": "P 输出：qwen-web",
+      "position": {
+        "x": 1040.0,
+        "y": 1200.0
+      },
+      "params": {
+        "label": "P 输出：qwen-web",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n65",
+      "type": "ProviderConfig",
+      "title": "配置：智谱清言（ChatGLM 网页版）",
+      "position": {
+        "x": 1600.0,
+        "y": -1800.0
+      },
+      "params": {
+        "provider": "chatglm-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n66",
+      "type": "LLMGenerate",
+      "title": "P 文本生成：智谱清言（ChatGLM 网页版）",
+      "position": {
+        "x": 1600.0,
+        "y": -1500.0
+      },
+      "params": {
+        "system_prompt": "",
+        "mode": "web",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n67",
+      "type": "TextOutput",
+      "title": "P 输出：chatglm-web",
+      "position": {
+        "x": 1600.0,
+        "y": -1200.0
+      },
+      "params": {
+        "label": "P 输出：chatglm-web",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n68",
+      "type": "ProviderConfig",
+      "title": "配置：腾讯元宝",
+      "position": {
+        "x": 1600.0,
+        "y": -600.0
+      },
+      "params": {
+        "provider": "yuanbao-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n69",
+      "type": "LLMGenerate",
+      "title": "P 文本生成：腾讯元宝",
+      "position": {
+        "x": 1600.0,
+        "y": -300.0
+      },
+      "params": {
+        "system_prompt": "",
+        "mode": "web",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n70",
+      "type": "TextOutput",
+      "title": "P 输出：yuanbao-web",
+      "position": {
+        "x": 1600.0,
+        "y": 0.0
+      },
+      "params": {
+        "label": "P 输出：yuanbao-web",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n71",
+      "type": "ProviderConfig",
+      "title": "配置：文心一言（百度文心助手）",
+      "position": {
+        "x": 1600.0,
+        "y": 600.0
+      },
+      "params": {
+        "provider": "ernie-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n72",
+      "type": "LLMGenerate",
+      "title": "P 文本生成：文心一言（百度文心助手）",
+      "position": {
+        "x": 1600.0,
+        "y": 900.0
+      },
+      "params": {
+        "system_prompt": "",
+        "mode": "web",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n73",
+      "type": "TextOutput",
+      "title": "P 输出：ernie-web",
+      "position": {
+        "x": 1600.0,
+        "y": 1200.0
+      },
+      "params": {
+        "label": "P 输出：ernie-web",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n74",
+      "type": "ProviderConfig",
+      "title": "配置：讯飞星火",
+      "position": {
+        "x": 2160.0,
+        "y": -1800.0
+      },
+      "params": {
+        "provider": "spark-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n75",
+      "type": "LLMGenerate",
+      "title": "P 文本生成：讯飞星火",
+      "position": {
+        "x": 2160.0,
+        "y": -1500.0
+      },
+      "params": {
+        "system_prompt": "",
+        "mode": "web",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n76",
+      "type": "TextOutput",
+      "title": "P 输出：spark-web",
+      "position": {
+        "x": 2160.0,
+        "y": -1200.0
+      },
+      "params": {
+        "label": "P 输出：spark-web",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n77",
+      "type": "ProviderConfig",
+      "title": "配置：ChatGPT（chatgpt.com）",
+      "position": {
+        "x": 2160.0,
+        "y": -600.0
+      },
+      "params": {
+        "provider": "chatgpt-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n78",
+      "type": "LLMGenerate",
+      "title": "P 文本生成：ChatGPT（chatgpt.com）",
+      "position": {
+        "x": 2160.0,
+        "y": -300.0
+      },
+      "params": {
+        "system_prompt": "",
+        "mode": "web",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n79",
+      "type": "TextOutput",
+      "title": "P 输出：chatgpt-web",
+      "position": {
+        "x": 2160.0,
+        "y": 0.0
+      },
+      "params": {
+        "label": "P 输出：chatgpt-web",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n80",
+      "type": "ProviderConfig",
+      "title": "配置：Claude（claude.ai）",
+      "position": {
+        "x": 2160.0,
+        "y": 600.0
+      },
+      "params": {
+        "provider": "claude-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n81",
+      "type": "LLMGenerate",
+      "title": "P 文本生成：Claude（claude.ai）",
+      "position": {
+        "x": 2160.0,
+        "y": 900.0
+      },
+      "params": {
+        "system_prompt": "",
+        "mode": "web",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n82",
+      "type": "TextOutput",
+      "title": "P 输出：claude-web",
+      "position": {
+        "x": 2160.0,
+        "y": 1200.0
+      },
+      "params": {
+        "label": "P 输出：claude-web",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    },
+    {
+      "id": "n83",
+      "type": "ProviderConfig",
+      "title": "配置：Gemini（gemini.google.com）",
+      "position": {
+        "x": 2720.0,
+        "y": -1800.0
+      },
+      "params": {
+        "provider": "gemini-web",
+        "mode": "web"
+      }
+    },
+    {
+      "id": "n84",
+      "type": "LLMGenerate",
+      "title": "P 文本生成：Gemini（gemini.google.com）",
+      "position": {
+        "x": 2720.0,
+        "y": -1500.0
+      },
+      "params": {
+        "system_prompt": "",
+        "mode": "web",
+        "seed": 0,
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 512,
+        "top_p": 0.95,
+        "stream": true
+      }
+    },
+    {
+      "id": "n85",
+      "type": "TextOutput",
+      "title": "P 输出：gemini-web",
+      "position": {
+        "x": 2720.0,
+        "y": -1200.0
+      },
+      "params": {
+        "label": "P 输出：gemini-web",
+        "export_dir": "",
+        "file_name": "",
+        "auto_export": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": {
+        "node": "n1",
+        "port": "text"
+      },
+      "to": {
+        "node": "n5",
+        "port": "vars"
+      }
+    },
+    {
+      "id": "e2",
+      "from": {
+        "node": "n5",
+        "port": "text"
+      },
+      "to": {
+        "node": "n7",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e3",
+      "from": {
+        "node": "n2",
+        "port": "image"
+      },
+      "to": {
+        "node": "n7",
+        "port": "image"
+      }
+    },
+    {
+      "id": "e4",
+      "from": {
+        "node": "n6",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n7",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e5",
+      "from": {
+        "node": "n7",
+        "port": "text"
+      },
+      "to": {
+        "node": "n8",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e6",
+      "from": {
+        "node": "n7",
+        "port": "text"
+      },
+      "to": {
+        "node": "n9",
+        "port": "vars"
+      }
+    },
+    {
+      "id": "e7",
+      "from": {
+        "node": "n9",
+        "port": "text"
+      },
+      "to": {
+        "node": "n11",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e8",
+      "from": {
+        "node": "n10",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n11",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e9",
+      "from": {
+        "node": "n11",
+        "port": "text"
+      },
+      "to": {
+        "node": "n12",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e10",
+      "from": {
+        "node": "n11",
+        "port": "text"
+      },
+      "to": {
+        "node": "n13",
+        "port": "vars"
+      }
+    },
+    {
+      "id": "e11",
+      "from": {
+        "node": "n13",
+        "port": "text"
+      },
+      "to": {
+        "node": "n15",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e12",
+      "from": {
+        "node": "n3",
+        "port": "image"
+      },
+      "to": {
+        "node": "n15",
+        "port": "image"
+      }
+    },
+    {
+      "id": "e13",
+      "from": {
+        "node": "n14",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n15",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e14",
+      "from": {
+        "node": "n15",
+        "port": "text"
+      },
+      "to": {
+        "node": "n16",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e15",
+      "from": {
+        "node": "n15",
+        "port": "text"
+      },
+      "to": {
+        "node": "n17",
+        "port": "vars"
+      }
+    },
+    {
+      "id": "e16",
+      "from": {
+        "node": "n17",
+        "port": "text"
+      },
+      "to": {
+        "node": "n19",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e17",
+      "from": {
+        "node": "n18",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n19",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e18",
+      "from": {
+        "node": "n19",
+        "port": "text"
+      },
+      "to": {
+        "node": "n20",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e19",
+      "from": {
+        "node": "n19",
+        "port": "text"
+      },
+      "to": {
+        "node": "n21",
+        "port": "vars"
+      }
+    },
+    {
+      "id": "e20",
+      "from": {
+        "node": "n21",
+        "port": "text"
+      },
+      "to": {
+        "node": "n23",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e21",
+      "from": {
+        "node": "n4",
+        "port": "image"
+      },
+      "to": {
+        "node": "n23",
+        "port": "image"
+      }
+    },
+    {
+      "id": "e22",
+      "from": {
+        "node": "n22",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n23",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e23",
+      "from": {
+        "node": "n23",
+        "port": "text"
+      },
+      "to": {
+        "node": "n24",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e24",
+      "from": {
+        "node": "n11",
+        "port": "text"
+      },
+      "to": {
+        "node": "n25",
+        "port": "texts"
+      }
+    },
+    {
+      "id": "e25",
+      "from": {
+        "node": "n23",
+        "port": "text"
+      },
+      "to": {
+        "node": "n25",
+        "port": "texts"
+      }
+    },
+    {
+      "id": "e26",
+      "from": {
+        "node": "n25",
+        "port": "text"
+      },
+      "to": {
+        "node": "n26",
+        "port": "vars"
+      }
+    },
+    {
+      "id": "e27",
+      "from": {
+        "node": "n26",
+        "port": "text"
+      },
+      "to": {
+        "node": "n28",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e28",
+      "from": {
+        "node": "n27",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n28",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e29",
+      "from": {
+        "node": "n28",
+        "port": "text"
+      },
+      "to": {
+        "node": "n29",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e30",
+      "from": {
+        "node": "n30",
+        "port": "text"
+      },
+      "to": {
+        "node": "n31",
+        "port": "vars"
+      }
+    },
+    {
+      "id": "e31",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n34",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e32",
+      "from": {
+        "node": "n32",
+        "port": "image"
+      },
+      "to": {
+        "node": "n34",
+        "port": "image"
+      }
+    },
+    {
+      "id": "e33",
+      "from": {
+        "node": "n33",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n34",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e34",
+      "from": {
+        "node": "n34",
+        "port": "text"
+      },
+      "to": {
+        "node": "n35",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e35",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n38",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e36",
+      "from": {
+        "node": "n36",
+        "port": "image"
+      },
+      "to": {
+        "node": "n38",
+        "port": "image"
+      }
+    },
+    {
+      "id": "e37",
+      "from": {
+        "node": "n37",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n38",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e38",
+      "from": {
+        "node": "n38",
+        "port": "text"
+      },
+      "to": {
+        "node": "n39",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e39",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n42",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e40",
+      "from": {
+        "node": "n40",
+        "port": "image"
+      },
+      "to": {
+        "node": "n42",
+        "port": "image"
+      }
+    },
+    {
+      "id": "e41",
+      "from": {
+        "node": "n41",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n42",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e42",
+      "from": {
+        "node": "n42",
+        "port": "text"
+      },
+      "to": {
+        "node": "n43",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e43",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n46",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e44",
+      "from": {
+        "node": "n44",
+        "port": "image"
+      },
+      "to": {
+        "node": "n46",
+        "port": "image"
+      }
+    },
+    {
+      "id": "e45",
+      "from": {
+        "node": "n45",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n46",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e46",
+      "from": {
+        "node": "n46",
+        "port": "text"
+      },
+      "to": {
+        "node": "n47",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e47",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n50",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e48",
+      "from": {
+        "node": "n48",
+        "port": "image"
+      },
+      "to": {
+        "node": "n50",
+        "port": "image"
+      }
+    },
+    {
+      "id": "e49",
+      "from": {
+        "node": "n49",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n50",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e50",
+      "from": {
+        "node": "n50",
+        "port": "text"
+      },
+      "to": {
+        "node": "n51",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e51",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n54",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e52",
+      "from": {
+        "node": "n52",
+        "port": "image"
+      },
+      "to": {
+        "node": "n54",
+        "port": "image"
+      }
+    },
+    {
+      "id": "e53",
+      "from": {
+        "node": "n53",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n54",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e54",
+      "from": {
+        "node": "n54",
+        "port": "text"
+      },
+      "to": {
+        "node": "n55",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e55",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n57",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e56",
+      "from": {
+        "node": "n56",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n57",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e57",
+      "from": {
+        "node": "n57",
+        "port": "text"
+      },
+      "to": {
+        "node": "n58",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e61",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n63",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e62",
+      "from": {
+        "node": "n62",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n63",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e63",
+      "from": {
+        "node": "n63",
+        "port": "text"
+      },
+      "to": {
+        "node": "n64",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e64",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n66",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e65",
+      "from": {
+        "node": "n65",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n66",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e66",
+      "from": {
+        "node": "n66",
+        "port": "text"
+      },
+      "to": {
+        "node": "n67",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e67",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n69",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e68",
+      "from": {
+        "node": "n68",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n69",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e69",
+      "from": {
+        "node": "n69",
+        "port": "text"
+      },
+      "to": {
+        "node": "n70",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e70",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n72",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e71",
+      "from": {
+        "node": "n71",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n72",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e72",
+      "from": {
+        "node": "n72",
+        "port": "text"
+      },
+      "to": {
+        "node": "n73",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e73",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n75",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e74",
+      "from": {
+        "node": "n74",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n75",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e75",
+      "from": {
+        "node": "n75",
+        "port": "text"
+      },
+      "to": {
+        "node": "n76",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e76",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n78",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e77",
+      "from": {
+        "node": "n77",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n78",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e78",
+      "from": {
+        "node": "n78",
+        "port": "text"
+      },
+      "to": {
+        "node": "n79",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e79",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n81",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e80",
+      "from": {
+        "node": "n80",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n81",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e81",
+      "from": {
+        "node": "n81",
+        "port": "text"
+      },
+      "to": {
+        "node": "n82",
+        "port": "text"
+      }
+    },
+    {
+      "id": "e82",
+      "from": {
+        "node": "n31",
+        "port": "text"
+      },
+      "to": {
+        "node": "n84",
+        "port": "prompt"
+      }
+    },
+    {
+      "id": "e83",
+      "from": {
+        "node": "n83",
+        "port": "provider"
+      },
+      "to": {
+        "node": "n84",
+        "port": "provider"
+      }
+    },
+    {
+      "id": "e84",
+      "from": {
+        "node": "n84",
+        "port": "text"
+      },
+      "to": {
+        "node": "n85",
+        "port": "text"
+      }
+    }
+  ],
+  "viewport": {
+    "x": 0.0,
+    "y": 0.0,
+    "zoom": 1.0
+  }
+}

@@ -30,8 +30,10 @@
 #include <string>
 #include <vector>
 
-#include "ai/provider_spec.h"
-#include "web/web_owner.h" // M_patchC（PW-01）：归属（纯数据；无 Win32 依赖）
+#include <nlohmann/json.hpp>
+
+#include "provider_spec.h"
+#include "web_owner.h" // M_patchC（PW-01）：归属（纯数据；无 Win32 依赖）
 
 namespace aiwrite::ai {
 
@@ -110,12 +112,88 @@ DomChatResult dom_chat(const DomChatRequest& request);
 // PB2-15：**选择器探测 / 诊断**（只读，不发送任何内容）—— 按条目诊断 dom 站点
 //  * 打印：当前页面 URL/标题、各选择器命中数、`done_when` 现状、`token_expr` 取值形状、Cookie 可读性
 //  * 并给**可操作修复建议**（F12 Copy selector / 改 send 方式 / 修 token_expr）
-//  * 返回码：0 = 必需选择器全部命中；1 = 有缺项；2 = 站点不可用 / 非 dom 条目
+//  * 返回码：0 = 必需选择器全部命中；1 = 有缺项 / 页面异常；2 = 站点不可用 / 非 dom 条目；
+//            3 = **需人工介入**（需登录：登录墙下选择器缺项属「没法测」而非「真失败」，`loop_dev` §6.3）
 int dom_adapter_selftest(const std::string& provider_id, int timeout_ms);
 
 // M_patchB L4（PB2-29 / v15）：**选择器候选枚举**（只读）—— 让「填选择器」不必靠人肉 F12
 //  * 在当前页面枚举候选 input / textarea / contenteditable、发送按钮、回答容器，打印指纹 + **建议选择器**
 //  * 返回码：0 = 枚举成功；1 = 页面 / 脚本未就绪；2 = 条目不可用（非网页版条目 / 缺 login_url / 表外 id）
 int dom_selector_dump(const std::string& provider_id, int timeout_ms);
+
+// ============================================================================
+//  Loop Dev（批 3）：**批量只读探测 + 机器可读报告**（`FEA-L01` / `FEA-L03`）
+//
+//  判据口径（`docs/loop_dev.md` §3.2）：**只用页面事实（DOM）**，**不看 Cookie**
+//    · 输入区候选 > 0（或声明值 `input_hits` > 0）  → 匿名可用（`needs_login = false`）
+//    · 输入区候选 = 0 **且** 有登录迹象（密码框 / 登录控件 / URL 落在登录路径）
+//                                                  → 需强制登录（`needs_login = true` ⇒ 退出码 3）
+//    · 输入区候选 = 0 且**无**任何登录迹象          → 页面异常（`page_abnormal` ⇒ 归失败）
+//  * 判据在**页面脚本**里算（`dom_probe_script()` 内的同一段代码），C++ 只**搬运**不重算
+//    ⇒ 单一真相源；夹具 `source/tools/dom_gate_test.js` 抽同一段脚本真跑（`TST-L02`）
+// ============================================================================
+struct DomSiteProbe {
+    // ---- 入口 ----
+    std::string id;                     // 条目 id
+    std::string display;                // 显示名
+    std::string adapter;               // 适配器（"dom" / 其它）
+    std::string site_error;             // 条目级不可用原因（空 = 条目可用）
+    // ---- 会话（只读；仅内存，退出即销毁）----
+    bool        session_ok = false;     // ensure_session 是否取到凭证
+    std::string session_hint;           // 未取到时给用户的可操作提示（空 = 无）
+    // ---- 页面事实（来自探测脚本）----
+    std::string url;
+    std::string title;
+    int         input_hits = 0;         // 声明值 `input_selector` 命中数
+    bool        input_visible = false;  // 首个命中元素是否可见
+    int         send_hits = 0;
+    int         answer_hits = 0;
+    int         answer_chars = 0;       // 末条答案字符数（只读长度，不取内容）
+    int         token_len = -1;         // -1 = 空 / -2 = 表达式抛错
+    bool        token_json = false;
+    int         cookies_wanted = 0;
+    int         cookies_present = 0;
+    // ---- 需登录判据（§3.2）----
+    int         input_candidates = 0;   // 输入区候选池命中数（选择器无关）
+    int         login_controls = 0;     // 登录控件计数（密码框 + 登录节点）
+    std::string login_evidence;         // 登录证据（人类可读；空 = 无迹象）
+    bool        needs_login = false;    // true = 需强制人工登录（退出码 3）
+    bool        page_abnormal = false;  // true = 页面异常（既无输入区也无登录迹象）
+    // ---- 执行结果 ----
+    int         attempts = 1;           // 本轮尝试次数（§3.2 行 3：环境级失败允许重试 1 次 ⇒ 上限 2）
+    bool        probe_ok = false;       // 脚本执行 + JSON 解析成功
+    std::string error;                  // 失败原因（脚本 / 解析 / 会话）
+};
+
+// 纯解析（**离线可断言** · `api_probe --selftest`）：探测脚本 JSON → 页面事实
+//  * 字段缺失 = 「无事实」（不猜、不默认成功）；返回 false 仅当 JSON 非法 / 非对象
+//  * **不**重算 `needs_login`（判据在页面脚本里）—— 只搬运，含 `login_evidence`
+bool dom_probe_result_from_json(const std::string& raw, DomSiteProbe* out);
+
+// 单站只读探测（会**起窗口 / 页面**；只读 DOM：不写入、不发送、不读任何值）
+//  返回码：0 = 探测成功；1 = 探测失败（会话 / 脚本 / 解析）；2 = 条目不可用（非 dom / 表外 id）
+int dom_site_probe(const std::string& provider_id, int timeout_ms, DomSiteProbe* out);
+
+// 批量只读探测：**全部** `kind=web 且 web.adapter=dom` 的条目（`loop_dev` §2.2 的 11 条）
+//  * 逐站独立：一站失败不影响其他站；每站打印紧凑块（命令输出即报告素材）
+//  * **环境级失败重试 1 次**（§3.2 行 3 / §5.1③：探测未跑通 / 页面异常 ⇒ 上限 2 次尝试；
+//    「需登录」不重试）；`attempts` 进报告，别站不受影响
+//  * `report`（可空）：机器读版 JSON（`schema` / `counts` / `sites[]`）—— 供与上一轮 diff
+//  * `probes`（可空）：结构化明细，供调用方自行组织输出
+//  * 返回码（§6.3）：0 = 全部探测成功且无需登录；3 = 有站需人工介入（需登录）；
+//    1 = 有真失败（探测失败 / 页面异常）；2 = 没有可诊断的 DOM 站点
+int dom_probe_all(int timeout_ms, nlohmann::json* report, std::vector<DomSiteProbe>* probes);
+
+// 报告 diff（`FEA-L01`：与上一轮报告对比）—— 打印每站的**状态变化**与**判据变化**
+//  * 状态 5 态：可用 / 需登录 / 失败 / 未测 / 新增 · 消失（`lines` 逐行输出，供控制台）
+//  * `previous` 缺 `sites` 数组 ⇒ 返回 false（如实报错，不假装「无变化」）
+bool dom_report_diff(const nlohmann::json& previous, const nlohmann::json& current,
+                     std::vector<std::string>* lines);
+
+// 纯函数离线自检（`api_probe --selftest` 的「会话与可见性」组 · 不开窗口 / 不联网 / 不写盘）
+//  * 覆盖 `FEA-L01` 的**报告链路**：`dom_probe_result_from_json`（事实搬运 / 缺字段 / 非法 JSON）
+//    + `probe_state_of`（4 态映射）+ `dom_report_diff`（5 态 + 旧报告按事实回推）
+//  * 返回失败项数；`passed_out`（可空）回填通过项数
+int dom_probe_selftest(int* passed_out = nullptr);
 
 } // namespace aiwrite::ai

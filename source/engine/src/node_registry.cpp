@@ -1,6 +1,6 @@
-#include "engine/node_registry.h"
+#include "node_registry.h"
 
-#include "ai/provider_spec.h" // M_patchB L1：提供商列表 / 默认值来自配置表
+#include "provider_spec.h" // M_patchB L1：提供商列表 / 默认值来自配置表
 
 #include <algorithm>
 #include <utility>

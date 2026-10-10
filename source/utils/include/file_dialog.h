@@ -38,6 +38,11 @@ std::string pick_folder(const std::string& default_path = {});
 // M5-03：在资源管理器中定位文件（不存在时退回打开所在目录）；返回是否已发起
 bool open_in_explorer(const std::string& path);
 
+// M6：在资源管理器中**打开目录**（自动打开归档目录用：`output.auto_open_on_complete`）
+//  * path 是目录 → 直接打开它；path 是文件 → 打开它所在的目录
+//  * 返回是否已发起（与 open_in_explorer 同口径；失败写日志）
+bool open_folder(const std::string& path);
+
 // 依赖是否可用（NFD 能否初始化）
 bool file_dialog_available();
 

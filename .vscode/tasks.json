@@ -104,6 +104,19 @@
       ],
       "problemMatcher": [],
       "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "log: 查看最新构建日志",
+      "detail": "读取 build/logs/ 下最新一份构建日志（由 source/build.ps1 自动写入）",
+      "type": "shell",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "Get-ChildItem \"${workspaceFolder}/build/logs/*.log\" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1 | ForEach-Object { Write-Host ('--- ' + $_.FullName + ' ---'); Get-Content -LiteralPath $_.FullName -Tail 80 }"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
     }
   ]
 }

@@ -103,4 +103,24 @@ inline std::string ready_missing_text(int need, int reached)
     return text;
 }
 
+// 失败**诊断附加**（2026-10-10 · 循环开发 `T-L06` 真机驱动 · `PW-03` 观测补充）：
+//  * 动机：`gemini-web` / `spark-web` 只报「页面未就绪（缺 页面级；已达：窗口级）」——
+//    而「`readyState` 未完成」与「**实时 URL 已不在目标站点**（登录墙 / 反爬跳转，如
+//    `accounts.google.com`）」是**两种病**：前者等一等 / 收窄超时，后者只能人工登录。
+//    没有实时事实时只能记「环境级 · 未定」（[loop_dev §5.1 第③行]）⇒ 归因靠猜。
+//  * 本函数把**实时页面事实**（readyState / URL / 可见输入候选）拼成可 grep 的一行，
+//    由调用方贴在失败文案**尾部**（**不改**既有文案，故旧断言不受影响）。
+//  * **纯函数** ⇒ `api_probe --selftest` 可断言（见 `PW-03 诊断附加` 组）。
+inline std::string ready_detail_text(const std::string& url, const std::string& ready_state,
+                                     int composer_hits)
+{
+    if (url.empty() && ready_state.empty() && composer_hits <= 0) {
+        return {}; // 什么事实都没取到 ⇒ 不吹牛（调用方改用「取不到页面状态」分支）
+    }
+    std::string text = "｜实时页面：readyState=" + (ready_state.empty() ? std::string("?") : ready_state);
+    text += " · URL=" + (url.empty() ? std::string("（取不到）") : url);
+    text += " · 可见输入候选=" + std::to_string(composer_hits);
+    return text;
+}
+
 } // namespace aiwrite::web

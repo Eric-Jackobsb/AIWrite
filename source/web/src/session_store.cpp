@@ -1,7 +1,7 @@
-#include "web/session_store.h"
+#include "session_store.h"
 
-#include "ai/provider_spec.h"   // L4（PB2-27）：站点无关登录证据（ai::WebSessionEvidence）
-#include "utils/log.h"
+#include "provider_spec.h"   // L4（PB2-27）：站点无关登录证据（ai::WebSessionEvidence）
+#include "log.h"
 
 #include <cctype>
 #include <ctime>

@@ -232,45 +232,59 @@ endfunction()
 # 后续 M2 起把 engine / nodes / ai 也并入本库
 # -----------------------------------------------------------------------------
 add_library(aiwrite_core STATIC
-    src/utils/paths.cpp
-    src/utils/log.cpp
-    src/utils/config.cpp
-    src/utils/window_geometry.cpp
-    src/utils/credential.cpp
-    src/utils/text_export.cpp
-    src/utils/crypto.cpp
-    src/utils/output_archive.cpp
-    src/utils/diagnostics.cpp
-    src/utils/image_decode.cpp     # M7-04：图片格式嗅探 + stb/WIC 解码（texture_cache 与自检共用）
-    src/utils/asset_store.cpp      # P7a-04：统一资源目录（内容寻址归档 + 令牌解析）
-    src/engine/graph.cpp
-    src/engine/node_registry.cpp
-    src/engine/undo_stack.cpp
-    src/engine/workflow_io.cpp
-    src/engine/validate.cpp
-src/engine/provider_resolve.cpp
-    src/engine/executor.cpp
-    src/engine/recent_files.cpp
-    src/ai/web_pow.cpp
-    src/ai/deepseek_web_client.cpp
-    src/ai/dom_web_client.cpp        # L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
-    src/ai/upload_supply_probe.cpp  # M8 Phase 2：C++ 供料探针（WebView2 会话供料 + 站点只读 GET）
-    src/ai/upload/image_convert.cpp        # M8-14：图片准备（站点白名单 / 限额 → 缩放 + 转码）
-    src/ai/upload/upload_evidence.cpp      # M8-14：上传双证据（页面 + 网络；I18）纯函数
-    src/ai/upload/upload_registry.cpp      # M8-14：站点上传注册表 + 唯一执行入口 upload_images
-    src/ai/upload/sites/site_upload_doubao.cpp # M8-14：豆包站点上传单元（B1/B2 实测）
-    src/ai/upload/sites/site_upload_kimi.cpp   # M8-14：Kimi 站点上传单元（模板性验证站）
-    src/ai/deepseek_official_provider.cpp
-    src/ai/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）
-    src/nodes/local_nodes.cpp
-    src/nodes/register_executors.cpp
-    src/web/channel_frames.cpp   # M7B 批 1：管道协议 v1 帧（纯函数；VB2-29 / VB2-32）
-    src/web/pipe_client.cpp      # M7B 批 1 step 2：命名管道客户端（M7B-02；读线程 + id 配对）
-    src/web/pydoll_channel.cpp   # M7B 批 2：新通道（Pydoll 守护进程）—— 本批**不接线**（只 --pydoll-login / --pydoll-selftest）
-    src/web/session_snapshot.cpp # M7B 批 2：L2 快照只读视图（MB-D0-8；**只碰元数据**，不读内容）
-    src/web/session_store.cpp
-    src/web/webview_host.cpp)    # 网页版登录 + 会话 + 协议探测 + 页面内 PoW 求解
-target_include_directories(aiwrite_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    utils/src/paths.cpp
+    utils/src/log.cpp
+    utils/src/config.cpp
+    utils/src/window_geometry.cpp
+    utils/src/credential.cpp
+    utils/src/text_export.cpp
+    utils/src/crypto.cpp
+    utils/src/output_archive.cpp
+    utils/src/diagnostics.cpp
+    utils/src/image_decode.cpp     # M7-04：图片格式嗅探 + stb/WIC 解码（texture_cache 与自检共用）
+    utils/src/asset_store.cpp      # P7a-04：统一资源目录（内容寻址归档 + 令牌解析）
+    utils/src/diagnostics_report.cpp  # M6（PM-04）：诊断报告（只读采集；api_probe --diag-assert）
+    utils/src/settings_validation.cpp # M6（M6-01）：设置面板校验纯函数（api_probe --settings-assert）
+    utils/src/webview2_runtime.cpp    # M6（PM-01）：WebView2 运行时依赖探测（首启引导 + 诊断）
+    engine/src/graph.cpp
+    engine/src/node_registry.cpp
+    engine/src/undo_stack.cpp
+    engine/src/workflow_io.cpp
+    engine/src/validate.cpp
+    engine/src/provider_resolve.cpp
+    engine/src/executor.cpp
+    engine/src/recent_files.cpp
+    ai/src/web_pow.cpp
+    ai/src/deepseek/deepseek_web_client.cpp
+    ai/src/dom_web_client.cpp        # L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
+    ai/src/upload_supply_probe.cpp  # M8 Phase 2：C++ 供料探针（WebView2 会话供料 + 站点只读 GET）
+    ai/src/upload/image_convert.cpp        # M8-14：图片准备（站点白名单 / 限额 → 缩放 + 转码）
+    ai/src/upload/upload_evidence.cpp      # M8-14：上传双证据（页面 + 网络；I18）纯函数
+    ai/src/upload/upload_registry.cpp      # M8-14：站点上传注册表 + 唯一执行入口 upload_images
+    ai/src/doubao/site_upload_doubao.cpp # M8-14：豆包站点上传单元（B1/B2 实测）
+    ai/src/kimi/site_upload_kimi.cpp   # M8-14：Kimi 站点上传单元（模板性验证站）
+    ai/src/deepseek/deepseek_official_provider.cpp
+    ai/src/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）
+    nodes/src/local_nodes.cpp
+    nodes/src/register_executors.cpp
+    web/src/channel_frames.cpp   # M7B 批 1：管道协议 v1 帧（纯函数；VB2-29 / VB2-32）
+    web/src/pipe_client.cpp      # M7B 批 1 step 2：命名管道客户端（M7B-02；读线程 + id 配对）
+    web/src/pydoll_channel.cpp   # M7B 批 2：新通道（Pydoll 守护进程）—— 本批**不接线**（只 --pydoll-login / --pydoll-selftest）
+    web/src/session_snapshot.cpp # M7B 批 2：L2 快照只读视图（MB-D0-8；**只碰元数据**，不读内容）
+    web/src/session_store.cpp
+    web/src/webview_host.cpp)    # 网页版登录 + 会话 + 协议探测 + 页面内 PoW 求解
+# 头文件根 = **每个模块自己的 `include/`**（模块自带走 src/ + include/）—— 见 AI_README.md §11「代码组织规范」
+#  * 实现（.cpp）在 source/<模块>/src/**；头文件在 source/<模块>/include/**（模块内**拍平**，不再镜像子目录）
+#  * 引用写法 = **裸文件名**（例：#include "graph.h"）⇒ 每个模块的 include/ 都要挂成头文件根，故逐个列出
+#  * AI 专属实现仍按站点分目录：ai/src/deepseek/**、ai/src/doubao/**、ai/src/kimi/**
+#  * 新增模块 = 建 source/<模块>/{src,include} + 下面加一行 + 上方源文件列表加 .cpp（三步都要做）
+target_include_directories(aiwrite_core PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/ai/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/engine/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/nodes/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ui/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/utils/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/web/include")
 target_link_libraries(aiwrite_core
     PUBLIC aiwrite_build_options
     PUBLIC spdlog::spdlog
@@ -279,7 +293,7 @@ target_link_libraries(aiwrite_core
     PUBLIC OpenSSL::Crypto
     PUBLIC httplib::httplib   # ai/：网页版 PoW + /api/v0/chat/completion（M4-06）
     ${AIWRITE_WEBVIEW2}       # web/：内嵌 WebView2 登录窗口 + 页面内 PoW 求解（M4-06/M4-08）
-    PRIVATE psapi)   # 诊断模块：GetProcessMemoryInfo
+    PRIVATE psapi version)   # 诊断模块：GetProcessMemoryInfo ｜ webview2_runtime：GetFileVersionInfoW/VerQueryValueW
 # M7-04 图片解码：stb_image 只有头文件（端口无 CMake config）→ 手工挂 include；
 #   Windows 系统解码器 WIC（WebP/TIFF/ICO/HEIF 等）+ COM 初始化（ole32）
 target_include_directories(aiwrite_core PRIVATE "${AIWRITE_STB_INCLUDE_DIR}")
@@ -310,19 +324,20 @@ endif()
 # aiwrite：主程序（GUI，Dear ImGui + GLFW + OpenGL3）
 # -----------------------------------------------------------------------------
 add_executable(aiwrite WIN32
-    src/main.cpp
-    src/ui/app.cpp
-    src/ui/console_panel.cpp
-    src/ui/property_panel.cpp
-    src/ui/editor_state.cpp
-    src/ui/node_canvas.cpp
-    src/ui/node_library.cpp
-    src/ui/toolbar.cpp
-    src/utils/file_dialog.cpp
-    src/ui/output_panel.cpp
-    src/ui/error_bar.cpp
-    src/ui/text_view.cpp
-    src/ui/texture_cache.cpp)
+    app/src/main.cpp
+    ui/src/app.cpp
+    ui/src/console_panel.cpp
+    ui/src/property_panel.cpp
+    ui/src/editor_state.cpp
+    ui/src/node_canvas.cpp
+    ui/src/node_library.cpp
+    ui/src/toolbar.cpp
+    utils/src/file_dialog.cpp
+    ui/src/output_panel.cpp
+    ui/src/error_bar.cpp
+    ui/src/text_view.cpp
+    ui/src/texture_cache.cpp
+    ui/src/settings_panel.cpp)  # M6（M6-01）：设置面板（config.toml 可调项）
 target_link_libraries(aiwrite PRIVATE
     aiwrite_core
     imgui_node_editor
@@ -330,7 +345,7 @@ target_link_libraries(aiwrite PRIVATE
     OpenGL::GL
     nfd::nfd
     shell32)   # M5-03：ShellExecuteW（在资源管理器中定位图片）
-# 图片解码的 stb include 与 WIC 链接已随 src/utils/image_decode.cpp 归到 aiwrite_core（M7-04）
+# 图片解码的 stb include 与 WIC 链接已随 utils/src/image_decode.cpp 归到 aiwrite_core（M7-04）
 # 源码目录（自检用：默认示例图片路径可复现）
 target_compile_definitions(aiwrite PRIVATE AIWRITE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 if(MSVC)

@@ -1,6 +1,6 @@
-#include "utils/log.h"
+#include "log.h"
 
-#include "utils/paths.h"
+#include "paths.h"
 
 #include <spdlog/sinks/base_sink.h>
 #include <spdlog/sinks/rotating_file_sink.h>
@@ -10,10 +10,14 @@
 #include <windows.h>
 
 #include <cstdio>
+#include <chrono>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <memory>
 #include <mutex>
+#include <system_error>
+#include <vector>
 
 namespace aiwrite::log {
 namespace {
@@ -237,6 +241,66 @@ void clear_entries()
 std::string file_path_string()
 {
     return paths::app_log_file().string();
+}
+
+// ---- M6：旧日志清理（接线 `advanced.log_ttl_days`；归口 PD-06）----
+//  实现要点（与 log.h 的契约逐条对应）：
+//   * 只在 logs/ 里找**常规文件**，跳过正在写的 app.log / workflow.log
+//   * 年龄判据 = `last_write_time` 早于 (now - ttl_days)
+//   * 目录不存在 / ttl<=0 → 直接返回 0（**不创建目录**：清理不该有副作用）
+int purge_old_files(int ttl_days, std::string* error)
+{
+    if (error != nullptr) {
+        error->clear();
+    }
+    if (ttl_days <= 0) {
+        return 0; // 0 = 不清理（用户显式关闭）
+    }
+
+    const std::filesystem::path dir        = paths::logs_dir();
+    std::error_code             probe_code;
+    if (!std::filesystem::is_directory(dir, probe_code)) {
+        return 0; // 目录不存在：无需清理，也不是错误
+    }
+
+    const std::filesystem::path keep_app      = paths::app_log_file();
+    const std::filesystem::path keep_workflow = paths::workflow_log_file();
+    const auto                  now           = std::filesystem::file_time_type::clock::now();
+    const auto                  limit         = now - std::chrono::hours(24 * ttl_days);
+
+    int             removed = 0;
+    std::string     first_failure;
+    std::error_code code;
+    for (const auto& entry : std::filesystem::directory_iterator(dir, code)) {
+        std::error_code item_code;
+        if (!entry.is_regular_file(item_code)) {
+            continue;
+        }
+        const std::filesystem::path path = entry.path();
+        if (path == keep_app || path == keep_workflow) {
+            continue; // 活动文件永不按年龄删
+        }
+
+        const auto written = entry.last_write_time(item_code);
+        if (item_code || written >= limit) {
+            continue;
+        }
+
+        std::error_code remove_code;
+        if (std::filesystem::remove(path, remove_code)) {
+            ++removed;
+        }
+        else if (first_failure.empty()) {
+            first_failure = path.filename().string() + "：" + remove_code.message();
+        }
+    }
+    if (code && first_failure.empty()) {
+        first_failure = std::string("遍历日志目录失败：") + code.message();
+    }
+    if (!first_failure.empty() && error != nullptr) {
+        *error = first_failure;
+    }
+    return removed;
 }
 
 std::string workflow_file_path_string()

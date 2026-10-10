@@ -25,8 +25,8 @@
 #include <string>
 #include <vector>
 
-#include "ai/upload/upload_contract.h"
-#include "utils/image_decode.h"
+#include "upload_contract.h"
+#include "image_decode.h"
 
 namespace aiwrite::ai {
 

@@ -1,6 +1,6 @@
-#include "ui/text_view.h"
+#include "text_view.h"
 
-#include "utils/log.h"
+#include "log.h"
 
 #include <unordered_map>
 #include <vector>

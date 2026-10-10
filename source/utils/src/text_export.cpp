@@ -1,7 +1,7 @@
-#include "utils/text_export.h"
+#include "text_export.h"
 
-#include "utils/log.h"
-#include "utils/paths.h"
+#include "log.h"
+#include "paths.h"
 
 #include <cctype>
 #include <ctime>

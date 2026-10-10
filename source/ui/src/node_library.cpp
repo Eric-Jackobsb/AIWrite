@@ -1,8 +1,8 @@
-#include "ui/node_library.h"
+#include "node_library.h"
 
-#include "engine/node_registry.h"
-#include "ui/node_canvas.h"
-#include "ui/theme.h"
+#include "node_registry.h"
+#include "node_canvas.h"
+#include "theme.h"
 
 #include <imgui.h>
 

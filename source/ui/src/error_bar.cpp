@@ -1,6 +1,6 @@
-#include "ui/error_bar.h"
+#include "error_bar.h"
 
-#include "utils/log.h"
+#include "log.h"
 
 #include <imgui.h>
 

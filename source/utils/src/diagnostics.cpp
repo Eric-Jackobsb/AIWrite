@@ -1,6 +1,6 @@
-#include "utils/diagnostics.h"
+#include "diagnostics.h"
 
-#include "utils/log.h"
+#include "log.h"
 
 // WIN32_LEAN_AND_MEAN / NOMINMAX 已由 CMake 全局定义（见 CMakeLists 的 aiwrite_build_options）
 #include <windows.h>

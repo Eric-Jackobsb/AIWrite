@@ -1,7 +1,7 @@
-#include "engine/provider_resolve.h"
+#include "provider_resolve.h"
 
-#include "ai/upload/upload_registry.h" // M8-14：网页版图片上传是否已接（未接 → 运行前明示）
-#include "utils/credential.h"
+#include "upload_registry.h" // M8-14：网页版图片上传是否已接（未接 → 运行前明示）
+#include "credential.h"
 
 #include <cstdlib>
 
@@ -288,7 +288,10 @@ std::string unwired_reason(const Graph& graph, const Node& node)
         return {};
     }
     const std::string ref = effective.key_ref;
-    if (!ref.empty() && !utils::load_credential(ref, nullptr).empty()) {
+    // P0（2026-10-09）：这里以前是 utils::load_credential(ref, nullptr) —— 逐帧调用 ⇒
+    // 每帧读凭据文件 + DPAPI 解密（85 节点基准图里有 11 个 official 节点）。
+    // credential_available() 判据完全一致，但把**布尔结果**缓存（TTL 30s + 保存/删除时失效）。
+    if (!ref.empty() && utils::credential_available(ref)) {
         return {};
     }
 

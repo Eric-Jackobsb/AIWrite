@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "web/site_ref.h"
+#include "site_ref.h"
 
 namespace aiwrite::web::channel {
 

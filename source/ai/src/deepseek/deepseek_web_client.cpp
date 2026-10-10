@@ -1,8 +1,8 @@
-#include "ai/deepseek_web_client.h"
+#include "deepseek_web_client.h"
 
-#include "ai/web_pow.h"
-#include "utils/log.h"
-#include "web/webview_host.h"
+#include "web_pow.h"
+#include "log.h"
+#include "webview_host.h"
 
 #include <sstream>
 

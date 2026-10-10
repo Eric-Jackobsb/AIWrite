@@ -7,35 +7,39 @@
 #endif
 #include <windows.h>   // M7B 批 1 step 2：--pipe-selftest（CreateProcessW / WaitForSingleObject）
 
-#include "ui/app.h"
-#include "ui/editor_state.h"
-#include "ui/output_panel.h"
-#include "ai/deepseek_official_provider.h"
-#include "ai/provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）
-#include "engine/node_registry.h"
-#include "ai/deepseek_web_client.h"
-#include "ai/dom_web_client.h"      // L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
-#include "ai/upload_supply_probe.h"   // M8 Phase 2：C++ 供料探针（--web-supply-probe）
-#include "ai/upload/upload_registry.h"  // M8-14：站点上传模板（--upload-selftest）
-#include "ai/upload/image_convert.h"    // M8-14：图片准备（离线断言）
-#include "ai/upload/upload_evidence.h"  // M8-14：上传双证据（离线断言）
-#include "utils/config.h"
-#include "utils/text_export.h"
-#include "utils/credential.h"
-#include "utils/log.h"
-#include "utils/paths.h"
-#include "web/webview_host.h"
-#include "web/pipe_client.h"      // M7B 批 1 step 2：命名管道客户端（--pipe-selftest / M7B-02）
-#include "web/pydoll_channel.h"   // M7B 批 2：新通道（--pydoll-login / --pydoll-selftest）
-#include "web/session_store.h"   // M_patchB：--provider-selftest 的网页版登录态检查
+#include "app.h"
+#include "editor_state.h"
+#include "output_panel.h"
+#include "deepseek_official_provider.h"
+#include "provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）
+#include "node_registry.h"
+#include "workflow_io.h"   // VA-07：graph_to_json（运行前 JSON 基线 / TST-L01 判据）
+#include "deepseek_web_client.h"
+#include "dom_web_client.h"      // L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
+#include "upload_supply_probe.h"   // M8 Phase 2：C++ 供料探针（--web-supply-probe）
+#include "upload_registry.h"  // M8-14：站点上传模板（--upload-selftest）
+#include "image_convert.h"    // M8-14：图片准备（离线断言）
+#include "upload_evidence.h"  // M8-14：上传双证据（离线断言）
+#include "config.h"
+#include "text_export.h"
+#include "credential.h"
+#include "log.h"
+#include "paths.h"
+#include "webview_host.h"
+#include "pipe_client.h"      // M7B 批 1 step 2：命名管道客户端（--pipe-selftest / M7B-02）
+#include "pydoll_channel.h"   // M7B 批 2：新通道（--pydoll-login / --pydoll-selftest）
+#include "session_store.h"   // M_patchB：--provider-selftest 的网页版登录态检查
+#include "session_snapshot.h" // 批 3（FEA-L02）：--web-session-list 的 L2 快照只读元数据
 
 #include <cstdio>
 #include <cstdlib>
 #include <chrono>
 #include <atomic>
 #include <cmath>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <set>
 #include <sstream>
 #include <thread>
@@ -44,10 +48,108 @@
 
 namespace {
 
+// 报告时间戳（"YYYY-MM-DD HH:MM:SS"，与其它落盘报告同口径）
+std::string report_timestamp()
+{
+    const std::time_t now = std::time(nullptr);
+    std::tm           tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &now);
+#else
+    localtime_r(&now, &tm);
+#endif
+    std::ostringstream stream;
+    stream << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+    return stream.str();
+}
+
+// 读文本文件（UTF-8 原样；失败 → false + 原因）—— 批 3：读上一轮报告做 diff
+bool read_text_file(const std::string& path, std::string* out, std::string* error)
+{
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        if (error != nullptr) {
+            *error = "打不开文件（不存在 / 无权限）：" + path;
+        }
+        return false;
+    }
+    std::ostringstream buffer;
+    buffer << in.rdbuf();
+    if (out != nullptr) {
+        *out = buffer.str();
+    }
+    return true;
+}
+
+// 写文本文件（UTF-8 **无 BOM**，与其它报告一致；父目录不存在则创建）
+bool write_text_file(const std::string& path, const std::string& text, std::string* error)
+{
+    std::error_code ec;
+    const std::filesystem::path fs_path(path);
+    if (!fs_path.parent_path().empty()) {
+        std::filesystem::create_directories(fs_path.parent_path(), ec);
+    }
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        if (error != nullptr) {
+            *error = "写不了文件（目录不存在 / 无权限）：" + path;
+        }
+        return false;
+    }
+    out << text;
+    if (!out) {
+        if (error != nullptr) {
+            *error = "写入过程中出错：" + path;
+        }
+        return false;
+    }
+    return true;
+}
+
+// ------------------------------------------------------------- UTF-8 口径 ----
+// VA-07（TST-L01 缺陷修复）：取样必须按 **UTF-8 码点** 计数，**不能**按字节。
+//  背景（实证）：CJK 一个字占 3 字节 ⇒ 原本的 `substr(0, 24)` 只截到 8 个汉字
+//  「从前有座山，山里」；而网页版模型常把工作流自身的 text 参数（种子文本
+//  「从前有座山，山里有座庙。」）复述在答案开头 ⇒ 该 8 字前缀**必然**命中
+//  工作流 JSON 里的参数值 ⇒ 合法答案被判成"运行结果泄漏"（假阴性，污染退出码）。
+//  * 只统计码点首字节（续字节 10xxxxxx 不计数）：容错损坏 UTF-8，不会越界。
+
+// 码点数（不是字节数）
+std::size_t utf8_length(const std::string& text)
+{
+    std::size_t count = 0;
+    for (const char raw : text) {
+        if ((static_cast<unsigned char>(raw) & 0xC0) != 0x80) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+// 取前 max_chars 个码点的前缀（不劈开多字节字符；不足 max_chars 则返回全文）
+std::string utf8_prefix(const std::string& text, std::size_t max_chars)
+{
+    std::size_t chars = 0;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if ((static_cast<unsigned char>(text[i]) & 0xC0) == 0x80) {
+            continue; // 续字节：仍在同一个码点内
+        }
+        if (chars == max_chars) {
+            return text.substr(0, i);
+        }
+        ++chars;
+    }
+    return text;
+}
+
+// VA-07 取样长度（单位：**码点**）
+constexpr std::size_t kVa07ProbeChars = 24;
+
 void print_usage()
 {
     std::printf("AIwrite - AI 小说/剧本创作软件 (M1 技术验证)\n");
     std::printf("用法: aiwrite [选项]\n");
+    std::printf("  --open <路径>    启动即打开指定工作流 JSON（默认用内置示例工作流）\n");
     std::printf("  --console        为日志额外分配控制台窗口（便于开发调试）\n");
     std::printf("  --login-selftest [--timeout <秒>]\n");
     std::printf("                   网页版登录自检：离屏跑「WebView2 环境 → 导航 → 提取 Cookie」\n");
@@ -60,13 +162,23 @@ void print_usage()
     std::printf("  --web-adapter-selftest --provider <id>\n");
     std::printf("                   L3（PB2-15）选择器探测 / 诊断：在**已登录窗口**里只读检查\n");
     std::printf("                   input_selector / send / answer_selector / done_when / token_expr，\n");
-    std::printf("                   并给可操作修复建议；退出码 0=全部命中 / 1=有缺项 / 2=站点不可用\n");
+    std::printf("                   并给可操作修复建议；退出码 0=全部命中 / 1=有缺项或页面异常\n");
+    std::printf("                   / 2=站点不可用 / 3=需登录（人工介入；批 3 · FEA-L03）\n");
+    std::printf("                   ＋ --provider all：**批量只读探测**全部 DOM 站点（批 3 · FEA-L01）\n");
+    std::printf("                     退出码 0=全部可用 / 3=有站需登录 / 1=有真失败 / 2=无可测站点\n");
+    std::printf("                   ＋ --json <路径>：把报告落成机器读版 JSON（供与上一轮对比）\n");
+    std::printf("                   ＋ --json-diff <上一轮报告>：对比并打印状态 / 判据变化\n");
     std::printf("  --web-chat \"<提示词>\"\n");
     std::printf("                   网页版生成：取 PoW 挑战 → C++ 求解 → 调用 /api/v0/chat/completion\n");
     std::printf("                   退出码 0=取到文本 / 1=失败（需先登录过一次）\n");
     std::printf("  --web-session-selftest\n");
     std::printf("                   会话自动引导回归：先按用户手动路径开窗口（不探测）→ 再调 ensure_session\n");
     std::printf("                   应「窗口已开 → 自动补探测」拿到凭证；退出码 0=通过 / 1=失败\n");
+    std::printf("  --web-session-list [--json <路径>]\n");
+    std::printf("                   会话 / 登录态清单（批 3 · FEA-L02）：① 本进程内存会话（I15：不落盘，\n");
+    std::printf("                   全新进程必然为空）② L2 DPAPI 快照**只读元数据**（路径 / 字节 / 时间）\n");
+    std::printf("                   ③ 每条网页版条目的登录判据配置（cookie_names）\n");
+    std::printf("                   退出码 0=清单成功（有无会话都算成功）/ 1=读快照元数据异常\n");
     std::printf("  --run-selftest [--web]\n");
     std::printf("                   执行自检：创建示例工作流 → 运行到结束，打印各节点状态与统计\n");
     std::printf("                   --web：LLMGenerate 走网页版真实生成（需已登录过一次）\n");
@@ -193,6 +305,11 @@ int run_selftest(bool use_web, const std::string& provider_id)
         selftest_config.output.ttl_days     = 0;
         aiwrite::set_app_config(selftest_config);
     }
+    // VA-07 判据②的「运行前基线」：与 save_workflow 落盘形式逐字节同源
+    // （engine/workflow_io.cpp： graph_to_json(graph).dump(2) + "\n"）。
+    // 用途：网页版答案常以工作流自身的种子文本开头 ⇒「答案前缀命中 JSON」可能只是
+    //       模型**合法复述参数值**；只有「命中处不在运行前基线里」才算运行结果泄漏。
+    const std::string json_before = aiwrite::engine::graph_to_json(state.graph).dump(2) + "\n";
 
     if (!state.start_run()) {
         std::printf("[运行自检] FAIL：start_run 被拒绝（%s）\n", state.status.c_str());
@@ -275,6 +392,8 @@ int run_selftest(bool use_web, const std::string& provider_id)
             std::stringstream buffer;
             buffer << in.rdbuf();
             const std::string content    = buffer.str();
+            // 归档是**全文**落盘 ⇒ 这里只做「含生成文档」的存在性判断，
+            // 故沿用字节前缀即可（VA-07 的纯净判据见下方，那条必须按码点取样）。
             const std::size_t probe_len  = llm_result.size() < 24 ? llm_result.size() : 24;
             if (!content.empty() &&
                 (llm_result.empty() ||
@@ -289,16 +408,61 @@ int run_selftest(bool use_web, const std::string& provider_id)
                 archive_files, doc_found ? "是" : "否");
 
     // VA-07：保存出来的 JSON 不得包含运行结果（运行态值原则）
-    bool json_clean = true;
+    // 判据（TST-L01 缺陷修复 —— 原实现按**字节**取样，见 anonymous namespace 的说明）：
+    //   ① 取样 = 答案前 kVa07ProbeChars 个 **UTF-8 码点**（不再按 24 字节截断）
+    //   ② 命中但**不算**泄漏：该取样在「运行前 JSON 基线」里就已存在
+    //      ⇒ 命中的是工作流自身参数值（模型合法复述种子文本），不是运行结果被写回
+    //   ③ 已知盲区（如实登记）：若运行结果前缀与某个运行前参数值**逐字相同**，
+    //      两者无法区分（属于不可观测差异）；由 VA-01 三处一致 + 人工复核兜底。
+    bool        json_clean      = true;
+    bool        json_static_hit = false;
+    std::size_t json_chars      = 0;
+    std::size_t baseline_chars  = 0;
+    std::size_t probe_chars     = 0;
+    std::size_t probe_bytes     = 0;
+    std::size_t hit_index       = std::string::npos;
+    std::string probe;
     if (saved && !llm_result.empty()) {
         std::ifstream     json_in(temp_file, std::ios::binary);
         std::stringstream json_buffer;
         json_buffer << json_in.rdbuf();
         const std::string json = json_buffer.str();
-        const std::size_t probe_len = llm_result.size() < 24 ? llm_result.size() : 24;
-        json_clean = json.find(llm_result.substr(0, probe_len)) == std::string::npos;
+        json_chars          = json.size();
+        baseline_chars      = json_before.size();
+        probe               = utf8_prefix(llm_result, kVa07ProbeChars);
+        probe_chars         = utf8_length(probe);
+        probe_bytes         = probe.size();
+        hit_index           = json.find(probe);
+        json_static_hit     = (hit_index != std::string::npos) &&
+                              json_before.find(probe) != std::string::npos;
+        json_clean = (hit_index == std::string::npos) || json_static_hit;
     }
     std::printf("[运行自检] VA-07 工作流 JSON 不含运行结果：%s\n", json_clean ? "OK" : "失败");
+    {
+        // 诊断：命中/未命中都要能复盘（取样口径 = 答案前 N 个**码点**；转义换行/引号便于比对）
+        std::string head;
+        for (const char c : probe) {
+            if (c == '\n') {
+                head += "\\n";
+            }
+            else if (c == '\r') {
+                head += "\\r";
+            }
+            else if (c == '"') {
+                head += "\\\"";
+            }
+            else {
+                head += c;
+            }
+        }
+        const std::string hit =
+            (hit_index == std::string::npos) ? std::string("未命中") : std::to_string(hit_index);
+        std::printf("[运行自检] VA-07 诊断：llm_result=%zu 字节/%zu 码点 / 取样=%zu 码点（%zu 字节）/ "
+                    "json=%zu 字节（运行前基线 %zu 字节）/ 命中位置=%s / 命中运行前内容=%s / "
+                    "取样文本=[%s]\n",
+                    llm_result.size(), utf8_length(llm_result), probe_chars, probe_bytes, json_chars,
+                    baseline_chars, hit.c_str(), json_static_hit ? "是" : "否", head.c_str());
+    }
 
     std::filesystem::remove(temp_file, ec);
     if (had_recent) {
@@ -1186,6 +1350,128 @@ std::string join_names(const std::vector<std::string>& items)
     return text.empty() ? std::string("（无）") : text;
 }
 
+// ============================================================================
+//  --web-session-list：**会话 / 登录态清单**（批 3 · FEA-L02）
+//
+//  把「登录态现在到底什么情况」从界面里搬到命令行 —— 三类事实一次列清：
+//    ① 本进程**内存**会话（`I15`：凭证不落盘 ⇒ 全新进程必然为空，**如实标注**而不是假装）
+//    ② L2 DPAPI 快照的**只读元数据**（路径 / 字节 / 修改时间 / 触发时机；不解密、不读内容）
+//    ③ 每条网页版条目的**登录判据配置**（`cookie_names`；`I15′`：判据不得依赖厂商专有物）
+//  退出码：0 = 清单输出成功（**有没有会话都算成功** —— 它是报告命令，不是门槛）；
+//          1 = 落盘失败 / 快照元数据异常；2 = 表读取失败
+// ============================================================================
+int web_session_list(const std::string& json_path)
+{
+    using aiwrite::web::SessionStore;
+
+    std::printf("\n===== 会话 / 登录态清单（批 3 · FEA-L02）=====\n");
+
+    // ---- ① 本进程内存会话 ----
+    SessionStore&                  store  = SessionStore::instance();
+    const std::vector<std::string> sites  = store.sites();
+    nlohmann::json                 memory = nlohmann::json::array();
+    std::printf("① 内存会话（本进程）：%zu 个站点\n", sites.size());
+    if (sites.empty()) {
+        std::printf("   无 —— 凭证**只在内存**（I15：不写盘、不进日志）⇒ 全新进程必然为空：\n");
+        std::printf("   要拿内存凭证，请在**同一次运行**里先登录"
+                    "（界面「打开登录窗口」/ --login-selftest / --web-adapter-selftest）\n");
+    }
+    else {
+        std::printf("   %-30s %-16s %-12s %-7s %-5s %-20s %s\n", "站点键（origin）", "条目 id",
+                    "登录态", "Cookie", "凭证", "更新时间", "会话来源 URL");
+        for (const std::string& site : sites) {
+            const aiwrite::web::Session session = store.snapshot(site);
+            const aiwrite::ai::ProviderSpec* spec =
+                aiwrite::ai::provider_specs().find(session.provider_id);
+            std::string state_label = "非表内条目（按 origin 归档）";
+            if (spec != nullptr) {
+                const aiwrite::ai::WebSessionVerdict verdict = aiwrite::ai::web_session_state(
+                    spec, aiwrite::web::web_session_evidence(session));
+                state_label = aiwrite::ai::web_session_state_label(verdict.state);
+            }
+            std::printf("   %-30s %-16s %-12s %-7zu %-5s %-20s %s\n", site.c_str(),
+                        session.provider_id.empty() ? "（未标注）" : session.provider_id.c_str(),
+                        state_label.c_str(), session.cookie_count(),
+                        session.user_token.empty() ? "无" : "有", session.updated_at.c_str(),
+                        session.url.c_str());
+            nlohmann::json item;
+            item["site"]         = site;
+            item["provider_id"]  = session.provider_id;
+            item["state_label"]  = state_label;
+            item["logged_in"]    = session.logged_in;
+            item["cookie_count"] = session.cookie_count();
+            item["has_token"]    = !session.user_token.empty();
+            item["updated_at"]   = session.updated_at;
+            item["url"]          = session.url;
+            memory.push_back(item);
+        }
+    }
+    // ---- ② L2 快照只读元数据（红线 I23③：C++ 侧永不读快照内容）----
+    const aiwrite::web::SnapshotInfo info = aiwrite::web::inspect_snapshot();
+    std::printf("\n② L2 登录态快照（DPAPI 加密；只有 Python 侧读写 —— 此处只读元数据、不解密）\n");
+    std::printf("   路径      : %s\n", aiwrite::web::snapshot_file().string().c_str());
+    std::printf("   状态      : %s\n", aiwrite::web::snapshot_summary(info).c_str());
+    std::printf("   触发时机  : %s\n", aiwrite::web::snapshot_trigger_note().c_str());
+    if (!info.exists) {
+        std::printf("   提示      : 快照由守护进程（brain_ai_browser --serve）在登录后写出；"
+                    "没跑过就不存在（不是错误）\n");
+    }
+    else if (!info.in_size_limit) {
+        std::printf("   ⚠️ 超限    : > %llu 字节 ⇒ Python 侧按「损坏」处理（重登一次会重写）\n",
+                    static_cast<unsigned long long>(aiwrite::web::kSnapshotMaxBytes));
+    }
+
+    // ---- ③ 网页版条目登录判据 ----
+    std::printf("\n③ 网页版条目登录判据（站点无关 · I15′：cookie_names 命中 或 该 origin Cookie 非空）\n");
+    nlohmann::json entries   = nlohmann::json::array();
+    int            web_total = 0;
+    for (const aiwrite::ai::ProviderSpec& spec : aiwrite::ai::provider_specs().items) {
+        if (spec.kind != "web") {
+            continue;
+        }
+        ++web_total;
+        std::printf("   %-16s %-26s %-6s %s\n", spec.id.c_str(), spec.display.c_str(),
+                    spec.web.adapter.c_str(),
+                    spec.web.cookie_names.empty()
+                        ? "（未配 cookie_names ⇒ 判据只剩「该 origin Cookie 非空」）"
+                        : join_names(spec.web.cookie_names).c_str());
+        nlohmann::json item;
+        item["id"]           = spec.id;
+        item["display"]      = spec.display;
+        item["adapter"]      = spec.web.adapter;
+        item["login_url"]    = spec.web.login_url;
+        item["cookie_names"] = spec.web.cookie_names;
+        entries.push_back(item);
+    }
+    std::printf("   共 %d 条网页版条目\n", web_total);
+
+    // ---- 机器读版（供 loop 报告引用 / 与上一轮对比）----
+    if (!json_path.empty()) {
+        nlohmann::json doc;
+        doc["schema"]          = "aiwrite.web_session_list/1";
+        doc["generated_at"]    = report_timestamp();
+        doc["memory_sessions"] = memory;
+        doc["l2_snapshot"]     = {{"path", aiwrite::web::snapshot_file().string()},
+                                  {"exists", info.exists},
+                                  {"bytes", info.bytes},
+                                  {"modified_at", info.modified_at},
+                                  {"in_size_limit", info.in_size_limit},
+                                  {"max_bytes", aiwrite::web::kSnapshotMaxBytes},
+                                  {"trigger_note", aiwrite::web::snapshot_trigger_note()}};
+        doc["web_entries"]     = entries;
+        std::string write_error;
+        if (!write_text_file(json_path, doc.dump(2) + "\n", &write_error)) {
+            std::printf("\n[会话清单] 落盘失败：%s\n", write_error.c_str());
+            return 1;
+        }
+        std::printf("\n[会话清单] 机器读版已写入：%s\n", json_path.c_str());
+    }
+    std::printf("[会话清单] 完成（内存会话 %zu 个 · L2 快照 %s · 网页版条目 %d 条）\n\n",
+                sites.size(), info.exists ? "存在" : "不存在", web_total);
+    std::fflush(stdout);
+    return 0;
+}
+
 void print_spec_list(const aiwrite::ai::ProviderSpecs& specs)
 {
     for (const aiwrite::ai::ProviderSpec& spec : specs.items) {
@@ -1377,12 +1663,23 @@ int main(int argc, char** argv)
     bool        upload_selftest_flag = false;                           // M8-14：--upload-selftest（离线三组；带 --provider 追加真机）
     std::string supply_get_path;                                        // --get <路径?查询串>（空 = 只读模式）
     std::string provider_id;                                            // --provider <id>
+    std::string report_json_path;                                       // --json <报告路径>
+    std::string report_prev_path;                                       // --json-diff <上一轮报告>
+    bool        web_session_list_flag = false;                          // --web-session-list
     int  selftest_timeout = 30;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--console") {
             options.console = true;
+        }
+        else if (arg == "--open") {
+            // 启动即打开指定工作流（见 ui/app.h AppOptions::open_workflow）
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --open 缺少取值（工作流 JSON 路径）\n");
+                return 2;
+            }
+            options.open_workflow = argv[++i];
         }
         else if (arg == "--login-selftest") {
             login_selftest = true;
@@ -1463,6 +1760,23 @@ int main(int argc, char** argv)
         }
         else if (arg == "--web-session-selftest") {
             web_session_selftest_flag = true;
+        }
+        else if (arg == "--web-session-list") {
+            web_session_list_flag = true; // 批 3（FEA-L02）：会话 / 登录态清单
+        }
+        else if (arg == "--json") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --json 缺少取值（报告路径）\n");
+                return 2;
+            }
+            report_json_path = argv[++i];
+        }
+        else if (arg == "--json-diff") {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "参数 --json-diff 缺少取值（上一轮报告路径）\n");
+                return 2;
+            }
+            report_prev_path = argv[++i];
         }
         else if (arg == "--web-chat") {
             if (i + 1 >= argc) {
@@ -1579,6 +1893,14 @@ int main(int argc, char** argv)
         return session_code;
     }
 
+    // 批 3（FEA-L02）：会话 / 登录态清单（**报告命令**：有没有会话都算成功）
+    if (web_session_list_flag) {
+        const int list_code = web_session_list(report_json_path);
+        aiwrite::log::info("AIwrite 会话清单退出，返回码 " + std::to_string(list_code));
+        aiwrite::log::shutdown();
+        return list_code;
+    }
+
     // 网页版登录自检（不需要 GUI，不进消息循环）
     if (login_selftest) {
         const int selftest_code = aiwrite::web::selftest(selftest_timeout);
@@ -1587,10 +1909,63 @@ int main(int argc, char** argv)
         return selftest_code;
     }
 
-    // L3（PB2-15）：选择器探测 / 诊断（按 dom 条目；只读，不发送内容）
+    // L3（PB2-15）+ 批 3（FEA-L01）：选择器探测 / 诊断（只读，不发送内容）
     if (dom_adapter_selftest_flag) {
         int code = 2;
-        if (provider_id.empty()) {
+        if (provider_id == "all") {
+            // ---- 批量：全部 `adapter=dom` 条目（表驱动；逐站独立）----
+            nlohmann::json report;
+            code = aiwrite::ai::dom_probe_all(selftest_timeout, &report, nullptr);
+            if (!report_json_path.empty()) {
+                std::string write_error;
+                if (write_text_file(report_json_path, report.dump(2) + "\n", &write_error)) {
+                    std::printf("[批量探测] 机器读版已写入：%s\n", report_json_path.c_str());
+                }
+                else {
+                    std::printf("[批量探测] 报告落盘失败：%s\n", write_error.c_str());
+                    code = (code == 0) ? 1 : code;
+                }
+            }
+            if (!report_prev_path.empty()) {
+                std::string prev_text;
+                std::string read_error;
+                if (!read_text_file(report_prev_path, &prev_text, &read_error)) {
+                    std::printf("[批量探测] 读上一轮报告失败：%s\n", read_error.c_str());
+                    code = (code == 0) ? 1 : code;
+                }
+                else {
+                    nlohmann::json prev;
+                    bool           parsed = true;
+                    try {
+                        prev = nlohmann::json::parse(prev_text);
+                    }
+                    catch (const std::exception& ex) {
+                        parsed = false;
+                        std::printf("[批量探测] 上一轮报告不是合法 JSON：%s\n", ex.what());
+                        code = (code == 0) ? 1 : code;
+                    }
+                    if (parsed) {
+                        std::vector<std::string> lines;
+                        std::printf("\n----- 与上一轮报告对比（%s）-----\n",
+                                    report_prev_path.c_str());
+                        if (aiwrite::ai::dom_report_diff(prev, report, &lines)) {
+                            for (const std::string& line : lines) {
+                                std::printf("  %s\n", line.c_str());
+                            }
+                        }
+                        else {
+                            std::printf("  对比失败：两侧报告的 sites 数组不兼容"
+                                        "（如实报错，不假装「无变化」）\n");
+                            code = (code == 0) ? 1 : code;
+                        }
+                    }
+                }
+            }
+            std::printf("\n[批量探测] 退出码 %d"
+                        "（0=全部可用 / 3=需登录 / 1=有真失败 / 2=无可测站点）\n",
+                        code);
+        }
+        else if (provider_id.empty()) {
             std::printf("[选择器探测] 请用 --provider <id> 指定要诊断的网页版条目；当前表里的 web 条目：\n");
             for (const aiwrite::ai::ProviderSpec& spec : aiwrite::ai::provider_specs().items) {
                 if (spec.kind != "web") {
@@ -1603,6 +1978,7 @@ int main(int argc, char** argv)
                 std::printf("   %-16s %-28s %s\n", spec.id.c_str(), spec.display.c_str(), kind_text);
             }
             std::printf("  例：aiwrite.exe --web-adapter-selftest --provider kimi-web\n");
+            std::printf("      aiwrite.exe --web-adapter-selftest --provider all --json build\\loop\\probe.json\n");
         }
         else {
             code = aiwrite::ai::dom_adapter_selftest(provider_id, selftest_timeout);

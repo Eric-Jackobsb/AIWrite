@@ -10,7 +10,7 @@
 
 批 1 阶段（本包当前状态）：
     * step 1 ✅ `protocol.py`（§6.1 词表唯一实现）；
-    * step 2 ✅ `pipe.py`（命名管道服务端 = 本守护进程；`Shell` 侧 `src/web/pipe_client.*`）；
+    * step 2 ✅ `pipe.py`（命名管道服务端 = 本守护进程；`Shell` 侧 `web/src/pipe_client.cpp` · `web/include/pipe_client.h`）；
     * step 3 ✅ `browsers.py`（浏览器探测 · `M7B-14`）/ `runtime.py`（运行时检测 · `M7B-13`）/
       `driver.py`（Pydoll 最小集：`start` / `tab_for` / `cookies_all` / `execute_script` / `close_wait`）；
     * step 4 ✅ `daemon.py`（**唯一主循环**：管道监听线程 × asyncio 事件循环；命令分发 / 按需启动 /

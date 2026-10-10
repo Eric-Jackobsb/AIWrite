@@ -1,8 +1,8 @@
-#include "ui/toolbar.h"
+#include "toolbar.h"
 
-#include "engine/provider_resolve.h"
-#include "ui/editor_state.h"
-#include "utils/log.h"
+#include "provider_resolve.h"
+#include "editor_state.h"
+#include "log.h"
 
 #include <imgui.h>
 

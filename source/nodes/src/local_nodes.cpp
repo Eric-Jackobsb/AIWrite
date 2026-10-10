@@ -1,18 +1,18 @@
-#include "nodes/nodes.h"
+#include "nodes.h"
 
-#include "ai/provider_spec.h"          // M_patchB L1：配置表（生效提供商 / 站点端点）
-#include "engine/provider_resolve.h"   // M_patchB L1：EffectiveProvider
+#include "provider_spec.h"          // M_patchB L1：配置表（生效提供商 / 站点端点）
+#include "provider_resolve.h"   // M_patchB L1：EffectiveProvider
 
-#include "ai/deepseek_official_provider.h"
-#include "utils/credential.h"
-#include "utils/asset_store.h"         // P7a-04：资源令牌解析（统一资源目录）
-#include "utils/paths.h"               // P7a-01/02：image 端口多值 + 多选路径解析
-#include "ai/deepseek_web_client.h"
-#include "ai/dom_web_client.h"         // L3（PB2-13）：通用 DOM 站点适配器
-#include "ai/upload/upload_registry.h" // M8-14：站点上传模板（网页版图片上传 → 再发送）
-#include "utils/log.h"
-#include "web/session_store.h"
-#include "web/webview_host.h"
+#include "deepseek_official_provider.h"
+#include "credential.h"
+#include "asset_store.h"         // P7a-04：资源令牌解析（统一资源目录）
+#include "paths.h"               // P7a-01/02：image 端口多值 + 多选路径解析
+#include "deepseek_web_client.h"
+#include "dom_web_client.h"         // L3（PB2-13）：通用 DOM 站点适配器
+#include "upload_registry.h" // M8-14：站点上传模板（网页版图片上传 → 再发送）
+#include "log.h"
+#include "session_store.h"
+#include "webview_host.h"
 
 #include <cstdio>
 #include <filesystem>

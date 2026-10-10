@@ -24,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-#include "ai/upload/upload_contract.h"
+#include "upload_contract.h"
 
 namespace aiwrite::ai {
 

@@ -36,6 +36,12 @@ struct Config {
         int  window_pos_x     = -1;
         int  window_pos_y     = -1;
         bool window_maximized = false;
+
+        // ---- 首启引导（M6 `PM-02`）：是否已展示过「首次使用引导」----
+        //  * 由引导窗口的「开始使用 / 跳过」写入；**不**影响任何功能（只是不再自动弹）
+        //  * 老配置无此键 → 默认 false ⇒ **升级后的老用户会看到一次引导**（可跳过，无副作用）；
+        //    如需再次查看：菜单「帮助 → 首次使用引导」
+        bool first_run_done = false;
     };
 
     struct Output {

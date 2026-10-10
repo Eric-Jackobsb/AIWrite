@@ -1,6 +1,6 @@
-#include "ai/web_pow.h"
+#include "web_pow.h"
 
-#include "utils/crypto.h"
+#include "crypto.h"
 
 #include <exception>
 
