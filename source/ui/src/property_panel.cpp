@@ -299,14 +299,15 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
     }
 
     web::LoginWindow& window      = web::login_window();
-    const bool        window_here = web::window_on_site(ctx.site_key);
+    // `PW-02`：界面窗口是**独立归属**（`界面#登录窗口`）—— 判定一律按该归属查窗口表
+    const bool        window_here = web::window_on_site(web::ui_window_owner(), ctx.site_key);
     if (window.running()) {
         if (window_here) {
             ImGui::TextDisabled("登录窗口已打开（该站点）：请在窗口中完成登录，然后关闭它。");
         }
         else {
             ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f), "登录窗口正开着其他站点：%s",
-                               web::current_window_site().c_str());
+                               web::current_window_site(web::ui_window_owner(), ctx.site_key).c_str());
             ImGui::TextDisabled("点「打开登录窗口」会按串行策略切到本节点站点（先关旧窗）");
         }
         ImGui::TextDisabled("当前：%s", window.status().c_str());
@@ -346,7 +347,7 @@ bool draw_web_session_section(engine::Node& node, const engine::Graph& graph)
     if (ImGui::Button(probe_applicable ? "探测网页版协议（dev）"
                                        : "只读诊断（该站点不适用协议探测）",
                       ImVec2(-FLT_MIN, 0.0f))) {
-        if (web::window_on_site(ctx.site_key)) {
+        if (web::window_on_site(web::ui_window_owner(), ctx.site_key)) {
             web::request_protocol_probe(); // 窗口已开在该站点：直接在当前页面里探测 / 诊断
         }
         else {

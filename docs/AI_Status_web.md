@@ -20,44 +20,44 @@
 ## 二、网页版台账（11 站 · 机器生成 · 跨轮累积）
 
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-10 · 覆盖轮次 39：R1 · SMOKE · SMOKE2 · SMOKE3 · SMOKE4 · SMOKE5 · SMOKE6 · SMOKE6 · SMOKE7 · SMOKE8 · SMOKE9 · SMOKE10 · SMOKE11 · SMOKE12 · SMOKE13 · T-L06 · T-L06b · T-L06c · T-L06d · T-L07 · T-L08 · T-L09 · T-L10 · T-L11 · T-L12 · T-L13 · T-L14 · T-L15 · T-L16 · T-L17 · T-L18 · T-L19 · T-L20 · T-L21 · T-L22 · T-L23 · T-L24 · T-L25 · T-L26
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-11 · 覆盖轮次 0：
 > **范围**：`kind=web` 的 **11 站**（DOM 自动化 10 站 + 协议型适配器 `deepseek-web` 1 站）· **文字理解**判据 = S3 **三口径**（`rc=0` + `n3=done` + 归档正文非站侧错误/忙碌串）；**图片理解**判据 = 站点上传双证据 + 取回正文。
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > 来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。
 
-**汇总（web）**：共 11 站 · 文字理解 ✅ 实测 **8** · 图片理解 ✅ 实测 **1** / 🟡 就绪 1 / ⬜ 未接 9 · 归因口径：需登录 1 · 站侧忙碌 0
+**汇总（web）**：共 11 站 · 文字理解 ✅ 实测 **7** · 图片理解 ✅ 实测 **1** / 🟡 就绪 1 / ⬜ 未接 9 · 归因口径：需登录 0 · 站侧忙碌 0
 
 **表 A · 链路证据（S2 匿名探测 → S3 端到端）**
 
 | # | id | 接入 | 最近轮次 | S2 探测 | 输入命中/候选 | 登录证据 | S3 rc | n3 | 正文码点 | 最终态 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `spark-web` | web·dom | T-L16 | 失败 | 0/0 | — | — | — | — | 失败（探测级 · §5.1③） |
-| 2 | `gemini-web` | web·dom | T-L25 | 未测 | / | — | 0 | done | 22 | 可用（匿名） |
-| 3 | `doubao-web` | web·dom | T-L21 | 未测 | / | — | 0 | done | 41 | 可用（匿名） |
+| 1 | `spark-web` | web·dom | — | — | — | — | — | — | — | 未测 |
+| 2 | `gemini-web` | web·dom | — | — | — | — | — | — | — | 未测 |
+| 3 | `doubao-web` | web·dom | — | — | — | — | — | — | — | 未测 |
 | 4 | `deepseek-web` | web·deepseek-web | — | — | — | — | — | — | — | ✅ 已实测（协议型适配器） |
-| 5 | `qwen-web` | web·dom | T-L16 | 可用 | 1/1 | — | — | — | — | 未测（S3 未跑） |
-| 6 | `claude-web` | web·dom | T-L16 | 需登录 | 0/0 | login-url:/login | — | — | — | 需登录 |
-| 7 | `yuanbao-web` | web·dom | T-L25 | 未测 | / | — | 0 | done | 672 | 可用（匿名） |
-| 8 | `chatgpt-web` | web·dom | T-L16 | 可用 | 1/1 | login-node x8 | — | — | — | 未测（S3 未跑） |
-| 9 | `ernie-web` | web·dom | T-L25 | 未测 | / | — | 0 | done | 697 | 可用（匿名） |
-| 10 | `kimi-web` | web·dom | T-L21 | 未测 | / | — | 0 | done | 70 | 可用（匿名） |
-| 11 | `chatglm-web` | web·dom | T-L21 | 未测 | / | — | 0 | done | 10044 | 可用（匿名） |
+| 5 | `qwen-web` | web·dom | — | — | — | — | — | — | — | 未测 |
+| 6 | `claude-web` | web·dom | — | — | — | — | — | — | — | 未测 |
+| 7 | `yuanbao-web` | web·dom | — | — | — | — | — | — | — | 未测 |
+| 8 | `chatgpt-web` | web·dom | — | — | — | — | — | — | — | 未测 |
+| 9 | `ernie-web` | web·dom | — | — | — | — | — | — | — | 未测 |
+| 10 | `kimi-web` | web·dom | — | — | — | — | — | — | — | 未测 |
+| 11 | `chatglm-web` | web·dom | — | — | — | — | — | — | — | 未测 |
 
 **表 B · 能力与接线（文字理解 / 图片理解 · 下一动作）**
 
 | # | id | 文字理解 | 图片理解 | 上传适配器 | 选择器 in/ans | 依据（图片理解） | 下一动作 |
 |---|---|---|---|---|---|---|---|
-| 1 | `spark-web` | ✅ 实测（SMOKE2） | ⬜ 未接 | — | N/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | 冷启动后重测；仍失败要有 DOM 物证才可分②改版 |
-| 2 | `gemini-web` | ✅ 实测（T-L25） | ⬜ 未接 | — | N/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | — |
-| 3 | `doubao-web` | ✅ 实测（T-L21） | ✅ 实测 | `builtin:doubao` | Y/N | B3 真视觉（256×256 纯红 → 描述正确）+ upload_adapter=builtin:doubao 双证据 PASS（协议记录 §8.3/§9/§10.2） | — |
+| 1 | `spark-web` | ⬜ 未测 | ⬜ 未接 | — | N/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | S2 探到「可用」后跑 S3 |
+| 2 | `gemini-web` | ✅ 实测 | ⬜ 未接 | — | N/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | S2 探到「可用」后跑 S3 |
+| 3 | `doubao-web` | ✅ 实测 | ✅ 实测 | `builtin:doubao` | Y/N | B3 真视觉（256×256 纯红 → 描述正确）+ upload_adapter=builtin:doubao 双证据 PASS（协议记录 §8.3/§9/§10.2） | S2 探到「可用」后跑 S3 |
 | 4 | `deepseek-web` | ✅ 实测 | ⬜ 未接 | — | N/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | — |
-| 5 | `qwen-web` | ⬜ 未测（S3 未通过） | ⬜ 未接 | — | Y/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | S2 探到「可用」后跑 S3 |
-| 6 | `claude-web` | ⬜ 未测（S3 未通过） | ⬜ 未接 | — | N/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | 人工在窗口内登录一次 → 重跑 S3 |
-| 7 | `yuanbao-web` | ✅ 实测（T-L25） | ⬜ 未接 | — | Y/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | — |
-| 8 | `chatgpt-web` | ⬜ 未测（S3 未通过） | ⬜ 未接 | — | Y/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | S2 探到「可用」后跑 S3 |
-| 9 | `ernie-web` | ✅ 实测（T-L25） | ⬜ 未接 | — | Y/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | — |
-| 10 | `kimi-web` | ✅ 实测（T-L21） | 🟡 就绪·未实测 | `builtin:kimi` | Y/N | 接线 builtin:kimi · attach_selector 待侦察/待真机 | 侦察 attach_selector → 真机一次 |
-| 11 | `chatglm-web` | ✅ 实测（T-L21） | ⬜ 未接 | — | N/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | — |
+| 5 | `qwen-web` | ⬜ 未测 | ⬜ 未接 | — | Y/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | S2 探到「可用」后跑 S3 |
+| 6 | `claude-web` | ⬜ 未测 | ⬜ 未接 | — | N/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | S2 探到「可用」后跑 S3 |
+| 7 | `yuanbao-web` | ✅ 实测 | ⬜ 未接 | — | Y/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | S2 探到「可用」后跑 S3 |
+| 8 | `chatgpt-web` | ⬜ 未测 | ⬜ 未接 | — | Y/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | S2 探到「可用」后跑 S3 |
+| 9 | `ernie-web` | ✅ 实测 | ⬜ 未接 | — | Y/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | S2 探到「可用」后跑 S3 |
+| 10 | `kimi-web` | ✅ 实测 | 🟡 就绪·未实测 | `builtin:kimi` | Y/N | 接线 builtin:kimi · attach_selector 待侦察/待真机 | 侦察 attach_selector → 真机一次 |
+| 11 | `chatglm-web` | ✅ 实测 | ⬜ 未接 | — | N/N | 无 web.upload_adapter（VLM + 网页版组合会明确报错） | S2 探到「可用」后跑 S3 |
 
 > 重建（零副作用，随时可跑）：`powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\loop_verify.ps1 -StatusOnly`
 <!-- SITE-STATUS:END -->

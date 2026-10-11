@@ -94,8 +94,8 @@
 | spdlog | 日志 | vcpkg |
 | toml++ | 配置管理 | 单头文件 |
 | cpp-httplib | HTTP 客户端 | vcpkg / 单头文件 |
-| OpenSSL | SHA3-256（历史用途 = 网页版 PoW 求解，**已随 [actionPlan/M7B.md](Archive/actionPlan/M7B.md) 退役**；现仅自检 `V-05` 使用） | vcpkg |
-| WebView2 | 嵌入浏览器 | ⚠️ **退场（计划 · 2026-09-28 · [actionPlan/M7B.md](Archive/actionPlan/M7B.md) `MB-D0-2`）**：嵌入控件易被站点识别为非真实浏览器 → 改为 **Python + Pydoll 驱动本机真实 Edge / Chrome** |
+| OpenSSL | SHA3-256（历史用途 = 网页版 PoW 求解，**已随 [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md) 退役**；现仅自检 `V-05` 使用） | vcpkg |
+| WebView2 | 嵌入浏览器 | ⚠️ **退场（计划 · 2026-09-28 · [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md) `MB-D0-2`）**：嵌入控件易被站点识别为非真实浏览器 → 改为 **Python + Pydoll 驱动本机真实 Edge / Chrome** |
 | glm | 数学库（可选） | vcpkg |
 | Python 3.12 + Pydoll（**必需 · M7 第三轮 `M7B`**；原「计划 · P7-b」） | **网页版全部通道**（文字 + 图片）：启动独立浏览器做自动化 | 检测与引导由 `M7B-13` / `M7B-14` 定；**是否内嵌**由 `MB-D6`（原 `Q7`）定 —— 已升级为 **M6 硬门槛** |
 | 命名管道 + Win32 事件对象（**必需 · M7 第三轮 `M7B`**；原「计划 · P7-b」） | C++ ↔ Python 守护进程双向通信（**网页版唯一通道**） | 系统 API（无第三方依赖）；抽象层 `IpcChannel`（`RM-D3`） |
@@ -202,9 +202,9 @@ Workflow
 | 输出节点 | 展示结果 | Text Output |
 
 > **M7（2026-09-27）**：原「输出节点 · Image Preview」已删除（N-09）—— 图片结果由 `Image Input` 的
-> `image` 端口在输出面板 / 参数面板渲染缩略图，无需专用汇点节点。见 [actionPlan/M7.md](actionPlan/M7.md)。
+> `image` 端口在输出面板 / 参数面板渲染缩略图，无需专用汇点节点。见 [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md)（📦 已归档 2026-10-11）。
 
-### 4.4 MVP 节点清单（8 个；M7 起由 9 个精简）· ✅ **已固定（2026-10-08 · 节点数维持 8，不恢复）**
+### 4.4 MVP 节点清单（8 个；M7 起由 9 个精简）· ✅ **已固定（2026-10-08 · 节点数维持 8，不恢复）** —— 📦 **「数量维持 8」半句已被推翻（2026-10-11 · `PQ-20` 拍板 · 见 [roadmap.md](roadmap.md) §十）**：**8 个节点仍是当前实现**，但**不再禁止扩展**；后续新增 / 变形的**方向、范围与准入标准**在 [actionPlan/M_node_expansion.md](actionPlan/M_node_expansion.md) **细致讨论**（**拍板前不动任何代码**）
 
 | 编号 | 节点 | 分类 | 输入 | 输出 |
 |---|---|---|---|---|
@@ -1102,14 +1102,14 @@ void Executor::cancel() {
 |---|---|---|---|
 | M1：技术验证 | v0.1 | ImGui + 节点编辑器 + API 跑通 | ✅ ImGui 与节点编辑器已跑通；API 待 Key（见 [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md)） |
 | M2：引擎跑通 | v0.2 | 能加载 JSON 工作流并执行 | ✅ **已完成（2026-09-23 · 见 [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) 与 [Archive/actionPlan/M2.md](Archive/actionPlan/M2.md)）** |
-| M3：可视化编辑 | v0.3 | 能拖拽编辑工作流 | 🟡 **大体完成**（唯一待办 `FEA-M3-07` 工作流变体保存 → ⬜ 待定 `PQ-19`） |
-| M4：文本生成 | v0.4 | 能生成文本 | ✅ **核心完成**（残项见 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §1–§3） |
-| M5：多模态 | v0.5 | 能读图生成文字 | 🟡 **核心切片（M5-C）已完成**；余项见 [actionPlan/M5.md](actionPlan/M5.md) §九 |
-| M6：MVP | v1.0 | 功能完整，可自用 | ⏳ **未开工**（交付形态 ⬜ 待定 `PQ-02`；`M6-02` 归 `PM-01`） |
-| M7：图片输入收口 + 节点精简 | v0.5.1 | 删图片输出节点（9→8）+ 图片格式按内容嗅探 + 可操作报错 | ✅ 代码与手册已落地（2026-09-27；见 [actionPlan/M7.md](actionPlan/M7.md)）；待 GUI 端到端实测 |
-| M7 第二轮 P7-a：图片内部运行 + official 收口 + UI A 档 | v0.5.2 | 3 个「图片输入」可同时连入「图片理解」+ 资源目录/资源引用 + 面板与画布可用性 | ✅ **已落地（v0.5.2 · 2026-09-28）**：`image` 端口**变长** + **多选图片** + 统一资源目录（内容寻址 + `aiwrite-asset:` 令牌 + 一键迁移）+ official 收口（编码缓存 / 体积与耗时 / 三类错误文案）+ UI A 档；基线 `exec-selftest 251 → 310/0`（只升不降）—— 见 [actionPlan/M7.md](actionPlan/M7.md) §11–§14 |
-| ~~M7 第二轮 P7-b：网页版图片上传~~ 📦 **已失效（2026-10-05 · 方案 E）→ 现行 = [actionPlan/M8.md](actionPlan/M8.md)** | v0.5.3（⬜ 号待定 `PQ-03`） | 网页版跑通 `E-02`（图片先"进站"再发送） | 🟡 **计划中（前置验证部分已过）**：Pydoll 独立浏览器 + Python 守护进程 + 命名管道；**`P7b-01` / `P7b-04` 已随 `M7B-01` / `M7B-05` 通过**（2026-09-28），余 `P7b-02` / `P7b-03` / `P7b-05` 待 —— 通道底座归 `M7B` 批 1–2，前置验证**一次验证两用**，未过则回滚；**方案 B′（2026-09-29）：网页版图片理解首选目标站 = 豆包 `doubao-web`，先做只读侦察（`P7b-05b`：上传入口 4 类判定 + 纯图无字视觉性质判别），审核通过后才动管道** |
-| ~~M7 第三轮 `M7B`：网页通道整体迁 Pydoll（**WebView2 退场**）~~ 📦 **已归档（2026-10-05 · 方案 E 取代）** | v0.5.4（内部） | WebView2 退场 + 网页版全部走 Pydoll（协议栈退役）+ **CDP `Network` 事件重建 SSE 增量** + 单登录态 + **作废 `I2`**（→ `I20` CLI 契约 / `I21` 不静默降级 / `I22` 流式降级显式） | 🟡 **进行中（前置验证 7/9 已过；批 1 step 1~6 已落地：协议词表 / 命名管道 / Pydoll 驱动 / 守护进程主循环 + `VB2-38` / **L2 加密快照 `session.py` + `VB2-39`** / **C++ 新通道 `web/pydoll_channel.*` + `site_ref.h` 搬迁**，生产路径未接线；**目录迁移完成 2026-10-03**：运行代码归 `source/python/`、数据仍 `~/.brain-ai`）**（2026-09-28 决议 7 条 + 决议 **`MB-D0-8`** 登录态持久化四层）：6 批 `M7B-10`~`M7B-41` + **先建后拆** + 前置验证 `M7B-01`~`09` + **`M7B-06b`**（`M7B-01`/`02`/`03`/`04`/`05`/`08`/`09` **已过**；余真站点登录 `M7B-06`/`07`）；见 [actionPlan/M7B.md](Archive/actionPlan/M7B.md) |
+| M3：可视化编辑 | v0.3 | 能拖拽编辑工作流 | ✅ **已完成 · 计划已归档（2026-09-27 → [Archive/actionPlan/M3.md](Archive/actionPlan/M3.md)）**；唯一待办 `FEA-M3-07` 工作流变体保存 ⬜ **已拍板「延后 · 不排期」（`PQ-19`，2026-10-09）** |
+| M4：文本生成 | v0.4 | 能生成文本 | ✅ **核心完成 · 计划已归档（2026-10-11 → [Archive/actionPlan/M4.md](Archive/actionPlan/M4.md)）**（残项见 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §1–§3） |
+| M5：多模态 | v0.5 | 能读图生成文字 | 🟡 **核心切片（M5-C）已完成**；余项见 [Archive/actionPlan/M5.md](Archive/actionPlan/M5.md)（📦 已归档 2026-10-11）§九 |
+| M6：MVP | v1.0 | 功能完整，可自用 | 🟡 **已开工（第一批已落地 2026-10-10）**（交付形态 ✅ 已定 = Inno Setup · `PQ-02` 结案；`M6-02` 归 `PM-01` ✅ 已落地——见 [actionPlan/M6.md](actionPlan/M6.md) §一） |
+| M7：图片输入收口 + 节点精简 | v0.5.1 | 删图片输出节点（9→8）+ 图片格式按内容嗅探 + 可操作报错 | ✅ 代码与手册已落地（2026-09-27；计划已归档 2026-10-11 → [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md)）；待 GUI 端到端实测 |
+| M7 第二轮 P7-a：图片内部运行 + official 收口 + UI A 档 | v0.5.2 | 3 个「图片输入」可同时连入「图片理解」+ 资源目录/资源引用 + 面板与画布可用性 | ✅ **已落地（v0.5.2 · 2026-09-28）**：`image` 端口**变长** + **多选图片** + 统一资源目录（内容寻址 + `aiwrite-asset:` 令牌 + 一键迁移）+ official 收口（编码缓存 / 体积与耗时 / 三类错误文案）+ UI A 档；基线 `exec-selftest 251 → 310/0`（只升不降）—— 见 [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md) §11–§14 |
+| ~~M7 第二轮 P7-b：网页版图片上传~~ 📦 **已失效（2026-10-05 · 方案 E）→ 现行 = [actionPlan/M8.md](actionPlan/M8.md)** | v0.5.3（✅ 已拍板 2026-10-11 · `PQ-03` = **留用**；该号保留在文档历史，不清理） | 网页版跑通 `E-02`（图片先"进站"再发送） | 🟡 **计划中（前置验证部分已过）**：Pydoll 独立浏览器 + Python 守护进程 + 命名管道；**`P7b-01` / `P7b-04` 已随 `M7B-01` / `M7B-05` 通过**（2026-09-28），余 `P7b-02` / `P7b-03` / `P7b-05` 待 —— 通道底座归 `M7B` 批 1–2，前置验证**一次验证两用**，未过则回滚；**方案 B′（2026-09-29）：网页版图片理解首选目标站 = 豆包 `doubao-web`，先做只读侦察（`P7b-05b`：上传入口 4 类判定 + 纯图无字视觉性质判别），审核通过后才动管道** |
+| ~~M7 第三轮 `M7B`：网页通道整体迁 Pydoll（**WebView2 退场**）~~ 📦 **已归档（2026-10-05 · 方案 E 取代）** | v0.5.4（内部） | WebView2 退场 + 网页版全部走 Pydoll（协议栈退役）+ **CDP `Network` 事件重建 SSE 增量** + 单登录态 + **作废 `I2`**（→ `I20` CLI 契约 / `I21` 不静默降级 / `I22` 流式降级显式） | 🟡 **进行中（前置验证 7/9 已过；批 1 step 1~6 已落地：协议词表 / 命名管道 / Pydoll 驱动 / 守护进程主循环 + `VB2-38` / **L2 加密快照 `session.py` + `VB2-39`** / **C++ 新通道 `web/pydoll_channel.*` + `site_ref.h` 搬迁**，生产路径未接线；**目录迁移完成 2026-10-03**：运行代码归 `source/python/`、数据仍 `~/.brain-ai`）**（2026-09-28 决议 7 条 + 决议 **`MB-D0-8`** 登录态持久化四层）：6 批 `M7B-10`~`M7B-41` + **先建后拆** + 前置验证 `M7B-01`~`09` + **`M7B-06b`**（`M7B-01`/`02`/`03`/`04`/`05`/`08`/`09` **已过**；余真站点登录 `M7B-06`/`07`）；见 [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md) |
 
 > 📦 **本段已失效（2026-10-05 · 方案 E）**：`M7B` 退场（WebView2 回归）⇒ 上表中 `V-03` / `T-01` / `P0-04` 的**退场 / 改写**都不会发生；**原文保留**作决策证据。逐项处置见 [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md) §1.3 与 §8.5。
 

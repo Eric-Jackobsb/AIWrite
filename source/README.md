@@ -330,9 +330,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [
 本机装有 `Microsoft.WebpImageExtension 1.2.31.0` → WIC 的 WebP 解码器**接受**该假头后去解析比特流 →
 CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPOINT）**；
 `api_probe --exec-selftest` 与「参数面板渲染 WebP 图片」两条路径都会踩到。
-定位过程与修复见 §6.1 与 [../docs/actionPlan/M7.md](../docs/actionPlan/M7.md) §1。
+定位过程与修复见 §6.1 与 [../docs/Archive/actionPlan/M7.md](../docs/Archive/actionPlan/M7.md) §1。
 
-**计划中的不变量（`I18` / `I19` · 2026-09-27 会议立项 · 属 M7 第二轮 P7，见 [../docs/actionPlan/M7.md](../docs/actionPlan/M7.md) §15）**
+**计划中的不变量（`I18` / `I19` · 2026-09-27 会议立项 · 属 M7 第二轮 P7，见 [../docs/Archive/actionPlan/M7.md](../docs/Archive/actionPlan/M7.md) §15）**
 > ⚠️ 下面两条**尚未实现**（P7-b 为「先验证后实现」），先登记以免后续改动无意破坏设计意图。
 
 1. **`I18`（网页版图片上传证据）**：网页版图片流程中，**没有「上传完成证据」时不得自动发送**提示词
@@ -346,13 +346,13 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 **统一资源目录（✅ P7a-04 已落地，2026-09-28）**：`~/.brain-ai/assets/images/<摘要>.<ext>`（**内容寻址**，天然去重；
 摘要 = **SHA3-256**，复用 `utils/crypto.h`）；工作流里存**令牌** `aiwrite-asset:<摘要>` 而非绝对路径（`utils/asset_store.*`）。
 **向后兼容**（不变量 `I19`）：旧绝对路径照旧可加载 / 可运行 → Console 给迁移提示，参数面板「**迁移到资源目录**」一键归档
-（失败项保留原值，**不静默改写用户文件**）。细则见 [../docs/actionPlan/M7.md](../docs/actionPlan/M7.md) §11.1（`P7a-04`~`P7a-07`）。
+（失败项保留原值，**不静默改写用户文件**）。细则见 [../docs/Archive/actionPlan/M7.md](../docs/Archive/actionPlan/M7.md) §11.1（`P7a-04`~`P7a-07`）。
 
 ---
 
 ### 4.3 「引擎唯一化」与 `I2` 解冻 —— 📦 **已归档（2026-10-05 · 路线退场）**
 
-> 📦 **本节已归档（2026-10-05）**：`M7B` 的 Pydoll 路线（WebView2 退场 → 全部网页版走 Pydoll · Python 守护进程 + 命名管道）已被 **方案 E** 取代 ⇒ **文字生成回退 WebView2**、**图片上传改走 C++ native HTTP**、**Python / 命名管道 / 守护进程整体退场**（Phase 3）。本节原记「M7 第三轮 `M7B` · 2026-09-28 立项 · 批 3 step 1~14 已落地 / 词表 v4 / 全部命令已实现」。
+> 📦 **本节已归档（2026-10-05）**：`M7B` 的 Pydoll 路线（WebView2 退场 → 全部网页版走 Pydoll · Python 守护进程 + 命名管道）已被 **方案 E** 取代 ⇒ **文字生成回退 WebView2**、**图片上传改走「站点上传模板」**（进程内 CDP + 双证据 · 原「C++ native HTTP」📦 2026-10-06 改判）、**Python / 命名管道 / 守护进程整体退场**（Phase 3 📦 **2026-10-11 改判：栈休眠保留 · 不删**）。本节原记「M7 第三轮 `M7B` · 2026-09-28 立项 · 批 3 step 1~14 已落地 / 词表 v4 / 全部命令已实现」。
 > **现行计划** → [../docs/actionPlan/M8.md](../docs/actionPlan/M8.md)　**归档全文** → [../docs/Archive/actionPlan/M7B.md](../docs/Archive/actionPlan/M7B.md)　**摘录件** → [../docs/Archive/actionPlan/M7_P7b_pydollRoute.md](../docs/Archive/actionPlan/M7_P7b_pydollRoute.md)
 
 > 本节是**计划登记**。**批 1~3 的 step 1~14 已落地**（见下方「运行时通道归属」）：诊断工具（step 9 · `M7B-18`）、
@@ -489,7 +489,7 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
   ③ 冻结规则（不变量编号，如 `I17`） ④ 回归基线数字（本次：`--exec-selftest` **237/0 → 251/0**）。
 - **Debug 崩溃 ≠ Release 正常**：Release 只是不做断言，同一路径仍可能算错或写坏数据；
   必须按**根因**修，修后 Debug / Release 一致通过。
-- 排查结论写进 `CHANGELOG.md` 与本手册；影响架构的写进 `docs/actionPlan/M7.md`（含判据与不变量）。
+- 排查结论写进 `CHANGELOG.md` 与本手册；影响架构的写进 `docs/Archive/actionPlan/M7.md`（📦 已归档 2026-10-11 · 只读契约 · 含判据与不变量）。
 
 ### 6.2 一次性探针脚本的纪律（`M7B` 前置验证教训 · 2026-09-28）
 

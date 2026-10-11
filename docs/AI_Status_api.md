@@ -1,7 +1,7 @@
 # AI_Status_api · 官方 API 通道状态（9 条）
 
 > **用途**：只看**官方 API**这一条线（`openai` / `anthropic` / `gemini` 协议直连：不起浏览器、不走 DOM、不依赖登录态）——「哪条能跑 / 卡在协议未实现 / 卡在没 `api_base` / 卡在没 Key / 图片（vision）声明与实测差在哪」。
-> **配套**：[AI_Status.md](AI_Status.md)（项目总览）· [AI_Status_web.md](AI_Status_web.md)（网页版分片）· [../source/assets/providers.json](../source/assets/providers.json)（协议 / `api_base` / `capabilities.vision` 声明）· [actionPlan/M7.md](actionPlan/M7.md)（`M7-10` vision 声明回填）。
+> **配套**：[AI_Status.md](AI_Status.md)（项目总览）· [AI_Status_web.md](AI_Status_web.md)（网页版分片）· [../source/assets/providers.json](../source/assets/providers.json)（协议 / `api_base` / `capabilities.vision` 声明）· [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md)（`M7-10` vision 声明回填）。
 > **维护**：**§二 两张表机器生成** —— `loop_verify.ps1` 每轮结束 / `-StatusOnly` 回写哨兵块，**人工只审阅**（改数据请改 `source/assets/providers.json` / `source/assets/site_capability_evidence.json`）；§三 / §四 由 AI 协作者滚动更新。
 > **最近更新**：2026-10-10（从 [AI_Status.md](AI_Status.md) §二按 `kind=official` 拆出 · `TST-L05`）
 
@@ -17,7 +17,7 @@
 ## 二、官方 API 台账（9 条 · 机器生成 · 跨轮累积）
 
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-10 · 覆盖轮次 39：R1 · SMOKE · SMOKE2 · SMOKE3 · SMOKE4 · SMOKE5 · SMOKE6 · SMOKE6 · SMOKE7 · SMOKE8 · SMOKE9 · SMOKE10 · SMOKE11 · SMOKE12 · SMOKE13 · T-L06 · T-L06b · T-L06c · T-L06d · T-L07 · T-L08 · T-L09 · T-L10 · T-L11 · T-L12 · T-L13 · T-L14 · T-L15 · T-L16 · T-L17 · T-L18 · T-L19 · T-L20 · T-L21 · T-L22 · T-L23 · T-L24 · T-L25 · T-L26
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-11 · 覆盖轮次 0：
 > **范围**：`kind=official` 的 **9 条**（`openai` / `anthropic` / `gemini` 协议直连：不起浏览器、不走 DOM、不依赖登录态）· **文字理解**判据 = 真机 HTTP 200 且取回正文（或 `providers.json` `verified=true`）；**图片理解**判据 = 多模态真机一次 —— `capabilities.vision=true` 只是**声明**（§10.1 陷阱 7）。
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > 来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。

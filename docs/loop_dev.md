@@ -55,7 +55,7 @@
 > 完整台账（含每站 `history[]` 跨轮轨迹）：`build/loop/SITE_STATUS.json`（机器读）· `build/loop/SITE_STATUS.md`（人读，随 `build/` 易失）。
 > **长期保留的人读位** = [AI_Status.md](AI_Status.md) §二（总览）+ [AI_Status_web.md](AI_Status_web.md) §二 / [AI_Status_api.md](AI_Status_api.md) §二（**两份分通道台账**）—— 都在 `docs/` 里、随版本库走，不会被清 `build/` 带走。
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-10 · 覆盖轮次 0：
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-11 · 覆盖轮次 0：
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > **判据**：**文字理解** = 「文本 → 取回文本」S3 三口径通过（``rc=0`` + ``n3=done`` + 正文非站侧错误串）；**图片理解** = 「图片 → 取回文本」链路（站点上传双证据 + 取回正文）。
 > 两列是**链路**、不是模型强弱；来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。
@@ -206,12 +206,12 @@ Start-Process -FilePath .\build\bin\aiwrite.exe -ArgumentList '--web-dom-dump','
 | 检查 | 命令 | 期望 |
 |---|---|---|
 | 构建 | `cd source; .\build.ps1` | **0 error / 0 warning** |
-| 工具 / 契约自检 | `api_probe.exe --selftest` | 七组全 PASS · exit **0**（含 **DOM 探测 27 / 0** · 执行器 **464 / 0** —— 2026-10-10 实测；2026-10-09 批 3 曾为 425 → 452，452 → 464 的 +12 = 上一批未提交改动） |
-| 图模型 / 执行器自检 | `--graph-selftest` / `--exec-selftest` | **110 / 0** · **464 / 0** |
+| 工具 / 契约自检 | `api_probe.exe --selftest` | 七组全 PASS · exit **0**（含 **DOM 探测 27 / 0** · 执行器 **490 / 0** —— 2026-10-11 实测；2026-10-10 曾为 464，**+26 = M_patchC 批 1**：窗口表 / 复位计划 / 归属准入 / 三类归因文案） |
+| 图模型 / 执行器自检 | `--graph-selftest` / `--exec-selftest` | **110 / 0** · **490 / 0** |
 | 提供商标记 | `aiwrite.exe --provider-selftest` / `--provider-dump` | **50 / 0** · **20 条**（official 9 / web 11）（`TST-L01` 门禁已把 `--provider-dump` 作为「条数快照」自动跑，见 `gate/dump.txt`） |
 | **站点上传模板**（离线 · 不起浏览器） | `aiwrite.exe --upload-selftest` | **72 / 0** · exit **0**（2026-10-10 实测；`M8-24`~`M8-27` 上传模板契约，站点侧接线出问题时先跑这条；门禁 `gate/upload.txt`） |
 | 离线夹具 | `node source\tools\poll_answer_gate_test.js` · `send_chain_test.js` · **`dom_gate_test.js`** | **44 / 0** · **17 / 0** · **15 / 0**（各自 `--old` 负向必 FAIL：**18 / 26** · **13 / 4** · **9 / 6** · exit 1） |
-| 文档断链 | `python vcpkg-cache\check_links.py` | **全库 0** —— **2026-10-10 实测 = 检查 818 / broken 0**（判据**已升级为「全库 0」**；历史：批 3 = 610 / 8 · `R1` 收轮 = 669 / 8 · `TST-L05` 落地 = 683 / 8 —— 数字涨 = 文档批量新增、broken 集合不变。8 条存量已于 2026-10-10 清零 = **7 条真断链**（`actionPlan/M7B.md` 未指向 `Archive/`）+ **1 条检查器跨反引号误判**，见 `DBG-L01`） |
+| 文档断链 | `python vcpkg-cache\check_links.py` | **全库 0** —— **2026-10-11 实测 = 检查 1097 / broken 0**（同日四批：批 0 文档落盘 = `M4`/`M5`/`M7` 归档 + 链接重算 = **995** → `M8` Phase 3 改判批 = **1022** → 待拍板项清零批 = **1077** → **`M_patchC` 批 1（`PW-02`/`04`/`05`/`08` 落地 + 新批次条目）= 1097（+17）** · 判据**已升级为「全库 0」**；历史：2026-10-10 = 818 / 0 · 批 3 = 610 / 8 · `R1` 收轮 = 669 / 8 · `TST-L05` 落地 = 683 / 8 —— 数字涨 = 文档批量新增、broken 集合不变。8 条存量已于 2026-10-10 清零 = **7 条真断链**（`actionPlan/M7B.md` 未指向 `Archive/`）+ **1 条检查器跨反引号误判**，见 `DBG-L01`） |
 
 > 上表是 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §0.4 回归基线的**循环化用法**（原表的数字以该处与 [../AI_README.md](../AI_README.md) §2 为准；数字变动时先改那两处，再同步本文）。
 > **门禁的意义**：站点循环的数字只在"起点是绿的"前提下才有可比性；起点不绿 ⇒ **先停下汇报，不进循环**。

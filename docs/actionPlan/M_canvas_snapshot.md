@@ -5,6 +5,7 @@
 > ⚠ **基准图规模变更（2026-10-10）**：[../../source/workflows/testAllAI.json](../../source/workflows/testAllAI.json) 因**移除重复站点条目 `tongyi-web`**（与 `qwen-web` 重复）由 **85 节点 / 84 连线** 变为 **82 节点 / 81 连线**；本文下列实测数字（FPS / 纹理 / 帧预算）取自**当时的 85 节点版本**，重跑 `--ui-bench` 时按新规模看（判据 `AC-01` 不变）。
 > 编号空间：任务 **`CS-01`…`CS-10`** · 验证 **`VC-01`…`VC-08`** · 验收 **`AC-01`…`AC-06`**（前缀 `CS` = **C**anvas **S**napshot；搜过全库，此前未被占用 ⇒ 已登记 [../../AI_README.md](../../AI_README.md) §5 编号空间）。
 > 状态：🟡 **部分落地（2026-10-09 · v2）** —— 主线仍为 **方案 A「每节点卡片纹理」**（开发者拍板），但**本轮先落地了 `CS-01` 指标行 + 一个计划外的 P0 根因热修**（见 §2.9 / §3.1）：实测根因是**纹理缓存 LRU 容量 8 < 同屏卡片图 9 张**（每帧 100% 未命中 ⇒ 每帧重解码 166 ms），**不是**§2.3 猜的 CPU 侧重复计算；修完 FPS **5~6 → 59~60**，按 §3.3 判据 ⇒ **`CS-04`+（卡片快照）暂缓**。`CS-02`…`CS-10` 仍为**计划中**（`CS-02` 的「`update_content_width` 移出逐帧路径」一条实测收益 ≈ 0，优先级已下调）。
+> 状态（**2026-10-11 · 全量核对收口**）：🔵 **`CS-01` 指标行落地即终止** —— `CS-02` / `CS-03` **⏸ 不排期**（触发条件未满足）· `CS-04`…`CS-08` **📦 不执行** · `CS-09` **⏸ 不再适用** · **唯一保留项 = `CS-10` 文档收口**；离线断言**不做**。逐条见 **§6.1 判定**。
 > 相关：变更日志 [../CHANGELOG.md](../CHANGELOG.md)（本轮「文档先行」条目）· 文档地图 [../DocMAP.md](../DocMAP.md) §一 / §5.3 · 看板 [../DevPlan.todo](../DevPlan.todo)（`FEA-M6-08` / `FEA-M6-09` / `TST-CS-01` / `DOCS-CS-01`）· 术语 [../变量术语对照表.md](../变量术语对照表.md) §12.2（「快照」三义）· 使用说明 [../节点编辑器使用说明.md](../节点编辑器使用说明.md) §10.12。
 > 建立：**2026-10-09**（v1）
 
@@ -22,7 +23,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 归口 | [M6.md](M6.md) `M6-07` 性能优化（步骤 3「渲染优化」）；`M6-07` 本行**不改**（M6 未开工，见 [M6.md](M6.md) §顶部实施状态） |
+| 归口 | [M6.md](M6.md) `M6-07` 性能优化（步骤 3「渲染优化」）；`M6-07` 本行**不改**（M6 已开工但 `M6-07` 仍 ⬜ 未做，见 [M6.md](M6.md) §顶部实施状态） |
 | 拆分 | M6-07 的「启动优化 / 执行优化」与本文无关；本文只做**渲染**这一格 |
 | 好处 | 画布性能不阻塞 M6 其余条目（打包 / README / 自测），可独立排期与回退 |
 
@@ -384,32 +385,42 @@
 |---|---|---|---|
 | **`CS-01`** | `[诊断] 画布` 指标行（§3.1）+ `--ui-bench` 基准开关（§3.2）+ 用 85 节点基准图采**改前**数字 | `source/src/ui/app.cpp`（主循环统计 / 退出释放点）· `source/src/main.cpp`（参数）· `source/src/ui/node_canvas.cpp`（节点计数字段）· `source/README.md` §4 | — |
 
-> **`CS-01` 状态：🟡 部分落地（2026-10-09）** —— **指标行 ✅ 已落地并采到改前/改后数字**（§2.9 / §3.1，字段差异已登记）；`--ui-bench` ⬜ **未做**（替代 = 新增 `--open <路径>` + 2 秒指标行）；`frame_p50/p95/max` · `vtx/cmds` · `--ui-bench` 的 JSON 输出 ⬜ **未做**。
+> **`CS-01` 状态：🟡 部分落地（2026-10-09）** —— **指标行 ✅ 已落地并采到改前/改后数字**（§2.9 / §3.1，字段差异已登记）；`--ui-bench` ⬜ **未做**（替代 = 新增 `--open <路径>` + 2 秒指标行）；`frame_p50/p95/max` · `vtx/cmds` · `--ui-bench` 的 JSON 输出 ⬜ **未做** → **2026-10-11 判定：⏸ 不排期**（唯一用途 = 给 `CS-04`+ 做判据，判据已定「不做」）。
 > **计划外产出**：`CS-01` 的第一次测量就定位到**根因不在本计划的假设里** —— 纹理缓存 LRU 容量 8 < 同屏卡片图 9 张 ⇒ 每帧 100% 未命中、每帧重解码 166 ms（§2.9）。按 §0.3 第 1 条（先测量后优化）与「不静默」纪律，本轮**先修根因再继续排期**：容量 8→64 + 字节预算 256 MB + 逐帧保护 + 统计计数器（`ui/texture_cache.{h,cpp}`）· 主循环 `ui::begin_frame()`（`ui/app.cpp`）· `credential_available()` 替换逐帧 `load_credential()`（`utils/credential.{h,cpp}` + `engine/provider_resolve.cpp`）。
 
-### Phase 1 · 公共降载（方案 D · **不需要快照**）
+### Phase 1 · 公共降载（方案 D · **不需要快照**）· ⏸ **整体不排期（2026-10-11）**
 
 | 任务 | 内容 | 主要文件 | 依赖 |
 |---|---|---|---|
-| **`CS-02`** | 昂贵计算缓存：新增 `EditorState::revision`（`editor_state.h:22`）+ 把 §2.3 表中的 `registerAllNodes` / `resolve_effective_provider` / `unwired_reason` / `validateParams` / 图片键（mtime+size）/ `update_content_width` / 尺寸自检 **改为按 `revision` 缓存** | `source/include/ui/editor_state.h` · `source/src/ui/editor_state.cpp` · `source/src/ui/node_canvas.cpp` | `CS-01` |
-| **`CS-03`** | 视口剔除 + LOD：`draw_node_canvas()`（`node_canvas.cpp:1120`）只提交**可见节点**（含预取边缘），`zoom < canvas_lod_zoom` 走标题条 LOD；连线单独判定（两端都不可见时仍需按需绘制） | `source/src/ui/node_canvas.cpp` | `CS-02`（**必须**：`update_content_width()` 与等宽自检原本遍历全部节点，若先做剔除会污染"统一宽度" ⇒ 先缓存后剔除） |
+| **`CS-02`** ⏸ **不排期** | 昂贵计算缓存：新增 `EditorState::revision`（`editor_state.h:22`）+ 把 §2.3 表中的 `registerAllNodes` / `resolve_effective_provider` / `unwired_reason` / `validateParams` / 图片键（mtime+size）/ `update_content_width` / 尺寸自检 **改为按 `revision` 缓存** | `source/include/ui/editor_state.h` · `source/src/ui/editor_state.cpp` · `source/src/ui/node_canvas.cpp` | `CS-01` |
+| **`CS-03`** ⏸ **不排期** | 视口剔除 + LOD：`draw_node_canvas()`（`node_canvas.cpp:1120`）只提交**可见节点**（含预取边缘），`zoom < canvas_lod_zoom` 走标题条 LOD；连线单独判定（两端都不可见时仍需按需绘制） | `source/src/ui/node_canvas.cpp` | `CS-02`（**必须**：`update_content_width()` 与等宽自检原本遍历全部节点，若先做剔除会污染"统一宽度" ⇒ 先缓存后剔除） |
 
-### Phase 2 · 卡片快照（方案 A）
-
-| 任务 | 内容 | 主要文件 | 依赖 |
-|---|---|---|---|
-| **`CS-04`** | GL 入口点自取（§5.4 A，约 10 个，失败即降级）+ FBO 封装 + "离屏帧"RAII（§5.4 B） | 新增 `source/include/ui/node_card_cache.h` + `source/src/ui/node_card_cache.cpp`（落位遵守 `AI_README.md` §11.1）· `source/CMakeLists.txt`（加源文件） | `CS-01` |
-| **`CS-05`** | 卡片缓存：键 / 元数据（尺寸 + 档位 + 失效信号快照）/ LRU + 预算 + 可见钉住（§5.6–§5.7）；**纯逻辑部分**配离线断言（键计算 / 淘汰顺序 / 预算裁减） | 同上（新增模块）· 断言挂 `source/tools/api_probe.cpp` | `CS-04` |
-| **`CS-06`** | 同源布局烘焙：把 `draw_node_body()`（`node_canvas.cpp:596`）拆为"布局测量"与"像素绘制"两段（**同尺寸**，§5.2），烘焙路径复用同一段；记录实测卡高 | `source/src/ui/node_canvas.cpp` · 新增模块 | `CS-05` |
-| **`CS-07`** | 绘制接线：帧内改 `AddImageQuad` 贴图 + `Dummy` 占位（尺寸同源）；尺寸自检扩展（`:990`）+ 失效信号表接线（§5.6）；不一致即**逐节点**回落实时 | `source/src/ui/node_canvas.cpp` · `source/src/ui/editor_state.cpp` | `CS-06` |
-| **`CS-08`** | 烘焙调度（每帧预算 / 优先级 / 去抖，§5.5）+ 配置接线（§9 的 5 个键）+ `canvas_render_mode` 热切换与缓存释放 | 新增模块 · `source/include/utils/config.h` + `source/src/utils/config.cpp` · `source/src/ui/app.cpp` | `CS-07` |
-
-### Phase 3 · 收口
+### Phase 2 · 卡片快照（方案 A）· 📦 **整体不执行（2026-10-11 · §3.3 判据命中第一行）**
 
 | 任务 | 内容 | 主要文件 | 依赖 |
 |---|---|---|---|
-| **`CS-09`** | 真机回归与数字回填：`--ui-bench` **改前 vs 改后**、`§7` 验证清单逐项、`AC-01`…`AC-06` 判定、本文 §12 增实测表 | 文档为主 | `CS-08` |
-| **`CS-10`** | 文档收口：使用说明 §10.12（已建 · 待补实测与截图）、`CHANGELOG` 实测小节、`DocMAP.md` §5.3、`变量术语对照表.md`、`source/README.md` §4 | 文档 | `CS-09` |
+| **`CS-04`** 📦 **不执行** | GL 入口点自取（§5.4 A，约 10 个，失败即降级）+ FBO 封装 + "离屏帧"RAII（§5.4 B） | 新增 `source/include/ui/node_card_cache.h` + `source/src/ui/node_card_cache.cpp`（落位遵守 `AI_README.md` §11.1）· `source/CMakeLists.txt`（加源文件） | `CS-01` |
+| **`CS-05`** 📦 **不执行** | 卡片缓存：键 / 元数据（尺寸 + 档位 + 失效信号快照）/ LRU + 预算 + 可见钉住（§5.6–§5.7）；**纯逻辑部分**配离线断言（键计算 / 淘汰顺序 / 预算裁减） | 同上（新增模块）· 断言挂 `source/tools/api_probe.cpp` | `CS-04` |
+| **`CS-06`** 📦 **不执行** | 同源布局烘焙：把 `draw_node_body()`（`node_canvas.cpp:596`）拆为"布局测量"与"像素绘制"两段（**同尺寸**，§5.2），烘焙路径复用同一段；记录实测卡高 | `source/src/ui/node_canvas.cpp` · 新增模块 | `CS-05` |
+| **`CS-07`** 📦 **不执行** | 绘制接线：帧内改 `AddImageQuad` 贴图 + `Dummy` 占位（尺寸同源）；尺寸自检扩展（`:990`）+ 失效信号表接线（§5.6）；不一致即**逐节点**回落实时 | `source/src/ui/node_canvas.cpp` · `source/src/ui/editor_state.cpp` | `CS-06` |
+| **`CS-08`** 📦 **不执行** | 烘焙调度（每帧预算 / 优先级 / 去抖，§5.5）+ 配置接线（§9 的 5 个键）+ `canvas_render_mode` 热切换与缓存释放 | 新增模块 · `source/include/utils/config.h` + `source/src/utils/config.cpp` · `source/src/ui/app.cpp` | `CS-07` |
+
+### Phase 3 · 收口 · 🟢 **只保留 `CS-10`（2026-10-11）**
+
+| 任务 | 内容 | 主要文件 | 依赖 |
+|---|---|---|---|
+| **`CS-09`** ⏸ **不再适用** | 真机回归与数字回填：`--ui-bench` **改前 vs 改后**、`§7` 验证清单逐项、`AC-01`…`AC-06` 判定、本文 §12 增实测表 | 文档为主 | `CS-08` |
+| **`CS-10`** 🟢 **要做（本专项唯一保留项）** | 文档收口：使用说明 §10.12（已建 · 待补实测与截图）、`CHANGELOG` 实测小节、`DocMAP.md` §5.3、`变量术语对照表.md`、`source/README.md` §4 | 文档 | ~~`CS-09`~~（无前置） |
+
+> **§6.1 逐条判定（2026-10-11 · 全量核对 · 与 [M6.md](M6.md) `M6-07` 归口一致）**
+> * `CS-01` **指标行** = 🔵 **已落地**（勾账）；`--ui-bench` + `p50/p95/max` + `vtx/cmds` + JSON 输出 = **⏸ 不排期**。
+> * `CS-02` / `CS-03` = **⏸ 不排期**（触发条件 = `p95 > 20 ms`，实测未触发；`update_content_width` 收益实测 ≈ 0）。
+> * `CS-04`…`CS-08` = **📦 不执行**（§3.3 命中第一行「`p95 ≤ 20 ms` ⇒ **不做** `CS-04`+」）。**设计章节（§5）全部保留作资料**，若将来帧时间回升 ⇒ 从 `CS-02` 重新评估，不直接上快照。
+> * `CS-09` = **⏸ 不再适用**（无快照可回归）；数字回填并入 `CS-10`。
+> * `CS-10` = **🟢 要做**（唯一保留项，见上表）。
+> * **纹理缓存离线断言**（§11「待做」第 7 条：键 / 淘汰顺序 / 预算裁减 / 逐帧保护，需 GL-free 拆分）= **不做**（2026-10-11 拍板）。
+> * 看板归口：`FEA-M6-08`（Phase 0–1）⇒ **收口**；`FEA-M6-09`（Phase 2）· `TST-CS-01` ⇒ **📦 不执行**；`DOCS-CS-01` = `CS-10` 保留。
+> * **归档时机**：`CS-10` 落地后本文可归档（承接位 = [M6.md](M6.md) §0.3 + [../CHANGELOG.md](../CHANGELOG.md)）。
 
 ---
 

@@ -12,7 +12,7 @@
 //          ∈ {WebP,TIFF,ICO,JXR,HEIF,AVIF} → 先 WIC、失败再 stb；
 //       ③ 失败文案（decodeErrorMessage）不得依赖能力探测结果（探测细节只进括号说明），
 //          否则离线断言会随机器变化而红。
-//     事故背景与定位过程：docs/actionPlan/M7.md §1（退出码 3 / 0x80000003）。
+//     事故背景与定位过程：docs/Archive/actionPlan/M7.md §1（退出码 3 / 0x80000003；📦 已归档 2026-10-11）。
 //
 //  * 嗅探（sniffImage*）：只读文件头魔数，**不整图解码**
 //      - 用途①：给模型发对的 MIME（扩展名可能是骗人的，例：WebP 存成 .png）

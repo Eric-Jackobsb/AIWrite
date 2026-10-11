@@ -12,6 +12,7 @@
 // ============================================================================
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -40,32 +41,33 @@ std::string probe_kickoff_script(const LoginRequest& request);
 //  * 无参重载 = 改造前的内置默认站点（DeepSeek），行为逐字不变（不变量 I2）
 //  * 带站点参数的重载见上方 `interactive_login_request(web, id)`（PB2-17）
 
+// 窗口运行时状态（实现细节 —— 定义在 `webview_host.cpp`）
+//  只做**前向声明**：头文件保持「无 Win32 / WebView2」依赖（可被 UI / 断言层安全 include）
+struct WindowCtx;
+
+// 登录窗口**句柄**（M_patchC `PW-02`）：绑定一个 `owner`
+//  * 同 `(owner, 站点)` ⇒ 复用；**不同 owner ⇒ 各自独立窗口**（`D-33②` · 真并行）
 class LoginWindow {
 public:
-    LoginWindow() = default;
+    // `owner` 默认 = 界面登录窗口（`界面#登录窗口`）—— 它也是独立窗口，不会被节点抢占
+    explicit LoginWindow(WebOwner owner = ui_window_owner());
     ~LoginWindow();
 
     LoginWindow(const LoginWindow&)            = delete;
     LoginWindow& operator=(const LoginWindow&) = delete;
 
-    // 启动登录窗口线程；已有窗口在运行时返回 false 并给出原因
+    // 打开（或复用）**本归属**在该请求站点的窗口；该站点窗口已在运行 → false + 原因
     bool start(const LoginRequest& request, std::string* error);
 
-    bool running() const { return running_.load(); }
-    void request_close();  // 请求关闭（UI 线程可调，异步）
-    void join();           // 等待线程结束
-    int  result() const { return result_.load(); }  // -1 未结束 / 0 成功 / 1 失败 / 2 超时
+    bool        running() const;
+    void        request_close();  // 请求关闭（UI 线程可调，异步）
+    void        join();           // 等待线程结束
+    int         result() const;   // -1 未结束 / 0 成功 / 1 失败 / 2 超时
     std::string status() const;
 
 private:
-    void set_status(const std::string& text);
-    void run_thread(LoginRequest request);
-
-    std::thread        thread_;
-    std::atomic<bool>  running_{false};
-    std::atomic<int>   result_{-1};
-    mutable std::mutex status_mutex_;
-    std::string        status_;
+    WebOwner                   owner_;
+    std::shared_ptr<WindowCtx> last_; // 最近一次 start 的窗口（状态查询用）
 };
 
 // 自检：离屏起一次登录窗口并等待结果（同步阻塞），打印脱敏 Cookie 清单
@@ -99,14 +101,19 @@ struct WebResourceRecord {          // WebView2 网络回执（**站点无关**�
     std::string url;
     std::string method;             // GET / POST / …
     int         status = 0;         // HTTP 状态码（0 = 未知）
+    // ---- M_patchC（`PW-04` / `I26`）：**回执必须绑定产生它的归属** ----
+    //  * 未绑定（`owner_key` 为空）或跨归属的回执**一律不得**用于 `I18` 判定
+    //  * 取值处见 `web/web_owner.h::owner_accepts`
+    WebOwner    owner;
 };
 
-// 清空网络采集缓冲（一次上传开始前调用；只清本进程内存）
-void begin_resource_capture();
-// 取走并清空缓冲（**增量**语义；调用方自行累积判定）
-std::vector<WebResourceRecord> take_resource_capture();
+// 清空网络采集缓冲（一次上传开始前调用；只清**本归属本窗口**的内存）
+void begin_resource_capture(const WebOwner& owner, const std::string& site_key);
+// 取走并清空缓冲（**增量**语义；只返回**本归属**的回执；跨归属 / 未绑定 ⇒ 丢弃并告警）
+std::vector<WebResourceRecord> take_resource_capture(const WebOwner& owner,
+                                                    const std::string& site_key);
 // 采集是否已挂钩（诊断：取不到 `ICoreWebView2_2` 时为 false —— 退化为「仅页面证据」）
-bool resource_capture_ready();
+bool resource_capture_ready(const WebOwner& owner, const std::string& site_key);
 
 // 把本地文件交给页面的 `<input type="file">`：
 //   CDP 三步 = `DOM.getDocument` → `DOM.querySelector` → `DOM.setFileInputFiles`
@@ -173,31 +180,38 @@ bool resolve_file_input_selector(const LoginRequest& site_request, int timeout_m
 //  * site_url：**目标站点**（origin / 登录页；PB2-23：不再用「内置默认站点」猜 —— 决策 D-22②）
 //    空串 = 旧行为（内置默认站点，仅供 CLI 自检守 I2）
 //  * challenge_json：/api/v0/chat/create_pow_challenge 的原始响应
-//  * 若登录窗口尚未打开 / 不在该站点，会**按站点**离屏启动一个（profile 已登录即可用），用户无需干预
+//  * 该归属在该站点没有窗口时会**开自己的**窗口（`PW-02`：不再关别人的窗口）；
+//    `owner` 默认「未标注」（内置协议路径 `web_chat` 尚未把节点 owner 穿下来 —— 如实登记）
 //  * 同步阻塞至多 timeout_ms；成功返回 answer（>=0），失败返回 -1 并写 error
 long long solve_pow_via_page(const std::string& site_url, const std::string& challenge_json,
-                             int timeout_ms, std::string* error);
+                             int timeout_ms, std::string* error, const WebOwner& owner = WebOwner{});
 
 // 确保内存会话里有可用凭证（Cookie + userToken）：没有则离屏起登录窗口并等一次协议探测完成
 // 返回 true 表示已具备凭证（幂等，已有凭证时立即返回）
 bool ensure_session(int timeout_ms, std::string* error);
 
-// ---- M_patchB L1 续（PB2-17/18/19）：按站点 ----
-// 当前登录窗口所属站点键（origin；无窗口 / 未启动 = 空）
-std::string current_window_site();
-// 登录窗口是否已开在指定站点上
-bool        window_on_site(const std::string& site);
-// 按**站点**确保凭证：站点与当前窗口不一致时**串行复用**同一个窗口（先关旧窗再按目标站点开窗，
-// 决策 D-20）；轮询期间只补探测，不重复开窗
+// ---- M_patchB L1 续（PB2-17/18/19）+ M_patchC（`PW-02` / `PW-06` · 不变量 `I24`）：按站点 ----
+// 窗口归属（`PW-02`）：所有取窗 / 判窗都按 `(owner, 站点)` —— **同站点不同 owner 各有各的窗口**
+//  * `current_window_site(owner, site_key)`：该归属在该站点的窗口键（无 = 空）
+//  * `window_on_site(owner, site)`：该归属在该站点是否有**活着的**窗口
+//  * `windows_report()`：窗口表诊断行（`#1 run1#n7@https://… ｜ #2 界面#登录窗口@https://…`）
+//  * `close_owner_window(owner, site_key)`：**显式**关闭某归属的窗口（不碰别的归属）
+std::string current_window_site(const WebOwner& owner, const std::string& site_key);
+bool        window_on_site(const WebOwner& owner, const std::string& site);
+std::string windows_report();
+void        close_owner_window(const WebOwner& owner, const std::string& site_key);
+// 按**站点**确保凭证：该归属在该站点**没有**窗口时开**自己的**（不再关别人的窗口 —— `I24`）；
+// 轮询期间只补探测，不重复开窗
 bool        ensure_session(const LoginRequest& site_request, int timeout_ms, std::string* error);
 // 按**站点**注销：清该站点的内存会话 + 删除该站点 origin 的 Cookie 与 localStorage
 // （不删除整个 profile，故不影响其他站点；PB2-19）
 bool        logout_site(const LoginRequest& site_request, int timeout_ms, std::string* error);
 
-// 进程内单例：参数面板与状态栏共用一个登录窗口（故意不析构，避免退出期竞态）
+// 界面登录窗口（`界面#登录窗口` 归属）的句柄：**故意不析构**，避免退出期竞态
+//  * `PW-02`：它现在是**独立窗口** —— 不再被节点的 `ensure_session` 抢占
 LoginWindow& login_window();
 
-// 请求关闭并等待登录窗口线程结束（退出主流程前调用，确保在日志关闭前收尾）
+// 请求关闭并**逐窗口**等待线程结束（退出主流程前调用；顺序由窗口表给出：后开的先关）
 void stop_login_window();
 
 } // namespace aiwrite::web

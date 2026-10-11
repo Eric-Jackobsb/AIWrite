@@ -38,6 +38,8 @@
 #include "session_store.h"
 #include "web_owner.h"     // M_patchC（PW-01）：归属（纯函数断言）
 #include "ready_level.h"   // M_patchC（PW-03）：就绪三级（纯函数断言）
+#include "web_error.h"     // M_patchC（PW-05）：三类归因文案（纯函数断言）
+#include "window_table.h"  // M_patchC（PW-02 / PW-06 / PW-08）：窗口表 + 复位计划（纯函数断言）
 #include "webview_host.h" // plan_session_boot / interactive_login_request（纯逻辑断言用）
 #include "deepseek_official_provider.h" // M5-02：多模态请求体断言
 #include "provider_spec.h"              // M_patchB L1：Provider 配置表断言
@@ -4099,6 +4101,96 @@ int execution_selftest()
         expect(check, detail_partial.find("readyState=loading") != std::string::npos &&
                           detail_partial.find("（取不到）") != std::string::npos,
                "PW-03 诊断附加：只有 readyState 也照实写（URL 缺 ⇒ 「（取不到）」）");
+
+        // ---- ⑤ `PW-02`（`I24`）：窗口表 —— 复用 / 独立 / 收尾顺序（离线；不开窗口、不联网）----
+        web::WindowTable table;
+        expect_eq(check, web::window_key(a, a.site_key), "run1#n7@https://www.doubao.com",
+                  "PW-02 窗口键 = owner#node@站点（**不是**只按站点 —— 真机错配的根因）");
+        expect(check, web::window_key(none, a.site_key) == "未标注@https://www.doubao.com",
+               "PW-02 未标注归属 ⇒ 键前缀「未标注」（CLI / 自检仍可安全取窗）");
+        expect(check, table.plan(a, a.site_key) == web::WindowPlan::Create,
+               "PW-02 首次取窗：该 (owner, 站点) 没窗口 ⇒ 新建");
+        table.note_opened(a, a.site_key);
+        expect(check, table.plan(a, a.site_key) == web::WindowPlan::Reuse,
+               "PW-02 同 owner + 同站点 ⇒ **复用**（幂等快路保留，语义不变）");
+        expect(check, table.plan(c, a.site_key) == web::WindowPlan::Create,
+               "PW-02 同站点、不同 owner ⇒ **各自独立窗口**（D-33② · 真并行 · 不排队）");
+        table.note_opened(c, a.site_key);
+        table.note_opened(c, "https://chat.deepseek.com");
+        expect(check, table.size() == 3u,
+               "PW-02 表里 3 个窗口（run1#n7@doubao + run1#n3@doubao + run1#n3@deepseek）");
+        expect(check, table.keys_of_owner(c).size() == 2u,
+               "PW-02 一个 owner 可跨站点各有一个窗口（换站点**不关旧窗**）");
+        const std::vector<std::string> close_order = table.keys_in_close_order();
+        expect(check, !close_order.empty() &&
+                           close_order.front() == "run1#n3@https://chat.deepseek.com",
+               "PW-02 收尾顺序 = **后开的先关**（由窗口表决定，不由调用者决定）");
+        expect(check, table.report().rfind("3 个窗口", 0) == 0,
+               "PW-02 诊断行：可 grep「谁开着哪些窗口」");
+        expect(check, table.note_closed(a, a.site_key) &&
+                           table.plan(a, a.site_key) == web::WindowPlan::Create,
+               "PW-02 显式关窗后 ⇒ 该键回到「新建」（表是唯一真相）");
+
+        // ---- ⑥ `PW-08`（`D-35③`）：运行级复位计划（**首次 + 失败时** · 单次重试）----
+        expect(check, web::kMaxResetsPerWindow == 1,
+               "PW-08 复位上限 = 1（单次重试；重试用尽 ⇒ 按归因报错，不空转）");
+        expect(check, web::plan_reset(/*opened_now=*/true, false, false, 0) ==
+                           web::ResetAction::None,
+               "PW-08 本次新建窗口 ⇒ **不复位**（新开 = 已在 login_url 新会话页，避免重复导航）");
+        expect(check, web::plan_reset(false, /*reused_external=*/true, false, 0) ==
+                           web::ResetAction::CloseAndReopen,
+               "PW-08 **首次**使用早于本轮存在的窗口 ⇒ 关窗重开（回到新会话页）");
+        expect(check, web::plan_reset(false, false, /*failed_before=*/true, 0) ==
+                           web::ResetAction::CloseAndReopen,
+               "PW-08 上一次**未就绪** ⇒ 复位一次后重试");
+        expect(check, web::plan_reset(false, false, true, web::kMaxResetsPerWindow) ==
+                           web::ResetAction::None,
+               "PW-08 重试用尽 ⇒ 不复位（交给归因文案，不再空转）");
+        expect(check, web::plan_reset(false, false, false, 0) == web::ResetAction::None,
+               "PW-08 非首次、未失败 ⇒ 不复位（不打扰用户会话）");
+        expect_eq(check, web::reset_action_name(web::ResetAction::CloseAndReopen),
+                  "关窗重开（窗口级）", "PW-08 复位动作可读名（日志可 grep）");
+
+        // ---- ⑦ `PW-04`（`I26`）：证据归属准入 —— **跨 owner 回执被拒** ----
+        web::WebResourceRecord record;
+        record.owner = a;
+        expect(check, web::owner_accepts(record.owner, a),
+               "PW-04 回执归属 == 要它的归属 ⇒ 采信");
+        expect(check, web::owner_accepts(record.owner, b),
+               "PW-04 按 run+node 判定：同 run 同 node = 同一归属");
+        expect(check, !web::owner_accepts(record.owner, c),
+               "PW-04 **跨 owner 回执被拒**（同站点不同节点也不得互相采信 —— 真机「串答案」的防线）");
+        expect(check, !web::owner_accepts(web::WebOwner{}, a),
+               "PW-04 未绑定归属的回执 ⇒ 拒绝（未绑定不得用于 I18 判定）");
+
+        // ---- ⑧ `PW-05`（`W-D6`）：三类错误文案**可分辨** ----
+        const std::string err_ready =
+            web::web_error_text(web::WebErrorKind::NotReady, a, a.site_key, "缺 交互态（附件入口）");
+        const std::string err_entry = web::web_error_text(
+            web::WebErrorKind::NoEntry, a, a.site_key, "枚举到 0 个 input[type=file]");
+        const std::string err_busy = web::web_error_text(web::WebErrorKind::Preempted, a,
+                                                         a.site_key, "该窗口正在被另一次调用使用");
+        expect(check, err_ready.rfind("[owner run1#n7]", 0) == 0 &&
+                           err_entry.rfind("[owner run1#n7]", 0) == 0 &&
+                           err_busy.rfind("[owner run1#n7]", 0) == 0,
+               "PW-05 三类文案**都以 owner 标签开头**（日志里一眼看出「谁要的」）");
+        expect(check, err_ready.find("页面未就绪") != std::string::npos &&
+                           err_entry.find("站点无上传入口") != std::string::npos &&
+                           err_busy.find("窗口被占用") != std::string::npos,
+               "PW-05 三类前缀互不重叠（未就绪 / 无上传入口 / 被占用）");
+        expect(check, err_ready.find("拖拽") == std::string::npos &&
+                           err_ready.find("暂不支持") == std::string::npos,
+               "PW-05 未就绪文案**绝不**含「拖拽 / 暂不支持」这类形态结论（G6 回归断言）");
+        expect(check, err_entry.find("web.attach_selector") != std::string::npos &&
+                           err_busy.find("取用自己的窗口") != std::string::npos &&
+                           err_entry.find("下一步：") != std::string::npos &&
+                           err_busy.find("下一步：") != std::string::npos,
+               "PW-05 每类都带**可操作下一步**（I21：无入口 → 填实测选择器；被占用 → 取用自己的窗口）");
+        expect(check, web::web_error_kind_name(web::WebErrorKind::NotReady) !=
+                               web::web_error_kind_name(web::WebErrorKind::NoEntry) &&
+                           web::web_error_kind_name(web::WebErrorKind::NoEntry) !=
+                               web::web_error_kind_name(web::WebErrorKind::Preempted),
+               "PW-05 类别名两两不同（归因必须可分辨）");
 
         // ---- ④ Loop Dev 批 3（`FEA-L01`）：DOM 探测**报告链路**的离线断言 ----
         //  * 报告解析 / 状态映射 / diff（含旧报告按事实回推）—— 不开窗口、不联网

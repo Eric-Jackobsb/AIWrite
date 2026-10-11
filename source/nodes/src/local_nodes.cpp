@@ -558,10 +558,12 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     if (!field_warnings.empty()) {
         ctx.console("[文本生成] " + field_warnings); // 决策 D-26：可回落 + 警告
     }
-    const web::LoginRequest  boot     = web::boot_login_request(site, site_id);
+    web::LoginRequest        boot     = web::boot_login_request(site, site_id);
+    boot.owner = web_owner_of(ctx, site, site_id); // M_patchC（PW-02）：归属贯穿（内置协议路径）
     const std::string        site_key = web::login_request_site(boot);
 
-    if (!web::SessionStore::instance().has_token(site_key) || !web::window_on_site(site_key)) {
+    if (!web::SessionStore::instance().has_token(site_key) ||
+        !web::window_on_site(boot.owner, site_key)) {
         std::string boot_error;
         ctx.console("[文本生成] 正在准备网页版会话（站点 " + site_label + "；首次约数秒）…");
         if (!web::ensure_session(boot, 25000, &boot_error)) {

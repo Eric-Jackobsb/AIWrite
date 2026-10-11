@@ -10,7 +10,7 @@
 
 1. **[docs/DocMAP.md](docs/DocMAP.md)** —— 文档地图：什么改动读哪份文档。
    > 更名记录：`docs/README.md` → `docs/DocMAP.md`（2026-10-08 · `git mv` 保留历史）。历史条目（含 `docs/Archive/**`）里出现的**旧文件名与旧自链写法**均指本文。
-2. **[docs/actionPlan/](docs/actionPlan/)** 中**现行**的那一份（`M6.md` / `M7.md` / `M8.md` / `M_patchAB_rest.md` / `M_patchC_web_node_bind.md` / `milestone_plan.md`）—— 不变量 `Ixx`、决策 `D-xx`、计划 `PW-xx`/`M*-xx`、§7 验收标准都在这。
+2. **[docs/actionPlan/](docs/actionPlan/)** 中**现行**的那一份（`M6.md` / `M8.md` / `M_patchAB_rest.md` / `M_patchC_web_node_bind.md` / `M_canvas_snapshot.md` / `M_node_expansion.md` / `milestone_plan.md`；**`M4.md` / `M5.md` / `M7.md` 已归档（2026-10-11）** → [docs/Archive/actionPlan/](docs/Archive/actionPlan/)）—— 不变量 `Ixx`、决策 `D-xx`、计划 `PW-xx`/`M*-xx`、§7 验收标准都在这。
 3. **[docs/CHANGELOG.md](docs/CHANGELOG.md)** 最近条目 —— 最后一次改了什么、上一轮验证数字是多少。
 4. 搜不到代码里的名字（类 / 函数 / 配置键） ⇒ 先查 **[docs/变量术语对照表.md](docs/变量术语对照表.md)**（§12 已知文档≠代码 · §13 新增功能检索入口）。
 5. **[docs/AI_Status.md](docs/AI_Status.md)** —— **一页状态（总览）**：门禁基线 + 台账汇总 + 循环轮次 + 下一步（接手 / 每轮开始与收尾时先扫一眼；§二 由 `loop_verify.ps1` 回写，勿手改）；**分通道明细** = [docs/AI_Status_web.md](docs/AI_Status_web.md)（网页版 11 站）/ [docs/AI_Status_api.md](docs/AI_Status_api.md)（官方 API 9 条）。
@@ -27,8 +27,8 @@
 | 目的 | 命令 | 基线（**2026-10-10 本机实测** · 每个数字的唯一权威位见 §10.1） |
 |---|---|---|
 | 构建（Debug） | `cd source; .\build.ps1`（= `cmake --preset default` + `cmake --build --preset debug`）｜**日志自动落 `build\logs\build_debug_<yyyyMMdd_HHmmss>.log`**（`-LogName` 改名 / `-NoLog` 关闭） | **0 error / 0 warning**。⚠ 若报 `error MSB4018` + `FileTracker`（`GetOutOfDateItems` / `SetModuleDependencies`）⇒ **不是代码问题**、**重跑无效**：`.\build.ps1 -Reconfigure` 清空重建（陷阱 9 = [docs/loop_dev.md](docs/loop_dev.md) §10.1） |
-| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===` · exit **0**；含 配置表 **50/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **DOM 探测 27/0** · **执行器 464/0**（2026-10-10 实测；2026-10-09 批 3 曾为 425 → 452，**+12 = 上一批未提交改动**） |
-| 执行器自检 | `api_probe.exe --exec-selftest` | **464 / 0** · exit 0（2026-10-10 实测；与旧记 **452** 差 12 = **上一批未提交改动**（`source/nodes/src/local_nodes.cpp` 等），本批未改执行器断言 —— 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]`） |
+| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===` · exit **0**；含 配置表 **50/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **DOM 探测 27/0** · **执行器 490/0**（2026-10-11 实测；2026-10-10 曾为 464，**+26 = M_patchC 批 1**（`PW-02` / `PW-04` / `PW-05` / `PW-08` 的纯函数断言）） |
+| 执行器自检 | `api_probe.exe --exec-selftest` | **490 / 0** · exit 0（2026-10-11 实测；2026-10-10 曾为 **464**，**+26 = M_patchC 批 1**：窗口表 / 复位计划 / 归属准入 / 三类归因文案 —— 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]`） |
 | 图模型自检 | `api_probe.exe --graph-selftest` | **110 / 0** · exit 0 |
 | 上传链路自检（离线三组；真机加 `--provider <id> --image <图>`） | `aiwrite.exe --upload-selftest` | **72 / 0** · exit 0（⚠️ 见 §3「GUI 子系统 stdout」；**不要并发跑**，共用 `%TEMP%\aiwrite-upload\selftest`） |
 | 运行时（真实工作流） | `aiwrite.exe --run-selftest` / `--run-selftest --web` | **PASS · exit 0**（**2026-10-09 复跑**：完成 3/5、失败 1、跳过 1 —— official 占位分支缺 Key 属预期；`official` 需 `~/.brain-ai/config.toml` 凭据；`--web` 需已登录一次） |
@@ -82,7 +82,7 @@
 
 ## 5. 编号与登记约定
 
-- **编号空间**：`Ixx`（不变量）/ `D-xx` / `W-Dx`（修正）/ `PW-xx`（补丁 C 任务）/ `M*-xx`（里程碑任务）/ `B*-xx`（批次）/ `AB*-xx`（验收）/ `VB*-xx` / `VB2-xx` / `A*-xx`（验证）/ `PB2-xx` / `R*-xx`（风险）/ `RM-D*`（路线决策）/ **`CS-xx`**（画布快照任务 · [docs/actionPlan/M_canvas_snapshot.md](docs/actionPlan/M_canvas_snapshot.md)）/ **`VC-xx`**（画布快照验证项）/ **`AC-xx`**（画布快照验收项）。
+- **编号空间**：`Ixx`（不变量）/ `D-xx` / `W-Dx`（修正）/ `PW-xx`（补丁 C 任务）/ `M*-xx`（里程碑任务）/ `B*-xx`（批次）/ `AB*-xx`（验收）/ `VB*-xx` / `VB2-xx` / `A*-xx`（验证）/ `PB2-xx` / `R*-xx`（风险）/ `RM-D*`（路线决策）/ **`CS-xx`**（画布快照任务 · [docs/actionPlan/M_canvas_snapshot.md](docs/actionPlan/M_canvas_snapshot.md)）/ **`VC-xx`**（画布快照验证项）/ **`AC-xx`**（画布快照验收项）· **`NE-Qx`**（**节点扩展**待讨论问题）/ **`NE-Dx`**（**节点扩展**决议 —— 见 [docs/actionPlan/M_node_expansion.md](docs/actionPlan/M_node_expansion.md)；任务号 **`NE-01…`** 于**拍板后**启用）。
 - **状态词白名单**（只用这几个，别自创）：**已拍板 / 已落地 / 部分落地 / 计划中 / 已归档 / 已退场 / 待真机**。
 - **文档三态标记**（全库统一 · 定义见 [docs/DocMAP.md](docs/DocMAP.md) §五）：✅ **已固定**（已落地视为契约）/ 📦 **已失效**（⛔ **只标记不删除**，必须给「现行指向」）/ ⬜ **待定**（未拍板 ⇒ **必须**在 `DevPlan.todo` 的「**待定 · 未拍板**」分类里有同名 `PQ-xx` 项；拍板后同批置 done）。
 - 新事项先**登记**（计划文档 + `DevPlan.todo`），再开工；收口时回填**实测数字**，不写「应该没问题」。
@@ -117,7 +117,7 @@
 1. **未获指令就提交 / 改版本 / 打 tag / push**（见 §6）。
 2. **未过验证就说「已完成」**：没有本轮 txt 物证（退出码 + 明细）不算完成。
 3. **为了让测试变绿而改断言**：断言必须先有失败的**机理**解释（真机取证或代码级推演），再改代码或改期望。
-4. **越界重写**：`source/third_party/**` 不做本地改造；冻结区（`M7.md` §1 · `I17` 图片解码、`M8.md` 退场清单）改动前先读对应文档。
+4. **越界重写**：`source/third_party/**` 不做本地改造；冻结区（[docs/Archive/actionPlan/M7.md](docs/Archive/actionPlan/M7.md) §1 · `I17` 图片解码、`M8.md` 退场清单）改动前先读对应文档。
 5. **删除 / 移动用户数据**：`~/.brain-ai/**`（含登录态、图片资源）只读诊断，禁止清理；`source/python/_probe/out/**` 等未跟踪探针产物不擅自删。
 6. **只改代码不修文档**（违反 §4），或反过来「文档先行但不登记」。
 7. **猜测式结论**：不确定就写「**待真机/待验证**」并登记到对应文档，不许编数字、编路径、编 API 行为。
@@ -132,7 +132,7 @@
 | 行为契约（本文） | `AI_README.md` |
 | 文档地图 / 进度 | `docs/DocMAP.md` |
 | 变更日志 | `docs/CHANGELOG.md` |
-| 现行计划 | `docs/actionPlan/M6.md` · `M7.md` · `M8.md` · `M_patchAB_rest.md` · `M_patchC_web_node_bind.md` · `M_canvas_snapshot.md`（画布渲染性能专项 · **计划中**）· `milestone_plan.md` |
+| 现行计划 | `docs/actionPlan/M6.md` · `M8.md` · `M_patchAB_rest.md` · `M_patchC_web_node_bind.md` · `M_canvas_snapshot.md`（画布渲染性能专项 · **计划中**）· `M_node_expansion.md`（节点扩展讨论稿 · **🟡 讨论中（未定向）** · ⬜ `PQ-20` · **零代码**）· `milestone_plan.md` |
 | 开发看板（JSON） | `docs/DevPlan.todo` |
 | 循环开发规则 | `docs/loop_dev.md`（网页站逐站转可用：启动闸 / 三层结构 / 站级 8 步 / 轮次门禁 / 失败分类 / 退出码 / 记录位 / 停止条件） |
 | 术语对照 | `docs/变量术语对照表.md` |

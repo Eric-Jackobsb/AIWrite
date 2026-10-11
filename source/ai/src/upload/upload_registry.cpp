@@ -245,11 +245,13 @@ UploadResult upload_images(const UploadPlan& plan)
     //    （口径①：只打印不落盘 —— 识别结果进日志 / steps，不改 providers.json）
     const web::LoginRequest site_request = web::with_owner(
         web::interactive_login_request(plan.site, plan.provider_id), plan.owner);
+    // `PW-04`（`I26`）：网络回执 / 页面基线都**按归属 + 站点**取用（回执不跨 owner）
+    const std::string site_key = web::login_request_site(site_request);
     std::vector<std::string> file_names;
     for (const std::string& path : delivered) {
         file_names.push_back(file_name_of(path));
     }
-    web::begin_resource_capture();
+    web::begin_resource_capture(site_request.owner, site_key);
 
     // 交件前的页面基线（供「页面新增」自动判据；采样失败静默 —— 诊断绝不干扰上传）
     PageState baseline_page;
@@ -324,8 +326,9 @@ UploadResult upload_images(const UploadPlan& plan)
 
     while (true) {
         ++polls;
-        // 网络回执（增量取走；清空缓冲由 `begin_resource_capture` 负责）
-        for (const web::WebResourceRecord& record : web::take_resource_capture()) {
+        // 网络回执（**只取本归属的**；增量取走；清空缓冲由 `begin_resource_capture` 负责）
+        for (const web::WebResourceRecord& record :
+             web::take_resource_capture(site_request.owner, site_key)) {
             network.records.push_back(NetRecord{record.url, record.method, record.status});
         }
         net_evidence = network.evidence_for(expect);

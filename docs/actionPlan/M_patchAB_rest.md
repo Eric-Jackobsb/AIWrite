@@ -42,9 +42,9 @@
 | 命令 | 期望（当前实测） |
 |---|---|
 | 构建（MSVC /W4，4 目标） | **0 error / 0 warning** |
-| `api_probe.exe --selftest` | 七组全 PASS · exit 0（含 **DOM 探测 27 / 0** · 执行器 **464 / 0**） |
+| `api_probe.exe --selftest` | 七组全 PASS · exit 0（含 **DOM 探测 27 / 0** · 执行器 **490 / 0**） |
 | `api_probe.exe --graph-selftest` | **110 通过 / 0 失败** |
-| `api_probe.exe --exec-selftest` | **464 通过 / 0 失败**（**2026-10-10 复测**；2026-10-09 批 3：**425 → 452**，新增 27 项 DOM 探测报告自检） |
+| `api_probe.exe --exec-selftest` | **490 通过 / 0 失败**（**2026-10-11 复测**；2026-10-10 曾为 **464**，**+26 = M_patchC 批 1**：窗口表 / 复位计划 / 归属准入 / 三类归因文案的纯函数断言） |
 | `aiwrite.exe --provider-selftest` | **50 通过 / 0 失败** |
 | `aiwrite.exe --provider-dump` | **20 条**（official 9 / web 11） |
 | `aiwrite.exe --cred-selftest` | **8/8 PASS**（本轮未复跑） |
@@ -58,7 +58,7 @@
 | `aiwrite.exe --run-selftest --web --provider <id>` | **exit 0 = 生成成功**（需该条目选择器就绪 + 会话有效） |
 | `aiwrite.exe --run-selftest --web`（内置 DeepSeek 路径） | 5/5 —— ⚠️ 受官网侧会话失效（`R19`）影响时需先解决 `PB2-25`/重登 |
 | 离线夹具 `node source/tools/*_test.js` | `poll_answer_gate_test` **44 / 0** · `send_chain_test` **17 / 0** · `dom_gate_test` **15 / 0**（各加 `--old` 负向**必须 FAIL**：**18 / 26** · **13 / 4** · **9 / 6** · 退出码 1） |
-| 文档断链自检 `python vcpkg-cache/check_links.py` | **全库 0** —— **2026-10-10 实测 checked 818 / broken 0**（存量 8 条已清零：7 条真断链 = `actionPlan/M7B.md` 未指向 `Archive/`，1 条 = 检查器跨反引号误判；判据由「本轮不得新增」**升级为「全库 0」**） |
+| 文档断链自检 `python vcpkg-cache/check_links.py` | **全库 0** —— **2026-10-11 实测 checked 1097 / broken 0**（同日四批：批 0 = 995 → `M8` Phase 3 改判批 = 1022 → 待拍板项清零批 = 1077 → **`M_patchC` 批 1 = 1097**（+17）；存量 8 条已清零：7 条真断链 = `actionPlan/M7B.md` 未指向 `Archive/`，1 条 = 检查器跨反引号误判；判据由「本轮不得新增」**升级为「全库 0」**） |
 
 ### 0.5 旧路径映射（归档后如何查历史）
 
@@ -73,6 +73,13 @@
 ---
 
 ## §1 剩余项总表
+
+> **§0.6 全量判定（2026-10-11 · 核对后落盘 · 判据 = 真要做 / 只勾账 / 已失效 / 不排期）**：
+> * 🟢 **要做（保留）**：`PB-02` 真取消 · `PB-06` 剩余（代理 / 自签证书 / `[credentials]`）· `PB-07`（与 `PB2-25` 合并）· `PB-09` 自检扩展 · `PD-06①` 通用重跑 · **L2 整批**（`PB2-04` / `PB2-05` 残余 / `PB2-08` / `PB2-09` / `PB2-10` / `PB2-11` / `PB2-12` —— **2026-10-11 拍板：保留「做」**，理由 = 可插拔底座）· `PB2-07` 测试连接按钮 · `PB2-24` / `PB2-29` / `PB2-30②` 站点数据 · `PC-01`~`PC-04` · `PM-03`。
+> * 📦 **不执行 / 不排期**：**`PD-07` 输出面板进阶**（历史列表 / 节点内搜索 / Markdown·JSON 导出 —— 2026-10-11 拍板**不执行**）· `PB-03` / `PB-08` 流式**数据源**（`PQ-11` = ③ 已拍板「不做」）· `PD-01` 快捷键（⛔ 早定不做）· `PW-09` 回填（见 [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md) §0.6）。
+> * 🔵 **只勾账**：`PM-01`（`--dep-check` 已落地）· `PM-04`（诊断复制已落地）· `PB2-31`（v16 已落地）· `PD-03`（= `M6-01` 已落地）· `PD-08`（`PQ-18②` 已结案且已落地）。
+> * 🔁 **合并（不新建实施项）**：`PM-03` ⇒ 只在 `source/build.ps1` 加**一行**调用 `source/tools/check_all.ps1` + 文档提及。
+> * ✅ **待拍板项已于 2026-10-11 全部结案（⛔ 零代码）**：`PQ-06` 版本号 = **沿用 `v0.5.4`**（见 [M8.md](M8.md) §7 `M8-Q4`）· `PQ-09` 字段回落口径 = **② `login_url` 缺失 = 明确报错（不回落）**（§9 `D-26`，复核 = **与现行实现一致**）· `PQ-12` 逐站回填范围 = **① 只做国内站点（6 站）**（§9 `D-32`）；**唯一落地项 = `PB2-29` 逐站实测回填**（归真机批）。
 
 > 批次命名：**`B2-b`**（`PB2-*` L2）· **`B2-e2`**（L4 尾项）· **`B2-f`**（L1 尾项）· **`B3-*`**（Patch B 残项）· **`C1`**（数据安全）· **`D1`**（交互打磨）· **`PM1`**（并行小项）。
 > 「归口」= `DevPlan.todo` 里已存在的任务 id（**不新开重复条目**，只把 `fileLink` 指到本文）。
@@ -170,17 +177,17 @@
 
 ### 3.1 L2 —— 协议 / 适配器实现（`B2-b`）
 
-> 整批**未开工**。提交信息约定（沿用归档 §4.1）：`feat(ai): M_patchB L2 InferenceProvider 接口与工厂（openai/anthropic/gemini/deepseek-web 按表分派）+ 能力驱动接线`
+> 整批**未开工** → ✅ **2026-10-11 拍板：整批保留「做」**（可插拔底座）。提交信息约定（沿用归档 §4.1）：`feat(ai): M_patchB L2 InferenceProvider 接口与工厂（openai/anthropic/gemini/deepseek-web 按表分派）+ 能力驱动接线`
 
 | 编号 | 要点 | 验证 |
 |---|---|---|
-| `PB2-04` | 抽出 `ProviderOptions{api_base, chat_path, auth_style, auth_header, extra_headers, env_names, limits}`；`build_endpoint(base,path)` / `build_auth_headers(spec,key)` / `resolve_api_key(param_key, env_names)`（env 名**按序尝试**，默认仍含 `DEEPSEEK_API_KEY`）；**旧签名保留为重载**（默认值 = 今天 DeepSeek 行为 → `I1` 自动成立） | `VB2-04`（端点拼接 5 例 / 认证头 5 例 / env 顺序命中） |
-| `PB2-05` 残余 | 按归档 §3「落地情况」表**逐行核对**（第 1–3 行均已 ✅）；主要残项 = 面板「配置表管理区」四按钮（并入 §3.5）与 `provider_spec.h` 头注释改用**嵌套** schema 名（`R18`） | `VB2-05` |
-| `PB2-08` | `ai/inference_provider.h`：`ProviderCaps{vision,stream,seed,system_role}`（来自表 `capabilities`，**取代**节点里 `if (mode == "web") throw`）、`GenerateParams`（system_prompt/prompt/images/temperature/max_tokens/top_p/seed/on_delta）、`GenerateResult`（ok/http_status/text/error/raw_head/elapsed_ms）、`class InferenceProvider{name,caps,generate}`；**不**新开 `generateStream`/`generateWithImage` 虚函数（保留 `on_delta` + `images`，与「流式暂停」现状一致，避免虚函数空转）—— 记 `D-09` | `VB2-08` |
-| `PB2-09` | `ai/provider_factory.{h,cpp}`：**按表 `protocol` 分派**（`openai` / `anthropic` / `gemini` / `dom` / `deepseek-web`）；把现有 `web_chat()` 收编为 `DeepSeekWebProvider`（`--web-chat` 行为**逐字不变** → `I2`）；**未知 `protocol` 明确报错**（`R9`） | `VB2-09` |
-| `PB2-10` | `AnthropicProvider`（Messages API：`/v1/messages` + `x-api-key` + `anthropic-version`） | `VB2-10` |
-| `PB2-11` | `GeminiProvider`（`generateContent`） | `VB2-11` |
-| `PB2-12` | 节点接线改**能力驱动**（视觉 / seed / 系统角色门控来自表，不再硬编码 `mode == "web"` 判断）；校验与提示文案同步由能力表生成 | `VB2-12` |
+| `PB2-04` 🟢 **要做（L2 底座 · 2026-10-11 保留）** | 抽出 `ProviderOptions{api_base, chat_path, auth_style, auth_header, extra_headers, env_names, limits}`；`build_endpoint(base,path)` / `build_auth_headers(spec,key)` / `resolve_api_key(param_key, env_names)`（env 名**按序尝试**，默认仍含 `DEEPSEEK_API_KEY`）；**旧签名保留为重载**（默认值 = 今天 DeepSeek 行为 → `I1` 自动成立） | `VB2-04`（端点拼接 5 例 / 认证头 5 例 / env 顺序命中） |
+| `PB2-05` 残余 🟢 **要做（小）** | 按归档 §3「落地情况」表**逐行核对**（第 1–3 行均已 ✅）；主要残项 = 面板「配置表管理区」四按钮（并入 §3.5）与 `provider_spec.h` 头注释改用**嵌套** schema 名（`R18`） | `VB2-05` |
+| `PB2-08` 🟢 **要做** | `ai/inference_provider.h`：`ProviderCaps{vision,stream,seed,system_role}`（来自表 `capabilities`，**取代**节点里 `if (mode == "web") throw`）、`GenerateParams`（system_prompt/prompt/images/temperature/max_tokens/top_p/seed/on_delta）、`GenerateResult`（ok/http_status/text/error/raw_head/elapsed_ms）、`class InferenceProvider{name,caps,generate}`；**不**新开 `generateStream`/`generateWithImage` 虚函数（保留 `on_delta` + `images`，与「流式暂停」现状一致，避免虚函数空转）—— 记 `D-09` | `VB2-08` |
+| `PB2-09` 🟢 **要做** | `ai/provider_factory.{h,cpp}`：**按表 `protocol` 分派**（`openai` / `anthropic` / `gemini` / `dom` / `deepseek-web`）；把现有 `web_chat()` 收编为 `DeepSeekWebProvider`（`--web-chat` 行为**逐字不变** → `I2`）；**未知 `protocol` 明确报错**（`R9`） | `VB2-09` |
+| `PB2-10` 🟢 **要做** | `AnthropicProvider`（Messages API：`/v1/messages` + `x-api-key` + `anthropic-version`） | `VB2-10` |
+| `PB2-11` 🟢 **要做** | `GeminiProvider`（`generateContent`） | `VB2-11` |
+| `PB2-12` 🟢 **要做** | 节点接线改**能力驱动**（视觉 / seed / 系统角色门控来自表，不再硬编码 `mode == "web"` 判断）；校验与提示文案同步由能力表生成 | `VB2-12` |
 
 **风险对策（归档 §5）**：`R9` 表与代码能力脱节 → 工厂对未知 `protocol` **明确报错**，`--provider-selftest` 逐条检查「表条目 → 是否有实现」；`R11` 抽象过度 → **新增代码预估 ≤ 1800 行**；`R12` adapter 不支持字段 → 加载时**警告并忽略**。
 
@@ -244,8 +251,8 @@
 |---|---|---|---|
 | `PC-01` | **autosave**：工作流变更后**节流**（≥3 秒且空闲）写 `~/.brain-ai/snapshots/autosave.json`；**原子写**（临时文件 + rename）；保留最近 N 份（`autosave_1..N`）　✅ **已落地（2026-10-10）· 落点调整**：纯逻辑 = `source/engine/{include,src}/autosave.*`（**原计划 `ui/editor_state.*`** —— 但 `ui/**` 属 GUI 可执行目标、`api_probe` 链接不到，放那里**无法离线断言** `VC-01`），`ui/editor_state.*` 只做**时机编排**（1 Hz 内容指纹探测 + 静默 `ui.autosave_idle_sec` 秒 + 无变更不写 + 失败退避 10 秒）；默认目录仍复用 `paths::snapshots_dir()`。历史轮转 = **先复制旧最新成 `autosave_1` 再原子替换最新** ⇒ 不存在「`autosave.json` 缺失窗口」 | `engine/autosave.{h,cpp}`（新）、`ui/editor_state.{h,cpp}`、`utils/paths`（复用 `snapshots_dir()`） | `VC-01`（✅ `--autosave-assert`：半截 `.tmp` 不参与恢复 / 可清理 / 清理后仍可加载 + 写后无 `.tmp` 残留 + `keep=2/0` 轮转） |
 | `PC-02` | **恢复流程**：启动时若 autosave 比最近打开的工作流新 → 弹一次「恢复未保存的更改？」（可禁用该提示）；恢复后**不覆盖原文件**，另存需确认　✅ **已落地（2026-10-10）**：判定 = 快照比工作流 mtime 新 / 原文件不存在 / 未命名 ⇒ 问一次；模态三按钮「恢复 / 忽略（保留当前内容）/ 忽略，且不再提示（写 `ui.autosave_restore_prompt=false`）」；**恢复后 `current_workflow_path` 留空 ⇒ 保存必走另存**（原路径记 `restored_from_autosave_path`） | `ui/app.cpp`、`ui/editor_state.*` | `VC-02`（✅ `--autosave-assert` 4 场景 + 恢复后**内容指纹逐字相同**；GUI 实测：启动判定日志 + 12 秒后快照哈希不变 = 启动不冲掉真快照；⛔ 真人点「恢复」未做） |
-| `PC-03` | **最近列表治理**：打开前校验存在性；失效条目**灰显**并标注「（文件不存在）」；提供「清理失效条目」 | `engine/recent_files.{h,cpp}`、`ui/app.cpp` | `VC-03` |
-| `PC-04` | **版本迁移框架**：`workflow_io` 的 `version` 与 `config_version` 建迁移表（当前只 warn）；**未知高版本明确拒绝**并提示；新增迁移自检 | `engine/workflow_io.cpp`、`utils/config.cpp` | `VC-03`（构造 v1.0 旧文件 → 加载并写回当前版本；未来版本 → 明确拒绝） |
+| `PC-03` 🟢 **要做** | **最近列表治理**：打开前校验存在性；失效条目**灰显**并标注「（文件不存在）」；提供「清理失效条目」 | `engine/recent_files.{h,cpp}`、`ui/app.cpp` | `VC-03` |
+| `PC-04` 🟢 **要做（与 `DBG-M6-02` 同批）** | **版本迁移框架**：`workflow_io` 的 `version` 与 `config_version` 建迁移表（当前只 warn）；**未知高版本明确拒绝**并提示；新增迁移自检 | `engine/workflow_io.cpp`、`utils/config.cpp` | `VC-03`（构造 v1.0 旧文件 → 加载并写回当前版本；未来版本 → 明确拒绝） |
 
 **风险对策**：误删用户输出 → TTL 清理**先列出再删 + 写日志 + 默认保守**；autosave 频繁写盘 → 节流 + 仅变更时写 + 原子写；恢复提示打扰 → 仅当 autosave 更新时提示且可「不再提示」（归档 §5.3）。
 
@@ -259,8 +266,8 @@
 | 编号 | 要点 | 落点 | 验证 |
 |---|---|---|---|
 | `PD-03` | **设置面板**（`ui/settings_panel.{h,cpp}`）：分区编辑 `ui/output/timeout/error/advanced`（**「通用」分区已无字段** —— `general.language` / `general.startup` 已按 `PQ-18②` 移除）；含**校验**（范围 / 路径存在性）+ 落盘 + 「需重启生效」标注；`deepseek` 段说明「**节点参数为准**」；本项同时承接 C 类配置残项接线（`timeout.*` / `error.*` / `advanced.*`，`grid_size` 受库限制归口于此） | `ui/settings_panel.{h,cpp}`、`ui/app.cpp`、`utils/config.*` | `VD-03`（面板 ↔ `config.toml` 双向一致；非法值被拒绝并提示） |
-| `PD-07` | **输出面板进阶**：历史运行列表（内存 + 最近 N 次）、节点内搜索、复制为 Markdown / JSON | `ui/output_panel.cpp` | `VD-06` |
-| `PD-08` | **i18n 决策**：二选一 —— ① 最小 i18n（字符串表 + `general.language` 切换，重启生效）② 从 `config.toml` 移除 `general.language/startup` 并记入 M6（`D-04` 默认 ②）　✅ **已拍板（2026-10-09 · `PQ-18` 结案）= 选 ②（从 `config.toml` 移除 `general.language` / `general.startup` 并记入 M6）**：与 [../roadmap.md](../roadmap.md) §十「i18n …**不做**」口径**一致** ⇒ 触发 §十「显式推翻」条款、**记入 M6**；✅ **代码已落地（2026-10-09）** = `utils/config.{h,cpp}` 删除 `General`（`language` / `startup`）+ `source/tools/api_probe.cpp` 的 `PA-08` 断言改判「**不含** `general.*`」；**实测数字无变动**（`--exec-selftest` 仍 **425 / 0**、`--graph-selftest` **110 / 0**、`--selftest` 七组全 PASS）—— 该断言是**单行 PASS/FAIL**、不进数字计数 ⇒ 原写的「425 → 424」是**误判**（订正见 §10 v4）。原文（拍板依据）：⬜ **待定（`PQ-18`）** —— 与 [../roadmap.md](../roadmap.md) §十「i18n **不做**」并列时**需一次显式确认** | `utils/config.*`、文档 | `VD-07` |
+| `PD-07` ⏸ **不执行（2026-10-11）** | **输出面板进阶**：历史运行列表（内存 + 最近 N 次）、节点内搜索、复制为 Markdown / JSON | `ui/output_panel.cpp` | `VD-06` |
+| `PD-08` ✅ **已落地（`PQ-18②` 结案 + 代码已落地）** | **i18n 决策**：二选一 —— ① 最小 i18n（字符串表 + `general.language` 切换，重启生效）② 从 `config.toml` 移除 `general.language/startup` 并记入 M6（`D-04` 默认 ②）　✅ **已拍板（2026-10-09 · `PQ-18` 结案）= 选 ②（从 `config.toml` 移除 `general.language` / `general.startup` 并记入 M6）**：与 [../roadmap.md](../roadmap.md) §十「i18n …**不做**」口径**一致** ⇒ 触发 §十「显式推翻」条款、**记入 M6**；✅ **代码已落地（2026-10-09）** = `utils/config.{h,cpp}` 删除 `General`（`language` / `startup`）+ `source/tools/api_probe.cpp` 的 `PA-08` 断言改判「**不含** `general.*`」；**实测数字无变动**（`--exec-selftest` 仍 **425 / 0**、`--graph-selftest` **110 / 0**、`--selftest` 七组全 PASS）—— 该断言是**单行 PASS/FAIL**、不进数字计数 ⇒ 原写的「425 → 424」是**误判**（订正见 §10 v4）。原文（拍板依据）：⬜ **待定（`PQ-18`）** —— 与 [../roadmap.md](../roadmap.md) §十「i18n **不做**」并列时**需一次显式确认** | `utils/config.*`、文档 | `VD-07` |
 | 归档完整化 | `output.auto_open_on_complete` 接线 + 历史/预览（`FEA-M5-04`） | `ui/output_panel.cpp`、`utils/output_archive.*` | `VC-04` |
 
 **明确不做**（归档 §6.1 / §1.8）：`PD-01` 快捷键表（设计 §6.7 定为**纯鼠标**，`⛔ 决定不做`）；`PD-08` i18n 界面语言（`PQ-18` = ② ⇒ **不做**；`config` 侧 `[general]` 已移除 · 2026-10-09）；多工作流标签页 / 协同编辑 / 云同步 / 自动更新 / 插件系统（超出 MVP 定位）。
@@ -276,9 +283,9 @@
 
 | 编号 | 要点 | 落点 | 验证 |
 |---|---|---|---|
-| `PM-01` | **WebView2 Runtime 检测与安装引导**（清零 M1 唯一遗留 → 落地 M6-02）：启动自检 Runtime 版本；缺失时给**官方 Evergreen Bootstrapper** 链接与说明；**不阻塞主界面**（仅网页版相关功能提示） | `web/webview_host.*`、`ui/app.cpp`、文档 | `VM-01`（模拟缺失 → 出现引导且非网页版功能可正常使用） |
-| `PM-03` | **构建脚本一键化**：`build.ps1` 增加「跑全部自检并输出摘要」（失败给**文件名 + 行号**） | `source/build.ps1`、`source/README.md` | `VM-03`（干净环境一条命令完成 + 可读摘要） |
-| `PM-04` | **诊断信息一键复制**：版本 / 依赖版本 / 数据目录 / 日志路径 / GPU / DPI 缩放 | `ui/app.cpp`（关于 / 诊断区） | `VM-04`（复制内容可直接用于问题反馈） |
+| `PM-01` 🔵 **只勾账（已落地 2026-10-10）** | **WebView2 Runtime 检测与安装引导**（清零 M1 唯一遗留 → 落地 M6-02）：启动自检 Runtime 版本；缺失时给**官方 Evergreen Bootstrapper** 链接与说明；**不阻塞主界面**（仅网页版相关功能提示） | `web/webview_host.*`、`ui/app.cpp`、文档 | `VM-01`（模拟缺失 → 出现引导且非网页版功能可正常使用） |
+| `PM-03` 🔁 **合并（不新建实施项）** | **构建脚本一键化**：`build.ps1` 增加「跑全部自检并输出摘要」（失败给**文件名 + 行号**） | `source/build.ps1`、`source/README.md` | `VM-03`（干净环境一条命令完成 + 可读摘要） |
+| `PM-04` 🔵 **只勾账（已落地）** | **诊断信息一键复制**：版本 / 依赖版本 / 数据目录 / 日志路径 / GPU / DPI 缩放 | `ui/app.cpp`（关于 / 诊断区） | `VM-04`（复制内容可直接用于问题反馈） |
 
 ---
 
@@ -513,22 +520,22 @@
 ## §9 决策点
 
 > ✅ **2026-10-08 全量梳理（口径见 [../DocMAP.md](../DocMAP.md) §五）**：本节的**未拍板项已登记到看板** [../DevPlan.todo](../DevPlan.todo) 的「**待定 · 未拍板**」分类 ——
-> ✅ **2026-10-09 拍板落盘**：`D-26` → **`PQ-09`** ⏳（仍待定）· `D-30` → **`PQ-10`** ✅（①）· `D-31` → **`PQ-11`** ✅（③）· `D-32` → **`PQ-12`** ⏳（仍待定）；`D-25` / `D-27` / `D-28` / `D-29` **✅ 已按实现收口（原文保留，只补拍板留痕）**。
+> ✅ **2026-10-09 拍板落盘**：`D-26` → **`PQ-09`** ✅（② · 2026-10-11）· `D-30` → **`PQ-10`** ✅（①）· `D-31` → **`PQ-11`** ✅（③）· `D-32` → **`PQ-12`** ✅（① · 2026-10-11）；`D-25` / `D-27` / `D-28` / `D-29` **✅ 已按实现收口（原文保留，只补拍板留痕）**。
 > ⛔ **原文不删**：下表是拍板依据；任何一项拍板后，同批改本表 + `DocMAP` §5.3 + 看板 `PQ-xx`。
-> ✅ **2026-10-09 拍板落盘**：`D-30`（`PQ-10` = ①）· `D-31`（`PQ-11` = ③）**已拍板**并就地改 ✅（原文保留作拍板依据）；⏳ `D-26`（`PQ-09`）· `D-32`（`PQ-12`）**仍待定**。
+> ✅ **2026-10-09 拍板落盘**：`D-30`（`PQ-10` = ①）· `D-31`（`PQ-11` = ③）**已拍板**并就地改 ✅（原文保留作拍板依据）；✅ **2026-10-11：`D-26`（`PQ-09` = ②）· `D-32`（`PQ-12` = ①）已拍板** ⇒ **本节决策点全部结案**（`D-25`~`D-32` 共 8 条：**已定 8 / 待定 0**）；**零代码改动**（`D-26` 与现行实现一致 ⇒ 只勾账；`D-32` 的落地 = 真机批逐站回填）。
 
 > 承接 `M_patchB` §6 与 `M_patchA` §12 的**未决项**（已定项见归档 `D-21`/`D-22`/`D-23`/`D-24`，`D-01…D-07` 见归档 `M_patchA` §12）。
 
 | 编号 | 议题 | 选项 | 状态 / 建议 |
 |---|---|---|---|
 | **`D-25`** | `mode=web` + **非网页版条目**时，运行前校验是否**阻断** | ① 阻断（`validateBeforeRun` 返回 false）② **不阻断**，但文案「**本次运行必然失败**」+ 三条引导 + 节点 `NodeError` | ✅ **实际已按 ② 落地**（v9 `PB2-22`）—— 仅补拍板留痕 |
-| **`D-26`** | 站点条目的**字段级**回落是否收紧 | ① 维持（`login_url` 空 → 回落内置默认站点）② **`login_url` 缺失 = 明确报错（不回落）**；`window_title` / `probe_paths` / `token_expr` 可回落 + 警告 | ⬜ **待定（`PQ-09`）**（建议 ②，与 `I14` 一致） |
+| **`D-26`** | 站点条目的**字段级**回落是否收紧 | ① 维持（`login_url` 空 → 回落内置默认站点）② **`login_url` 缺失 = 明确报错（不回落）**；`window_title` / `probe_paths` / `token_expr` 可回落 + 警告 | ✅ **已拍板（2026-10-11 · `PQ-09` 结案 = 选 ②）**：**`login_url` 缺失 = 明确报错（不回落内置默认站点）**；`window_title` / `probe_paths` / `token_expr` 可回落 + **警告**（与 `I14` 一致）。**复核结论（2026-10-11）= 与现行实现一致 ⇒ 拍板 + 勾账 · ⛔ 无代码项**：`source/ai/src/provider_spec.cpp:346` 的 `web_site_error()`、`source/ai/src/dom_web_client.cpp:944` 同判、`provider_spec.cpp:365` 的 `web_site_field_warnings()` 已给警告。原文（拍板依据）：⬜ 待定（`PQ-09`）（建议 ②） |
 | **`D-27`** | 「**已登录**」的判据（L4） | ① 该 origin Cookie 非空 ② 条目 `cookie_names` 命中 ③ 页面可达 / 用户确认 | ✅ **已按 ①∪② 实现**（v13 `PB2-27`：`web_session_state()` 纯函数，**不看** `userToken`）—— ✅ **已固定（2026-10-08）** |
 | **`D-28`** | 通用站点是否显示 `userToken` | ① 保留，但**仅当条目配了 `token_expr`** 才显示 ② 彻底移除该行 | ✅ **已按 ① 实现**（v13）—— ✅ **已固定（2026-10-08）** |
 | **`D-29`** | L4 归口 | ① `PB2-24` 并入 L4 本批；`PB2-25` 一并 ② 保持分散 | ✅ **已按 ① 收编**到本文（`B2-e2`）—— ✅ **已固定（2026-10-08）** |
 | **`D-30`** | **登录态判据收紧**（v15 实测：**未登录页面已有匿名 Cookie** → 「Cookie 非空 = 已登录」会**误报**） | ① **`cookie_names` 命中优先**，Cookie 非空降级为「**未校验**」 ② 保持现状（Cookie 非空 = 已登录，接受误报） | ✅ **已拍板（2026-10-09 · `PQ-10` 结案 = 选 ①）**：**`cookie_names` 命中优先**，Cookie 非空降级为「**未校验**」；**⚠️ 代码落地项（非待定 · 本轮未动代码）** = `web_session_state()` 判据收紧 + 逐站补 `cookie_names`（数据回填归 `D-32` / `PQ-12` 范围）。原文（拍板依据）：⬜ **待定（`PQ-10`）**（建议 ①）；**证据已到手（2026-10-02）**：豆包登录前后 Cookie 名差集 = 净新增 **23 名**，其中 **14 个鉴权名**（`M7.md` §12.1 ⑤ / [Archive/actionPlan/M7B.md](../Archive/actionPlan/M7B.md) §10）⇒ **只差拍板 + 逐站补 `cookie_names`** |
 | **`D-31`** | **流式方案**（§2.5） | ① 升级/替换 httplib ② 网页版改「POST + GET 轮询正文」（需先探 A′ 端点）③ 明确不做、文案改「分段落定」 | ✅ **已拍板（2026-10-09 · `PQ-11` 结案 = 选 ③）**：**明确不做**（网页版文案改「分段落定」）+ 补 `VB-03` 离线断言；A′ 端点探查**确定不启动**（原文保留：⬜ 待定（`PQ-11`）（建议 ③ + 补 `VB-03` 离线断言）） |
-| **`D-32`** | `PB2-29` 逐站回填的**范围** | ① 只做国内 6 站（Kimi / Qwen / 豆包 / 元宝 / 文心 / 星火）② 连境外 3 站（ChatGPT / Claude / Gemini，本机可直连） | ⬜ **待定（`PQ-12`）**（建议 ① 先做，② 可选） |
+| **`D-32`** | `PB2-29` 逐站回填的**范围** | ① 只做国内 6 站（Kimi / Qwen / 豆包 / 元宝 / 文心 / 星火）② 连境外 3 站（ChatGPT / Claude / Gemini，本机可直连） | ✅ **已拍板（2026-10-11 · `PQ-12` 结案 = 选 ①）**：**只做国内站点 6 站**（`Kimi` / `Qwen` / `豆包` / `元宝` / `文心` / `星火`）；**境外 3 站（`ChatGPT` / `Claude` / `Gemini`）不在本批**（本机可直连，留作后续可选）；看板原文「国内 7 站」= `T-L26` 去重前口径 ⇒ **本批订正为 6 站**。**⚠️ 落地项（非待定 · 本轮未动代码）** = `PB2-29` 逐站实测回填（`verified:true` + 附录 E 两列 · 归**真机批**）。原文（拍板依据）：⬜ 待定（`PQ-12`）（建议 ① 先做，② 可选） |
 
 **已定但需留痕**：`D-04` i18n 默认 ②（移除并记 M6；**`config` 侧已于 2026-10-09 移除 · `PQ-18②`**）；`D-08` 范围 = L1+L2+L3（L4 追加立项）；`D-09` `InferenceProvider` 不新开 `generateStream`/`generateWithImage` 虚函数；`D-19` 多站点会话键 = **站点 origin**；`D-20` 多站点窗口策略 = **串行复用单窗口**（并发后置）。
 
@@ -545,6 +552,7 @@
 | 2026-10-09 | **v5** | **批 3 · 网页站批量探测报告链路落地（代码 + 测试 + 文档）· 本文只动 §0.4 基线**：刷新为 2026-10-09 实测 —— `--exec-selftest` **425 → 452**（新增 27 项 DOM 探测报告自检）· `--graph-selftest` **110 / 0**（未变）· 新增三行（批量探测 `--provider all`（`FEA-L01`/`FEA-L03`：11 站 = 可用 8 / 需登录 2 / 失败 1 · exit 1）· 会话清单 `--web-session-list`（`FEA-L02`）· 离线夹具含 `dom_gate_test`（15/0；`--old` 6/15））；断链口径由「broken 0」改为「**本轮不得新增**」（实测 checked 610 / broken 8，8 条全部为存量）。逐项背景 / 物证见 [../CHANGELOG.md](../CHANGELOG.md) 批 3 条目与 [../loop_dev.md](../loop_dev.md) §3.1 · §4 · §6.2 · §6.3 · §10。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。
 | 2026-10-10 | **v6** | **`PB2-24` 自建站点闭环落地（代码 + 离线断言 · 本文 §1 第 18 行 / §3.5 / 附录 D 就地改 ✅）**：① 新增 `source/ai/{include,src}/site_template.*`（模板纯函数 + **原子写** + 默认拒覆盖；**强制信封 / `adapter=dom` / `verify=false`**）；② `source/engine/{include,src}/node_registry.*` 新增 `provider_option_ids()` / `findMutable()` / `provider_param_options()` / `refresh_provider_options()`（2 重载，带 `Graph&` 时**保留已选值**）/ `reload_provider_specs_and_refresh()`（单入口）；③ 设置面板 §⑥ 新增「**新建网页版站点…**」模态 + 「**重新加载配置表**」+ 错误/警告明细 + 打开站点目录，`SettingsPanelResult.provider_table_reloaded` ⇒ `app.cpp` 刷新画布内已有节点实例枚举；④ 新开关 `api_probe --site-assert`（纯函数 **47 / 0** + 端到端：写盘 → 进表 → 进下拉 → 进枚举 **20 → 21** → 新节点校验 → **旧实例刷新回归** → 清理零残留；**模拟应用启动次序**）并接入 `check_all.ps1`（**12 → 13 项**）。**验证（2026-10-10 本机）**：构建 **0 / 0**；`--site-assert` **PASS · exit 0**；`check_all.ps1` **13/13 PASS**；`--selftest` / `--exec-selftest` **464 / 0** / `--graph-selftest` **110 / 0** 无回归；GUI 冒烟无崩溃。**⛔ 界面点选回路未人工实测**（需真人点一次）· **`PB2-30②` 仍未做**。同批：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]` · [../变量术语对照表.md](../变量术语对照表.md)（§10.2 · §14 附表 · §15）· [../roadmap.md](../roadmap.md) §十二 第 2 条 · [../DevPlan.todo](../DevPlan.todo) `FEA-M_patchB-29…30` · [../AI_Status.md](../AI_Status.md) §一/§四 · [M6.md](M6.md) `M6-10`。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
 | 2026-10-10 | **v7** | **`PC-01` / `PC-02` 自动保存 + 崩溃恢复落地（代码 + 离线断言 · 本文 §1 第 19 行 / §4 两行就地改 ✅）**：① 新增 `source/engine/{include,src}/autosave.*`（`autosave_paths` / `autosave_probe` / `graph_content_signature`（不含 viewport）/ `autosave_write`（**原子写 + 先复制旧最新成 `autosave_1` ⇒ 无缺失窗口**）/ `autosave_load` / `autosave_clear` / `autosave_cleanup_temp` / `autosave_should_offer_restore` / `autosave_selftest`）；**落点调整（如实登记）**：原计划 `ui/editor_state.*`，因 `ui/**` 属 GUI 可执行目标、`api_probe` 链接不到 ⇒ 纯逻辑下沉 `engine/` 才能离线断言 `VC-01`/`VC-02`，`ui/` 只保留**时机编排**（`tick_autosave` 1 Hz 指纹探测 + 静默 `ui.autosave_idle_sec` 秒 + 无变更不写 + 失败退避 10 秒 + `flush_autosave_on_exit`）与**启动闸门** `autosave_paused`（防启动示例工作流冲掉真快照）；② `ui/app.cpp` 启动序 = 清残留 `.tmp` → 判定 → 模态（恢复 / 忽略 / 忽略且不再提示），**恢复后 `current_workflow_path` 留空 ⇒ 保存必走另存（不覆盖原文件）**；③ 配置新增 `ui.autosave_enabled` / `autosave_idle_sec` / `autosave_keep` / `autosave_restore_prompt`（设置面板 **§⑦ 数据安全（自动保存）**；`--settings-assert` 越界例 **8 → 11**）；④ 新开关 `api_probe --autosave-assert`（**28 / 0**）并接入 `check_all.ps1`（**13 → 14 项**）。**验证（2026-10-10 本机）**：构建 **0 / 0**；`--autosave-assert` **PASS · exit 0**（28/28）；`check_all.ps1` **14 / 14 PASS · exit 0**（`check_all_20261010_202628.log`）；GUI 实测（真机）：启动判定日志出现 + **12 秒后快照哈希不变**（种子事后删除，零残留）。**⚠ 同批踩坑 → 陷阱 10**：`Param::value` 是 `nlohmann::json`，**`value += "文本"` 语义 = `push_back`**（对字符串抛 `type_error` → `terminate` → `0x80000003`，stdout 缓冲丢失 ⇒ 看不出跑了），已改显式赋值 + 自检逐项 `fflush`。**⛔ 未验证（如实登记）**：GUI「改图 → 静默 3 秒 → 写快照」与「点『恢复』」需真人点一次鼠标（同一代码路径已由 `--autosave-assert` 覆盖）。同批：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]` · [../DevPlan.todo](../DevPlan.todo) `FEA-M2-01` / `TST-M2-03` · [../AI_Status.md](../AI_Status.md) §一/§四 · [../变量术语对照表.md](../变量术语对照表.md) §6/§9/§10/§14/§15 · [../节点编辑器使用说明.md](../节点编辑器使用说明.md) §10.13 · [../loop_dev.md](../loop_dev.md) §10.1 陷阱 10 · [../../source/README.md](../../source/README.md) · [../../AI_README.md](../../AI_README.md) §2。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
+| 2026-10-11 | **v8** | **待拍板项清零（`PQ-09` / `PQ-12` · 只改文档 · ⛔ 零代码改动）**：`D-26`（`PQ-09`）✅ **= ②**：`login_url` 缺失 = **明确报错（不回落内置默认站点）**，`window_title` / `probe_paths` / `token_expr` 可回落 + 警告 —— **复核结论 = 与现行实现一致**（`source/ai/src/provider_spec.cpp:346 web_site_error()` 已报「**不会**回落到内置默认站点」；`web_site_field_warnings()` 对其余字段给警告；`source/ai/src/dom_web_client.cpp:944` 侧同判）⇒ **拍板 + 勾账 · 无代码项**；`D-32`（`PQ-12`）✅ **= ① 只做国内站点（6 站）**：名单 = `Kimi` / `Qwen` / `豆包` / `元宝` / `文心` / `星火`（看板原文「国内 7 站」= `T-L26` 去重前口径 ⇒ **本批订正为 6 站**），境外 3 站（`ChatGPT` / `Claude` / `Gemini`）**不在本批**；`M8-Q4`（`PQ-06`）✅ **= 沿用 `v0.5.4`**（见 [M8.md](M8.md) §7）。同批：[../roadmap.md](../roadmap.md)（`RM-D6` · §六注 · §十改判 · `RQ-1`/`RQ-4`/`RQ-5` · 头部 2 行）· [M8.md](M8.md) §7 · [../ai_writer_nodes.md](../ai_writer_nodes.md)（§4.4 标题 · P7-b 行）· [M_node_expansion.md](M_node_expansion.md)（v2：`NE-D1` + `NE-Q2` 已答）· [../DocMAP.md](../DocMAP.md) §5.3 · [../DevPlan.todo](../DevPlan.todo)（六项置 done + 分组计数 + 待定组清零）· [../CHANGELOG.md](../CHANGELOG.md)。**验证**：文档断链 **0**（见 §0.4）；**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
 
 
 

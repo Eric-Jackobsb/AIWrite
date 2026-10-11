@@ -10,7 +10,7 @@
 | [ai_writer_nodes.md](ai_writer_nodes.md) | 项目设计文档（v1.0） |
 | [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) | 里程碑总体计划（M1–M6 + **M7**） |
 | [roadmap.md](roadmap.md) | **长期路线图 v1.0（一页纸）**：定位 / 阶段总览 / 决策 `RM-D1`~`RM-D6` / 风险与不做清单 / 待确认项与"待同步差异" |
-| [actionPlan/M7.md](actionPlan/M7.md) | **M7 现行计划（两轮）**：**第一轮**（✅ 已固定）= 图片输入收口 + 节点精简（删图片输出节点 9→8）+ 图片格式按内容嗅探/双解码后端 + **CRT 断言崩溃根因与冻结区 `I17`**；**第二轮 P7**：**P7-a v0.5.2**（图片内部运行：`image` 端口 variadic 多图 + 统一资源目录；official 收口；UI **A 档** —— ✅ 已固定）+ **P7-b v0.5.3** 📦 **已失效（2026-10-05 · 方案 E**；原 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件**）** + 不变量 `I18`/`I19` |
+| [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md) | **M7 现行计划（两轮）**：**第一轮**（✅ 已固定）= 图片输入收口 + 节点精简（删图片输出节点 9→8）+ 图片格式按内容嗅探/双解码后端 + **CRT 断言崩溃根因与冻结区 `I17`**；**第二轮 P7**：**P7-a v0.5.2**（图片内部运行：`image` 端口 variadic 多图 + 统一资源目录；official 收口；UI **A 档** —— ✅ 已固定）+ **P7-b v0.5.3** 📦 **已失效（2026-10-05 · 方案 E**；原 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件**）** + 不变量 `I18`/`I19` |
 | [actionPlan/M8.md](actionPlan/M8.md) | **M8 现行计划（网页通道方案 E）**：文字生成**回退 WebView2** + 图片上传走「**站点上传模板**」（公共契约 + 每站一个独立上传函数 · 进程内 CDP 交件 + 双证据 `I18`；原「C++ native HTTP / `ai/image_upload_client`」📦 **已于 2026-10-06 改为模板化**）+ **Pydoll / Python / 命名管道 / 守护进程整体退场**；**Phase 0 / 1 / 2 ✅ 已落地**（`M8-24`~`M8-37`）、**Phase 3~6 ⬜ 未做**；✅ **`M8-Q2` / `M8-Q3` / `M8-Q5` / `M8-Q6` 已拍板 2026-10-09**，余 `M8-Q4`（`PQ-06`）⏳ 待定 → 看板 `PQ-04`~`PQ-08` |
 | [actionPlan/](actionPlan/) · [Archive/actionPlan/](Archive/actionPlan/) | 各里程碑 Action Plan（进行中 / 已完成归档） |
 | [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md) · [Archive/actionPlan/M7_P7b_pydollRoute.md](Archive/actionPlan/M7_P7b_pydollRoute.md) | **已归档（2026-10-05）**：`M7B`（网页通道整体迁 Pydoll —— **路线退场 · 未完成**）+ `M7.md` 的 Pydoll 章节摘录 —— 决策追溯与资料取用（**内容取用终点 `git cdf6d40`**） |
@@ -33,6 +33,11 @@
 
 | 日期 | 批次（新 → 旧） |
 |---|---|
+| 2026-10-11 | 🧩 `M_patchC` 批 1：窗口表 / 归属 / 归因分离 / 复位（`PW-02`·`04`·`05`·`06`·`08` · 纯离线） |
+| 2026-10-11 | 🎯 待拍板项清零：`PQ-01`/`03`/`06`/`09`/`12`/`20` 六项全部拍板（含**推翻「节点数维持 8」**） |
+| 2026-10-11 | 🛌 `M8` Phase 3 拍板：Pydoll 栈**休眠保留 · 不删**（`M8-Q7` = ② · 零代码） |
+| 2026-10-11 | 🗃️ 批 0 文档落盘：M4 / M5 / M7 归档（`git mv`）+ 全库链接重算 + 看板补建 `M8` / `M_patchC` 组 |
+| 2026-10-11 | 🧭 节点扩展讨论稿「文档先行」（四层框架 L1~L4 · ⬜ `PQ-20` 待拍板 · 零代码） |
 | 2026-10-10 | 📚 文档可信度收口（审计订正 + 断链清零 + 数字口径 SSoT） |
 | 2026-10-10 | 💾 `PC-01` / `PC-02` 自动保存 + 崩溃恢复 |
 | 2026-10-10 | 🧩 M6 收口 · 第一批：设置面板 / 首启引导 / 依赖自检 / 诊断报告 / 一键自检 / 安装包骨架 |
@@ -57,6 +62,82 @@
 | 2026-10-08 | ↩️ `PW-08` 答案归属门 v2「已回退」 |
 | 2026-10-08 | 🔒 `PW-07` 答案归属门（精简版）落地 + `PW-07b..n` 隔离存档 |
 
+---
+
+**🧩 `M_patchC` 批 1：网页通道「窗口表 / 归属 / 归因分离 / 复位」落地（2026-10-11 · `PW-02` / `PW-04` / `PW-05` / `PW-06` / `PW-08` · 纯离线批）**
+
+- **背景**：真机 2026-10-06 三次运行的**根因** = 网页通道**没有「节点 / 运行 ↔ 窗口」关系表**（全进程只有一套按**站点**键控的单例）⇒ 同站点多节点互相认领同一页面、跨站点互相关窗、证据与上传槽互相覆盖；叠加「就绪 = 凭证级」⇒ 真机表现为「**第一次假成功、第二次必失败**」。
+- **本轮落地（代码 + 离线断言）**：
+  * **`PW-02` 窗口表 / 独立窗口**：🆕 [../source/web/include/window_table.h](../source/web/include/window_table.h)（纯函数表：复用 / 新建仲裁 · 收尾 LIFO · 诊断行）；`web/webview_host.{h,cpp}` 把**进程级单例状态**改成**每窗口 `WindowCtx`**（`thread_local t_cur` + `CtxScope`），窗口按 `(owner, 站点)` 键控 —— 同 owner **复用** · **同站点不同 owner 各自独立窗口** · 跨站点**不关旧窗**；**删除全部「先关旧窗」**（`ensure_session` / `run_script_sync` / 交件 / CDP / `logout_site`）；`stop_login_window()` = **逐窗口**收尾；**浏览器环境按 profile 共享**（官方约束：一个 user data folder 只能一个 environment）+ 每窗口独立窗口类名 —— 见 [actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md) §4.1「实现事实」。
+  * **`PW-04` 证据归属（`I26`）**：脚本槽 / 上传槽 / CDP 槽 / 网络回执 / 就绪缓存**随窗口走**（每 owner 一套）；`WebResourceRecord.owner` + `begin/take/ensure_resource_capture(owner, site)`；取用时以 `owner_accepts` 复核（跨 owner / 未绑定 ⇒ **丢弃 + 告警**）。
+  * **`PW-05` 归因分离**：🆕 [../source/web/include/web_error.h](../source/web/include/web_error.h) = 三类文案**唯一构造入口**（页面未就绪 / 站点无上传入口 / 窗口被占用），每类带 `owner` 标签 + **可操作下一步**；「窗口未就绪」不再误劝「先去登录一次」（`G2`）；附件枚举 0 个不再沿用「该站点可能是拖拽 / 粘贴入口」（`G6`）。
+  * **`PW-06` 真并行（结构部分）**：同站点两 owner ⇒ **两个独立窗口**（各带自己的槽位）+ `BusyGuard`（同窗口并发 ⇒ 可分辨的「窗口被占用」，**不再静默串槽**）；⚠️ 执行器目前**单 worker 串行** ⇒ 端到端真并行需先有并发执行器（[actionPlan/M_node_expansion.md](actionPlan/M_node_expansion.md)）。
+  * **`PW-08` 运行级复位**：`plan_reset`（**首次 + 失败时** · 单次重试）+ `prepare_window` 执行（关**自己的**窗口重开）+ 复位后 `wait_ready(L1→L2→L3)` 确认；**不做**静默改导航。
+  * **归属贯穿补齐**：[../source/ai/include/deepseek_web_client.h](../source/ai/include/deepseek_web_client.h)（`WebChatRequest.owner`）· `nodes/local_nodes.cpp`（内置协议路径）· `ai/upload/upload_registry.cpp`（按归属取回执）· `ui/property_panel.cpp`（界面登录窗口 = `界面#登录窗口` 归属）。
+- **验证（2026-10-11 本机）**：构建 **0 error / 0 warning**；`api_probe --exec-selftest` **464 → 490 / 0**（本批新增 **26** 条离线断言 = 窗口表 11 + `PW-04` 4 + `PW-05` 5 + `PW-08` 6）；`--selftest` 七组全 PASS · exit 0；`--graph-selftest` **110 / 0**；`check_all.ps1` **14 项 · 失败 0**；`check_links.py` **1097 / 0**。
+- **⛔ 真机未跑（如实登记）**：`n3(deepseek)` 运行期间 `n7(doubao)` 窗口**存活** · 三类错误文案可分辨 · 同站点两窗口并行 · 连续两次运行结果一致 —— 全部留给**批 6**（真机单次登录跑）。
+- **落点**：[actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md)（§1 / §4.1 实现事实 / §6 状态 / §7.1b 实测 / §10 v7）· [AI_Status.md](AI_Status.md) · [loop_dev.md](loop_dev.md) · [../AI_README.md](../AI_README.md) §2（数字**权威位**）。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🎯 待拍板项清零：`PQ-01` / `PQ-03` / `PQ-06` / `PQ-09` / `PQ-12` / `PQ-20` 六项全部拍板（2026-10-11 · ⚠️ 仅文档 · 零代码改动）**
+
+- **拍板（六项 · 开发者口径）**：
+  * `PQ-01`（`RQ-1` 滚动发布形态 / `RM-D6`）= **① 内部滚动**（不发布公开渠道）+ **每批内部版本号**；对非技术用户的正式交付**只在 `M6` 安装包形态下发生**。
+  * `PQ-03`（`RQ-4`）= **留用**：`v0.5.3` **保留在文档历史中**（**不清理、不改写**；P7-b 主体仍 📦 失效）。
+  * `PQ-06`（`M8-Q4` 版本号 / `RQ-5`）= **沿用 `v0.5.4`**（内部号**从未对外发布** ⇒ **不新开 `v0.5.5`**）；⛔ **不改代码版本常量** —— [../source/utils/include/app_version.h](../source/utils/include/app_version.h) 明令「改版本号需明确指令」（现值 = `0.2.0`，属**另一套产品版本口径**，与本批无关）。
+  * `PQ-09`（`D-26` 站点条目**字段级回落**）= **② `login_url` 缺失 = 明确报错（不回落内置默认站点）**；`window_title` / `probe_paths` / `token_expr` 可回落 + **警告**（与 `I14` 一致）。**复核结论 = 与现行实现一致** —— `source/ai/src/provider_spec.cpp` 的 `web_site_error()`（`:346`）/ `web_site_field_warnings()`（`:365`）与 `source/ai/src/dom_web_client.cpp:944` 三处已如此判 ⇒ **拍板 + 勾账 · 无代码项**。
+  * `PQ-12`（`D-32` / `PB2-29` 逐站回填范围）= **① 只做国内站点 6 站**（`Kimi` / `Qwen` / `豆包` / `元宝` / `文心` / `星火`）；境外 3 站（`ChatGPT` / `Claude` / `Gemini`）**不在本批**（本机可直连，留作后续可选）；**看板原文「国内 7 站」= `T-L26` 去重前口径 ⇒ 本批订正为 6 站**（与 2026-10-10 条目一致）；落地 = **真机批逐站回填**（`verified:true` + 附录 E 两列）。
+  * `PQ-20`（节点扩展范围与准入标准）= **推翻「节点数维持 8」** —— **节点数不再固定 8**，允许扩展（逐次走「拍板 + 登记」）；**范围 / 层 / 准入标准的细谈落 [actionPlan/M_node_expansion.md](actionPlan/M_node_expansion.md)**（记为 `NE-D1`；`NE-Q1` / `NE-Q3` / `NE-Q4` 待答）⇒ **未定向完成前不动任何代码**。
+- **连带结果**：看板「**待定 · 未拍板**」分类 = **0 项**（分组保留作历史 · 已拍板累计 **20 项**）；[roadmap.md](roadmap.md) 待确认项 `RQ-1` / `RQ-4` / `RQ-5` **全部结案**；[actionPlan/M8.md](actionPlan/M8.md) §7 `M8-Q1`~`M8-Q7` **全部结案**；[actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §9 `D-25`~`D-32` **八条全部结案**（已定 8 / 待定 0）。
+- **落点（活文档 · 同批同步）**：[roadmap.md](roadmap.md)（头部 2 行 + `RM-D6` + §六注 + 轨道 A `PQ-03` 注 + §十「节点数维持 8」改判 + `RQ-1` / `RQ-4` / `RQ-5`）· [actionPlan/M8.md](actionPlan/M8.md) §7（标题 + 2 处说明 + `M8-Q4` 行）· [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)（§0.6 说明块 + §9 两行 + §9 说明块 + §10 v8）· [ai_writer_nodes.md](ai_writer_nodes.md)（§4.4 标题 + P7-b 行）· [actionPlan/M_node_expansion.md](actionPlan/M_node_expansion.md)（v2：标题 / 状态行 / §1 拍板块 / §7 `NE-D1` / §8 `NE-Q2`）· [DocMAP.md](DocMAP.md)（顶部「最近更新」+ 文档地图 + §五口径示例 + §5.3 五行）· [Archive/README.md](Archive/README.md)（2026-10-11 追加（二））· [DevPlan.todo](DevPlan.todo)（六项置 done + 五分组计数 + `desc` 口径 + `version`）。
+- **⛔ 不含**：① **归档件不回改** —— [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md) §12 第 184 行的「⬜ 待定（`PQ-03`）」与 [Archive/](Archive/) 下其他文件**一字不改**（结论只**由活文档覆盖**，见 [Archive/README.md](Archive/README.md) 追加（二））；② `source/**` 产品代码**零改动**（`PQ-09` 复核为「已实现」；版本常量按 [../source/utils/include/app_version.h](../source/utils/include/app_version.h) 明令不动）。
+- **验证**：`vcpkg-cache/check_links.py` = **checked 1077 / broken 0**（**↑55** = 本批新增链接；前批 = 1022 · 判据不变「全库 0」· 权威位 [loop_dev.md](loop_dev.md) §4）；[DevPlan.todo](DevPlan.todo) JSON 解析通过（9 个顶层组）；本批触及文件行尾 = **CRLF**、无 BOM。
+- **⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🛌 `M8` Phase 3 拍板：`Pydoll` 栈「休眠保留 · 不删」（2026-10-11 · ⚠️ 仅文档 · 零代码改动）**
+
+- **拍板**：`M8-Q7` = **②** —— 原 `M8-15`~`M8-19`「**退场删除**」**降级为「Pydoll 栈休眠保留 · 不删」**：代码（`source/python/**` · `web/pydoll_channel.*` · `web/pipe_client.*` · `web/channel_frames.*` · `--pydoll-*` CLI · 构建脚本 `aiwrite_copy_python`）与相关文档**原地保留**，只标「**不接线 · 不维护 · 可复启**」；**不排期**；**Phase 3 不再是 `M8` 的阶段**。
+- **理由**：退场是**纯删除、零收益**（运行期早已零 Python / 零管道 —— `M8-05` / `M8-05b` 实测在案），且会切断已归档 [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md) 的**资料链**与 `--pydoll-*` **诊断入口**；与 `M8-14`「Gate 不过则休眠」口径一致。
+- **连带结果**：`M8-14` 过 ⇒ **Phase 4（解禁）**、不过 ⇒ 停在 Phase 2 —— **两种结果栈都休眠保留**；风险 `R4`（`api_probe` 数字下降）**消除** ⇒ §9.3「数字 + 原因成对」契约**留作将来备用**；§10「文档同步清单」（原 Phase 3 收尾用）**不再执行**（#9~#12 取消 · `M7B.md` 链接**不重写**）。
+- **落点（活文档 · 同批同步）**：[actionPlan/M8.md](actionPlan/M8.md)（标题 / §0 / §0.5 / 铁律 1·2 / 阶段总览 Phase 3·4 / §2.3 / §4 `M8-05`·`M8-14`·`M8-15`~`M8-19` / §7 **新增 `M8-Q7` 行** / §8 `R4` + 风险表 / §9 `R4` 注 / §10 标题与附注 / §11 `I18` / §12 实施序）· [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) `M8` 行 · [DocMAP.md](DocMAP.md) 顶部「当前进度」/「最近更新」+ 文档地图 + §5.3 · [Archive/README.md](Archive/README.md)（`M7B` 行 + 待归档候选 `M8` 行 + §末尾 2026-10-11 追加注）· [roadmap.md](roadmap.md) `RQ-3` + §十二 第 5 条 · [loop_dev.md](loop_dev.md) §4 + [AI_Status.md](AI_Status.md) + [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §0.4（断链数值 995 → 1022 跟随）· [../source/README.md](../source/README.md) §4.3 · [DevPlan.todo](DevPlan.todo)（`M8` 组计数 + `FEA-M8-15~19` 条去 `❓`）。
+- **⛔ 不含**：① **归档件不回改** —— [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md) 与 [Archive/actionPlan/M7_P7b_pydollRoute.md](Archive/actionPlan/M7_P7b_pydollRoute.md) **一字不改**（改判只在**活文档**登记；归档纪律见 [Archive/README.md](Archive/README.md) §三/§五）；② `source/**` 产品代码**零改动**。
+- **验证**：`vcpkg-cache/check_links.py` = **checked 1022 / broken 0**（**↑27** = 本批新增链接；批 0 = 995 · 判据不变 · 权威位 [loop_dev.md](loop_dev.md) §4）；[DevPlan.todo](DevPlan.todo) JSON 解析通过（9 个顶层组）；本批触及文件行尾 = **CRLF**。
+- **⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🗃️ 批 0 文档落盘：M4 / M5 / M7 归档 + 全库链接重算 + 看板补建两组（2026-10-11 · ⚠️ 零产品代码改动）**
+
+- **起因**：多轮路线变更（`M7B` 退场 → `M8` 方案 E → `M_patchC` 归属化）后，「**现行 / 已归档 / 不排期**」三层混在同一批文档里 —— `M4` / `M5` / `M7` 三份计划**实质已完成**（残项已迁 [M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) / 已失效），却仍留在 `docs/actionPlan/` 与现行计划并列，索引与看板都读不出「哪些还能照做」。本批**只动文档与看板**。
+- **归档（`git mv` → [Archive/actionPlan/](Archive/actionPlan/)）**：`M4.md`（文本生成链路 · 核心完成）· `M5.md`（多模态 · M5-C 核心切片完成）· `M7.md`（图片输入收口 + P7-a 固定）；三份各加 `📦 已归档（2026-10-11）` 标记行 + **承接位**（指向现行 [M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) / `M8.md` / `PQ-*`）+ 相对链接层级修正；**正文一字未改**（归档规则见 [Archive/README.md](Archive/README.md) §三）。
+- **全库链接重算（脚本 · 95 处）**：归档件内部 **47 处**（`M4` 6 · `M5` 6 · `M7` 35）+ 活文档指向归档件的 **48 处**；同批修正「旧基准路径」（`actionPlan/M7.md` → `Archive/actionPlan/M7.md`）与跨 `docs/` 前缀的失效链接。实测 `vcpkg-cache/check_links.py`：**checked 995 / broken 0**（判据维持「全库 0」；**权威位 = [loop_dev.md](loop_dev.md) §4**）。
+- **索引同步（7 处）**：[DocMAP.md](DocMAP.md)（顶部「最近更新」+ §一 进度行 / 文档地图 + §5.3 表 + §5.2 归档纪律注）· [Archive/README.md](Archive/README.md)（顶部「最近归档」+ 归档索引表 + 待归档候选表）· [ai_writer_nodes.md](ai_writer_nodes.md)（§4.3 里程碑表 + §18.3 文档面）· [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md)（§一 状态表 `M4`/`M5`/`M7` 行）· [actionPlan/M8.md](actionPlan/M8.md)（`M8-Q5` / `PQ-07` 注释 + 头部相关行）· [../AI_README.md](../AI_README.md)（§1 阅读顺序 + §2 冻结区 + 路径速查）· [../source/README.md](../source/README.md)（§4 文档落点 ×3 + 契约入口）。
+- **链接标签复核（48 处 · 机械替换 · 保证「标签 = 目标」）**：归档后仍有活文档把**链接标签写作旧位置**（`actionPlan/M7.md`）却指向**目标 = 归档件 D（`Archive/actionPlan/M7.md`）** —— 读标签会误判文档还在 `docs/actionPlan/`。逐处把标签改成与目标同形（`Archive/actionPlan/{M7,M7B,M5,M3,M_patchB}.md` · `Archive/网页版协议实测记录.md` 同理）：[CHANGELOG.md](CHANGELOG.md) **36** · [节点编辑器使用说明.md](节点编辑器使用说明.md) **6** · [ai_writer_nodes.md](ai_writer_nodes.md) **3** · [roadmap.md](roadmap.md) **3**；**仅 1 处有意保留**（[CHANGELOG.md](CHANGELOG.md) 内一句「§6.1 管道协议 v1 词表」标签是**章节名**、同行已在侧写明 `M7B.md`）。
+- **看板（[DevPlan.todo](DevPlan.todo)）**：`fileLink` 全量改指归档路径（`M4` 2 · `M5` 5 · `M7` 27）· Archive 组补 **`ARC-AR-01`**（本批落盘记录，组计数 `31 → 32`）· 子组标注 `M4`/`M5`/`M7` 「📦 计划已归档 2026-10-11」；同批补建两组 —— **`M8 网页通道`（`300`）** 与 **`M_patchC 网页节点归属`（`320`）**，并把「**不执行 / 不排期**」与「**只勾账**」条目**逐条显式标注**（`⏸ 不排期` = `FEA-M8-23` · `FEA-PW-09`/`PW-14` · `FEA-M3-07` 等；`📦 已失效 / 已关闭` = `M7B-*` · `TST-M7-05`/`06` · `DBG-M7-03` · `FEA-M8-13` 等；`🔵 只勾账` = `M8-01~12`/`24~37` · `PW-01`/`03`/`07`/`07g`/`13` 等）—— **条数与逐条内容以 [DevPlan.todo](DevPlan.todo) 为准**（本文件不复述数值）。JSON 经解析校验（合法 · 9 个顶层组）。
+- **⛔ 本批不含**：① `source/**` 代码改动（仅 [../source/README.md](../source/README.md) 说明性文字与 [../source/utils/include/image_decode.h](../source/utils/include/image_decode.h) 注释里的路径）；② ~~**`M8-15~19` 是否从「退场删除」降级为「`Pydoll` 栈休眠不删」⬜ 待拍板**（看板已标 `❓`）~~ ✅ **当日拍板 = 降级为「休眠保留 · 不删」（见上一批次 🛌）**；③ 历史 CHANGELOG 条目的**正文描述**（只改**链接目标 + 链接标签**，句子原文不动）。
+- **口径刷新（同批 · 3 处 + 权威位）**：`check_links.py` 实测值 `818 → 995`（清零口径不变）—— 权威位 [loop_dev.md](loop_dev.md) §4 已更新，[AI_Status.md](AI_Status.md) 与 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §0.4 只跟随数值；另 [roadmap.md](roadmap.md) §五 状态行补「`M4`/`M5`/`M7` 计划已归档」、[节点编辑器使用说明.md](节点编辑器使用说明.md) 与 [ai_writer_nodes.md](ai_writer_nodes.md) 的归档标注补齐。
+- **行尾归一**：本批触及的 **26** 个文件统一为 **CRLF**（`.vscode/settings.json` `files.eol` 口径）—— 其中 [DevPlan.todo](DevPlan.todo) 与 [AI_Status.md](AI_Status.md) 曾为 LF（前者 JSON 语义已按解析前后比对确认**不变**）。
+- **涉及文件（仅文档 · 26 个）**：`docs/Archive/actionPlan/{M4,M5,M7}.md`（移动 · 各 +2 行标记）· `docs/DocMAP.md` · `docs/CHANGELOG.md` · `docs/DevPlan.todo` · `docs/roadmap.md` · `docs/loop_dev.md` · `docs/AI_Status.md` · `docs/AI_Status_api.md` · `docs/ai_writer_nodes.md` · `docs/节点编辑器使用说明.md` · `docs/Archive/README.md` · `docs/Archive/actionPlan/{M3,M7B,M7_P7b_pydollRoute}.md` · `docs/Archive/网页版协议实测记录.md`（仅链接/口径跟随）· `docs/actionPlan/{milestone_plan,M6,M8,M_canvas_snapshot,M_patchAB_rest,M_patchC_web_node_bind}.md` · `AI_README.md` · `source/README.md` · `source/utils/include/image_decode.h`
+- **⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+---
+
+**🧭 节点扩展讨论稿「文档先行」（四层框架 · 未定向 · 2026-10-11 · ⚠️ 零产品代码改动）**
+
+- **起因**：基础路线已跑通（M6 第一批 / 轨道 B 收口）⇒ 下一步要谈「nodes 的扩展」；而「**节点数维持 8**」在 [roadmap.md](roadmap.md) §十 是**硬约束**、在 [ai_writer_nodes.md](ai_writer_nodes.md) §4.4 是**已固定** ⇒ 必须先把「扩展」摊成**可拍板的选择**，再决定动不动契约。因此本批**只出讨论稿、只讨论、不定向**。
+- **本批产出**：[actionPlan/M_node_expansion.md](actionPlan/M_node_expansion.md)（头部块 + 11 节）—— §0 元信息 / §1 结论摘要（**无方向性结论**）/ §2 现状契约取证（8 节点完整参数面 · 5 类端口 2 类闲置 · **加删 1 节点 = 2 处注册 + `api_probe.cpp:803/805` 硬断言 + 12~15 处文档同步** · 示例工作流落差）/ §3 约束面（§十 / §4.4 / §19.1 / §六 逐条对号）/ §4 四层拆解（L1 · L2 · L3 · L4）/ §5 代价边界（条件分支 · 循环 · 子工作流 = **引擎 v2**，不是「加节点」）/ §6 候选 + **准入三问** / §7 `NE-D*` / §8 `NE-Q*` / §9 若走 L2 的完整改动清单 / §10 与既有文档关系（单向引用）/ §11 逐条讨论清单。
+- **本批新增的取证结论**：**L3 的 5 项 UX（节点搜索 / 小地图 / 自动吸附 / 节点折叠展开 / 对齐辅助线）全部已在 `ai_writer_nodes.md` §19.1 登记「延后 · 不排期」** ⇒ L3 **不是「未被禁止」，而是「已被显式延后」**；而 **L4（组合层：示例工作流 / 模板 / 分享）与 §十 / §4.4 零冲突**，且 `M6-03` **本就在 M6 计划内**（[roadmap.md](roadmap.md) §五）。
+- **新增编号空间**：`NE-Qx`（待讨论问题）/ `NE-Dx`（决议）/ `NE-01…`（**拍板后**才启用）—— 已登记 [../AI_README.md](../AI_README.md) §5。
+- **看板登记**：`PQ-20`（**待定 · 未拍板** = 节点扩展范围与准入标准 + 是否推翻「节点数维持 8」）+ `DOCS-NE-01`（文档项 · ✅ 已落地）—— **计数以 [DevPlan.todo](DevPlan.todo) 本身为准**。
+- **⛔ 本批不含**：任何 `source/**` 代码改动；改 [ai_writer_nodes.md](ai_writer_nodes.md) / [roadmap.md](roadmap.md) / [actionPlan/M6.md](actionPlan/M6.md) / [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) **任何一行**（推翻 §十 / §4.4 必须**先**拍 `PQ-20`）。
+- **涉及文件（仅文档 · 无 `source/**` 改动）**：新增 `docs/actionPlan/M_node_expansion.md`；同步 `docs/{DocMAP, CHANGELOG, DevPlan.todo, AI_Status}.md` · `AI_README.md`。
+
+---
 **📚 文档可信度收口（审计订正 + 断链清零 + 数字口径 SSoT · 2026-10-10 · ⚠️ 零产品代码改动）**
 
 - **起因**：一次**只读审计**（代码 + 文档）发现「**关于代码的说法**」已落后于代码：7 类基线数字与实际实测不符 + 8 条文档断链，而门禁 **14/14 全绿**、构建 **0/0** —— **不是代码问题，是文档漂移**。
@@ -293,7 +374,7 @@
 
 - **拍板内容（逐项）**：`PQ-02`（安装包形态）= **Inno Setup**（单 exe + 随包附带 WebView2 Bootstrapper）· `PQ-04`（`M8-Q2` 合规口径）= **③ 认可 + 面板一次性告知**（「上传 + 发送」只对**已实测站点**开放）· `PQ-05`（`M8-Q3` 数字登记）= **① 显式登记**（`M8.md` §9.3 三条升为契约）· `PQ-07`（`M8-Q5` `M7.md` 是否瘦身）= **① 保持现状**· `PQ-08`（`M8-Q6` 接线口径）= **① 先接线、`vision` 声明另批**· `PQ-10`（`D-30` 登录态判据）= **① `cookie_names` 命中优先**（Cookie 非空降级「未校验」）· `PQ-11`（`D-31` 流式）= **③ 明确不做**（文案改「分段落定」）· `PQ-13`（`W-D8` 模板占位符）= **改为报错**（落地 `PW-10`）· `PQ-14`（单 `\n` 升级空行）= **不做**（取证并入 `AW-04`）· `PQ-15`（`PW-14` 取 Markdown 原文）= **不排期**· `PQ-16`（设计 §19.1 延后 14 项）= **延后 · 不排期**，其中 快捷键 / 多语言界面 / 浅色主题 **明确不做**· `PQ-17`（`M5-09` / `M5-10` 范围）= **留后 · 不排期**（文本部分追认完成）· `PQ-18`（i18n 决策）= **② 从 `config.toml` 移除并记入 M6**· `PQ-19`（`FEA-M3-07` 变体保存）= **维持延后 · 待设计**。
 - **仍待定（5 项）**：`PQ-01`（滚动发布形态）· `PQ-03`（P7-b 内部版本号 `v0.5.3` 是否留用）· `PQ-06`（`M8-Q4` 版本号 `v0.5.4` 沿用 vs 新开 `v0.5.5`）· `PQ-09`（`D-26` 站点条目字段级回落）· `PQ-12`（`D-32` 逐站回填范围）。
-- **落地范围（12 份文档 + 看板）**：[roadmap.md](roadmap.md)（`RM-D5` / `RQ-2` / §五 / §十二 差异 1 / 风险表 `D-30` 行）· [actionPlan/M6.md](actionPlan/M6.md)（`A-03` / `M6-08` / 技术选型与产出物表的 `CPack` → Inno Setup）· [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md)（`M6-08` / `M5-09` / `M5-10` / 状态行）· [actionPlan/M5.md](actionPlan/M5.md)（§11 状态块 / 任务表 / 未做节）· [actionPlan/M8.md](actionPlan/M8.md)（§7 `M8-Q2`~`M8-Q6` 行与说明块 / §9.3 升契约 / `M8-21` / §2.2 建议 / §3.1 建议 / §5 / §6）· [actionPlan/M7.md](actionPlan/M7.md)（`M7-10` / §12 逐条口径）· [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)（§9 `D-30` / `D-31` / 说明块 / §1 第 23、30 行 / §2.5 / §5 `PD-07`、`PD-08` / §7 `FEA-M3-07` / §10 v3）· [actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md)（待定横幅 / §4.5 / §4.6 / §6 / §10 v6）· [ai_writer_nodes.md](ai_writer_nodes.md)（§19.1 / §19.2）· [网页版协议实测记录.md](Archive/网页版协议实测记录.md)（附录 A / §8.3 注 / `D-30` 注）· [节点编辑器使用说明.md](节点编辑器使用说明.md)（§10.2 待定行）· [DocMAP.md](DocMAP.md)（§5.3 表 9 行 + 最近更新）· [DevPlan.todo](DevPlan.todo)（14 项置 done + 分组计数 + `desc` 说明）。
+- **落地范围（12 份文档 + 看板）**：[roadmap.md](roadmap.md)（`RM-D5` / `RQ-2` / §五 / §十二 差异 1 / 风险表 `D-30` 行）· [actionPlan/M6.md](actionPlan/M6.md)（`A-03` / `M6-08` / 技术选型与产出物表的 `CPack` → Inno Setup）· [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md)（`M6-08` / `M5-09` / `M5-10` / 状态行）· [Archive/actionPlan/M5.md](Archive/actionPlan/M5.md)（§11 状态块 / 任务表 / 未做节）· [actionPlan/M8.md](actionPlan/M8.md)（§7 `M8-Q2`~`M8-Q6` 行与说明块 / §9.3 升契约 / `M8-21` / §2.2 建议 / §3.1 建议 / §5 / §6）· [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md)（`M7-10` / §12 逐条口径）· [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)（§9 `D-30` / `D-31` / 说明块 / §1 第 23、30 行 / §2.5 / §5 `PD-07`、`PD-08` / §7 `FEA-M3-07` / §10 v3）· [actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md)（待定横幅 / §4.5 / §4.6 / §6 / §10 v6）· [ai_writer_nodes.md](ai_writer_nodes.md)（§19.1 / §19.2）· [网页版协议实测记录.md](Archive/网页版协议实测记录.md)（附录 A / §8.3 注 / `D-30` 注）· [节点编辑器使用说明.md](节点编辑器使用说明.md)（§10.2 待定行）· [DocMAP.md](DocMAP.md)（§5.3 表 9 行 + 最近更新）· [DevPlan.todo](DevPlan.todo)（14 项置 done + 分组计数 + `desc` 说明）。
 - **登记但未落地的代码项（⏳ 如实登记 · 本轮未动代码）**：① `PQ-10` ① 的判据收紧（`web_session_state()`：`cookie_names` 命中 = 已登录 / 仅匿名 Cookie = 未校验）+ 逐站补 `cookie_names`（数据回填归 `D-32` / `PQ-12` 范围）；② `PQ-18` ② 的配置字段移除（`source/src/utils/config.cpp:37-38`）+ 断言按 `PQ-05` 契约**显式登记**（`source/tools/api_probe.cpp:374`；**订正（2026-10-09）**：原文写「`--selftest` 425 → 424」为**误判** —— 该断言是**单行 PASS/FAIL**、不进数字计数 ⇒ 数字不变；详见本文件顶部「`PQ-18②` 代码落地」条目）。二者已写入计划文档，**未改任何 `.cpp` / `.h`**。
 - **验证（本轮实测 · 仅文档）**：断链自检 `python vcpkg-cache/check_links.py` → **checked 524 / broken 8**（broken 与上轮同值 ⇒ 未新增断链）；改动文件**无 BOM**、12 份 `.md` **纯 CRLF**、`DevPlan.todo` **保持纯 LF**；`DevPlan.todo` **JSON 解析通过**；既有代码基线不受影响（`--exec-selftest` 425/0 · `--graph-selftest` 110/0 · `--upload-selftest` 72/0）。
 - **⛔ 未做（如实登记）**：**未提交**（按 AI_README §6 改完即停并汇报）· `docs/Archive/**` 未改（归档冻结）· 上条 2 项代码落地项未动。
@@ -322,7 +403,7 @@
 
 - **新增根目录 [`AI_README.md`](../AI_README.md)（AI / 协作者行为契约 · 9 节）**：① 读取顺序（`DocMAP` → 现行计划 → `CHANGELOG` → 术语表）② **命令表 + 本轮实测基线**（构建 **0/0** · `api_probe --selftest` 末行 `=== 结果: … PASS ===` · `--exec-selftest` **425/0** · `--graph-selftest` **110/0** · `aiwrite --upload-selftest` **72/0** · 门夹具 **12/0** · 发送链夹具 **17/0** · `--old` 负向 **5/7 · exit 1**）③ 取证纪律（**新测得坑：`aiwrite.exe` 为 GUI 子系统 ⇒ `>` 重定向捕不到 stdout，必须 `Start-Process -RedirectStandardOutput`**；另有「重定向绕管道吞输出」「失败打逐例明细」「`--old` 负向打假」「口径变更四处同改」）④ 改动伴随义务 6 条 ⑤ 编号空间与**状态词白名单**（已拍板 / 已落地 / 部分落地 / 计划中 / 已归档 / 已退场 / 待真机）⑥ **提交纪律：⛔ 禁止擅自提交**（默认改完即停并汇报；仅当开发者**明确**说「提交 / 改版本 / 建分支 / 回滚」才行动）⑦ 禁止项 7 条（含不得为让测试变绿而改断言 · 不动 `~/.brain-ai` 数据 · 不猜数字/路径）⑧ 路径速查 ⑨ 维护约定（技术细节一律外链，避免双份维护）。
 - **文档地图更名**：`docs/README.md` → **`docs/DocMAP.md`**（`git mv` 保留历史）；[DocMAP.md](DocMAP.md)：文档地图新增契约索引行、§四 新增第 **6** 条（协作契约同步 —— 基线数字以最近一次全量实测为准，`M_patchC` §7.1 的历史数字不追溯改写）与第 **7** 条（提交由开发者决定）、顶部「最近更新」→ **2026-10-08** + 更名注（历史文档里的 `docs/README.md` 均指本文）。
-- **引用同步（活文档）**：本文件 · [actionPlan/M7.md](actionPlan/M7.md) · [actionPlan/M8.md](actionPlan/M8.md) · [actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md) · [../source/README.md](../source/README.md)；**`docs/Archive/**` 冻结不改**（历史条目原文留痕）。
+- **引用同步（活文档）**：本文件 · [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md) · [actionPlan/M8.md](actionPlan/M8.md) · [actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md) · [../source/README.md](../source/README.md)；**`docs/Archive/**` 冻结不改**（历史条目原文留痕）。
 - **顺带修过期数字**：[../source/README.md](../source/README.md) §4 `--exec-selftest` 断言行 **332 → 425**（本轮实测），并补 **`aiwrite.exe --upload-selftest`** 命令行（原文缺 · 含并发禁止与 GUI stdout 两条警告）。
 
 **🧵 `PW-07g` 答案文本保真：页面**无损搬运** + C++ 纯函数排版（2026-10-08 · 代码已改 · 真机复跑待办）**
@@ -721,7 +802,7 @@
 - **网络取证（换机后新事实）**：`py install --yes 3.12` 走 **BITS** 报 `NoInternetError`，但普通 HTTPS **通**（python.org HTTP 200）→ **真因是带宽**（≈**20–70 KB/s** 且中途多次 stall），非防火墙。处置：改「官方安装器直下 + **断点续传** `curl -C -` + **停滞自动重试**」；镜像实测 **`huaweicloud` 不通**、`tuna` ~8 KB/s，**`files.pythonhosted` ~70 KB/s** ⇒ pip **直连 PyPI**、不换源。
 - **Chrome 缺失 → Edge 兜底（`M7B-14`）本机首次实跑**：探针 `m7b09_common.py` 增 `browser_kind()` / `browser_exe()` / `browser_class()` / `env_proof()`（**标准安装路径**先探 Chrome、再探 Edge，命中谁用谁；两者皆无仍返回 `Chrome`，让库自己报启动失败、探针留真实错误）；`m7b28_doubao_recon.py` 三处 `Chrome(...)` 改 `common.browser_class()(...)`，JSON 增 **`env`** 物证字段、verdict 增 `env_browser_kind`。
 - **验收（本机实跑 · 本地桩 · 临时 profile · headless · 零副作用、不需登录）**：`source\python\.venv\Scripts\python.exe source\python\_probe\m7b28_doubao_recon.py --selftest` → **PASS**（**exit 0 · 47 s**）：读回自证 `probe-ok` · `entry_kind=file_input` · `file_inputs=['#file']` · `#file` 命中 **1** · 收尾 `close_wait` **残留 0**。**环境物证**：`{'python': '3.12.10', 'pydoll': '2.27.0', 'browser_kind': 'edge', 'browser_version': '154.0.4258.48'}`。
-- **文档落点**：[actionPlan/M7B.md](Archive/actionPlan/M7B.md) §11.1 增「**换机环境重建**」登记（新旧基线对照表 + 命令实测 + 网络取证）；[actionPlan/M7.md](actionPlan/M7.md) §12.1 **`P7b-01`** 加「**换机复证（Edge）**」注（headful 登录窗口 + `~/.brain-ai/pydoll-profile` **仍待 B0**）；本条目。
+- **文档落点**：[actionPlan/M7B.md](Archive/actionPlan/M7B.md) §11.1 增「**换机环境重建**」登记（新旧基线对照表 + 命令实测 + 网络取证）；[Archive/actionPlan/M7.md](Archive/actionPlan/M7.md) §12.1 **`P7b-01`** 加「**换机复证（Edge）**」注（headful 登录窗口 + `~/.brain-ai/pydoll-profile` **仍待 B0**）；本条目。
 - **明确未含（口径不变）**：**`B0` / `B2` / `B3` 仍待人工登录一次**；`source/assets/providers.json` 的 **`web.attach` 仍不填**（`D11` 显式确认口径）；`DevPlan.todo` id **200 / 201** 保持 `done: false`；**本批不提交**变更集。
 - **验证**：`py_compile` 探针 **2 文件退出码 0** · `providers.json` **JSON 合法（21 条）** · `.venv` **未入库** · `source/` 改动 = **旧遗留 2 项**（`install-deps.cmd` / `node_canvas.cpp`）+ 本轮 **`providers.json`**（B1 回填）。
 
@@ -738,7 +819,7 @@
 
 - **背景**：`P7b-05b` 的 **B1 段**（豆包 `doubao-web` 上传入口只读侦察）**已于 2026-09-29 20:33 实跑**并留下物证 `source/python/_probe/out/m7b28_doubao_recon.json`，但结论未回填（文档仍写「🟡 计划中」）→ 本轮逐处补齐。
 - **B1 关键结论**：① **上传入口 = `paste_only`**（`file_inputs: []` / `drop_zones: []`）⇒ **`P7b-10` 注入路线定为 `DataTransfer` 构造 File + 合成 `paste`**（主路线 `expect_file_chooser` 对豆包**不适用**）；② **composer = `div.tiptap.ProseMirror`**（**未登录即渲染**、命中 1 可见 —— 更正「未登录不渲染输入框」旧结论）；③ **未登录已有 10 条匿名 Cookie**（仅名字）⇒ 决策 `D-30`「Cookie 非空 = 已登录」误报风险再获旁证；④ **`answer_selector` 4 类候选全 0** ⇒ 须「登录 + 手动发一条」；⑤ **B0 / B2 / B3 未跑** ⇒ **不构成 `I18` 证据**，网页版条目 `capabilities.vision` **保持 `false`**。⚠️ **已更正（同日稍后）**：B0 / B2 / B3 **已全部跑完**，且本条 ①「入口 = `paste_only`」**是小视口假象**（真入口 = `file_input`）⇒ 见上「🔍 探针判据纠错」条的「✅ 追加」段。
-- **回填落点（4 处）**：[actionPlan/M7.md](actionPlan/M7.md) §12.1（状态列 + 新增「B1 段实测结论」块 + `P7b-10` 补注）· [actionPlan/M7B.md](Archive/actionPlan/M7B.md) §10（`doubao-web` 单列行 `input_selector` 更正 + 「登录 Cookie 存活口径」豆包行补登录前 10 条 + 「网页版图片理解侦察记录」表填 `paste_only` / `DataTransfer`）+ §15 **`v11`** · [DevPlan.todo](DevPlan.todo) `TST-M7-07`（**`done: false` 不变**）· [网页版协议实测记录.md](Archive/网页版协议实测记录.md) §8.3（新增 B1 结果表）。
+- **回填落点（4 处）**：[Archive/actionPlan/M7.md](Archive/actionPlan/M7.md) §12.1（状态列 + 新增「B1 段实测结论」块 + `P7b-10` 补注）· [actionPlan/M7B.md](Archive/actionPlan/M7B.md) §10（`doubao-web` 单列行 `input_selector` 更正 + 「登录 Cookie 存活口径」豆包行补登录前 10 条 + 「网页版图片理解侦察记录」表填 `paste_only` / `DataTransfer`）+ §15 **`v11`** · [DevPlan.todo](DevPlan.todo) `TST-M7-07`（**`done: false` 不变**）· [网页版协议实测记录.md](Archive/网页版协议实测记录.md) §8.3（新增 B1 结果表）。
 - **新示例登记**：`source/workflows/examples/ImgPlusText.json`（**8 节点 7 连线**，2026-09-30 入库；文本链 + 图片链并排，未编 E 号）→ 写入 [ai_writer_nodes.md](ai_writer_nodes.md) §20.4 与 [节点编辑器使用说明.md](节点编辑器使用说明.md) §10.9（同时说明「示例工作流」按钮载的是**内置**示例，本文件须经「打开工作流」载入；`api_probe` 对它**尚无断言**）。
 - **清理**：删除仓库根 **0 字节**误提交文件 `m7b28_doubao_recon.py`（真脚本在 `source/python/_probe/`）。
 - **验证**：文档断链自检 **docs/ 全量 289 checked / 0 broken**（**本机无仓库自带的 `check_links.py`**，改用一次性脚本在 `%TEMP%` 完成、**不入仓库**）；`DevPlan.todo` **JSON 合法（199 条 todo）**、`TST-M7-07` 仍 `done: false`；`source/` 与 `source/assets/providers.json` **零改动**。
@@ -759,9 +840,9 @@
 - **顺序闸门（新）**：先做**只读侦察**（`P7b-05b` → 新增一次性探针 `source/python/_probe/m7b28_doubao_recon.py`，**不进主管道**）→ 结论**经用户审核通过后**才启动 **C++↔Python 命名管道本体**（`M7B-02`/`04` = 方案 A）。B 的结论同时定 `P7b-10` 的注入路线（**`expect_file_chooser` 优先**，仅当站点无 `file input` 时才退 `DataTransfer`）与 `P7b-05` 的证据形态。
 - **外部事实核查（修正两条旧假设）**：① **DeepSeek 官方 API 已支持真视觉** —— 2026-08-21 实验模型 → **2026-09-10 `deepseek-flash`（DeepSeek-V4.1-Flash：native multimodal visual understanding，Pricing 页 Vision ✓；`deepseek-v4-pro` 仍 ✗）**；官方 Vision 指南 = 「describe pictures / read text from screenshots / analyze charts」→ **真视觉，非 OCR-only**。**仓库 `deepseek` 条目未跟上**（`vision=false`、无 `deepseek-flash`、`notes` 仍写「官方 API 无视觉模型」）→ 登记 **`M7-10`**（⬜ 待办；**本次未改 `providers.json`**）；临时**零代码通道** = GUI「模型（自定义）」填 `deepseek-flash`（表外模型放行 · **未实测**，故不写入手册）。② **DeepSeek 网页版**：官方最后一次点名 Web 是 2026-08-13 的 **V4-Pro GA（Vision ✗）**，且 V4.1-Flash 公告**只提 API** → **推断「无真视觉理解」**（推断，非结论）；是否有上传入口**待实测**。③ **豆包网页版**：公开资料**未声明**图片理解 → **待实测**；证据出来前**不得**改其 `capabilities.vision`（`I18`）。
 - **判定方法写死**：上传入口 4 类（`file_input` / `drop_zone` / `paste_only` / `none`）；视觉性质用「**纯图无字**」判别（能描述图形 / 颜色 / 构图 = 真视觉；只复述文字或答「看不到图片」= OCR / 非视觉）。
-- **文档落点**：[actionPlan/M7.md](actionPlan/M7.md)（决策 `D10` · 任务 `M7-10` · 前置验证 `P7b-05b` · §16 顺序 · §12.1 外部核查注）· [actionPlan/M7B.md](Archive/actionPlan/M7B.md)（§10 `doubao-web` 单列 + 新表 + `v10`）· [网页版协议实测记录.md](Archive/网页版协议实测记录.md)（**新增 §8**）· [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)（`D-30` 证据计划 + 附录 E + `v2`）· [DocMAP.md](DocMAP.md)（进度行 + 最近更新）· `DevPlan.todo`（新增 2 条）· [roadmap.md](roadmap.md) · [ai_writer_nodes.md](ai_writer_nodes.md) · [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md)。
+- **文档落点**：[Archive/actionPlan/M7.md](Archive/actionPlan/M7.md)（决策 `D10` · 任务 `M7-10` · 前置验证 `P7b-05b` · §16 顺序 · §12.1 外部核查注）· [actionPlan/M7B.md](Archive/actionPlan/M7B.md)（§10 `doubao-web` 单列 + 新表 + `v10`）· [网页版协议实测记录.md](Archive/网页版协议实测记录.md)（**新增 §8**）· [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)（`D-30` 证据计划 + 附录 E + `v2`）· [DocMAP.md](DocMAP.md)（进度行 + 最近更新）· `DevPlan.todo`（新增 2 条）· [roadmap.md](roadmap.md) · [ai_writer_nodes.md](ai_writer_nodes.md) · [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md)。
 - **验证**：文档断链自检 `python vcpkg-cache/check_links.py` → **broken 0**；`source/` 与 `source/assets/providers.json` **零改动**。
-- **✅ 追加（同日 · 用户实测通过）**：**DeepSeek 官方 API 视觉能力已实测通过** —— 上述「零代码临时通道」不再是"未实测"而是**已验证可用**；据此 `M7.md` 的 `M7-09` 改 🟡 部分（DeepSeek 视觉路径已过）、`M7-10` 改 🟡 部分（**只剩 `providers.json` 能力表声明 + 文档同步**）。口径见 [actionPlan/M7.md](actionPlan/M7.md) §3 与 [网页版协议实测记录.md](Archive/网页版协议实测记录.md) §8.1/§8.5。**证据（日志物证）**：`~/.brain-ai/logs/app.log` **2026-09-29 01:03** —— `[图片理解] 模型=deepseek-flash / 图片 1 张` → `完成：HTTP 200，输出 759 字节（6256 ms）`；下游 `n3`（文本生成）同模型出 747 字节，正文与图中场景一致（**真视觉理解**，非 OCR 复述）。
+- **✅ 追加（同日 · 用户实测通过）**：**DeepSeek 官方 API 视觉能力已实测通过** —— 上述「零代码临时通道」不再是"未实测"而是**已验证可用**；据此 `M7.md` 的 `M7-09` 改 🟡 部分（DeepSeek 视觉路径已过）、`M7-10` 改 🟡 部分（**只剩 `providers.json` 能力表声明 + 文档同步**）。口径见 [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md) §3 与 [网页版协议实测记录.md](Archive/网页版协议实测记录.md) §8.1/§8.5。**证据（日志物证）**：`~/.brain-ai/logs/app.log` **2026-09-29 01:03** —— `[图片理解] 模型=deepseek-flash / 图片 1 张` → `完成：HTTP 200，输出 759 字节（6256 ms）`；下游 `n3`（文本生成）同模型出 747 字节，正文与图中场景一致（**真视觉理解**，非 OCR 复述）。
 
 **📐 UI 修复：节点宽度改为「按输入/输出标签实测最宽自适应」（全画布同值，不再随字符长度变化）（2026-09-29）**
 
@@ -796,7 +877,7 @@
   `--exec-selftest` **251 → 310 / 0**（**只升不降，0 条旧断言被删**）· `--graph-selftest` **110 / 0** ·
   `--provider-selftest` **50 / 0** · `--run-selftest` **PASS** · `--vlm-selftest` 离线 **PASS**（无 Key `exit 2`）·
   文档断链 **266 / 0**；GUI 冒烟：启动 8s 存活 / 首帧完成 / 无 ImGui 断言
-- 文档同步：[actionPlan/M7.md](actionPlan/M7.md)（§11 全 ✅ + §14 基线回填）· `DevPlan.todo` ·
+- 文档同步：[Archive/actionPlan/M7.md](Archive/actionPlan/M7.md)（§11 全 ✅ + §14 基线回填）· `DevPlan.todo` ·
   [ai_writer_nodes.md](ai_writer_nodes.md)（§7.1 / §7.2 / §20.2）· [节点编辑器使用说明.md](节点编辑器使用说明.md)（§2 / §4 / §10）·
   [../source/README.md](../source/README.md)（源文件表 + 资源目录）
 
@@ -939,7 +1020,7 @@
 - 回归：`--graph-selftest` **111 → 110 通过 / 0 失败**；`--selftest` 七组 PASS；`--run-selftest` PASS；
   `--vlm-selftest` 离线断言 PASS；构建 **0 error / 0 warning**
 
-**文档（M7）**：新增 [actionPlan/M7.md](actionPlan/M7.md)（§0 结论 / §1 **事故记录** / §2 现状勘误 / §3 任务 / §4 决策 / §5 影响面 / §6 基线 / §7 遗留）；
+**文档（M7）**：新增 [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md)（§0 结论 / §1 **事故记录** / §2 现状勘误 / §3 任务 / §4 决策 / §5 影响面 / §6 基线 / §7 遗留）；
 [../source/README.md](../source/README.md) 新增 **§4.2 图片诊断与图片解码冻结区**、**§6.1 崩溃 / 断言错误排查（CRT assert · 退出码 3）** 与 `--image-decode` 命令，并刷新自检项数
 
 **文档（补丁系列拆分与归档）：新增 `M_patchAB_rest` 承接剩余项 + `M_patchA` / `M_patchB` 归档**

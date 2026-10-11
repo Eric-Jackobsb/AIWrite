@@ -4,12 +4,22 @@
 > 动机：**2026-10-06 真机实证** —— 工作流 `imgTest` 连续三次运行（**1 次「假成功」+ 2 次失败**）暴露：网页版通道**缺少「节点/运行 ↔ 窗口」的绑定与仲裁**；
 > 且「就绪」判据只到**凭证级**（有 Cookie / userToken），不到**页面级**（窗口 / 页面 / 交互态可用）。本文把**根因、纠错与修正设计**固化为可执行补丁。
 > 编号空间：任务 **`PW-01`…`PW-13`**（验证 `VW-*` / 验收 `AW-*`）· 决策 **`D-33`…`D-36`**（**已于 2026-10-07 拍板**，见 §9；承接 `D-20` / `D-22` / `D-30`；与 [M_patchAB_rest.md](M_patchAB_rest.md) §9 已用的 `D-25`…`D-32` 语义**不重叠** —— **只引用，不修改该文件**）· 不变量 **`I24`**（窗口归属唯一）/ **`I25`**（就绪三级）/ **`I26`**（证据归属）。
-> 状态：🟢 **已拍板（2026-10-07）· P1 动工中** —— `D-33②`（**独立窗口 / profile · 真并行**）· `D-34①`（`answer_selector` 维持**可选**，以**真机实测**驱动）· `D-35③`（复位 = **首次 + 失败时**）· `D-36②`（`web.attach` **降级为诊断字段**）。**代码已动**：`PW-01`（归属贯穿）+ `PW-03`（就绪三级）**已落地**（2026-10-07 · 构建 0/0 · `api_probe --selftest` **422/0** · `--upload-selftest` **72/0**）；`PW-02`（窗口表 / 真并行）随后。
+> 状态：🟢 **批 1 已收口（2026-10-11）** —— `D-33②`（**独立窗口 · 真并行**）· `D-34①`（`answer_selector` 维持**可选**，以**真机实测**驱动）· `D-35③`（复位 = **首次 + 失败时**）· `D-36②`（`web.attach` **降级为诊断字段**）。**代码已落地**：`PW-01`（归属贯穿）+ `PW-03`（就绪三级）（2026-10-07）+ **`PW-02` / `PW-04` / `PW-05` / `PW-06` / `PW-08`（批 1 · 2026-10-11）**（构建 0/0 · `api_probe --exec-selftest` **464 → 490 / 0** · `check_all.ps1` **14/14** · 文档断链见 §7.1b）；**⛔ 真机 `AW-*` 未跑**（本批为**纯离线**批）。
 > 相关：现行计划 [M8.md](M8.md)（网页通道方案 E）· 实测记录 [../网页版协议实测记录.md](../Archive/网页版协议实测记录.md) §10.6 · 索引 [../CHANGELOG.md](../CHANGELOG.md)
 > 建立：**2026-10-06**（v1）· 决策拍板与同步：**2026-10-07**（v2）
 > ✅ **已固定（2026-10-08 全量梳理 · 口径见 [../DocMAP.md](../DocMAP.md) §五）**：§9 `D-33`~`D-36` 与 §5 `I24`~`I26` **视为契约**（不再重新讨论）；已落地 = `PW-01` / `PW-03` / `PW-07` / `PW-07g`（+ §4.7 `PW-13`）。
 > ✅ **拍板落盘（2026-10-09 · 零代码改动）** —— 本节原三项待定项**已全部拍板**：**`PQ-13`**（`W-D8` 模板占位符 ⇒ **改为报错**，落地 `PW-10`）· **`PQ-14`**（单 `\n` ⇒ **不做**「2 行并 1 段」推断 · 取证并入 `AW-04`）· **`PQ-15`**（`PW-14` 取 Markdown 原文 ⇒ **不排期**）。
-> ⏳ **未完工作（非待定 · 有任务号与验收）**：`PW-02` / `PW-04` / `PW-05` / `PW-06` / `PW-08` / `PW-09` / `PW-11` / `PW-12`；**（口径已拍板 · 待落地）`PW-10`** = 模板未填充占位符**改为报错**；**真机 `AW-01` / `AW-03` / `AW-04` / `AW-06` 待登录后跑**。
+> ⏳ **未完工作（非待定 · 有任务号与验收）**：`PW-09` / `PW-11` / `PW-12`；**（口径已拍板 · 待落地）`PW-10`** = 模板未填充占位符**改为报错**；**真机 `AW-01` / `AW-03` / `AW-04` / `AW-06` 待登录后跑**；**批 1 引入的真机项**：`n3(deepseek)` 运行期间 `n7(doubao)` 窗口存活 · 三类错误文案可分辨 · 同站点两窗口并行 · 连续两次运行结果一致（见 §6 各行末尾「⛔ 真机」）。
+
+> **§0.6 全量判定（2026-10-11 · 核对后落盘）**：
+> * 🔵 **已完成 · 勾账**：`PW-01` · `PW-03` · `PW-07` · `PW-07g` · `PW-13`（§4.7）。
+> * ✅ **批 1 已收口 —— 四处收口契约 `I24` / `I26` 的代码落地**：**`PW-02`（窗口表 —— 本补丁**唯一结构改动**）** · `PW-04`（归属化运行态）· `PW-05`（归因分离）· `PW-06`（同站点真并行 · 结构部分）· `PW-08`（运行级复位）—— 全部 **2026-10-11** 落地（离线断言 **+26**）；**真机 `AW-*` 待跑**（§6 各行末尾）。仍待做：`PW-10`（占位符 ⇒ 报错 · `PQ-13` 已拍板）、`PW-09` / `PW-11` / `PW-12`。
+> * 🟢 **要做（低优先 · 独立小项）**：`PW-11`（归档保留份数调大）。
+> * ⏸ **不排期**：`PW-09`（`answer_selector` 回填 —— `D-34①` 本就「可选」，**真机复现假成功前无收益**）· `PW-14`（`PQ-15` 已拍板）。
+> * 🟢 **文档**：`PW-12`（本文件 + [M8.md](M8.md) + 实测记录 + `CHANGELOG` + 索引）。
+> * ⏳ **真机（需真实登录态）**：`AW-01` / `AW-03` / `AW-04` / `AW-06` —— 与 [M8.md](M8.md) `M8-14` **同批**跑。
+> * ✅ **优先级依据（历史记录）**：`I24` / `I26` 曾「**已写入契约但代码未满足**」⇒ 即网页版「**假成功 / 串答案**」的根因；**批 1 已按「先 `PW-02` + `PW-04`、再 `PW-05` / `PW-06`」的顺序清理完毕**（2026-10-11）。
+
 
 ---
 
@@ -120,7 +130,14 @@
   - **跨站点** ⇒ **不再关旧窗**：直接取用（必要时新开）**该站点自己的**窗口 ⇒ 今天 19:39:12「串行复用登录窗口：先关闭旧窗口」这条日志**应当消失**；
   - 仅当**显式**要求共享（将来某条目声明「共用窗口」）才回落到排队 —— **默认不排队**。
 - **禁止隐式抢占**：任何「先关旧窗再开新窗」都必须由**窗口表**决策（或显式清理语义），而不是像今天这样「**谁调用谁关**」。
-- **成本与代价（如实登记）**：每站点一份窗口 = 一份内存 + 一份 WebView2 controller + 一份 profile 目录（登录态**各自维护** —— 与"各站点各自登录一次"的既有产品语义一致）；收尾必须**逐窗口** `request_close()` + `join()`（`stop_login_window()` 扩展为遍历窗口表）；界面「打开登录窗口」也须落到**某窗口**（不再覆盖全部站点）。
+- **成本与代价（如实登记）**：每**归属**一份窗口 = 一份内存 + 一份 WebView2 controller；收尾必须**逐窗口** `request_close()` + `join()`（`stop_login_window()` = `ctx_close_all()`，顺序由窗口表给出：**后开的先关**）；界面「打开登录窗口」也落到**自己的窗口**（owner = `界面#登录窗口`，不再覆盖全部站点）。
+- **实现事实（2026-10-11 · 批 1 落地 —— 与上面设计的**唯一偏离**在此如实登记）**：
+  * **浏览器环境 / profile 仍为「全局共享一份」**（`g_envs` 按 profile 目录缓存：`CreateCoreWebView2EnvironmentWithOptions`，同 profile 只允许一个创建者，其余窗口**等待后复用同一 environment**）。**理由（官方约束 + 产品语义）**：WebView2 的 **user data folder 同时只能有一个 environment** ⇒「每 owner 一份 profile」在**同一 user data folder** 下物理不可行；且**登录态共享**正是既有产品语义（**每个站点只需登录一次**）。**独立的是窗口 / 页面 / 全部槽位**（`WindowCtx` 每窗口一套：脚本 / 上传 / CDP / 网络回执 / 就绪缓存 / PoW）—— 真机错配（串答案、互覆上传槽）的**根因由此消失**。
+  * **每窗口独立 HWND + 独立窗口类名**（`AIwriteWebLoginWindow_<seq>`）：多窗口并存时同名 `RegisterClassExW` 会失败。
+  * **统一前置**：`prepare_window(owner, 站点)` = 取窗（复用 / 新建）+ `PW-08` 复位；`run_script_sync` / `set_file_input_files` / `cdp_input_text` / `wait_ready` / `peek_page_state` / `resolve_file_input_selector` **全部**走它（旧代码里的「三级前置 + 关旧窗兜底」已删除）。
+  * **同窗口串行守卫**（`BusyGuard`）：同一窗口并发调用 ⇒ **可分辨**的「窗口被占用」错误（旧实现是**静默串槽**：一个 `g_script_done` 被两个等待者共享）。
+  * **`wait_page_ready()` 已删除**（与 `I25` 三级判据重复且更弱）。
+  * **内置协议路径（`builtin:deepseek`）的归属也有来源**：`WebChatRequest.owner`（`local_nodes.cpp` 用 `web_owner_of` 填；CLI 为空 = 未标注）。
 
 ### 4.2 就绪三级判据（`W-D3` · 不变量 `I25`）
 
@@ -200,19 +217,19 @@
 | 阶段 | 条目 | 内容 | 主要文件 | 验收 |
 |---|---|---|---|---|
 | P1 | `PW-01` | ✅ **已落地（2026-10-07）** `WebOwner` 定义与贯穿（**只传递、不改行为**）：🆕 `web/web_owner.h`（纯函数）+ `LoginRequest.owner` + `with_owner()`；`ExecutionContext.run_id`（运行会话 id）；节点层 `web_owner_of()` 填 owner；日志带 `[owner run#node]` | 🆕 `web/web_owner.h` · `engine/executor.{h,cpp}` · `nodes/local_nodes.cpp` · `ai/dom_web_client.{h,cpp}` · `ai/upload/upload_contract.h` · `ai/upload/upload_registry.cpp` · `web/site_ref.h` | ✅ 离线断言 6 条（`owner_same` / `owner_key` / `owner_tag` / 空 owner）；`api_probe --selftest` **422/0** |
-| P1 | `PW-02` | **窗口表 / 独立窗口**（`I24`）：按 `(owner, site_key)` 取窗 —— 同 owner **复用** · **同站点不同 owner = 各自独立窗口 / profile**（`D-33②`）· 跨站点**不关旧窗**（仅**显式**共享时才排队） | `web/webview_host.*` | 离线断言：窗口表仲裁状态机；真机：`n3(deepseek)` 运行期间 `n7(doubao)` 窗口**存活** |
+| P1 | `PW-02` ✅ **已落地（2026-10-11 · 批 1）** | **窗口表 / 独立窗口**（`I24`）：按 `(owner, site_key)` 取窗 —— 同 owner **复用** · **同站点不同 owner = 各自独立窗口**（`D-33②`）· 跨站点**不关旧窗**（「谁调用谁关」全部删除） | 🆕 `web/window_table.h` · `web/webview_host.{h,cpp}`（`WindowCtx` 每窗口状态 · `prepare_window` 统一前置 · 每窗口窗口类名 · 浏览器环境**按 profile 共享**）· `ui/property_panel.cpp` · `nodes/local_nodes.cpp` + `ai/deepseek_web_client.*`（归属贯穿内置协议路径） | ✅ 离线断言 **11 条**（窗口键 / 复用 / 同站点独立 / 跨站点不关旧窗 / 收尾 LIFO / 诊断行 / 关窗回退）；**⛔ 真机**：`n3(deepseek)` 运行期间 `n7(doubao)` 窗口**存活**（待跑） |
 | P1 | `PW-03` | ✅ **已落地（2026-10-07）** 就绪三级（`I25`）+ `wait_ready()` / `peek_page_state()` + **实时 URL 校验**：L1 等 controller · L2 `readyState=complete` 且 `site_key_of(location.href)` 命中 · L3 可见输入候选（+ 附件入口）；**归因分离**（附件未挂载 ⇒ 只报「页面未就绪」，不再说「拖拽 / 粘贴入口」）；就绪缓存 1.5 s（轮询免重复探针） | 🆕 `web/ready_level.h` · `web/webview_host.{h,cpp}` · `ai/dom_web_client.cpp` · `ai/upload/upload_registry.cpp` | ✅ 离线断言 9 条（位组合 / 覆盖判定 / 缺级 / 归因分离）；真机 113 ms / 41 ms 两类失败**待回归**（`AW-01`） |
-| P1 | `PW-04` | 归属化运行态（`I26`）：脚本槽 / 上传槽 / 网络回执 / 基线 / 轮询分桶 | `web/webview_host.*` · `ai/upload/*` | 离线断言：跨 owner 回执被拒 |
-| P1 | `PW-05` | 归因分离（未就绪 / 无入口 / 被抢占）+ 日志带 `owner` / 级 | `web/webview_host.*` · `ai/upload/*` · `ai/dom_web_client.*` | 真机：三类错误文案可分辨 |
-| P1（`D-33②`） | `PW-06` | **同站点真并行**：两节点**各自独立窗口 / profile**（各带自己的脚本槽 / 上传槽 / 网络回执 —— 承接 `PW-04`） | `web/webview_host.*` · `ai/upload/*` | 真机：两个 `doubao-web` 节点**同时**跑不串答案、不互相覆盖上传槽 |
+| P1 | `PW-04` ✅ **已落地（2026-10-11 · 批 1）** | 归属化运行态（`I26`）：脚本槽 / 上传槽 / CDP 槽 / 网络回执 / 就绪缓存**随窗口走**（每 owner 一套）；回执**绑定归属**并在取用时复核（`owner_accepts`：跨 owner / 未绑定 ⇒ 丢弃 + 告警） | `web/webview_host.{h,cpp}`（`WindowCtx` 槽位 · `begin/take/ensure_resource_capture(owner, site)`）· `web/web_owner.h`（`owner_accepts`）· `ai/src/upload/upload_registry.cpp` | ✅ 离线断言 **4 条**（**跨 owner 回执被拒** / 未绑定被拒 / 同 run+node = 同一归属）；⚠️ 如实登记：回执**物理上已按窗口分桶**（旧实现 = 全进程单缓冲） |
+| P1 | `PW-05` ✅ **已落地（2026-10-11 · 批 1）** | 归因分离（未就绪 / 无入口 / 被占用）+ 日志 / 文案带 `owner`：三类文案**唯一构造入口** = `web/web_error.h::web_error_text`；未就绪文案**绝不**含「拖拽 / 暂不支持」；「窗口未就绪」不再劝用户「先去登录一次」（`G2` 误归因） | 🆕 `web/web_error.h`（纯函数）· `web/webview_host.cpp`（`wait_ready` / `run_script_now` / 交件 / CDP / 附件枚举 全部改走统一构造；`BusyGuard` 报「窗口被占用」） | ✅ 离线断言 **5 条**（三类前缀互不重叠 / 都以 owner 开头 / 无形态结论 / 都带可操作下一步）；**⛔ 真机**：三类错误文案可分辨（待跑） |
+| P1（`D-33②`） | `PW-06` ✅ **已落地（2026-10-11 · 批 1 · 结构部分）** | **同站点真并行**：两节点**各自独立窗口**（各带自己的脚本槽 / 上传槽 / CDP 槽 / 网络回执 / 就绪缓存 —— 承接 `PW-04`）+ 每窗口独立窗口类名；同窗口**串行执行守卫**（并发 ⇒ 给「窗口被占用」可分辨原因，**不再静默串槽**） | `web/webview_host.cpp`（`BusyGuard` · `ctx_start` 独立线程 / 独立类名）· `web/window_table.h` | ✅ 离线：窗口表「同站点不同 owner ⇒ 新建」断言；**⛔ 真机**：两个 `doubao-web` 节点**同时**跑不串答案、不互相覆盖上传槽（待跑；⚠️ 执行器目前**单 worker 串行** ⇒ 真并行需先有并发执行器，见 [M_node_expansion.md](M_node_expansion.md)） |
 | P3 | `PW-07` | ✅ **已落地（2026-10-08 · 精简版）** 答案归属判据（**真机驱动** · `D-34①`）：**装饰 / 布局文本整串排除门**（`answer_chrome_text`）+ **取消「短候选也算成功」**（旧 `fallback` → `refuse.short`）+ **命中 / 体检明细**（候选池数 · 装饰拒 · 过短拒 ⇒ `steps`·`error`·日志）；**未做**（如实登记）：候选池收窄 / 增长判据（见 §4.5） | `ai/dom_web_client.cpp` · 🆕 `source/tools/poll_answer_gate_test.js` · `tools/api_probe.cpp` | ✅ 离线：夹具 **10/0**（`--old` 负向 5 条如实 FAIL）· `api_probe --selftest` **423/0**（`VB2-22⑥`）；真机 `AW-04`（不再命中 `div.bp5-overflow-list` / 无 12 字节类"假成功"）⏳ **待跑** |
-| P3 | `PW-08` | 运行级复位（`D-35③`：**首次 + 失败时**；窗口级首选 = 关窗重开，交互态级 = `wait_ready`）+ 复位后就绪确认 | `web/webview_host.*` · `ai/*` | 真机：连续两次运行结果一致 |
+| P3 | `PW-08` ✅ **已落地（2026-10-11 · 批 1）** | 运行级复位（`D-35③`：**首次 + 失败时** · 单次重试）+ 复位后就绪确认：计划 = `web/window_table.h::plan_reset`；动作为**窗口级**（关该窗口重开 —— 不碰别的 owner）；复位后由 `wait_ready(L1→L2→L3)` 确认；**不做**静默改导航 | `web/window_table.h`（`plan_reset` / `kMaxResetsPerWindow`）· `web/webview_host.cpp`（`prepare_window` 复位执行 · `failed_before` 记账 · 失败文案走 `PW-05`） | ✅ 离线断言 **6 条**（新建不复位 / 首次复位 / 失败复位一次 / 重试用尽不复位 / 未失败不复位 / 动作可读名）；**⛔ 真机**：连续两次运行结果一致（待跑） |
 | P3 | `PW-07g` | ✅ **已落地（2026-10-08 · 真机物证驱动）** **答案文本保真**：`kPollScript` 的 `norm` **只服务判据**（基线差分 / 装饰整串门 / 回声排除 / `min_chars`），产物改 **原样搬运**（`out.text = raw`）+ 新增 `out.lf`（页面原始换行数 = **分段物证**）；🆕 C++ 纯函数 `ai::format_answer_text()` 负责排版（CRLF 归一 · 行尾空白 · 行内空白压单空格 · **空行规范化 A2**（`\n{3,}`→`\n\n`：**空行 = 段界**）· 首尾 trim · **Markdown 原样**）；`dom_chat` 完成日志增 `；行 N（页面换行 k，折叠 R）`。**不做**：base64（传输层已实证 `ExecuteScript` JSON + `nlohmann::json::parse` 逐字节无损） | `ai/dom_web_client.h`·`.cpp` · `tools/api_probe.cpp` · `source/tools/poll_answer_gate_test.js` | ✅ 离线：夹具 **12/0**（`--old` **第二注入** ⇒ ⑯⑰ 如实 FAIL）· `api_probe --selftest` **425/0**（`VB2-22⑦⑧`）；真机：输出**出现分段**（日志 `页面换行 k > 0` / `行 N > 1`）⏳ **待复跑** |
 | P4 | `PW-14`（候选 · ✅ **已拍板（2026-10-09 · `PQ-15`）= 不排期**） | 「复制」按钮取 **Markdown 原文**（站点若只在复制按钮里给源文，再考虑；当前真机答案容器 `innerText` 已够用 ⇒ **不预先做**） | `ai/dom_web_client.cpp` | 真机：Markdown 结构与纯文本一致 |
-| P4 | `PW-09` | `answer_selector` 回填（**可选** · 真机实测驱动 —— `D-34①` **不设**必做门槛）：豆包 / Kimi 实跑后写回 `providers.json` | `source/assets/providers.json` | `--upload-selftest --provider <id>` 显示生成字段齐全（**缺项不拦运行**） |
-| P4 | `PW-10` | 模板未填充占位符 ⇒ 报错（`W-D8`）· ✅ **已拍板（2026-10-09 · `PQ-13`）= 改为报错** | `nodes/local_nodes.cpp` | 离线断言 + 真机：不再静默下发 `{vars}` |
-| P4 | `PW-11` | 归档保留份数调大（避免吃掉复盘证据） | `utils/asset_store` / 运行收尾 | 运行两次后仍能看到两次归档 |
-| P4 | `PW-12` | 文档收尾（本文件 + `M8.md` + 实测记录 + `CHANGELOG` + 索引；`DevPlan` 由 UI 写入） | `docs/*` | 断链 0 |
+| P4 | `PW-09` ⏸ **不排期（2026-10-11）** | `answer_selector` 回填（**可选** · 真机实测驱动 —— `D-34①` **不设**必做门槛）：豆包 / Kimi 实跑后写回 `providers.json` | `source/assets/providers.json` | `--upload-selftest --provider <id>` 显示生成字段齐全（**缺项不拦运行**） |
+| P4 | `PW-10` 🟢 **要做（口径已拍板）** | 模板未填充占位符 ⇒ 报错（`W-D8`）· ✅ **已拍板（2026-10-09 · `PQ-13`）= 改为报错** | `nodes/local_nodes.cpp` | 离线断言 + 真机：不再静默下发 `{vars}` |
+| P4 | `PW-11` 🟢 **要做（小）** | 归档保留份数调大（避免吃掉复盘证据） | `utils/asset_store` / 运行收尾 | 运行两次后仍能看到两次归档 |
+| P4 | `PW-12` 🟢 **要做（文档）** | 文档收尾（本文件 + `M8.md` + 实测记录 + `CHANGELOG` + 索引；`DevPlan` 由 UI 写入） | `docs/*` | 断链 0 |
 | P2 | `PW-13` | `web.attach` **降级为诊断回显**（`D-36②`）：注释改写 + `--web-dom-dump` / 就绪度行回显**实测形态**与计数；`M8-Q1` 结案 | `ai/provider_spec.h` · `web/site_ref.h` · `ai/dom_web_client.*` · `main.cpp` | 离线断言：`attach` 全程**零消费**；诊断行出现实测形态 |
 
 ---
@@ -231,6 +248,18 @@
 | 文档断链自检 | **0** |
 > 📌 **本表 = 2026-10-08 快照，数字不追溯改写**（口径见 [../../AI_README.md](../../AI_README.md) §10.1）：**现行基线一律看 [../../AI_README.md](../../AI_README.md) §2** —— 例：`poll_answer_gate_test` 已随 `PW-07` / `PW-07i` 扩充，本表的 **12 / 0** 已不是现行值。
 
+
+### 7.1b 批 1 实测（2026-10-11 · **纯离线批** · 本机）
+
+| 项 | 实测 | 备注 |
+|---|---|---|
+| 构建（MSVC /W4） | **0 error / 0 warning** | `build\logs\build_debug_20261011_181720.log` |
+| `api_probe.exe --selftest` | **exit 0** · 七组全 PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · DOM 探测 27/0 · **执行器 490/0**） | 唯一权威位 = [AI_README §2](../../AI_README.md) |
+| `api_probe.exe --exec-selftest` | **490 通过 / 0 失败**（**464 → 490**，本批 **+26** = `PW-02` 11 + `PW-04` 4 + `PW-05` 5 + `PW-08` 6） | 同上 |
+| `api_probe.exe --graph-selftest` | **110 / 0** | 无回归 |
+| `check_all.ps1` | **14 项 · 失败 0 项**（exit 0） | `build\logs\check_all_20261011_182044.log` |
+| 文档断链 | 见 [../../AI_README.md](../../AI_README.md) §2 / [../loop_dev.md](../loop_dev.md) §4 | `python vcpkg-cache/check_links.py` |
+| **真机** | **⛔ 未跑（如实登记）** | 本批全部验收均为离线；§6 各行末尾的「⛔ 真机」项**留给批 6** |
 
 ### 7.2 真机验收（`AW-*`）
 
@@ -306,3 +335,5 @@
 | 2026-10-08 | **v4** | **`PW-07` 答案归属门落地（代码已改 · 精简版 · 只动判据）**：`ai/dom_web_client.cpp` 的 `kPollScript` 增 **「装饰 / 布局文本」整串排除门**（`kAnswerChromeTextRe` → `dom_cfg_json()` 的 `cfg["answer_chrome_text"]`，纯数据不落盘）+ **删除**旧「短候选也算成功」的 `fallback`（改 `refuse.short` 计数）+ **每轮体检串**（`note`：候选池数 / 装饰拒 / 过短拒 ⇒ C++ 侧 `last_poll_note` 进 `steps` / `error` / `log::warn` / 完成日志）；🆕 夹具 `source/tools/poll_answer_gate_test.js`（**抽真实脚本 + 迷你 DOM 真跑**：**10/0**，`--old` 负向 **5 条如实 FAIL**）；`tools/api_probe.cpp` 增 **`VB2-22⑥`**。**验证（本机实测）**：构建 **0 error / 0 warning** · `api_probe --selftest` **423/0**（422 → **+1**）· `--exec-selftest` **423/0** · `--graph-selftest` **110/0**（不变）；真机 `AW-04` ⏳ **待跑**。**同日存档**：早先那批 `PW-07b..n`（`dom_web_client.cpp` **877 → 2240 行**重写）**从未提交** ⇒ 冻结为分支 `wip/pw07n-20261008`（`9252038`）+ `build/_backup/20261008_pw07n/`；本次修复以 `main`（`33b647a`）为基线**另起分支** `fix/pw07-answer-chrome-gate-20261008`。 |
 | 2026-10-08 | **v5** | **`PW-07g` 答案文本保真落地（代码已改 · 真机物证驱动 · 口径拍板 **A2**）** —— **真机物证**（运行 `20261008-172758`）：`PW-07f` 发送链路**已通**（`发送回执：URL已变化 / 新节点 10 / 输入框 0 字`；答案容器 `div.container-qX9Csx`、文本 **759 字节**），**却整篇 1 行** —— 归档头部固定 8 行各带 1 个 `\n` ⇒ 文件里的 8 个 LF **全在文件头**，答案贡献 **0** 个。**根因**：`kPollScript` 的 `norm()`（`\s+` → `' '`）**判据与产物同源**（同一个归一值既判长度又当答案落盘）。**修法（方案 A：判据与产物分离）**：① 页面脚本**无损搬运**（`out.text = raw`；判据仍吃 `norm` ⇒ `PW-07` 的「12 字节假成功」防线**不动**）+ 新增 `out.lf`（`lf_count` = 页面 `\n` 数，**分段物证**随 poll 回传）；② 🆕 C++ 纯函数 `ai::format_answer_text()` 排版 —— `\r\n`/`\r`→`\n` · 清行尾空白 · 行内连续空白→单空格 · **行首缩进原样保留**（B1：不破坏代码块 / 引用）· **空行规范化 A2**（连续 `\n{3,}` → `\n\n`：**空行 = 段界**，行内软换行保留 `\n`）· 首尾 trim · 纯空白 → 空串；③ `dom_chat` 每轮对**原始**文本重算（幂等），完成日志 `；行 N（页面换行 k，折叠 R）`（`R` **钳 0**：页面孤立 `\r` 归一成 `\n` 会让差为负）。**不加 base64**（传输层已实证 `ExecuteScript` JSON + `nlohmann::json::parse` 逐字节无损）。**离线锁**：`api_probe` 增 **`VB2-22⑦`**（静态：产物不得再归一 + `lf` 随 poll 回传）+ **`VB2-22⑧`**（排版纯函数 **8 例**：多段保留 / CRLF / **空行规范化（含「恰好 1 空行不动」）** / 行内·行尾空白 / 缩进保留 / Markdown 原样 / trim / 空串 / 长文本无损；失败时打印 `blank_got` 等**逐例明细**）；夹具 `poll_answer_gate_test.js` 增 **⑯ 多段保真** / **⑰ 页面侧原样搬运** + `--old` **第二注入**（产物换回 `norm`）。**验证（本机实测）**：构建 **0 error / 0 warning** · `api_probe --selftest` **425/0** · `--exec-selftest` **425/0** · `--graph-selftest` **110/0** · 夹具 **12/0**（`--old` **5 / 7** = 预期，exit 1）· `send_chain_test.js` **17/0**。**待办**：真机复跑（看日志 `页面换行 k` / `折叠 R` / `行 N` 与输出空行）+ `M8.md` §9.6 复盘行；候选登记 **`PW-14`**（仅当站点只在「复制」按钮给 Markdown 源文才需要）。 |
 | 2026-10-09 | **v6** | **待定项拍板落盘（只改文档 · 零代码改动）**：三项待定项全部拍板 —— **`PQ-13`**（`W-D8` 模板未填充占位符 ⇒ **改为报错**，落地 `PW-10` · §4.6）· **`PQ-14`**（单 `\n` ⇒ **不做**「2 行并 1 段」推断，取证并入 `AW-04`，不另开项 · §4.5 + §6 `PW-07g`）· **`PQ-15`**（`PW-14` 取 Markdown 原文 ⇒ **不排期** · §6 P4）；同批补 **`A1` 口径定义**（§4.5 原先引用未定义代号）。同步 [../DocMAP.md](../DocMAP.md) §5.3 · [../DevPlan.todo](../DevPlan.todo)（三项置 done）· [../CHANGELOG.md](../CHANGELOG.md)。**代码未改**。 |
+| 2026-10-11 | **v7** | **批 1 收口（代码 + 文档 · **纯离线批**）—— `PW-02` / `PW-04` / `PW-05` / `PW-06`（结构部分）/ `PW-08` 全部落地**：① 🆕 `source/web/include/window_table.h`（**窗口表** + `plan_reset` 复位计划 · 纯函数）；② 🆕 `source/web/include/web_error.h`（三类归因文案 · 纯函数）；③ `source/web/include/web_owner.h` 增 `owner_accepts`（`I26` 证据准入）+ `ui_window_owner()` / `selftest_owner()`；④ `web/webview_host.{h,cpp}` **结构改动**：进程级单例状态 ⇒ **每窗口 `WindowCtx`**（`thread_local t_cur` + `CtxScope`）+ 窗口表（`g_table` / `g_windows`）+ **环境按 profile 共享**（`g_envs`，同 profile 单创建者 + 等待复用）+ 每窗口独立窗口类名 + `ctx_start/ctx_close/ctx_close_all` + `prepare_window`（统一前置 + `PW-08` 复位）+ `BusyGuard`（同窗口串行守卫）+ `windows_report()` / `close_owner_window()`；**删除全部「先关旧窗」**（`ensure_session` / `run_script_sync` / 交件 / CDP / `logout_site`）；`wait_page_ready()` 删除；⑤ `web/webview_host.h`：`LoginWindow` 改**句柄**（绑定 owner · 默认 `界面#登录窗口`）· `WebResourceRecord.owner` + `begin/take/ensure_resource_capture(owner, site)` · `current_window_site/window_on_site` 按归属 · `windows_report` / `close_owner_window`；⑥ 归属贯穿：`ai/include/deepseek_web_client.h`（`WebChatRequest.owner`）· `ai/src/deepseek/deepseek_web_client.cpp`（PoW 带 owner）· `nodes/src/local_nodes.cpp`（内置协议路径 `boot.owner`）· `ai/src/upload/upload_registry.cpp`（按归属取回执）· `ui/src/property_panel.cpp`（界面窗口按归属判定）；⑦ `tools/api_probe.cpp` 新增 **26 条**离线断言（窗口表 11 / `PW-08` 6 / `PW-04` 4 / `PW-05` 5）。**验证（2026-10-11 本机）**：构建 **0/0** · `--exec-selftest` **464 → 490 / 0** · `--graph-selftest` **110/0** · `check_all.ps1` **14/14**；**⛔ 真机未跑**（§7.1b）。同批：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]` · [../AI_Status.md](../AI_Status.md) · [../loop_dev.md](../loop_dev.md)。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
+

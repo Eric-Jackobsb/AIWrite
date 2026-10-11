@@ -15,6 +15,7 @@
 
 #include "provider_spec.h"   // M_patchB L1（PB2-05）：站点端点来自配置表
 #include "session_store.h"
+#include "web_owner.h"       // M_patchC（PW-02）：归属（纯数据）
 
 namespace aiwrite::ai {
 
@@ -32,6 +33,9 @@ struct WebChatRequest {
     // M_patchB L1（PB2-05）：站点端点 —— 默认值 = 改造前写死的 DeepSeek 常量（行为不变）
     //  由 effective 配置表条目填入（`web.endpoints`），站点换域名/换 API 版本时改 JSON 即可
     ProviderWebEndpoints endpoints;
+    // M_patchC（`PW-02`）：归属 —— 与节点级 DOM 路径一致（同 owner + 同站点 ⇒ 复用同一个窗口；
+    // 空 = 未标注，CLI 等无节点上下文的调用点用）
+    web::WebOwner        owner;
 };
 
 struct WebChatResult {

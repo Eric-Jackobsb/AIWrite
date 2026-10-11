@@ -227,8 +227,10 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
     std::string       answer;
     std::string       page_error;
     // PB2-23：按**站点**求解（站点 = 本请求的端点 host；不再用无参 ensure_session → 内置默认站点）
+    // M_patchC（`PW-02`）：带**归属** —— 与节点同一个窗口（同 owner + 同站点 ⇒ 复用），不另开窗
     const long long   page_answer =
-        web::solve_pow_via_page(endpoints.host, challenge_resp->body, 90000, &page_error);
+        web::solve_pow_via_page(endpoints.host, challenge_resp->body, 90000, &page_error,
+                                request.owner);
     if (page_answer >= 0) {
         answer = std::to_string(page_answer);
         result.pow_attempts = 1;

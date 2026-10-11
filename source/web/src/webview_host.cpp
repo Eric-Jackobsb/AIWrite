@@ -16,14 +16,20 @@
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdio>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <exception>
 #include <filesystem>
 #include <utility>
 #include <vector>
+
+#include "web_error.h"      // M_patchC（PW-05）：三类归因文案（纯函数）
+#include "window_table.h"   // M_patchC（PW-02 / PW-06 / PW-08）：窗口表 + 复位计划（纯函数）
 
 using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
@@ -232,98 +238,187 @@ constexpr const char* kProbePollScript = R"JS(
 })();
 )JS";
 
-// ---- 登录线程内的运行时状态（同一时刻只允许一个登录窗口）----
-LoginRequest          g_request;   // start() 写入，线程只读
-std::atomic<HWND>     g_window{nullptr};
-std::atomic<bool>     g_stop{false};
-std::atomic<int>      g_result{-1};
-std::atomic<unsigned> g_cookie_count{0};
-std::atomic<bool>     g_cookies_done{false};
-std::atomic<DWORD>    g_first_cookie_tick{0};
-// 协议探测状态：0=空闲 / 1=已注入（轮询等待结果）/ 2=完成
-int                   g_probe_stage   = 0;
-int                   g_probe_attempt = 0;
-DWORD                 g_probe_due_tick  = 0;
-DWORD                 g_probe_last_poll = 0;
-constexpr int         kProbeMaxAttempts = 24; // 24 × 500ms ≈ 12 秒
+// ============================================================================
+//  M_patchC（`PW-02` / `PW-04` / `PW-06` · 不变量 `I24` / `I26`）：**窗口运行时状态**
+//
+//  一个 `WindowCtx` = **一个窗口** = **一个 owner 在一个站点上的**窗口（含它自己的
+//  脚本槽 / 上传槽 / CDP 槽 / 网络回执 / 就绪缓存 / controller）—— 这就是 `I26`
+//  「证据归属」的物理形态：**证据与产生它的窗口同槽** ⇒ 结构上不可能跨 owner 串。
+//
+//  取用规则由 `web/window_table.h`（纯函数）决定：
+//    同 owner + 同站点 ⇒ 复用 · 同站点不同 owner ⇒ **各自独立窗口** · 跨站点**不关旧窗**
+//  「谁调用谁关」在本文件**已删除**（真机 2026-10-06 19:39:12 那条
+//  「切换站点…串行复用：先关闭旧窗口」从此**不应再出现**）。
+// ============================================================================
 
-// 页面内 PoW 求解：跨线程同步（调用方等待，窗口线程执行）
-std::mutex              g_pow_mutex;
-std::condition_variable g_pow_cv;
-bool                    g_pow_done = false;
-long long               g_pow_answer = -1;
-std::string             g_pow_error;
-std::string             g_pow_challenge_json;
-int                     g_pow_stage      = 0;   // 0=空闲 / 1=已注入（轮询等待）/ 2=完成
-int                     g_pow_attempt    = 0;
-DWORD                   g_pow_last_poll  = 0;
-constexpr int           kPowMaxAttempts  = 240; // 240 × 500ms ≈ 120 秒
+} // namespace（**暂时收口**：`WindowCtx` 必须定义在 `aiwrite::web` 名字空间 —— 头文件按此名前向声明）
 
-// ---- L3（PB2-13 / PB2-15）：通用「窗口内同步执行脚本」的状态（一次只跑一段，串行复用）----
-std::mutex              g_script_mutex;
-std::condition_variable g_script_cv;
-bool                    g_script_done = false;
-std::string             g_script_js;
-std::string             g_script_result;
-std::string             g_script_error;
+// ---- 窗口运行时状态（`web/webview_host.h` 里前向声明为 `aiwrite::web::WindowCtx`）----
+struct WindowCtx {
+    // ---- ① 归属（`PW-02` · `I24`）----
+    WebOwner      owner;     // 本窗口归属（`run#node` / `界面#登录窗口` / `自检#网页通道`）
+    std::string   site_key;  // 本窗口站点（origin）
+    std::string   key;       // 窗口键（`window_key(owner, site_key)`）
+    std::uint64_t seq = 0;   // 创建序号（诊断用；收尾顺序由**窗口表**给出，不由调用者决定）
+    LoginRequest  request;   // 开窗请求（`start` 时写入，窗口线程只读）
 
-// 按站点注销（PB2-19）：跨线程同步（调用方等待，窗口线程删 Cookie + 清 localStorage）
-std::mutex              g_logout_mutex;
-std::condition_variable g_logout_cv;
-bool                    g_logout_done  = false;
-bool                    g_logout_ok    = false;
-std::string             g_logout_error;
-unsigned                g_logout_deleted = 0;
-DWORD                 g_start_tick = 0;
-DWORD                 g_last_poll  = 0;
+    // ---- ② 生命周期 ----
+    std::thread       thread;
+    std::atomic<bool> running{false};
+    std::wstring      class_name; // 每窗口独立的窗口类名（多窗口并存必须各异）
 
-ComPtr<ICoreWebView2Environment> g_environment;
-ComPtr<ICoreWebView2Controller>  g_controller;
-ComPtr<ICoreWebView2>            g_webview;
+    // ---- ③ 窗口线程内的运行时状态（原「进程级单例」，现按窗口隔离）----
+    std::atomic<HWND>     window{nullptr};
+    std::atomic<bool>     stop{false};
+    std::atomic<int>      result{-1};
+    std::atomic<unsigned> cookie_count{0};
+    std::atomic<bool>     cookies_done{false};
+    std::atomic<DWORD>    first_cookie_tick{0};
+    // 协议探测状态：0=空闲 / 1=已注入（轮询等待结果）/ 2=完成
+    int                   probe_stage   = 0;
+    int                   probe_attempt = 0;
+    DWORD                 probe_due_tick  = 0;
+    DWORD                 probe_last_poll = 0;
 
-// ---- M8-14：CDP「把本地文件交给页面」的跨线程同步状态（调用方等待，窗口线程执行）----
-std::mutex               g_files_mutex;
-std::condition_variable  g_files_cv;
-bool                     g_files_done = false;
-bool                     g_files_ok   = false;
-std::string              g_files_selector;
-std::vector<std::string> g_files_paths;
-std::string              g_files_detail;
-std::string              g_files_error;
+    // 页面内 PoW 求解：跨线程同步（调用方等待，窗口线程执行）
+    std::mutex              pow_mutex;
+    std::condition_variable pow_cv;
+    bool                    pow_done = false;
+    long long               pow_answer = -1;
+    std::string             pow_error;
+    std::string             pow_challenge_json;
+    int                     pow_stage      = 0;   // 0=空闲 / 1=已注入（轮询等待）/ 2=完成
+    int                     pow_attempt    = 0;
+    DWORD                   pow_last_poll  = 0;
 
-// ---- M_patchC（`PW-07f` · 2026-10-08）：CDP「真实输入 / 发送」跨线程同步状态 ----
-//  * 调用方（后台线程）写参 → PostMessage → 窗口线程执行 CDP → 回写结果 → notify
-//  * 真机证据与原因见 `webview_host.h` 的同名小节（豆包 ProseMirror 忽略合成事件）
-std::mutex               g_cdp_mutex;
-std::condition_variable  g_cdp_cv;
-bool                     g_cdp_done  = false;
-bool                     g_cdp_ok    = false;
-std::string              g_cdp_text;
-bool                     g_cdp_enter = false;
-std::string              g_cdp_detail;
-std::string              g_cdp_error;
+    // ---- L3（PB2-13 / PB2-15）：通用「窗口内同步执行脚本」槽（**按窗口 / 按 owner**）----
+    std::mutex              script_mutex;
+    std::condition_variable script_cv;
+    bool                    script_done = false;
+    std::string             script_js;
+    std::string             script_result;
+    std::string             script_error;
 
-// ---- M8-14：网络回执采集（`ICoreWebView2_2::add_WebResourceResponseReceived`）----
-std::mutex                     g_net_mutex;
-std::vector<WebResourceRecord> g_net_records;
-bool                           g_net_ready = false;     // 是否挂钩成功
-constexpr std::size_t          kNetRecordLimit = 400;   // 有界缓冲（R13：不能无限增长）
+    // 按站点注销（PB2-19）：跨线程同步（调用方等待，窗口线程删 Cookie + 清 localStorage）
+    std::mutex              logout_mutex;
+    std::condition_variable logout_cv;
+    bool                    logout_done  = false;
+    bool                    logout_ok    = false;
+    std::string             logout_error;
+    unsigned                logout_deleted = 0;
+    DWORD                   start_tick = 0;
+    DWORD                   last_poll  = 0;
 
-// ---- M_patchC（`PW-03` · 不变量 `I25`）：**就绪缓存** ----
-//  * 目的：轮询期间（`dom_chat` 每 500 ms 一轮）不必每轮都多跑一次页面状态探针
-//  * 失效点：窗口 start（换站点 / 重开）与 WM_DESTROY（窗口关闭）
-//  * 只缓存「已达掩码」，**不缓存**页面内容 —— 不改变任何判定语义
-std::mutex  g_ready_mutex;
-std::string g_ready_site;
-int         g_ready_mask = 0;
-DWORD       g_ready_tick = 0;
+    // ---- 浏览器对象（**环境按 profile 共享**；见 `ensure_environment`）----
+    ComPtr<ICoreWebView2Environment> environment;
+    ComPtr<ICoreWebView2Controller>  controller;
+    ComPtr<ICoreWebView2>            webview;
+
+    // ---- `PW-05`（归因分离）：同窗口**串行执行**守卫 ----
+    //  * 一个窗口的页面是**单线程**执行的（WebView2 官方：回调全部在该窗口线程上跑）
+    //    ⇒ 同窗口上的两次并发调用会互相踩槽位；这里显式检测并给出**可分辨**的
+    //    「窗口被占用」原因（旧实现是**静默串槽**：一个 `g_script_done` 被两个等待者共享）
+    //  * 同一线程**重入**放行（`wait_ready` → `peek_page_state` 这类同链路嵌套不算并发）
+    std::mutex      busy_mutex;
+    bool            busy = false;
+    std::thread::id busy_thread{};
+
+    // ---- `PW-08`（`D-35③`）：复位记账 ----
+    bool used_before   = false; // 本窗口是否已被用过（false ⇒ 下一次调用是「首次」：要复位到新会话页）
+    bool failed_before = false; // 上一次使用以「未就绪」失败（⇒ 触发**一次**复位后重试）
+    int  resets_done   = 0;     // 已复位次数（上限 `kMaxResetsPerWindow`）
+
+    // ---- 状态文案（界面显示 / `LoginWindow::status()`）----
+    mutable std::mutex status_mutex;
+    std::string        status;
+
+    // ---- M8-14：CDP「把本地文件交给页面」的**本窗口**槽（调用方等待，窗口线程执行）----
+    std::mutex               files_mutex;
+    std::condition_variable  files_cv;
+    bool                     files_done = false;
+    bool                     files_ok   = false;
+    std::string              files_selector;
+    std::vector<std::string> files_paths;
+    std::string              files_detail;
+    std::string              files_error;
+
+    // ---- M_patchC（`PW-07f`）：CDP「真实输入 / 发送」的**本窗口**槽 ----
+    std::mutex              cdp_mutex;
+    std::condition_variable cdp_cv;
+    bool                    cdp_done  = false;
+    bool                    cdp_ok    = false;
+    std::string             cdp_text;
+    bool                    cdp_enter = false;
+    std::string             cdp_detail;
+    std::string             cdp_error;
+
+    // ---- M8-14：网络回执采集（**本窗口**的回执 —— `PW-04` / `I26`：回执不跨 owner）----
+    std::mutex                     net_mutex;
+    std::vector<WebResourceRecord> net_records;
+    bool                           net_ready = false;      // 是否挂钩成功
+
+    // ---- M_patchC（`PW-03` / `I25`）：**本窗口**的就绪缓存 ----
+    //  * 目的：轮询期间（`dom_chat` 每 500 ms 一轮）不必每轮都多跑一次页面状态探针
+    //  * 失效点：窗口 start（换站点 / 重开）与 WM_DESTROY（窗口关闭）
+    //  * 只缓存「已达掩码」，**不缓存**页面内容 —— 不改变任何判定语义
+    std::mutex  ready_mutex;
+    std::string ready_site;
+    int         ready_mask = 0;
+    DWORD       ready_tick = 0;
+};
+
+namespace { // 重新打开匿名名字空间（窗口表 / 环境缓存 / 全部实现细节）
+
+constexpr int kProbeMaxAttempts = 24;  // 24 × 500ms ≈ 12 秒
+constexpr int kPowMaxAttempts   = 240; // 240 × 500ms ≈ 120 秒
+
+constexpr std::size_t kNetRecordLimit = 400; // 网络回执有界缓冲（R13：不能无限增长）
+
+// ---- `PW-02`：**窗口表**（唯一真相 = 键与顺序；`g_windows` 存对应运行时对象）----
+//  * `g_table` = 纯函数决策模型（`web/window_table.h`）：复用 / 新建 / 收尾顺序 / 诊断行
+//  * `g_windows` = 窗口键 → 窗口运行时（`WindowCtx`）；**只在 `ctx_acquire` / `ctx_close` 里变更**
+//    （两处同时改，保证与 `g_table` 不发散）
+std::mutex                                        g_table_mutex;
+WindowTable                                       g_table;
+std::map<std::string, std::shared_ptr<WindowCtx>> g_windows;
+
+// ---- 浏览器**环境**缓存（官方约束：一个 user data folder 同时只能有一个 environment）----
+//  * 一个 environment 可创建**多个** controller（多窗口）⇒ 多窗口共享登录态
+//    （= 既有产品语义：每个站点只需登录一次；窗口之间互不干扰的是**页面 / 槽位**，不是 Cookie）
+//  * `g_env_creating` 标记「哪个 profile 正在被哪个窗口线程创建」：同 profile 的第二个窗口**等**
+//    第一个建好（否则第二次创建必然失败：user data folder 已被占用）
+std::mutex                                              g_env_mutex;
+std::condition_variable                                 g_env_cv;
+std::map<std::string, ComPtr<ICoreWebView2Environment>> g_envs;      // profile 目录 → 环境
+std::map<std::string, HRESULT>                          g_env_fail;  // profile 目录 → 创建失败码
+std::string                                             g_env_creating; // 正在创建该 profile
+
+// ---- 「当前窗口」上下文（`thread_local`）----
+//  * 窗口线程：线程启动时绑定**自己**的窗口 ⇒ 窗口线程内所有 `st()` 都指自己（含 COM 回调）
+//  * 调用方线程：进入公开 API 时用 `CtxScope` 绑定**目标**窗口（由 `ctx_find` 得到）
+//  * 这一层替换掉了改造前的「进程级单例」：**同一份代码**现在服务 N 个窗口
+thread_local WindowCtx* t_cur = nullptr;
+
+WindowCtx& st() { return *t_cur; }
+
+// 绑定 / 还原「当前窗口」（作用域守卫；支持嵌套）
+class CtxScope {
+public:
+    explicit CtxScope(WindowCtx* ctx) : prev_(t_cur) { t_cur = ctx; }
+    ~CtxScope() { t_cur = prev_; }
+    CtxScope(const CtxScope&)            = delete;
+    CtxScope& operator=(const CtxScope&) = delete;
+
+private:
+    WindowCtx* prev_;
+};
 
 void forget_ready()
 {
-    std::lock_guard<std::mutex> lock(g_ready_mutex);
-    g_ready_site.clear();
-    g_ready_mask = 0;
-    g_ready_tick = 0;
+    std::lock_guard<std::mutex> lock(st().ready_mutex);
+    st().ready_site.clear();
+    st().ready_mask = 0;
+    st().ready_tick = 0;
 }
 
 std::wstring to_wide(const std::string& text)
@@ -374,34 +469,34 @@ void attach_parent_console()
 
 void resize_webview()
 {
-    HWND window = g_window.load();
-    if (g_controller == nullptr || window == nullptr) {
+    HWND window = st().window.load();
+    if (st().controller == nullptr || window == nullptr) {
         return;
     }
     RECT bounds{};
     ::GetClientRect(window, &bounds);
-    g_controller->put_Bounds(bounds);
+    st().controller->put_Bounds(bounds);
 }
 
 // 写会话：按**站点**（origin）归档 —— 多站点互不覆盖（PB2-18）
 void write_session(const std::vector<Cookie>& cookies)
 {
     Session session;
-    session.url         = g_request.url;
+    session.url         = st().request.url;
     session.cookies     = cookies;
-    session.site        = site_key_of(g_request.url);
-    session.provider_id = g_request.provider_id;
+    session.site        = site_key_of(st().request.url);
+    session.provider_id = st().request.provider_id;
     SessionStore::instance().set(std::move(session));
 }
 
 void extract_cookies(const char* reason)
 {
-    if (g_webview == nullptr) {
+    if (st().webview == nullptr) {
         return;
     }
 
     ComPtr<ICoreWebView2_2> webview2;
-    if (FAILED(g_webview.As(&webview2)) || webview2 == nullptr) {
+    if (FAILED(st().webview.As(&webview2)) || webview2 == nullptr) {
         log::error("[网页版登录] 当前 WebView2 运行时过旧，不支持 CookieManager（请更新 Runtime）");
         return;
     }
@@ -412,7 +507,7 @@ void extract_cookies(const char* reason)
         return;
     }
 
-    const std::wstring target_url = to_wide(g_request.url);
+    const std::wstring target_url = to_wide(st().request.url);
     const HRESULT      hr         = manager->GetCookies(
         target_url.c_str(),
         Callback<ICoreWebView2GetCookiesCompletedHandler>(
@@ -467,10 +562,10 @@ void extract_cookies(const char* reason)
                     }
                 }
 
-                g_cookie_count = static_cast<unsigned>(cookies.size());
-                g_cookies_done = true;
-                if (g_first_cookie_tick.load() == 0) {
-                    g_first_cookie_tick = ::GetTickCount();
+                st().cookie_count = static_cast<unsigned>(cookies.size());
+                st().cookies_done = true;
+                if (st().first_cookie_tick.load() == 0) {
+                    st().first_cookie_tick = ::GetTickCount();
                 }
                 write_session(cookies);
                 log::info(std::string("[网页版登录] Cookie 已获取（") + reason +
@@ -487,8 +582,8 @@ void extract_cookies(const char* reason)
 // 关闭窗口：code >= 0 时使用给定退出码，否则按"是否拿到 Cookie"判定（有=0，无=1）
 void close_window(int code)
 {
-    g_result = (code >= 0) ? code : ((g_cookie_count.load() > 0) ? 0 : 1);
-    HWND window = g_window.load();
+    st().result = (code >= 0) ? code : ((st().cookie_count.load() > 0) ? 0 : 1);
+    HWND window = st().window.load();
     if (window != nullptr) {
         ::KillTimer(window, kTimerId);
         ::DestroyWindow(window);
@@ -501,9 +596,154 @@ void finish_protocol_probe(ProbeResult probe);
 void start_protocol_probe();
 void poll_protocol_probe();
 
+// ---------------------------------------------------------------- 窗口表 ----
+//  `PW-02`（`I24`）：**唯一**的开窗 / 关窗入口 —— 任何「先关旧窗再开新窗」的调用点都已被删除
+//   * 取窗：按 `(owner, 站点)`；**找不到就返回空**（不新建；新建只由本文件的
+//     `ensure_session` / 显式「打开登录窗口」/ `prepare_window` 做）
+//   * 新建：登记窗口表 + 起**该窗口自己的**线程（不碰任何别的窗口）
+//   * 关闭：请求关闭（可等线程结束）+ 从表里删除（**只关自己的**）
+//   * 收尾：`ctx_close_all()` 按窗口表给出的顺序（后开的先关）逐窗口关闭
+
+int run_login_window(const LoginRequest& request); // 线程体（定义在后面）
+
+std::shared_ptr<WindowCtx> ctx_find(const WebOwner& owner, const std::string& site_key)
+{
+    const std::string           key = window_key(owner, site_key);
+    std::lock_guard<std::mutex> lock(g_table_mutex);
+    const auto                  it = g_windows.find(key);
+    return it == g_windows.end() ? nullptr : it->second;
+}
+
+bool ctx_alive(const std::shared_ptr<WindowCtx>& ctx)
+{
+    return ctx != nullptr && ctx->running.load();
+}
+
+// 窗口线程体（绑定 `t_cur` → 跑 `run_login_window` → 回写结果 / `running`）
+void window_thread_main(std::shared_ptr<WindowCtx> holder, LoginRequest request)
+{
+    CtxScope scope(holder.get());
+    const int code = run_login_window(request);
+    holder->result  = code;
+    holder->running = false;
+    {
+        std::lock_guard<std::mutex> lock(holder->status_mutex);
+        switch (code) {
+        case 0:
+            holder->status = "登录窗口已关闭（会话 Cookie 已保存在内存）";
+            break;
+        case 2:
+            holder->status = "登录窗口已关闭（超时，未取得 Cookie）";
+            break;
+        default:
+            holder->status = "登录窗口已关闭（未取得有效会话）";
+            break;
+        }
+    }
+    log::info("[网页版窗口] 线程结束 " + holder->key + "，退出码 " + std::to_string(code));
+}
+
+// 起一条**新窗口**（登记 + 线程）；失败 → 返回空 + `error`（不静默）
+std::shared_ptr<WindowCtx> ctx_start(const WebOwner& owner, LoginRequest request,
+                                     std::string* error)
+{
+    const std::string site = site_key_of(request.url);
+    auto              ctx  = std::make_shared<WindowCtx>();
+    ctx->owner    = owner;
+    ctx->site_key = site;
+    ctx->key      = window_key(owner, site);
+    request.owner = owner;
+    if (request.profile_dir.empty()) {
+        request.profile_dir = paths::webview2_profile().string();
+    }
+    ctx->request = request;
+
+    std::error_code ec;
+    std::filesystem::create_directories(ctx->request.profile_dir, ec);
+    if (ec) {
+        log::warn("[网页版登录] profile 目录创建失败: " + ctx->request.profile_dir + "（" +
+                  ec.message() + "）");
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_table_mutex);
+        if (g_windows.find(ctx->key) != g_windows.end()) {
+            if (error != nullptr) {
+                *error = "该归属在该站点已有窗口（" + ctx->key + "）";
+            }
+            return nullptr;
+        }
+        g_table.note_opened(owner, site);
+        if (const WindowEntry* entry = g_table.find(owner, site); entry != nullptr) {
+            ctx->seq = entry->seq; // 诊断序号（收尾顺序由窗口表给出）
+        }
+        g_windows.emplace(ctx->key, ctx);
+    }
+
+    ctx->running = true;
+    try {
+        ctx->thread = std::thread(window_thread_main, ctx, ctx->request);
+    }
+    catch (const std::exception& ex) {
+        ctx->running = false;
+        {
+            std::lock_guard<std::mutex> lock(g_table_mutex);
+            g_windows.erase(ctx->key);
+            g_table.note_closed(owner, site);
+        }
+        if (error != nullptr) {
+            *error = std::string("创建登录线程失败（") + ctx->key + "）: " + ex.what();
+        }
+        return nullptr;
+    }
+
+    log::info("[网页版窗口] 开窗 " + ctx->key + "（profile " + ctx->request.profile_dir +
+              "；窗口表：" + g_table.report() + "）");
+    return ctx;
+}
+
+// 关**自己的**窗口：请求关闭（可选等线程结束）+ 从窗口表移除
+void ctx_close(const std::shared_ptr<WindowCtx>& ctx, int code, bool wait)
+{
+    if (ctx == nullptr) {
+        return;
+    }
+    ctx->stop = true;
+    if (const HWND window = ctx->window.load(); window != nullptr) {
+        if (code >= 0) {
+            ctx->result = code;
+        }
+        ::PostMessageW(window, WM_CLOSE, 0, 0);
+    }
+    if (wait && ctx->thread.joinable()) {
+        ctx->thread.join();
+    }
+    std::lock_guard<std::mutex> lock(g_table_mutex);
+    g_windows.erase(ctx->key);
+    g_table.note_closed(ctx->owner, ctx->site_key);
+}
+
+// 收尾：**逐窗口**关闭（顺序 = 窗口表给出：后开的先关）
+void ctx_close_all()
+{
+    std::vector<std::shared_ptr<WindowCtx>> all;
+    {
+        std::lock_guard<std::mutex> lock(g_table_mutex);
+        for (const std::string& key : g_table.keys_in_close_order()) {
+            const auto it = g_windows.find(key);
+            if (it != g_windows.end()) {
+                all.push_back(it->second);
+            }
+        }
+    }
+    for (const auto& ctx : all) {
+        ctx_close(ctx, -1, /*wait=*/true);
+    }
+}
+
 void finish_protocol_probe(ProbeResult probe)
 {
-    g_probe_stage = 2;
+    st().probe_stage = 2;
 
     log::info("[网页版探测] localStorage 键: " +
               (probe.local_storage_keys.empty() ? std::string("(空)") : probe.local_storage_keys));
@@ -521,9 +761,9 @@ void finish_protocol_probe(ProbeResult probe)
     }
 
     const bool ok = probe.ok;
-    SessionStore::instance().set_probe(std::move(probe), site_key_of(g_request.url)); // 按站点归档（PB2-18）
+    SessionStore::instance().set_probe(std::move(probe), site_key_of(st().request.url)); // 按站点归档（PB2-18）
 
-    if (g_request.auto_close_after_probe) {
+    if (st().request.auto_close_after_probe) {
         log::info("[网页版探测] 已自动收尾（关闭登录窗口）");
         close_window(ok ? 0 : 1);
     }
@@ -531,7 +771,7 @@ void finish_protocol_probe(ProbeResult probe)
 
 void start_protocol_probe()
 {
-    if (g_webview == nullptr) {
+    if (st().webview == nullptr) {
         ProbeResult probe;
         probe.error = "WebView2 尚未就绪";
         finish_protocol_probe(std::move(probe));
@@ -539,8 +779,8 @@ void start_protocol_probe()
     }
 
     log::info("[网页版探测] 注入探测脚本（localStorage/userToken + create_pow_challenge）");
-    const std::wstring script = to_wide(probe_kickoff_script(g_request));
-    const HRESULT      hr     = g_webview->ExecuteScript(
+    const std::wstring script = to_wide(probe_kickoff_script(st().request));
+    const HRESULT      hr     = st().webview->ExecuteScript(
         script.c_str(),
         Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
             [](HRESULT result, LPCWSTR /*json_result*/) -> HRESULT {
@@ -550,9 +790,9 @@ void start_protocol_probe()
                     finish_protocol_probe(std::move(probe));
                     return S_OK;
                 }
-                g_probe_stage     = 1; // 等待异步任务完成，交给 WM_TIMER 轮询
-                g_probe_attempt   = 0;
-                g_probe_last_poll = ::GetTickCount();
+                st().probe_stage     = 1; // 等待异步任务完成，交给 WM_TIMER 轮询
+                st().probe_attempt   = 0;
+                st().probe_last_poll = ::GetTickCount();
                 return S_OK;
             })
             .Get());
@@ -566,10 +806,10 @@ void start_protocol_probe()
 
 void poll_protocol_probe()
 {
-    if (g_probe_stage != 1 || g_webview == nullptr) {
+    if (st().probe_stage != 1 || st().webview == nullptr) {
         return;
     }
-    if (++g_probe_attempt > kProbeMaxAttempts) {
+    if (++st().probe_attempt > kProbeMaxAttempts) {
         ProbeResult probe;
         probe.error = "探测超时（结果未在 " + std::to_string(kProbeMaxAttempts * 500 / 1000) +
                       " 秒内返回）";
@@ -578,7 +818,7 @@ void poll_protocol_probe()
     }
 
     const std::wstring script = to_wide(kProbePollScript);
-    const HRESULT      hr     = g_webview->ExecuteScript(
+    const HRESULT      hr     = st().webview->ExecuteScript(
         script.c_str(),
         Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
             [](HRESULT result, LPCWSTR json_result) -> HRESULT {
@@ -632,32 +872,32 @@ void poll_protocol_probe()
 void finish_run_script(std::string result, std::string error)
 {
     {
-        std::lock_guard<std::mutex> lock(g_script_mutex);
-        g_script_result = std::move(result);
-        g_script_error  = std::move(error);
-        g_script_done   = true;
+        std::lock_guard<std::mutex> lock(st().script_mutex);
+        st().script_result = std::move(result);
+        st().script_error  = std::move(error);
+        st().script_done   = true;
     }
-    g_script_cv.notify_all();
+    st().script_cv.notify_all();
 }
 
-// L3：在窗口线程执行 g_script_js（不做解释，原样回传 JSON 结果）
+// L3：在窗口线程执行 st().script_js（不做解释，原样回传 JSON 结果）
 void run_script_in_window()
 {
-    if (g_webview == nullptr) {
+    if (st().webview == nullptr) {
         finish_run_script({}, "WebView2 未就绪");
         return;
     }
     std::string script_js;
     {
-        std::lock_guard<std::mutex> lock(g_script_mutex);
-        script_js = g_script_js;
+        std::lock_guard<std::mutex> lock(st().script_mutex);
+        script_js = st().script_js;
     }
     if (script_js.empty()) {
         finish_run_script({}, "脚本为空");
         return;
     }
     const std::wstring script = to_wide(script_js);
-    const HRESULT      hr     = g_webview->ExecuteScript(
+    const HRESULT      hr     = st().webview->ExecuteScript(
         script.c_str(),
         Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
             [](HRESULT result, LPCWSTR json_result) -> HRESULT {
@@ -683,26 +923,26 @@ void run_script_in_window()
 void finish_set_files(bool ok, std::string detail, std::string error)
 {
     {
-        std::lock_guard<std::mutex> lock(g_files_mutex);
-        g_files_ok     = ok;
-        g_files_detail = std::move(detail);
-        g_files_error  = std::move(error);
-        g_files_done   = true;
+        std::lock_guard<std::mutex> lock(st().files_mutex);
+        st().files_ok     = ok;
+        st().files_detail = std::move(detail);
+        st().files_error  = std::move(error);
+        st().files_done   = true;
     }
-    g_files_cv.notify_all();
+    st().files_cv.notify_all();
 }
 
 // 调用一次 CDP 方法（回调在窗口线程；`params_json` 为 UTF-8 JSON 文本）
 void call_cdp(const wchar_t* method, const std::string& params_json,
               std::function<void(HRESULT, const std::string&)> on_done)
 {
-    if (g_webview == nullptr) {
+    if (st().webview == nullptr) {
         on_done(E_FAIL, {});
         return;
     }
     const std::wstring method_name = method;
     const std::wstring params      = to_wide(params_json);
-    const HRESULT      hr          = g_webview->CallDevToolsProtocolMethod(
+    const HRESULT      hr          = st().webview->CallDevToolsProtocolMethod(
         method_name.c_str(), params.c_str(),
         Callback<ICoreWebView2CallDevToolsProtocolMethodCompletedHandler>(
             [on_done](HRESULT result, LPCWSTR json_result) -> HRESULT {
@@ -720,16 +960,16 @@ void call_cdp(const wchar_t* method, const std::string& params_json,
 // CDP 三步：DOM.getDocument → DOM.querySelector → DOM.setFileInputFiles
 void run_set_files_in_window()
 {
-    if (g_webview == nullptr) {
+    if (st().webview == nullptr) {
         finish_set_files(false, {}, "WebView2 未就绪");
         return;
     }
     std::string              selector;
     std::vector<std::string> paths;
     {
-        std::lock_guard<std::mutex> lock(g_files_mutex);
-        selector = g_files_selector;
-        paths    = g_files_paths;
+        std::lock_guard<std::mutex> lock(st().files_mutex);
+        selector = st().files_selector;
+        paths    = st().files_paths;
     }
     if (selector.empty()) {
         finish_set_files(false, {}, "选择器为空（站点单元未给 attach_selector）");
@@ -823,13 +1063,13 @@ void run_set_files_in_window()
 void finish_cdp_input(bool ok, std::string detail, std::string error)
 {
     {
-        std::lock_guard<std::mutex> lock(g_cdp_mutex);
-        g_cdp_ok     = ok;
-        g_cdp_detail = std::move(detail);
-        g_cdp_error  = std::move(error);
-        g_cdp_done   = true;
+        std::lock_guard<std::mutex> lock(st().cdp_mutex);
+        st().cdp_ok     = ok;
+        st().cdp_detail = std::move(detail);
+        st().cdp_error  = std::move(error);
+        st().cdp_done   = true;
     }
-    g_cdp_cv.notify_all();
+    st().cdp_cv.notify_all();
 }
 
 // 一步 CDP 调用（成功后把 `label` 追加进诊断串；任一步失败 → 立即如实收尾）
@@ -873,11 +1113,11 @@ void run_cdp_input_in_window()
     std::string text;
     bool        press_enter = false;
     {
-        std::lock_guard<std::mutex> lock(g_cdp_mutex);
-        text        = g_cdp_text;
-        press_enter = g_cdp_enter;
+        std::lock_guard<std::mutex> lock(st().cdp_mutex);
+        text        = st().cdp_text;
+        press_enter = st().cdp_enter;
     }
-    if (g_webview == nullptr) {
+    if (st().webview == nullptr) {
         finish_cdp_input(false, {}, "CDP 真实输入：WebView 不可用（窗口已关闭？）");
         return;
     }
@@ -926,19 +1166,21 @@ void run_cdp_input_in_window()
 // M8-14：网络回执挂钩（窗口线程；控制器就绪后调用一次）
 void hook_resource_capture()
 {
-    if (g_webview == nullptr) {
+    if (st().webview == nullptr) {
         return;
     }
     ComPtr<ICoreWebView2_2> webview2;
-    if (FAILED(g_webview->QueryInterface(IID_PPV_ARGS(&webview2))) || webview2 == nullptr) {
+    if (FAILED(st().webview->QueryInterface(IID_PPV_ARGS(&webview2))) || webview2 == nullptr) {
         log::warn("[图片上传] 取不到 ICoreWebView2_2 —— 网络回执采集不可用"
                   "（本页只能用页面证据判定）");
         return;
     }
     EventRegistrationToken token{};
+    // `PW-04`（`I26`）：回执**带上产生它的归属** —— 取用时会再核一次（`owner_accepts`）
+    const WebOwner         window_owner = st().owner;
     const HRESULT          hr = webview2->add_WebResourceResponseReceived(
         Callback<ICoreWebView2WebResourceResponseReceivedEventHandler>(
-            [](ICoreWebView2* /*sender*/,
+            [window_owner](ICoreWebView2* /*sender*/,
                ICoreWebView2WebResourceResponseReceivedEventArgs* args) -> HRESULT {
                 if (args == nullptr) {
                     return S_OK;
@@ -967,18 +1209,19 @@ void hook_resource_capture()
                 if (record.url.empty()) {
                     return S_OK;
                 }
-                std::lock_guard<std::mutex> lock(g_net_mutex);
-                if (g_net_records.size() >= kNetRecordLimit) {
-                    g_net_records.erase(g_net_records.begin()); // 有界（R13）
+                record.owner = window_owner; // `PW-04` / `I26`：回执绑定归属
+                std::lock_guard<std::mutex> lock(st().net_mutex);
+                if (st().net_records.size() >= kNetRecordLimit) {
+                    st().net_records.erase(st().net_records.begin()); // 有界（R13）
                 }
-                g_net_records.push_back(std::move(record));
+                st().net_records.push_back(std::move(record));
                 return S_OK;
             })
             .Get(),
         &token);
-    g_net_ready = SUCCEEDED(hr);
+    st().net_ready = SUCCEEDED(hr);
     log::info(std::string("[图片上传] 网络回执采集：") +
-              (g_net_ready ? "已挂钩（WebResourceResponseReceived）" : "挂钩失败"));
+              (st().net_ready ? "已挂钩（WebResourceResponseReceived）" : "挂钩失败"));
 }
 
 
@@ -986,26 +1229,26 @@ void hook_resource_capture()
 void finish_pow_solve(long long answer, std::string error)
 {
     {
-        std::lock_guard<std::mutex> lock(g_pow_mutex);
-        g_pow_answer = answer;
-        g_pow_error  = std::move(error);
-        g_pow_done   = true;
+        std::lock_guard<std::mutex> lock(st().pow_mutex);
+        st().pow_answer = answer;
+        st().pow_error  = std::move(error);
+        st().pow_done   = true;
     }
-    g_pow_cv.notify_all();
+    st().pow_cv.notify_all();
 }
 
 // PoW：在窗口线程执行（注入挑战 → 运行页面内求解脚本）
 void run_pow_solve_in_page()
 {
-    if (g_webview == nullptr) {
+    if (st().webview == nullptr) {
         finish_pow_solve(-1, "WebView2 未就绪");
         return;
     }
 
     std::string challenge_json;
     {
-        std::lock_guard<std::mutex> lock(g_pow_mutex);
-        challenge_json = g_pow_challenge_json;
+        std::lock_guard<std::mutex> lock(st().pow_mutex);
+        challenge_json = st().pow_challenge_json;
     }
     if (challenge_json.empty()) {
         finish_pow_solve(-1, "挑战为空");
@@ -1015,7 +1258,7 @@ void run_pow_solve_in_page()
     // 1) 挑战 JSON 写入页面全局（内容是合法 JSON，可安全内联）
     const std::wstring inject =
         to_wide("window.__aiwritePowChallenge = " + challenge_json + "; 'ok';");
-    const HRESULT inject_hr = g_webview->ExecuteScript(
+    const HRESULT inject_hr = st().webview->ExecuteScript(
         inject.c_str(),
         Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
             [](HRESULT result, LPCWSTR /*json_result*/) -> HRESULT {
@@ -1032,7 +1275,7 @@ void run_pow_solve_in_page()
 
     // 2) 注入求解脚本（结果写入 window.__aiwritePowResult，由 WM_TIMER 轮询取回）
     const std::wstring script = to_wide(kSolvePowScript);
-    const HRESULT      hr     = g_webview->ExecuteScript(
+    const HRESULT      hr     = st().webview->ExecuteScript(
         script.c_str(),
         Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
             [](HRESULT result, LPCWSTR /*json_result*/) -> HRESULT {
@@ -1046,25 +1289,25 @@ void run_pow_solve_in_page()
         finish_pow_solve(-1, "调用求解脚本失败");
         return;
     }
-    g_pow_stage     = 1;
-    g_pow_attempt   = 0;
-    g_pow_last_poll = ::GetTickCount();
+    st().pow_stage     = 1;
+    st().pow_attempt   = 0;
+    st().pow_last_poll = ::GetTickCount();
 }
 
 // PoW：轮询页面里的求解结果（WM_TIMER 驱动）
 void poll_pow_solve()
 {
-    if (g_pow_stage != 1 || g_webview == nullptr) {
+    if (st().pow_stage != 1 || st().webview == nullptr) {
         return;
     }
-    if (++g_pow_attempt > kPowMaxAttempts) {
-        g_pow_stage = 2;
+    if (++st().pow_attempt > kPowMaxAttempts) {
+        st().pow_stage = 2;
         finish_pow_solve(-1, "页面内 PoW 求解超时");
         return;
     }
 
     const std::wstring script = to_wide(kSolvePowPollScript);
-    const HRESULT      hr     = g_webview->ExecuteScript(
+    const HRESULT      hr     = st().webview->ExecuteScript(
         script.c_str(),
         Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
             [](HRESULT result, LPCWSTR json_result) -> HRESULT {
@@ -1083,7 +1326,7 @@ void poll_pow_solve()
                     return S_OK; // 尚未完成
                 }
 
-                g_pow_stage = 2;
+                st().pow_stage = 2;
                 try {
                     const nlohmann::json data   = nlohmann::json::parse(inner);
                     const bool           ok     = data.value("ok", false);
@@ -1101,7 +1344,7 @@ void poll_pow_solve()
             })
             .Get());
     if (FAILED(hr)) {
-        g_pow_stage = 2;
+        st().pow_stage = 2;
         finish_pow_solve(-1, "轮询求解结果失败");
     }
 }
@@ -1113,23 +1356,23 @@ void poll_pow_solve()
 void finish_logout(bool ok, std::string error)
 {
     {
-        std::lock_guard<std::mutex> lock(g_logout_mutex);
-        g_logout_ok    = ok;
-        g_logout_error = std::move(error);
-        g_logout_done  = true;
+        std::lock_guard<std::mutex> lock(st().logout_mutex);
+        st().logout_ok    = ok;
+        st().logout_error = std::move(error);
+        st().logout_done  = true;
     }
-    g_logout_cv.notify_all();
+    st().logout_cv.notify_all();
 }
 
 void run_logout_in_page()
 {
-    if (g_webview == nullptr) {
+    if (st().webview == nullptr) {
         finish_logout(false, "WebView2 尚未就绪");
         return;
     }
 
     ComPtr<ICoreWebView2_2> webview2;
-    if (FAILED(g_webview.As(&webview2)) || webview2 == nullptr) {
+    if (FAILED(st().webview.As(&webview2)) || webview2 == nullptr) {
         finish_logout(false, "当前 WebView2 运行时过旧，不支持 CookieManager（请更新 Runtime）");
         return;
     }
@@ -1139,7 +1382,7 @@ void run_logout_in_page()
         return;
     }
 
-    const std::wstring target_url = to_wide(g_request.url);
+    const std::wstring target_url = to_wide(st().request.url);
     const HRESULT      hr         = manager->GetCookies(
         target_url.c_str(),
         Callback<ICoreWebView2GetCookiesCompletedHandler>(
@@ -1156,16 +1399,16 @@ void run_logout_in_page()
                         }
                     }
                 }
-                g_logout_deleted = deleted;
+                st().logout_deleted = deleted;
                 log::info("[网页版注销] 站点 Cookie 删除：" + std::to_string(deleted) + " / " +
-                          std::to_string(count) + " 条（" + g_request.url + "）");
+                          std::to_string(count) + " 条（" + st().request.url + "）");
 
-                if (g_webview == nullptr) {
+                if (st().webview == nullptr) {
                     finish_logout(true, std::string());
                     return S_OK;
                 }
                 // 同源 localStorage / sessionStorage 一并清掉（网页版 token 就存在 localStorage）
-                const HRESULT script_hr = g_webview->ExecuteScript(
+                const HRESULT script_hr = st().webview->ExecuteScript(
                     L"try { localStorage.clear(); sessionStorage.clear(); } catch (e) { }",
                     Callback<ICoreWebView2ExecuteScriptCompletedHandler>(
                         [](HRESULT, LPCWSTR /*json*/) -> HRESULT {
@@ -1188,18 +1431,18 @@ HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
 {
     if (FAILED(result) || controller == nullptr) {
         log::error("[网页版登录] 创建 WebView2 控制器失败 HRESULT=" + std::to_string(result));
-        g_result = 1;
-        ::PostMessageW(g_window.load(), WM_CLOSE, 0, 0);
+        st().result = 1;
+        ::PostMessageW(st().window.load(), WM_CLOSE, 0, 0);
         return S_OK;
     }
 
-    g_controller = controller;
-    g_controller->get_CoreWebView2(&g_webview);
+    st().controller = controller;
+    st().controller->get_CoreWebView2(&st().webview);
     resize_webview();
-    g_controller->put_IsVisible(TRUE);
+    st().controller->put_IsVisible(TRUE);
 
     ComPtr<ICoreWebView2Settings> settings;
-    if (SUCCEEDED(g_webview->get_Settings(&settings)) && settings != nullptr) {
+    if (SUCCEEDED(st().webview->get_Settings(&settings)) && settings != nullptr) {
         settings->put_IsStatusBarEnabled(FALSE);
     }
 
@@ -1207,7 +1450,7 @@ HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
     hook_resource_capture();
 
     EventRegistrationToken token{};
-    g_webview->add_NavigationCompleted(
+    st().webview->add_NavigationCompleted(
         Callback<ICoreWebView2NavigationCompletedEventHandler>(
             [](ICoreWebView2* /*sender*/,
                ICoreWebView2NavigationCompletedEventArgs* args) -> HRESULT {
@@ -1215,8 +1458,8 @@ HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
                 args->get_IsSuccess(&success);
                 if (success) {
                     extract_cookies("页面加载完成");
-                    if (g_request.probe_after_load) {
-                        g_probe_due_tick = ::GetTickCount() + kProbeDelayMs; // SPA 就绪后再探测
+                    if (st().request.probe_after_load) {
+                        st().probe_due_tick = ::GetTickCount() + kProbeDelayMs; // SPA 就绪后再探测
                     }
                 }
                 else {
@@ -1227,46 +1470,107 @@ HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
             .Get(),
         &token);
 
-    log::info("[网页版登录] 开始导航: " + g_request.url);
-    g_webview->Navigate(to_wide(g_request.url).c_str());
+    log::info("[网页版登录] 开始导航: " + st().request.url);
+    st().webview->Navigate(to_wide(st().request.url).c_str());
     return S_OK;
 }
 
-HRESULT on_environment_ready(HRESULT result, ICoreWebView2Environment* environment)
+// ---- 浏览器环境：**按 profile 缓存**（WebView2 官方约束：一个 user data folder 只能有一个 environment）----
+//  * 一个 environment 可创建**多个** controller ⇒ 多窗口并存的**前提**（`PW-06`）
+//  * `g_env_creating` = 「该 profile 正在被某个窗口线程创建」：同 profile 的第二个窗口**等它建好**
+//    （否则第二次创建必然失败：folder 已被占用 —— 真机报错一般不可读，故这里先等）
+//  * 失败码也进缓存（`g_env_fail`）：同一 profile 不反复重试空转（如实报错）
+void create_controller_for_window(ICoreWebView2Environment* environment)
 {
-    if (FAILED(result) || environment == nullptr) {
-        log::error("[网页版登录] 创建 WebView2 环境失败（请确认已安装 WebView2 Runtime）HRESULT=" +
-                   std::to_string(result));
-        g_result = 1;
-        ::PostMessageW(g_window.load(), WM_CLOSE, 0, 0);
-        return S_OK;
-    }
-
-    g_environment = environment;
-    const HRESULT hr = g_environment->CreateCoreWebView2Controller(
-        g_window.load(),
+    const HRESULT hr = environment->CreateCoreWebView2Controller(
+        st().window.load(),
         Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(&on_controller_ready)
             .Get());
     if (FAILED(hr)) {
         // 同步返回失败时回调不会触发（典型：HWND 无效 → E_INVALIDARG），必须显式报错
         log::error("[网页版登录] CreateCoreWebView2Controller 同步返回失败 HRESULT=" +
-                   std::to_string(hr));
-        g_result = 1;
-        ::PostMessageW(g_window.load(), WM_CLOSE, 0, 0);
+                   std::to_string(hr) + "（窗口 " + st().key + "）");
+        st().result = 1;
+        ::PostMessageW(st().window.load(), WM_CLOSE, 0, 0);
     }
+}
+
+HRESULT on_environment_ready(HRESULT result, ICoreWebView2Environment* environment)
+{
+    const std::string profile_dir = st().request.profile_dir;
+    if (FAILED(result) || environment == nullptr) {
+        log::error("[网页版登录] 创建 WebView2 环境失败（请确认已安装 WebView2 Runtime）HRESULT=" +
+                   std::to_string(result));
+        {
+            std::lock_guard<std::mutex> lock(g_env_mutex);
+            g_env_fail[profile_dir] = result;
+            if (g_env_creating == profile_dir) {
+                g_env_creating.clear();
+            }
+        }
+        g_env_cv.notify_all();
+        st().result = 1;
+        ::PostMessageW(st().window.load(), WM_CLOSE, 0, 0);
+        return S_OK;
+    }
+
+    // ① 进缓存（后续窗口直接复用 ⇒ 登录态共享、页面/槽位各自独立）
+    {
+        std::lock_guard<std::mutex> lock(g_env_mutex);
+        g_envs[profile_dir] = environment;
+        g_env_fail.erase(profile_dir);
+        if (g_env_creating == profile_dir) {
+            g_env_creating.clear();
+        }
+    }
+    g_env_cv.notify_all();
+
+    // ② 本窗口**自己**的 controller（不是抢别人的）
+    st().environment = environment;
+    create_controller_for_window(environment);
     return S_OK;
 }
 
-LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+// 取（必要时建）**本窗口**要用的环境；失败 → false + 可操作 `error`
+bool ensure_environment(HWND window, std::string* error)
 {
-    (void)lparam;
-    switch (message) {
-    case WM_CREATE: {
-        // 【关键】异步回调可能在 CreateWindowExW 返回前（嵌套消息泵）触发，必须先赋值 g_window
-        g_window = window;
+    const std::string                profile_dir = st().request.profile_dir;
+    constexpr DWORD                  kEnvWaitMs  = 30000; // 等「同 profile 的创建者」完成（首次可能较慢）
+    const DWORD                      deadline    = ::GetTickCount() + kEnvWaitMs;
+    bool                             create_now  = false;
+    bool                             env_timeout = false;
+    HRESULT                          fail_code   = S_OK;
+    ComPtr<ICoreWebView2Environment> cached;
 
-        const std::wstring profile = to_wide(g_request.profile_dir);
-        const HRESULT      hr      = ::CreateCoreWebView2EnvironmentWithOptions(
+    {
+        std::unique_lock<std::mutex> lock(g_env_mutex);
+        for (;;) {
+            if (const auto it = g_envs.find(profile_dir); it != g_envs.end()) {
+                cached = it->second;
+                break;
+            }
+            if (const auto it = g_env_fail.find(profile_dir); it != g_env_fail.end()) {
+                fail_code = it->second;
+                break;
+            }
+            if (g_env_creating.empty()) {
+                g_env_creating = profile_dir; // 本线程来建（同 profile 只允许一个创建者）
+                create_now     = true;
+                break;
+            }
+            if (::GetTickCount() >= deadline) {
+                env_timeout = true;
+                break;
+            }
+            g_env_cv.wait_for(lock, std::chrono::milliseconds(200));
+        }
+    }
+
+    if (create_now) {
+        const std::wstring profile = to_wide(profile_dir);
+        log::info("[网页版会话] 创建 WebView2 环境（profile " + profile_dir + "；窗口 " +
+                  st().key + "）");
+        const HRESULT hr = ::CreateCoreWebView2EnvironmentWithOptions(
             nullptr, profile.c_str(), nullptr,
             Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
                 &on_environment_ready)
@@ -1274,12 +1578,59 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         if (FAILED(hr)) {
             log::error("[网页版登录] CreateCoreWebView2EnvironmentWithOptions 调用失败 HRESULT=" +
                        std::to_string(hr));
-            g_result = 1;
+            {
+                std::lock_guard<std::mutex> lock(g_env_mutex);
+                g_env_fail[profile_dir] = hr;
+                if (g_env_creating == profile_dir) {
+                    g_env_creating.clear();
+                }
+            }
+            g_env_cv.notify_all();
+            if (error != nullptr) {
+                *error = "创建 WebView2 环境失败（HRESULT " + std::to_string(hr) +
+                         "）：请确认已安装 WebView2 Runtime";
+            }
+            ::PostMessageW(window, WM_CLOSE, 0, 0);
+            return false;
+        }
+        return true; // 环境回调里会创建**本窗口**的 controller
+    }
+
+    if (cached != nullptr) {
+        st().environment = cached.Get();
+        create_controller_for_window(cached.Get());
+        return true;
+    }
+
+    if (error != nullptr) {
+        *error = env_timeout ? ("等待 WebView2 环境超时（profile " + profile_dir +
+                                "；另一个窗口正在创建同一 profile 的环境）")
+                             : ("WebView2 环境此前创建失败（HRESULT " + std::to_string(fail_code) +
+                                "；profile " + profile_dir + "）");
+    }
+    ::PostMessageW(window, WM_CLOSE, 0, 0);
+    return false;
+}
+
+LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+{
+    (void)lparam;
+    switch (message) {
+    case WM_CREATE: {
+        // 【关键】异步回调可能在 CreateWindowExW 返回前（嵌套消息泵）触发，必须先赋值 st().window
+        st().window = window;
+
+        // 环境**按 profile 缓存 / 共享**（一个 user data folder 只能一个 environment；
+        // 多窗口共享它 ⇒ 登录态共享，而页面 / 槽位各自独立）—— `PW-02` / `PW-06`
+        std::string env_error;
+        if (!ensure_environment(window, &env_error)) {
+            log::error("[网页版登录] " + st().key + " 环境不可用：" + env_error);
+            st().result = 1;
             ::PostMessageW(window, WM_CLOSE, 0, 0);
         }
 
-        g_start_tick = ::GetTickCount();
-        g_last_poll  = g_start_tick;
+        st().start_tick = ::GetTickCount();
+        st().last_poll  = st().start_tick;
         ::SetTimer(window, kTimerId, kTimerTickMs, nullptr);
         return 0;
     }
@@ -1299,36 +1650,36 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
 
     case WM_TIMER: {
         const DWORD now = ::GetTickCount();
-        if (g_stop.load()) {
+        if (st().stop.load()) {
             log::info("[网页版登录] 收到关闭请求，正在关闭登录窗口");
             close_window(-1);
             return 0;
         }
-        if (g_request.timeout_seconds > 0 &&
-            now - g_start_tick > static_cast<DWORD>(g_request.timeout_seconds) * 1000) {
-            log::warn("[网页版登录] 到达超时 " + std::to_string(g_request.timeout_seconds) +
+        if (st().request.timeout_seconds > 0 &&
+            now - st().start_tick > static_cast<DWORD>(st().request.timeout_seconds) * 1000) {
+            log::warn("[网页版登录] 到达超时 " + std::to_string(st().request.timeout_seconds) +
                       " 秒，自动关闭窗口");
-            close_window(g_cookie_count.load() > 0 ? 0 : 2);
+            close_window(st().cookie_count.load() > 0 ? 0 : 2);
             return 0;
         }
-        if (now - g_last_poll >= kCookiePollMs && g_webview != nullptr) {
-            g_last_poll = now;
+        if (now - st().last_poll >= kCookiePollMs && st().webview != nullptr) {
+            st().last_poll = now;
             extract_cookies("定时刷新（登录后 Cookie 会变化）");
         }
-        if (g_probe_stage == 1 && now - g_probe_last_poll >= 500) {
-            g_probe_last_poll = now;
+        if (st().probe_stage == 1 && now - st().probe_last_poll >= 500) {
+            st().probe_last_poll = now;
             poll_protocol_probe();
         }
-        if (g_pow_stage == 1 && now - g_pow_last_poll >= 500) {
-            g_pow_last_poll = now;
+        if (st().pow_stage == 1 && now - st().pow_last_poll >= 500) {
+            st().pow_last_poll = now;
             poll_pow_solve();
         }
-        if (g_probe_due_tick != 0 && now >= g_probe_due_tick) {
-            g_probe_due_tick = 0;
+        if (st().probe_due_tick != 0 && now >= st().probe_due_tick) {
+            st().probe_due_tick = 0;
             start_protocol_probe();
         }
-        if (g_request.auto_close_after_cookies && g_cookies_done.load()) {
-            const DWORD first = g_first_cookie_tick.load();
+        if (st().request.auto_close_after_cookies && st().cookies_done.load()) {
+            const DWORD first = st().first_cookie_tick.load();
             if (first != 0 && now - first >= kAutoCloseGraceMs) {
                 log::info("[网页版登录] 已取得 Cookie 且稳定 " +
                           std::to_string(kAutoCloseGraceMs / 1000) + " 秒，自动关闭登录窗口");
@@ -1368,16 +1719,16 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         return 0;
 
     case WM_DESTROY:
-        if (g_controller != nullptr) {
-            g_controller->Close();
-            g_controller = nullptr;
+        if (st().controller != nullptr) {
+            st().controller->Close();
+            st().controller = nullptr;
         }
-        g_webview     = nullptr;
-        g_environment = nullptr;
-        g_window      = nullptr;
+        st().webview     = nullptr;
+        st().environment = nullptr;
+        st().window      = nullptr;
         forget_ready(); // M_patchC PW-03：窗口关闭 ⇒ 就绪缓存作废
-        if (g_result.load() < 0) {
-            g_result = (g_cookie_count.load() > 0) ? 0 : 1;
+        if (st().result.load() < 0) {
+            st().result = (st().cookie_count.load() > 0) ? 0 : 1;
         }
         ::PostQuitMessage(0);
         return 0;
@@ -1398,6 +1749,9 @@ int run_login_window(const LoginRequest& request)
         return 1;
     }
 
+    // ---- `PW-02`：**窗口类名按窗口隔离**（多窗口并存时，同名 `RegisterClassExW` 会失败）----
+    st().class_name = std::wstring(kWindowClass) + L"_" + std::to_wstring(st().seq);
+
     WNDCLASSEXW window_class{};
     window_class.cbSize        = sizeof(window_class);
     window_class.style         = CS_HREDRAW | CS_VREDRAW;
@@ -1405,10 +1759,10 @@ int run_login_window(const LoginRequest& request)
     window_class.hInstance     = ::GetModuleHandleW(nullptr);
     window_class.hCursor       = ::LoadCursorW(nullptr, IDC_ARROW);
     window_class.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-    window_class.lpszClassName = kWindowClass;
+    window_class.lpszClassName = st().class_name.c_str();
 
     if (::RegisterClassExW(&window_class) == 0) {
-        log::error("[网页版登录] 注册窗口类失败");
+        log::error("[网页版登录] 注册窗口类失败（" + st().key + "）");
         ::CoUninitialize();
         return 1;
     }
@@ -1425,12 +1779,12 @@ int run_login_window(const LoginRequest& request)
         y = 120;
     }
 
-    HWND window = ::CreateWindowExW(0, kWindowClass, to_wide(request.window_title).c_str(),
+    HWND window = ::CreateWindowExW(0, st().class_name.c_str(), to_wide(request.window_title).c_str(),
                                     WS_OVERLAPPEDWINDOW, x, y, width, height, nullptr, nullptr,
                                     window_class.hInstance, nullptr);
     if (window == nullptr) {
-        log::error("[网页版登录] 创建登录窗口失败");
-        ::UnregisterClassW(kWindowClass, window_class.hInstance);
+        log::error("[网页版登录] 创建登录窗口失败（" + st().key + "）");
+        ::UnregisterClassW(st().class_name.c_str(), window_class.hInstance);
         ::CoUninitialize();
         return 1;
     }
@@ -1448,9 +1802,9 @@ int run_login_window(const LoginRequest& request)
 
     ::UnregisterHotKey(window, kHotkeyExtract);
     ::UnregisterHotKey(window, kHotkeyClose);
-    ::UnregisterClassW(kWindowClass, window_class.hInstance);
+    ::UnregisterClassW(st().class_name.c_str(), window_class.hInstance);
     ::CoUninitialize();
-    return g_result.load() < 0 ? 1 : g_result.load();
+    return st().result.load() < 0 ? 1 : st().result.load();
 }
 
 } // namespace
@@ -1494,6 +1848,13 @@ std::string probe_kickoff_script(const LoginRequest& request)
 }
 
 // -------------------------------------------------------- LoginWindow -------
+//  `PW-02`：`LoginWindow` 从「进程内单例窗口」改为**窗口句柄**（绑定一个 `owner`）——
+//   * 界面用 `login_window()`（owner = `界面#登录窗口`）：它也是**独立**窗口，
+//     不再被节点的 `ensure_session` 抢走（真机错配的另一半）
+//   * `start()` 把句柄指向 `(owner, 该请求站点)` 的窗口；**只关同一个 owner 的旧窗口**
+//     （界面上切换站点仍是「一个可见窗口」⇒ 与今天一致；节点 owner 之间互不影响 · `I24`）
+LoginWindow::LoginWindow(WebOwner owner) : owner_(std::move(owner)) {}
+
 LoginWindow::~LoginWindow()
 {
     request_close();
@@ -1502,106 +1863,93 @@ LoginWindow::~LoginWindow()
 
 bool LoginWindow::start(const LoginRequest& request, std::string* error)
 {
-    if (running_.load()) {
-        if (error != nullptr) {
-            *error = "已有登录窗口在运行";
+    const std::string site = site_key_of(request.url);
+
+    // ① 同一个 owner 在其他站点还有窗口 ⇒ 先关它（换站点 = 换这一个可见窗口；`I24` 允许：同一个 owner）
+    const std::vector<std::string> owned = [this] {
+        std::lock_guard<std::mutex> lock(g_table_mutex);
+        return g_table.keys_of_owner(owner_);
+    }();
+    for (const std::string& key : owned) {
+        if (key == window_key(owner_, site)) {
+            continue;
         }
+        std::shared_ptr<WindowCtx> other;
+        {
+            std::lock_guard<std::mutex> lock(g_table_mutex);
+            const auto                  it = g_windows.find(key);
+            if (it != g_windows.end()) {
+                other = it->second;
+            }
+        }
+        if (other != nullptr) {
+            log::info("[网页版窗口] 同一归属换站点：关闭 " + key + "（新站点 " +
+                      (site.empty() ? std::string("(默认)") : site) + "）");
+            ctx_close(other, -1, /*wait=*/true);
+        }
+    }
+
+    // ② 该站点已有窗口：**在跑** ⇒ 明确拒绝（不抢占）；**已结束** ⇒ 先收尾再重开
+    if (std::shared_ptr<WindowCtx> current = ctx_find(owner_, site); current != nullptr) {
+        if (ctx_alive(current)) {
+            if (error != nullptr) {
+                *error = "已有登录窗口在运行（" + owner_tag(owner_) + " · 站点 " +
+                         (site.empty() ? std::string("(默认)") : site) + "）";
+            }
+            return false;
+        }
+        ctx_close(current, -1, /*wait=*/true); // 收尾旧壳（线程已结束）
+    }
+
+    LoginRequest owned_request = request;
+    owned_request.owner        = owner_;
+    std::shared_ptr<WindowCtx> ctx = ctx_start(owner_, owned_request, error);
+    if (ctx == nullptr) {
         return false;
     }
-    join(); // 回收上一次的线程
-
-    g_request = request;
-    if (g_request.profile_dir.empty()) {
-        g_request.profile_dir = paths::webview2_profile().string();
-    }
-    g_stop             = false;
-    g_result           = -1;
-    g_cookies_done     = false;
-    g_cookie_count     = 0;
-    g_first_cookie_tick = 0;
-    g_probe_due_tick   = 0;
-    g_probe_stage      = 0;
-    g_probe_attempt    = 0;
-    g_window           = nullptr;
-    forget_ready(); // M_patchC PW-03：重开窗口 ⇒ 就绪缓存作废
     {
-        std::lock_guard<std::mutex> lock(g_logout_mutex);
-        g_logout_done    = false;
-        g_logout_ok      = false;
-        g_logout_error.clear();
-        g_logout_deleted = 0;
+        std::lock_guard<std::mutex> lock(ctx->status_mutex);
+        ctx->status = "正在打开登录窗口…";
     }
-
-    std::error_code ec;
-    std::filesystem::create_directories(g_request.profile_dir, ec);
-    if (ec) {
-        log::warn("[网页版登录] profile 目录创建失败: " + g_request.profile_dir + "（" +
-                  ec.message() + "）");
-    }
-
-    set_status("正在打开登录窗口…");
-    running_ = true;
-    try {
-        thread_ = std::thread(&LoginWindow::run_thread, this, g_request);
-    }
-    catch (const std::exception& ex) {
-        running_ = false;
-        if (error != nullptr) {
-            *error = std::string("创建登录线程失败: ") + ex.what();
-        }
-        return false;
-    }
-
-    log::info("[网页版登录] 登录窗口已启动（" + g_request.url + "，profile " +
-              g_request.profile_dir + "）");
+    last_ = ctx;
     return true;
 }
 
 void LoginWindow::request_close()
 {
-    g_stop      = true;
-    HWND window = g_window.load();
-    if (window != nullptr) {
+    if (last_ == nullptr) {
+        return;
+    }
+    last_->stop = true;
+    if (const HWND window = last_->window.load(); window != nullptr) {
         ::PostMessageW(window, WM_CLOSE, 0, 0);
     }
 }
 
 void LoginWindow::join()
 {
-    if (thread_.joinable()) {
-        thread_.join();
+    if (last_ != nullptr && last_->thread.joinable()) {
+        last_->thread.join();
     }
+}
+
+bool LoginWindow::running() const
+{
+    return last_ != nullptr && last_->running.load();
+}
+
+int LoginWindow::result() const
+{
+    return last_ == nullptr ? -1 : last_->result.load();
 }
 
 std::string LoginWindow::status() const
 {
-    std::lock_guard<std::mutex> lock(status_mutex_);
-    return status_;
-}
-
-void LoginWindow::set_status(const std::string& text)
-{
-    std::lock_guard<std::mutex> lock(status_mutex_);
-    status_ = text;
-}
-
-void LoginWindow::run_thread(LoginRequest request)
-{
-    const int code = run_login_window(request);
-    result_        = code;
-    running_       = false;
-    switch (code) {
-    case 0:
-        set_status("登录窗口已关闭（会话 Cookie 已保存在内存）");
-        break;
-    case 2:
-        set_status("登录窗口已关闭（超时，未取得 Cookie）");
-        break;
-    default:
-        set_status("登录窗口已关闭（未取得有效会话）");
-        break;
+    if (last_ == nullptr) {
+        return "(未打开)";
     }
-    log::info("[网页版登录] 登录窗口线程结束，退出码 " + std::to_string(code));
+    std::lock_guard<std::mutex> lock(last_->status_mutex);
+    return last_->status;
 }
 
 // ------------------------------------------------------------- 自检 --------
@@ -1617,7 +1965,7 @@ int selftest(int timeout_seconds)
     request.timeout_seconds          = timeout;
     request.auto_close_after_cookies = true;
 
-    LoginWindow window;
+    LoginWindow window(selftest_owner()); // `PW-02`：自检/CLI 用**独立归属**（不与节点窗口互抢）
     std::string error;
     if (!window.start(request, &error)) {
         std::printf("[网页版登录] 自检启动失败: %s\n", error.c_str());
@@ -1650,36 +1998,199 @@ LoginWindow& login_window()
 {
     // 故意用裸 new：不在退出期析构，避免静态析构顺序导致的线程/日志竞态。
     // 生命周期由 stop_login_window() 显式收尾。
-    static LoginWindow* instance = new LoginWindow();
+    static LoginWindow* instance = new LoginWindow(ui_window_owner());
     return *instance;
 }
 
-void request_protocol_probe()
+// ---- `PW-02` / `PW-05` / `PW-08`：公开 API 的公共前置（**唯一**入口，避免各调用点各写一套）----
+
+// 在**指定**窗口内请求一次协议探测（跨线程 Post；不抢占别的窗口）
+void ctx_post_probe(const std::shared_ptr<WindowCtx>& ctx)
 {
-    HWND window = g_window.load();
-    if (window == nullptr) {
-        log::warn("[网页版探测] 登录窗口未打开：请先点「打开登录窗口（WebView2）」并完成登录");
+    if (!ctx_alive(ctx)) {
         return;
     }
-    log::info("[网页版探测] 已请求（在登录窗口内执行）");
-    ::PostMessageW(window, kProbeMessage, 0, 0);
+    if (const HWND window = ctx->window.load(); window != nullptr) {
+        log::info("[网页版探测] 已请求（" + ctx->key + "）");
+        ::PostMessageW(window, kProbeMessage, 0, 0);
+    }
 }
 
-// 当前登录窗口所属站点（origin；无窗口 = 空）
-std::string current_window_site()
+// 取「最近打开且活着的窗口」（供**界面**「探测网页版协议」按钮 / 无站点参数的老路径使用）
+std::shared_ptr<WindowCtx> ctx_latest_alive()
 {
-    if (g_window.load() == nullptr) {
+    std::vector<std::string> order;
+    {
+        std::lock_guard<std::mutex> lock(g_table_mutex);
+        order = g_table.keys_in_close_order(); // 后开的在前
+    }
+    for (const std::string& key : order) {
+        std::shared_ptr<WindowCtx> ctx;
+        {
+            std::lock_guard<std::mutex> lock(g_table_mutex);
+            const auto                  it = g_windows.find(key);
+            if (it != g_windows.end()) {
+                ctx = it->second;
+            }
+        }
+        if (ctx_alive(ctx)) {
+            return ctx;
+        }
+    }
+    return nullptr;
+}
+
+// `PW-08`（`D-35③`）：为「一次节点级调用」准备**本 owner 自己的**该站点窗口
+//  * 复用 / 新建：由**窗口表**决定（同站点不同 owner 各开各的；跨站点**不关旧窗**）
+//  * 复位：`plan_reset`（首次 + 失败时 · 单次重试）= **关窗重开**（窗口级；`login_url` 即新会话页）
+//  * 输出 `ctx`：调用方用 `CtxScope` 绑定后，既有实现（`st()`）即指向该窗口
+bool prepare_window(const LoginRequest& site_request, std::shared_ptr<WindowCtx>* out,
+                    std::string* error)
+{
+    const std::string          site = site_key_of(site_request.url);
+    std::shared_ptr<WindowCtx> ctx  = ctx_find(site_request.owner, site);
+
+    const auto start_own_window = [&site_request, &site, error]() {
+        LoginRequest request     = site_request;
+        request.offscreen        = true;  // 离屏：不抢焦点（用户在界面开的窗口是**另一个 owner**）
+        request.probe_after_load = site_request.probe_applicable;
+        return ctx_start(site_request.owner, request, error);
+    };
+
+    if (!ctx_alive(ctx)) {
+        if (ctx != nullptr) {
+            ctx_close(ctx, -1, /*wait=*/true); // 旧壳（线程已结束）先收尾
+        }
+        ctx = start_own_window();
+        if (ctx == nullptr) {
+            return false;
+        }
+        log::info("[网页版窗口] 新开（" + ctx->key + "）；窗口表：" + [&] {
+            std::lock_guard<std::mutex> lock(g_table_mutex);
+            return g_table.report();
+        }());
+        if (out != nullptr) {
+            *out = ctx;
+        }
+        return true;
+    }
+
+    const int resets_before = ctx->resets_done;
+    const ResetAction action = plan_reset(/*opened_now=*/false,
+                                          /*reused_external=*/!ctx->used_before,
+                                          /*failed_before=*/ctx->failed_before,
+                                          /*resets_done=*/ctx->resets_done);
+    if (action == ResetAction::CloseAndReopen) {
+        const bool failure_driven = ctx->failed_before;
+        log::info("[网页版窗口] 复位 " + reset_action_name(action) + "：" + ctx->key +
+                  (failure_driven ? "（上一次未就绪 ⇒ 重试前复位）" : "（首次使用 ⇒ 回到新会话页）"));
+        ctx_close(ctx, -1, /*wait=*/true);
+        ctx = start_own_window();
+        if (ctx == nullptr) {
+            return false;
+        }
+        ctx->resets_done = resets_before + 1; // 单次重试预算：跨「重开」也要记账
+    }
+    ctx->used_before = true;
+    if (out != nullptr) {
+        *out = ctx;
+    }
+    return true;
+}
+
+// `PW-05`：同窗口**串行执行**守卫（同一线程重入放行）
+//  * 检测到并发 ⇒ 返回 `false` + `WebErrorKind::Preempted` 文案（**可分辨**，不静默串槽）
+class BusyGuard {
+public:
+    BusyGuard(WindowCtx& ctx, const std::string& site, bool* ok, std::string* error) : ctx_(ctx)
+    {
+        std::lock_guard<std::mutex> lock(ctx_.busy_mutex);
+        const std::thread::id       self = std::this_thread::get_id();
+        if (ctx_.busy && ctx_.busy_thread != self) {
+            if (ok != nullptr) {
+                *ok = false;
+            }
+            if (error != nullptr) {
+                *error = web_error_text(WebErrorKind::Preempted, ctx_.owner, site,
+                                        "该窗口正在被同一归属的另一次调用使用（" + ctx_.key + "）");
+            }
+            return;
+        }
+        if (!ctx_.busy) {
+            ctx_.busy        = true;
+            ctx_.busy_thread = self;
+            owned_           = true;
+        }
+        if (ok != nullptr) {
+            *ok = true;
+        }
+    }
+    ~BusyGuard()
+    {
+        if (owned_) {
+            std::lock_guard<std::mutex> lock(ctx_.busy_mutex);
+            ctx_.busy = false;
+        }
+    }
+
+    BusyGuard(const BusyGuard&)            = delete;
+    BusyGuard& operator=(const BusyGuard&) = delete;
+
+private:
+    WindowCtx& ctx_;
+    bool       owned_ = false;
+};
+
+void request_protocol_probe()
+{
+    const std::shared_ptr<WindowCtx> ctx = ctx_latest_alive();
+    if (ctx == nullptr) {
+        log::warn("[网页版探测] 没有已打开的登录窗口：请先点「打开登录窗口（WebView2）」并完成登录");
+        return;
+    }
+    ctx_post_probe(ctx);
+}
+
+// 当前窗口所属站点（origin；无窗口 = 空）—— **按归属**（`PW-02`：不再是「进程里那一个窗口」）
+std::string current_window_site(const WebOwner& owner, const std::string& site_key)
+{
+    const std::shared_ptr<WindowCtx> ctx = ctx_find(owner, site_key);
+    if (!ctx_alive(ctx)) {
         return {};
     }
-    return site_key_of(g_request.url);
+    return ctx->site_key;
 }
 
-bool window_on_site(const std::string& site)
+// 该归属在**指定站点**是否有活着的窗口（界面判定 / 调用前置）
+bool window_on_site(const WebOwner& owner, const std::string& site)
 {
-    return g_window.load() != nullptr && !site.empty() && current_window_site() == site;
+    if (site.empty()) {
+        return false;
+    }
+    const std::shared_ptr<WindowCtx> ctx = ctx_find(owner, site);
+    return ctx_alive(ctx) && ctx->site_key == site;
 }
 
-// 兼容路径（不指定站点）：改造前语义 —— 当前会话 / 内置默认站点，行为逐字不变
+// 窗口表诊断行（`PW-02`：谁开着哪些窗口 —— 日志 / 断言 / 界面可读）
+std::string windows_report()
+{
+    std::lock_guard<std::mutex> lock(g_table_mutex);
+    return g_table.report();
+}
+
+// 关闭**某归属**的窗口（显式收尾 / 换站点用；不碰别的归属）
+void close_owner_window(const WebOwner& owner, const std::string& site_key)
+{
+    const std::shared_ptr<WindowCtx> ctx = ctx_find(owner, site_key);
+    if (ctx == nullptr) {
+        return;
+    }
+    log::info("[网页版窗口] 显式关闭 " + ctx->key);
+    ctx_close(ctx, -1, /*wait=*/true);
+}
+
+// 兼容路径（不指定站点）：改造前语义 —— 最近打开的窗口的站点 / 内置默认站点
+//  * `PW-02`：**不再**读「进程里那一个窗口」；改为「最近打开且活着的窗口」（无则内置默认站点）
 bool ensure_session(int timeout_ms, std::string* error)
 {
     // 已有凭证 → 幂等返回（默认槽 = 最近写入的站点）
@@ -1688,24 +2199,25 @@ bool ensure_session(int timeout_ms, std::string* error)
     }
 
     LoginRequest request; // 默认 = 内置默认站点（DeepSeek）
-    if (g_window.load() != nullptr && !g_request.url.empty()) {
-        // 窗口已开：沿用其站点与站点参数（原地补探测，不另开窗）
-        request.url             = g_request.url;
-        request.window_title    = g_request.window_title;
-        request.profile_dir     = g_request.profile_dir;
-        request.provider_id     = g_request.provider_id;
-        request.probe_paths     = g_request.probe_paths;
-        request.challenge_path  = g_request.challenge_path;
-        request.completion_path = g_request.completion_path;
-        request.token_expr      = g_request.token_expr;
+    if (const std::shared_ptr<WindowCtx> ctx = ctx_latest_alive(); ctx != nullptr &&
+                                                                   !ctx->request.url.empty()) {
+        // 有活窗口：沿用其站点与站点参数（原地补探测，不另开窗）
+        request.url             = ctx->request.url;
+        request.window_title    = ctx->request.window_title;
+        request.profile_dir     = ctx->request.profile_dir;
+        request.provider_id     = ctx->request.provider_id;
+        request.probe_paths     = ctx->request.probe_paths;
+        request.challenge_path  = ctx->request.challenge_path;
+        request.completion_path = ctx->request.completion_path;
+        request.token_expr      = ctx->request.token_expr;
     }
     return ensure_session(request, timeout_ms, error);
 }
 
-// M_patchB L1 续（PB2-17/18/19）：按**站点**确保凭证 + 窗口对齐
-//  * 窗口必须开在**目标站点**上：页面内 PoW 求解依赖该站点页面（否则会拿错站点的页面）
-//  * 站点与当前窗口不一致 → **串行复用**同一个窗口（先关旧窗再按目标站点开窗；决策 D-20）
-//  * 因此多个网页版条目可「各自登录一次、运行时各用各的凭证」（内存会话按站点键控）
+// M_patchB L1 续（PB2-17/18/19）：按**站点**确保凭证 + 取用**本归属自己的**窗口
+//  * `PW-02`（`I24`）**核心修正**：站点不同 ⇒ **不再关别人的窗口**，而是**开/取该站点自己的**窗口
+//    （真机 2026-10-06 19:39:12 那条「串行复用：先关闭旧窗口」由此消失）
+//  * `PW-05`：失败文案带 `owner` 标签（谁要的）+ 站点 + 可操作下一步
 bool ensure_session(const LoginRequest& site_request, int timeout_ms, std::string* error)
 {
     const std::string site = site_key_of(site_request.url);
@@ -1723,49 +2235,43 @@ bool ensure_session(const LoginRequest& site_request, int timeout_ms, std::strin
     };
     const DWORD       deadline =
         ::GetTickCount() + static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 30000);
+    const std::string where = site.empty() ? std::string("(默认)") : site;
 
-    bool window_ready = window_on_site(site);
+    std::shared_ptr<WindowCtx> ctx        = ctx_find(site_request.owner, site);
+    const bool                 window_ready = ctx_alive(ctx);
     if (!window_ready) {
-        // ---- 串行复用：目标站点 ≠ 当前窗口站点（或无窗口）→ 关旧窗 + 按目标站点开窗 ----
-        if (g_window.load() != nullptr) {
-            log::info("[网页版会话] 切换站点：" + current_window_site() + " → " + site +
-                      "（串行复用登录窗口：先关闭旧窗口）");
-            login_window().request_close();
-            login_window().join();
+        if (ctx != nullptr) {
+            ctx_close(ctx, -1, /*wait=*/true); // 旧壳（线程已结束）先收尾
         }
-        // 起（或重建）离屏登录窗口；probe_after_load 会刷新 Cookie 与 userToken
+        // 起（或重建）**本归属自己的**离屏窗口；`probe_after_load` 会刷新 Cookie 与 userToken
         LoginRequest request     = site_request;
         request.offscreen        = true;   // 离屏可见窗口（完全隐藏时 WebView2 不创建控制器）
         request.timeout_seconds  = 0;
         request.probe_after_load = needs_token; // L4：DOM 站点不触发协议探测（探测不适用，I16）
-        std::string start_error;
-        if (!login_window().start(request, &start_error)) {
-            if (error != nullptr) {
-                *error = "启动登录窗口失败" + (site.empty() ? std::string() : "（站点 " + site + "）") +
-                         ": " + start_error;
-            }
+        ctx = ctx_start(site_request.owner, request, error);
+        if (ctx == nullptr) {
             return false;
         }
-        log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
+        log::info("[网页版会话] " + owner_tag(site_request.owner) + " 站点 " + where +
                   (ready() ? (needs_token
-                                  ? " 已有凭证但窗口不在该站点：已按串行策略重新打开（页面内 PoW 求解依赖该站点页面）"
-                                  : " 已有 Cookie 但窗口不在该站点：已按串行策略重新打开（DOM 生成 / 选择器探测需要该站点页面）")
-                           : " 内存无会话：已离屏启动登录窗口（页面加载后自动提取该站点 Cookie" +
-                                 std::string(needs_token ? "并探测协议" : "）")));
+                                  ? " 已有凭证但该归属尚无该站点窗口：已开**自己的**窗口（独立窗口，I24）"
+                                  : " 已有 Cookie 但该归属尚无该站点窗口：已开**自己的**窗口（独立窗口，I24）")
+                           : " 内存无会话：已离屏启动**本归属自己的**登录窗口（页面加载后自动提取该站点 Cookie" +
+                                 std::string(needs_token ? "并探测协议）" : "）")));
     }
     else if (ready()) {
         return true; // 幂等：窗口与站点态都已就绪
     }
     else if (needs_token) {
         // 窗口已在该站点但没有凭证（用户手动开的窗口不会自动探测 / 上次探测失败）→ 显式补一次探测
-        request_protocol_probe();
-        log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
-                  " 内存无凭证：复用已打开的登录窗口，已请求一次协议探测");
+        ctx_post_probe(ctx);
+        log::info("[网页版会话] 站点 " + where +
+                  " 内存无凭证：复用**本归属自己的**已开窗口，已请求一次协议探测");
     }
     else {
         // L4：DOM 站点 —— 不适用协议探测；窗口自身会定时复读 Cookie（登录后自动变「已登录」）
-        log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
-                  " 尚未读到 Cookie：复用已打开的登录窗口（DOM 站点不适用协议探测，等待登录后自动复读）");
+        log::info("[网页版会话] 站点 " + where +
+                  " 尚未读到 Cookie：复用本归属自己的已开窗口（DOM 站点不适用协议探测，等待登录后自动复读）");
     }
 
     // ---- 等站点就绪（内置站点：页面加载后自动探测 / 每 6 秒补一次；DOM 站点：等 Cookie 复读）----
@@ -1776,42 +2282,47 @@ bool ensure_session(const LoginRequest& site_request, int timeout_ms, std::strin
     while (::GetTickCount() < deadline) {
         if (ready()) {
             if (needs_token) {
-                log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
-                          " 已取得内存凭证（userToken 长度 " +
+                log::info("[网页版会话] 站点 " + where + " 已取得内存凭证（userToken 长度 " +
                           std::to_string(SessionStore::instance().snapshot(site).user_token.size()) +
                           "，仅内存；路径=" + (window_ready ? "复用已开窗口补探测" : "离屏开窗探测") + "）");
             }
             else {
-                log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
-                          " 已读到该站点 Cookie（" +
+                log::info("[网页版会话] 站点 " + where + " 已读到该站点 Cookie（" +
                           std::to_string(SessionStore::instance().snapshot(site).cookies.size()) +
                           " 条；DOM 站点不依赖内存 userToken，仅内存，程序退出即销毁）");
             }
             return true;
         }
+        // 窗口被关掉（用户手动关 / 复位）⇒ 不再空等：如实返回，由调用方按归因处理
+        if (!ctx_alive(ctx)) {
+            if (error != nullptr) {
+                *error = owner_tag(site_request.owner) + " 站点 " + where +
+                         " 的窗口已关闭（无法继续等待凭证）：请重新运行；若反复出现请检查窗口是否被手动关闭";
+            }
+            return false;
+        }
         const DWORD now = ::GetTickCount();
         if (needs_token && probes < 3 && now >= next_retry) {
             ++probes;
             next_retry = now + retry_ms;
-            request_protocol_probe();
-            log::info("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
-                      " 仍未取得凭证，补一次协议探测（第 " + std::to_string(probes) +
-                      " 次；窗口" + (window_ready ? "已打开" : "本次新开") + "）");
+            ctx_post_probe(ctx);
+            log::info("[网页版会话] 站点 " + where + " 仍未取得凭证，补一次协议探测（第 " +
+                      std::to_string(probes) + " 次；窗口" + (window_ready ? "已打开" : "本次新开") + "）");
         }
         ::Sleep(100);
     }
 
     if (error != nullptr) {
         if (needs_token) {
-            *error = (site.empty() ? std::string() : "站点 " + site + " ") +
-                     "未取得网页版凭证（内存里没有 userToken）"
-                     "：请在已登录的登录窗口内点「探测网页版协议（dev）」后重试，"
+            *error = owner_tag(site_request.owner) + " 站点 " + where +
+                     " 未取得网页版凭证（内存里没有 userToken）"
+                     "：请在**该站点窗口**内点「探测网页版协议（dev）」后重试，"
                      "或运行 aiwrite.exe --web-probe 确认登录态（退出码 0 = 可用）";
         }
         else {
             // L4：站点无关文案 —— 不再提 userToken；也不要求用户去点「探测网页版协议」
-            *error = (site.empty() ? std::string() : "站点 " + site + " ") +
-                     "未读到该站点 Cookie（浏览器 profile 里没有该站点的登录态）："
+            *error = owner_tag(site_request.owner) + " 站点 " + where +
+                     " 未读到该站点 Cookie（浏览器 profile 里没有该站点的登录态）："
                      "请点参数面板的「打开登录窗口（WebView2）」在该站点手动登录；"
                      "该站点不适用协议探测，登录后**无需**再点「探测网页版协议」";
         }
@@ -1823,6 +2334,7 @@ bool ensure_session(const LoginRequest& site_request, int timeout_ms, std::strin
 //  * 清该站点的**内存会话**（立即生效，其他站点不受影响）
 //  * 删除该站点 origin 的 **Cookie** 与 **localStorage / sessionStorage**（在窗口线程内完成）
 //  * **不**删除登录 profile：删除整个 profile（= 清掉所有站点）属高级操作，由参数面板单独入口提供
+//  * `PW-02`：只使用**本归属自己的**该站点窗口（不再「切过去」= 不再关别人的窗口）
 bool logout_site(const LoginRequest& site_request, int timeout_ms, std::string* error)
 {
     const std::string site = site_key_of(site_request.url);
@@ -1830,68 +2342,70 @@ bool logout_site(const LoginRequest& site_request, int timeout_ms, std::string* 
     // 1) 先清内存会话：UI 立刻看到「未登录」，且不影响其他站点
     SessionStore::instance().clear(site);
 
-    // 2) 窗口不在目标站点 → 按串行策略切过去（离屏，仅用于删 Cookie / localStorage）
-    if (g_window.load() != nullptr && !window_on_site(site)) {
-        log::info("[网页版会话] 按站点注销：窗口从 " + current_window_site() + " 切到 " + site);
-        login_window().request_close();
-        login_window().join();
-    }
-    if (g_window.load() == nullptr) {
-        LoginRequest request     = site_request;
-        request.offscreen        = true;
-        request.timeout_seconds  = 0;
-        request.probe_after_load = false; // 注销不需要探测
-        std::string start_error;
-        if (!login_window().start(request, &start_error)) {
-            if (error != nullptr) {
-                *error = "按站点注销需要打开该站点窗口（站点 " + site + "）：" + start_error;
-            }
-            return false;
+    // 2) 取用**本归属自己的**该站点窗口（没有就开一个，仅用于删 Cookie / localStorage）
+    LoginRequest request     = site_request;
+    request.offscreen        = true;
+    request.timeout_seconds  = 0;
+    request.probe_after_load = false; // 注销不需要探测
+    std::shared_ptr<WindowCtx> ctx = ctx_find(site_request.owner, site);
+    if (!ctx_alive(ctx)) {
+        if (ctx != nullptr) {
+            ctx_close(ctx, -1, /*wait=*/true); // 旧壳（线程已结束）先收尾
         }
-        // 等控制器就绪：CookieManager 需要 ICoreWebView2_2
-        const DWORD ready_deadline = ::GetTickCount() + 10000;
-        while (g_webview == nullptr && ::GetTickCount() < ready_deadline) {
-            ::Sleep(100);
-        }
-        if (g_webview == nullptr) {
-            login_window().request_close();
-            login_window().join();
-            if (error != nullptr) {
-                *error = "按站点注销：WebView2 在 10 秒内未就绪（站点 " + site + "）";
+        ctx = ctx_start(site_request.owner, request, error);
+        if (ctx == nullptr) {
+            if (error != nullptr && error->empty()) {
+                *error = "按站点注销需要打开该站点窗口（站点 " + site + "）";
             }
             return false;
         }
     }
 
-    // 3) 窗口线程执行：删该 origin 的 Cookie + 清同源 localStorage
+    // 3) 等控制器就绪（CookieManager 需要 `ICoreWebView2_2`）
     {
-        std::lock_guard<std::mutex> lock(g_logout_mutex);
-        g_logout_done    = false;
-        g_logout_ok      = false;
-        g_logout_error.clear();
-        g_logout_deleted = 0;
+        const DWORD ready_deadline = ::GetTickCount() + 10000;
+        while (ctx->window.load() != nullptr && ctx->webview == nullptr &&
+               ::GetTickCount() < ready_deadline) {
+            ::Sleep(100);
+        }
+        if (ctx->webview == nullptr) {
+            ctx_close(ctx, -1, /*wait=*/true);
+            if (error != nullptr) {
+                *error = owner_tag(site_request.owner) +
+                         " 按站点注销：WebView2 在 10 秒内未就绪（站点 " + site + "）";
+            }
+            return false;
+        }
     }
-    if (HWND window = g_window.load(); window != nullptr) {
+
+    // 4) 窗口线程执行：删该 origin 的 Cookie + 清同源 localStorage
+    {
+        std::lock_guard<std::mutex> lock(ctx->logout_mutex);
+        ctx->logout_done    = false;
+        ctx->logout_ok      = false;
+        ctx->logout_error.clear();
+        ctx->logout_deleted = 0;
+    }
+    if (HWND window = ctx->window.load(); window != nullptr) {
         ::PostMessageW(window, kLogoutMessage, 0, 0);
     }
 
     bool        ok  = false;
     std::string why;
     {
-        std::unique_lock<std::mutex> lock(g_logout_mutex);
+        std::unique_lock<std::mutex> lock(ctx->logout_mutex);
         const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 15000);
-        if (g_logout_cv.wait_for(lock, wait_ms, [] { return g_logout_done; })) {
-            ok  = g_logout_ok;
-            why = g_logout_error;
+        if (ctx->logout_cv.wait_for(lock, wait_ms, [&ctx] { return ctx->logout_done; })) {
+            ok  = ctx->logout_ok;
+            why = ctx->logout_error;
         }
         else {
             why = "按站点注销超时（Cookie 删除未在时限内完成）";
         }
     }
 
-    // 4) 收尾：关闭窗口（该站点已登出）
-    login_window().request_close();
-    login_window().join();
+    // 5) 收尾：关闭**该归属的**窗口（该站点已登出）—— 不碰别的归属
+    ctx_close(ctx, -1, /*wait=*/true);
 
     if (!ok && error != nullptr) {
         *error = why;
@@ -1911,54 +2425,43 @@ bool run_script_now(const std::string& script_js, int timeout_ms, std::string* j
         }
         return false;
     }
-    const HWND window = g_window.load();
-    if (window == nullptr || g_webview == nullptr) {
+    const HWND window = st().window.load();
+    if (window == nullptr || st().webview == nullptr) {
         if (error != nullptr) {
-            *error = "登录窗口未就绪（请先在界面「打开登录窗口」登录一次）";
+            // `PW-05`：**状态问题说成状态问题**（不再劝用户「先去登录一次」—— 那是误归因 `G2`/`G6`）
+            *error = web_error_text(WebErrorKind::NotReady, st().owner, st().site_key,
+                                    "窗口 / 页面尚未创建完成（窗口 " + st().key + "）");
         }
         return false;
     }
     {
-        std::lock_guard<std::mutex> lock(g_script_mutex);
-        g_script_js = script_js;
-        g_script_result.clear();
-        g_script_error.clear();
-        g_script_done = false;
+        std::lock_guard<std::mutex> lock(st().script_mutex);
+        st().script_js = script_js;
+        st().script_result.clear();
+        st().script_error.clear();
+        st().script_done = false;
     }
     ::PostMessageW(window, kRunScriptMessage, 0, 0);
 
-    std::unique_lock<std::mutex> lock(g_script_mutex);
+    std::unique_lock<std::mutex> lock(st().script_mutex);
     const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 15000);
-    if (!g_script_cv.wait_for(lock, wait_ms, [] { return g_script_done; })) {
+    if (!st().script_cv.wait_for(lock, wait_ms, [] { return st().script_done; })) {
         if (error != nullptr) {
             *error = "脚本执行超时（窗口可能未就绪或页面无响应）";
         }
         return false;
     }
     if (json_result != nullptr) {
-        *json_result = g_script_result;
+        *json_result = st().script_result;
     }
     if (error != nullptr) {
-        *error = g_script_error;
+        *error = st().script_error;
     }
-    return g_script_error.empty();
+    return st().script_error.empty();
 }
 
-// L3：等页面就绪（readyState = complete；最多 wait_ms）—— DOM 站点/选择器探测用
-bool wait_page_ready(int wait_ms)
-{
-    const DWORD deadline = ::GetTickCount() + static_cast<DWORD>(std::max(0, wait_ms));
-    while (::GetTickCount() <= deadline) {
-        std::string raw;
-        std::string err;
-        if (run_script_now("document.readyState", 5000, &raw, &err) &&
-            raw.find("complete") != std::string::npos) {
-            return true;
-        }
-        ::Sleep(400);
-    }
-    return false;
-}
+// （`wait_page_ready` 已删除：`PW-02` 起所有前置统一走 `prepare_window` + `wait_ready(L1→L2→L3)`，
+//   不再保留「等 readyState=complete」的第二条路径 —— 它与 `I25` 的三级判据重复且更弱）
 
 // ---- M_patchC（`PW-03` · 不变量 `I25`）：就绪三级 —— **实现** ----
 //  * L1 窗口级：窗口在该站点 + controller / webview 已创建（复用 logout 里的既有写法）
@@ -1972,22 +2475,22 @@ constexpr DWORD kReadyCacheMs = 1500; // 就绪缓存有效期（轮询期间的
 
 void remember_ready(const std::string& site, int mask)
 {
-    std::lock_guard<std::mutex> lock(g_ready_mutex);
-    g_ready_site = site;
-    g_ready_mask = mask;
-    g_ready_tick = ::GetTickCount();
+    std::lock_guard<std::mutex> lock(st().ready_mutex);
+    st().ready_site = site;
+    st().ready_mask = mask;
+    st().ready_tick = ::GetTickCount();
 }
 
 int cached_ready(const std::string& site, int need)
 {
-    std::lock_guard<std::mutex> lock(g_ready_mutex);
-    if (g_ready_site != site || g_ready_mask == 0) {
+    std::lock_guard<std::mutex> lock(st().ready_mutex);
+    if (st().ready_site != site || st().ready_mask == 0) {
         return 0;
     }
-    if (::GetTickCount() - g_ready_tick > kReadyCacheMs) {
+    if (::GetTickCount() - st().ready_tick > kReadyCacheMs) {
         return 0;
     }
-    return ready_satisfied(g_ready_mask, need) ? g_ready_mask : 0;
+    return ready_satisfied(st().ready_mask, need) ? st().ready_mask : 0;
 }
 
 // L1：等 controller / webview 创建完成（50 ms 粒度；与 logout_site 既有写法同源）
@@ -1995,7 +2498,7 @@ bool wait_controller_ready(int timeout_ms, std::string* error)
 {
     const DWORD deadline = ::GetTickCount() + static_cast<DWORD>(timeout_ms > 0 ? timeout_ms : 0);
     while (::GetTickCount() < deadline) {
-        if (g_window.load() != nullptr && g_webview != nullptr) {
+        if (st().window.load() != nullptr && st().webview != nullptr) {
             return true;
         }
         ::Sleep(50);
@@ -2035,7 +2538,6 @@ constexpr const char* kPageStateScript = R"JS(
 
 bool peek_page_state(const LoginRequest& site_request, WebPageState* out, std::string* error)
 {
-    (void)site_request; // 站点过滤由调用方做（L2 用 site_key_of(url) 比较）
     if (out == nullptr) {
         if (error != nullptr) {
             *error = "输出参数为空";
@@ -2043,6 +2545,18 @@ bool peek_page_state(const LoginRequest& site_request, WebPageState* out, std::s
         return false;
     }
     *out = WebPageState{};
+
+    // `PW-02`：**只读**探针只作用于「本归属在该站点的窗口」——没有窗口就如实报（不另开窗）
+    const std::shared_ptr<WindowCtx> ctx = ctx_find(site_request.owner, site_key_of(site_request.url));
+    if (!ctx_alive(ctx)) {
+        if (error != nullptr) {
+            *error = web_error_text(WebErrorKind::NotReady, site_request.owner,
+                                    site_key_of(site_request.url), "该归属在该站点暂无窗口");
+        }
+        return false;
+    }
+    CtxScope scope(ctx.get());
+
     std::string raw;
     std::string why;
     if (!run_script_now(kPageStateScript, 8000, &raw, &why)) {
@@ -2083,6 +2597,14 @@ int wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std::
     const int         budget   = timeout_ms > 0 ? timeout_ms : 15000;
     const DWORD       deadline = ::GetTickCount() + static_cast<DWORD>(budget);
 
+    // ---- `PW-02` / `PW-08`：取用**本归属自己的**该站点窗口（复用 / 新建 / 首次复位）----
+    //  * **不再**「关掉别人的窗口」；`prepare_window` 里由**窗口表**决策落点
+    std::shared_ptr<WindowCtx> ctx;
+    if (!prepare_window(site_request, &ctx, error)) {
+        return kReadyNone;
+    }
+    CtxScope scope(ctx.get());
+
     const int cached = cached_ready(site, need);
     if (cached != 0) {
         return cached;
@@ -2098,37 +2620,17 @@ int wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std::
     bool         have_state       = false;
     std::string  last_probe_error;
 
-    // ---- L1 窗口级 ----
-    if (!window_on_site(site)) {
-        std::string boot_error;
-        if (!ensure_session(site_request, std::min(budget, 15000), &boot_error) &&
-            !window_on_site(site)) {
-            LoginWindow& window = login_window();
-            if (window.running()) {
-                window.request_close(); // 串行复用（决策 D-20；`PW-02` 起改由窗口表取窗）
-                window.join();
-            }
-            LoginRequest request     = site_request;
-            request.offscreen        = true;
-            request.probe_after_load = false;
-            std::string start_error;
-            if (!window.start(request, &start_error)) {
-                if (error != nullptr) {
-                    *error = tag + " 打开登录窗口失败：" + start_error +
-                             (boot_error.empty() ? std::string() : ("（" + boot_error + "）"));
-                }
-                return reached;
-            }
-        }
-    }
+    // ---- L1 窗口级（窗口已由 `prepare_window` 备好；这里只等 controller / webview 创建完成）----
     {
         const DWORD now  = ::GetTickCount();
         const int   left = now < deadline ? static_cast<int>(deadline - now) : 0;
         std::string why;
         if (!wait_controller_ready(left, &why)) {
             if (error != nullptr) {
-                *error = tag + " " + ready_missing_text(need, reached) + "（" + why + "）";
+                *error = web_error_text(WebErrorKind::NotReady, site_request.owner, site,
+                                        ready_missing_text(need, reached) + "（" + why + "）");
             }
+            ctx->failed_before = true; // `PW-08`：下一次调用会复位一次（关窗重开）
             return reached;
         }
         reached |= kReadyWindow;
@@ -2160,6 +2662,7 @@ int wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std::
             }
             if (ready_satisfied(reached, need)) {
                 remember_ready(site, reached);
+                ctx->failed_before = false; // `PW-08`：成功 ⇒ 清掉「失败一次」的记账
                 return reached;
             }
         }
@@ -2169,19 +2672,21 @@ int wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std::
         ::Sleep(200);
     }
 
-    if (error != nullptr) {
-        *error = tag + " " + ready_missing_text(need, reached);
-        // 诊断附加（2026-10-10）：把**实时页面事实**如实贴上 —— 判「等一等」还是「先登录」
-        if (have_state) {
-            *error += ready_detail_text(last_state.url, last_state.ready_state, last_state.composer_hits);
-        }
-        else {
-            *error += "｜实时页面：**取不到页面状态**" +
-                      (last_probe_error.empty() ? std::string() : ("（" + last_probe_error + "）"));
-        }
-        log::warn(tag + " 就绪失败（" + std::to_string(need) + " 位需求 / 已达 " +
-                  std::to_string(reached) + "）：" + *error);
+    // 失败：**归因分离**（`PW-05`：只说「哪一级没过 + 下一步」；**不得**说成「形态不支持 / 拖拽入口」）
+    std::string detail = ready_missing_text(need, reached);
+    if (have_state) {
+        detail += ready_detail_text(last_state.url, last_state.ready_state, last_state.composer_hits);
     }
+    else {
+        detail += "｜实时页面：**取不到页面状态**" +
+                  (last_probe_error.empty() ? std::string() : ("（" + last_probe_error + "）"));
+    }
+    ctx->failed_before = true; // `PW-08`：下一次调用会复位一次（关窗重开）
+    if (error != nullptr) {
+        *error = web_error_text(WebErrorKind::NotReady, site_request.owner, site, detail);
+    }
+    log::warn(tag + " 就绪失败（" + std::to_string(need) + " 位需求 / 已达 " +
+              std::to_string(reached) + "）：" + detail);
     return reached;
 }
 
@@ -2200,27 +2705,20 @@ bool run_script_sync(const LoginRequest& site_request, const std::string& script
         return false;
     }
     const std::string site_key = site_key_of(site_request.url);
-    if (!window_on_site(site_key)) {
-        std::string boot_error;
-        if (!ensure_session(site_request, 15000, &boot_error) && !window_on_site(site_key)) {
-            LoginWindow& window = login_window();
-            if (window.running()) {
-                window.request_close(); // 串行复用（决策 D-20）
-                window.join();
-            }
-            LoginRequest request     = site_request;
-            request.offscreen        = true;  // 离屏：不抢焦点（用户可在参数面板打开可见窗口登录）
-            request.probe_after_load = false; // 不额外触发协议探测（DOM 路径不依赖 userToken）
-            std::string start_error;
-            if (!window.start(request, &start_error)) {
-                if (error != nullptr) {
-                    *error = std::string(owner_tag(site_request.owner)) + " 打开登录窗口失败：" + start_error +
-                             (boot_error.empty() ? std::string() : ("（" + boot_error + "）"));
-                }
-                return false;
-            }
-            wait_page_ready(std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000));
-        }
+
+    // ---- `PW-02` / `PW-08`：取用**本归属自己的**该站点窗口（复用 / 新建 / 首次复位）----
+    //  * **不再**「关掉别人的窗口」（`I24`）；同站点不同 owner 各开各的
+    std::shared_ptr<WindowCtx> ctx;
+    if (!prepare_window(site_request, &ctx, error)) {
+        return false;
+    }
+    CtxScope scope(ctx.get());
+
+    // `PW-05`：同窗口**串行执行**守卫（同一线程重入放行）—— 并发时给「可分辨」的原因，不静默串槽
+    bool        busy_ok = false;
+    BusyGuard   busy(*ctx, site_key, &busy_ok, error);
+    if (!busy_ok) {
+        return false;
     }
 
     // ---- M_patchC PW-03（不变量 I25）：脚本前置 = L1 窗口级 + L2 页面级 ----
@@ -2229,35 +2727,72 @@ bool run_script_sync(const LoginRequest& site_request, const std::string& script
     const int   need_ready = kReadyWindow | kReadyPage;
     std::string ready_error;
     const int   reached = wait_ready(site_request, need_ready,
-                                     std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000), &ready_error);
+                                     std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000),
+                                     &ready_error);
     if (!ready_satisfied(reached, need_ready)) {
         if (error != nullptr) {
-            *error = ready_error.empty() ? std::string("页面未就绪（脚本未执行）") : ready_error;
+            *error = ready_error.empty()
+                         ? web_error_text(WebErrorKind::NotReady, site_request.owner, site_key,
+                                          "脚本未执行（就绪未达成）")
+                         : ready_error;
         }
         return false;
     }
-    return run_script_now(script_js, timeout_ms, json_result, error);
+    const bool ok = run_script_now(script_js, timeout_ms, json_result, error);
+    ctx->failed_before = !ok; // `PW-08`：失败 ⇒ 下一次调用复位一次
+    return ok;
 }
 
-// ---- M8-14：站点上传模板的传输原语（公开 API）----------------------------------------
-
-void begin_resource_capture()
+// ---- M8-14 续（`PW-04` · `I26`）：网络回执**按归属** ----
+//  * 回执存在**该归属自己的窗口**里 ⇒ 结构上不可能跨 owner 串（旧实现 = 一个全进程缓冲）
+//  * 取用时再用 `owner_accepts` 核一次「回执归属 == 要它的归属」：
+//    未绑定 / 跨归属 ⇒ **丢弃并告警**（`I26`：未绑定或跨 owner 的证据**不得**用于 `I18`）
+void begin_resource_capture(const WebOwner& owner, const std::string& site_key)
 {
-    std::lock_guard<std::mutex> lock(g_net_mutex);
-    g_net_records.clear();
+    const std::shared_ptr<WindowCtx> ctx = ctx_find(owner, site_key);
+    if (ctx == nullptr) {
+        log::warn(std::string("[图片上传] begin_resource_capture：") + owner_tag(owner) +
+                  " 在站点 " + site_key + " 没有窗口 ⇒ 本次采集为空（回执不跨归属，I26）");
+        return;
+    }
+    std::lock_guard<std::mutex> lock(ctx->net_mutex);
+    ctx->net_records.clear();
 }
 
-std::vector<WebResourceRecord> take_resource_capture()
+std::vector<WebResourceRecord> take_resource_capture(const WebOwner& owner,
+                                                    const std::string& site_key)
 {
-    std::lock_guard<std::mutex> lock(g_net_mutex);
+    const std::shared_ptr<WindowCtx> ctx = ctx_find(owner, site_key);
+    if (ctx == nullptr) {
+        return {};
+    }
+    std::vector<WebResourceRecord> raw;
+    {
+        std::lock_guard<std::mutex> lock(ctx->net_mutex);
+        raw.swap(ctx->net_records); // 增量取走（调用方累积）
+    }
+
     std::vector<WebResourceRecord> out;
-    out.swap(g_net_records); // 增量取走（调用方累积）
+    out.reserve(raw.size());
+    std::size_t rejected = 0;
+    for (WebResourceRecord& record : raw) {
+        if (owner_accepts(record.owner, owner)) {
+            out.push_back(std::move(record));
+            continue;
+        }
+        ++rejected; // 未绑定 / 跨归属 ⇒ 丢弃（绝不让它参与 `I18` 判定）
+    }
+    if (rejected > 0) {
+        log::warn(std::string("[图片上传] 丢弃 ") + std::to_string(rejected) + " 条**归属不符**的网络回执（" +
+                  owner_tag(owner) + " · 站点 " + site_key + "；I26：证据必须绑定产生它的归属）");
+    }
     return out;
 }
 
-bool resource_capture_ready()
+bool resource_capture_ready(const WebOwner& owner, const std::string& site_key)
 {
-    return g_net_ready;
+    const std::shared_ptr<WindowCtx> ctx = ctx_find(owner, site_key);
+    return ctx != nullptr && ctx->net_ready;
 }
 
 bool set_file_input_files(const LoginRequest& site_request, const std::string& css_selector,
@@ -2277,29 +2812,19 @@ bool set_file_input_files(const LoginRequest& site_request, const std::string& c
         return false;
     }
 
-    // 前置与 run_script_sync 同策略（三级：窗口已在该站点 → ensure_session → 离屏开窗）
+    // 前置：`PW-02` / `PW-08` —— 取用**本归属自己的**该站点窗口（复用 / 新建 / 首次复位）
     const std::string site_key = site_key_of(site_request.url);
-    if (!window_on_site(site_key)) {
-        std::string boot_error;
-        if (!ensure_session(site_request, 15000, &boot_error) && !window_on_site(site_key)) {
-            LoginWindow& window = login_window();
-            if (window.running()) {
-                window.request_close(); // 串行复用（决策 D-20）
-                window.join();
-            }
-            LoginRequest request     = site_request;
-            request.offscreen        = true;  // 离屏：不抢焦点
-            request.probe_after_load = false; // 上传不依赖 userToken
-            std::string start_error;
-            if (!window.start(request, &start_error)) {
-                if (error != nullptr) {
-                    *error = "打开登录窗口失败：" + start_error +
-                             (boot_error.empty() ? std::string() : ("（" + boot_error + "）"));
-                }
-                return false;
-            }
-            wait_page_ready(std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000));
-        }
+    std::shared_ptr<WindowCtx> ctx;
+    if (!prepare_window(site_request, &ctx, error)) {
+        return false;
+    }
+    CtxScope scope(ctx.get());
+
+    // `PW-05`：同窗口串行执行守卫
+    bool      busy_ok = false;
+    BusyGuard busy(*ctx, site_key, &busy_ok, error);
+    if (!busy_ok) {
+        return false;
     }
 
     // ---- M_patchC PW-03（不变量 I25）：**上传前置 = L1 + L2 + L3（含附件入口）** ----
@@ -2308,50 +2833,60 @@ bool set_file_input_files(const LoginRequest& site_request, const std::string& c
     const int   need_ready = kReadyUpload;
     std::string ready_error;
     const int   reached = wait_ready(site_request, need_ready,
-                                     std::min(timeout_ms > 0 ? timeout_ms : 20000, 20000), &ready_error);
+                                     std::min(timeout_ms > 0 ? timeout_ms : 20000, 20000),
+                                     &ready_error);
     if (!ready_satisfied(reached, need_ready)) {
         if (error != nullptr) {
-            *error = ready_error.empty() ? std::string("页面未就绪（未交件）") : ready_error;
+            *error = ready_error.empty()
+                         ? web_error_text(WebErrorKind::NotReady, site_request.owner, site_key,
+                                          "未交件（就绪未达成）")
+                         : ready_error;
         }
         return false;
     }
 
-    const HWND window = g_window.load();
-    if (window == nullptr || g_webview == nullptr) {
+    const HWND window = st().window.load();
+    if (window == nullptr || st().webview == nullptr) {
         if (error != nullptr) {
-            *error = std::string(owner_tag(site_request.owner)) +
-                     " 登录窗口在就绪检查后被关闭（请重试）";
+            *error = web_error_text(WebErrorKind::NotReady, site_request.owner, site_key,
+                                    "登录窗口在就绪检查后被关闭（窗口 " + st().key + "）");
         }
         return false;
     }
 
     {
-        std::lock_guard<std::mutex> lock(g_files_mutex);
-        g_files_selector = css_selector;
-        g_files_paths    = absolute_paths;
-        g_files_done     = false;
-        g_files_ok       = false;
-        g_files_detail.clear();
-        g_files_error.clear();
+        std::lock_guard<std::mutex> lock(st().files_mutex);
+        st().files_selector = css_selector;
+        st().files_paths    = absolute_paths;
+        st().files_done     = false;
+        st().files_ok       = false;
+        st().files_detail.clear();
+        st().files_error.clear();
     }
     ::PostMessageW(window, kSetFilesMessage, 0, 0);
 
-    std::unique_lock<std::mutex> lock(g_files_mutex);
-    const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 20000);
-    if (!g_files_cv.wait_for(lock, wait_ms, [] { return g_files_done; })) {
-        if (error != nullptr) {
-            *error = std::string(owner_tag(site_request.owner)) +
-                     " 注入文件超时（页面可能未就绪，或选择器无匹配元素）";
+    bool ok = false;
+    {
+        std::unique_lock<std::mutex> lock(st().files_mutex);
+        const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 20000);
+        if (!st().files_cv.wait_for(lock, wait_ms, [] { return st().files_done; })) {
+            if (error != nullptr) {
+                *error = web_error_text(WebErrorKind::NotReady, site_request.owner, site_key,
+                                        "交件超时（页面可能未就绪，或选择器无匹配元素）");
+            }
+            ctx->failed_before = true; // `PW-08`：失败 ⇒ 下一次调用复位一次
+            return false;
         }
-        return false;
+        if (detail != nullptr) {
+            *detail = st().files_detail;
+        }
+        if (error != nullptr) {
+            *error = st().files_error;
+        }
+        ok = st().files_ok;
     }
-    if (detail != nullptr) {
-        *detail = g_files_detail;
-    }
-    if (error != nullptr) {
-        *error = g_files_error;
-    }
-    return g_files_ok;
+    ctx->failed_before = !ok;
+    return ok;
 }
 
 // ---- M_patchC（`PW-07f` · 2026-10-08 · **自 `wip/pw07n-20261008` 移植回主分支**）----
@@ -2366,79 +2901,78 @@ bool cdp_input_text(const LoginRequest& site_request, const std::string& text, b
         return false;
     }
 
-    // 前置与 run_script_sync / set_file_input_files 同策略（窗口已在该站点 → ensure_session → 离屏开窗）
+    // 前置：`PW-02` / `PW-08` —— 取用**本归属自己的**该站点窗口（复用 / 新建 / 首次复位）
     const std::string site_key = site_key_of(site_request.url);
-    if (!window_on_site(site_key)) {
-        std::string boot_error;
-        if (!ensure_session(site_request, 15000, &boot_error) && !window_on_site(site_key)) {
-            LoginWindow& window = login_window();
-            if (window.running()) {
-                window.request_close(); // 串行复用（决策 D-20）
-                window.join();
-            }
-            LoginRequest request     = site_request;
-            request.offscreen        = true;  // 离屏：不抢焦点
-            request.probe_after_load = false; // 真输入不依赖 userToken
-            std::string start_error;
-            if (!window.start(request, &start_error)) {
-                if (error != nullptr) {
-                    *error = std::string(owner_tag(site_request.owner)) + " 打开登录窗口失败：" +
-                             start_error +
-                             (boot_error.empty() ? std::string() : ("（" + boot_error + "）"));
-                }
-                return false;
-            }
-            wait_page_ready(std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000));
-        }
+    std::shared_ptr<WindowCtx> ctx;
+    if (!prepare_window(site_request, &ctx, error)) {
+        return false;
+    }
+    CtxScope scope(ctx.get());
+
+    bool      busy_ok = false;
+    BusyGuard busy(*ctx, site_key, &busy_ok, error);
+    if (!busy_ok) {
+        return false;
     }
 
     // ---- M_patchC PW-03（不变量 I25）：前置 = L1 窗口 + L2 页面 + L3 输入框（**不要求**附件入口）----
     const int   need_ready = kReadyScript;
     std::string ready_error;
     const int   reached = wait_ready(site_request, need_ready,
-                                     std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000), &ready_error);
+                                     std::min(timeout_ms > 0 ? timeout_ms : 15000, 15000),
+                                     &ready_error);
     if (!ready_satisfied(reached, need_ready)) {
         if (error != nullptr) {
-            *error = ready_error.empty() ? std::string("页面未就绪（CDP 真实输入未执行）") : ready_error;
+            *error = ready_error.empty()
+                         ? web_error_text(WebErrorKind::NotReady, site_request.owner, site_key,
+                                          "CDP 真实输入未执行（就绪未达成）")
+                         : ready_error;
         }
         return false;
     }
 
-    const HWND window = g_window.load();
-    if (window == nullptr || g_webview == nullptr) {
+    const HWND window = st().window.load();
+    if (window == nullptr || st().webview == nullptr) {
         if (error != nullptr) {
-            *error = std::string(owner_tag(site_request.owner)) +
-                     " 登录窗口在就绪检查后被关闭（请重试）";
+            *error = web_error_text(WebErrorKind::NotReady, site_request.owner, site_key,
+                                    "登录窗口在就绪检查后被关闭（窗口 " + st().key + "）");
         }
         return false;
     }
 
     {
-        std::lock_guard<std::mutex> lock(g_cdp_mutex);
-        g_cdp_text   = text;
-        g_cdp_enter  = press_enter;
-        g_cdp_done   = false;
-        g_cdp_ok     = false;
-        g_cdp_detail.clear();
-        g_cdp_error.clear();
+        std::lock_guard<std::mutex> lock(st().cdp_mutex);
+        st().cdp_text   = text;
+        st().cdp_enter  = press_enter;
+        st().cdp_done   = false;
+        st().cdp_ok     = false;
+        st().cdp_detail.clear();
+        st().cdp_error.clear();
     }
     ::PostMessageW(window, kCdpInputMessage, 0, 0);
 
-    std::unique_lock<std::mutex> lock(g_cdp_mutex);
-    const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 15000);
-    if (!g_cdp_cv.wait_for(lock, wait_ms, [] { return g_cdp_done; })) {
-        if (error != nullptr) {
-            *error = std::string(owner_tag(site_request.owner)) + " CDP 真实输入超时";
+    bool ok = false;
+    {
+        std::unique_lock<std::mutex> lock(st().cdp_mutex);
+        const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 15000);
+        if (!st().cdp_cv.wait_for(lock, wait_ms, [] { return st().cdp_done; })) {
+            if (error != nullptr) {
+                *error = web_error_text(WebErrorKind::NotReady, site_request.owner, site_key,
+                                        "CDP 真实输入超时");
+            }
+            ctx->failed_before = true;
+            return false;
         }
-        return false;
+        if (detail != nullptr) {
+            *detail = st().cdp_detail;
+        }
+        if (error != nullptr) {
+            *error = st().cdp_error;
+        }
+        ok = st().cdp_ok;
     }
-    if (detail != nullptr) {
-        *detail = g_cdp_detail;
-    }
-    if (error != nullptr) {
-        *error = g_cdp_error;
-    }
-    return g_cdp_ok;
+    ctx->failed_before = !ok;
+    return ok;
 }
 
 
@@ -2486,10 +3020,14 @@ bool resolve_file_input_selector(const LoginRequest& site_request, int timeout_m
     const int   need_ready = kReadyUpload;
     std::string ready_error;
     const int   reached = wait_ready(site_request, need_ready,
-                                     std::min(timeout_ms > 0 ? timeout_ms : 10000, 15000), &ready_error);
+                                     std::min(timeout_ms > 0 ? timeout_ms : 10000, 15000),
+                                     &ready_error);
     if (!ready_satisfied(reached, need_ready)) {
         if (error != nullptr) {
-            *error = ready_error.empty() ? std::string("页面未就绪（未枚举附件入口）") : ready_error;
+            *error = ready_error.empty()
+                         ? web_error_text(WebErrorKind::NotReady, site_request.owner,
+                                          site_key_of(site_request.url), "未枚举附件入口")
+                         : ready_error;
         }
         return false;
     }
@@ -2499,8 +3037,9 @@ bool resolve_file_input_selector(const LoginRequest& site_request, int timeout_m
     if (!run_script_sync(site_request, kFileInputProbeScript, timeout_ms > 0 ? timeout_ms : 10000, &raw,
                          &why)) {
         if (error != nullptr) {
-            *error = std::string(owner_tag(site_request.owner)) +
-                     " 读取页面 `input[type=file]` 失败：" + why;
+            *error = web_error_text(WebErrorKind::NotReady, site_request.owner,
+                                    site_key_of(site_request.url),
+                                    "读取页面 `input[type=file]` 失败：" + why);
         }
         return false;
     }
@@ -2546,11 +3085,12 @@ bool resolve_file_input_selector(const LoginRequest& site_request, int timeout_m
                                                            : first_input;
         if (picked.empty()) {
             if (error != nullptr) {
-                *error = std::string(owner_tag(site_request.owner)) +
-                         " 页面里没有可用的 `input[type=file]`（共 " + std::to_string(count) +
-                         " 个；就绪已达：" + ready_reached_text(reached) +
-                         "）—— 就绪检查此前已通过 ⇒ 多为懒加载竞态，请重试；"
-                         "若持续出现，可在 providers.json 该条目填实测 `web.attach_selector`";
+                // **归因分离**（`PW-05` · `W-D6`）：L3（含附件入口）**已通过**却枚举不到 ⇒
+                // 这是「无入口 / 竞态」，**不得**再写成「页面未就绪」，也不得写「形态不支持」以外的猜测
+                *error = web_error_text(
+                    WebErrorKind::NoEntry, site_request.owner, site_key_of(site_request.url),
+                    "枚举到 " + std::to_string(count) + " 个 `input[type=file]`（就绪已达：" +
+                        ready_reached_text(reached) + "；就绪检查此前已通过 ⇒ 多为懒加载竞态）");
             }
             if (detail != nullptr) {
                 *detail = list;
@@ -2574,7 +3114,7 @@ bool resolve_file_input_selector(const LoginRequest& site_request, int timeout_m
 }
 
 long long solve_pow_via_page(const std::string& site_url, const std::string& challenge_json,
-                             int timeout_ms, std::string* error)
+                             int timeout_ms, std::string* error, const WebOwner& owner)
 {
     if (challenge_json.empty()) {
         if (error != nullptr) {
@@ -2584,10 +3124,13 @@ long long solve_pow_via_page(const std::string& site_url, const std::string& cha
     }
 
     // 确保有可用登录窗口（**按目标站点**；PB2-23：不再用无参 ensure_session → 内置默认站点）
+    //  * `PW-02`：归属显式 —— 默认为**未标注**（内置协议路径 `web_chat` 尚未把节点 owner 穿下来，
+    //    故它使用「未标注」归属在该站点的那一个窗口；节点级 DOM 路径不受影响）
     LoginRequest site_request;
     if (!site_url.empty()) {
         site_request.url = site_url;
     }
+    site_request.owner            = owner;
     site_request.offscreen        = true;
     site_request.probe_after_load = true;
     std::string boot_error;
@@ -2598,35 +3141,40 @@ long long solve_pow_via_page(const std::string& site_url, const std::string& cha
         return -1;
     }
 
-    const HWND window = g_window.load();
-    if (window == nullptr || g_webview == nullptr) {
+    const std::string          site = site_key_of(site_request.url);
+    std::shared_ptr<WindowCtx> ctx  = ctx_find(site_request.owner, site);
+    if (!ctx_alive(ctx) || ctx->webview == nullptr) {
         if (error != nullptr) {
-            *error = "登录窗口未就绪（请先登录一次：界面「打开登录窗口」或 --login-selftest）";
+            *error = web_error_text(WebErrorKind::NotReady, site_request.owner, site,
+                                    "窗口 / 页面尚未创建完成（PoW 求解需要该站点页面）");
         }
         return -1;
     }
+    CtxScope scope(ctx.get());
 
+    const HWND window = st().window.load();
     {
-        std::lock_guard<std::mutex> lock(g_pow_mutex);
-        g_pow_challenge_json = challenge_json;
-        g_pow_done           = false;
-        g_pow_answer         = -1;
-        g_pow_error.clear();
+        std::lock_guard<std::mutex> lock(st().pow_mutex);
+        st().pow_challenge_json = challenge_json;
+        st().pow_done           = false;
+        st().pow_answer         = -1;
+        st().pow_error.clear();
     }
     ::PostMessageW(window, kSolvePowMessage, 0, 0);
 
-    std::unique_lock<std::mutex> lock(g_pow_mutex);
+    std::unique_lock<std::mutex> lock(st().pow_mutex);
     const auto                   wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 60000);
-    if (!g_pow_cv.wait_for(lock, wait_ms, [] { return g_pow_done; })) {
+    if (!st().pow_cv.wait_for(lock, wait_ms, [] { return st().pow_done; })) {
         if (error != nullptr) {
-            *error = "页面内 PoW 求解超时";
+            *error = web_error_text(WebErrorKind::NotReady, site_request.owner, site,
+                                    "页面内 PoW 求解超时");
         }
         return -1;
     }
     if (error != nullptr) {
-        *error = g_pow_error;
+        *error = st().pow_error;
     }
-    return g_pow_answer;
+    return st().pow_answer;
 }
 
 // PB2-23：探测主体抽出，供「默认站点」与「按条目」两个入口共用（行为逐字一致）
@@ -2654,7 +3202,7 @@ static int protocol_probe_with(const LoginRequest& base_request, const ai::Provi
                     "             **不**请求任何站点端点，**不**读取 localStorage 的值（含 userToken）\n");
     }
 
-    LoginWindow window;
+    LoginWindow window(selftest_owner()); // `PW-02`：探测自检用独立归属（不与节点 / 界面窗口互抢）
     std::string error;
     if (!window.start(request, &error)) {
         std::printf("[网页版探测] 启动失败: %s\n", error.c_str());
@@ -2750,12 +3298,15 @@ int protocol_probe_for_provider(const std::string& provider_id, int timeout_seco
 
 void stop_login_window()
 {
-    LoginWindow& window = login_window();
-    if (!window.running()) {
-        return;
+    // `PW-02`：收尾 = **逐窗口**（顺序由窗口表给出：后开的先关）—— 不再只关「那一个窗口」
+    ctx_close_all();
+    // 环境 / 失败缓存一并释放（同进程内再开窗会重新创建环境）
+    {
+        std::lock_guard<std::mutex> lock(g_env_mutex);
+        g_envs.clear();
+        g_env_fail.clear();
+        g_env_creating.clear();
     }
-    window.request_close();
-    window.join();
 }
 
 } // namespace aiwrite::web

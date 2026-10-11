@@ -51,4 +51,21 @@ inline std::string owner_tag(const WebOwner& owner)
 // 归属是否已标注（`PW-02` 起：未标注 ⇒ 运行期警告；今天只用于日志 / 断言）
 inline bool owner_known(const WebOwner& owner) { return !owner_key(owner).empty(); }
 
+// ---- M_patchC（`PW-04` · 不变量 `I26`）：**证据准入** ----
+//  任何证据 / 网络回执 / 页面基线 / 上传槽都必须绑定产生它的 owner；
+//  未绑定或跨 owner 的**一律不得**用于 `I18` 判定（「图真进了站点」）。
+//  * 用途：`upload_registry` 取网络回执前过滤（只采信本 owner 的回执）；
+//    离线可断言（`api_probe --selftest` 的「归属证据准入」组）。
+inline bool owner_accepts(const WebOwner& record_owner, const WebOwner& asker)
+{
+    return owner_known(record_owner) && owner_same(record_owner, asker);
+}
+
+// 两个**非节点**归属（显式命名，便于日志 grep「谁动的手」）
+//  * 界面登录窗口：用户在参数面板手动打开的窗口（`I24`：它也是**独立**窗口，
+//    不再被节点的 `ensure_session` 抢占 —— 真机错配的另一半）
+//  * 自检 / CLI：`--web-probe` / `--login-selftest` 等无节点上下文的调用点
+inline WebOwner ui_window_owner() { return WebOwner{"界面", "登录窗口", ""}; }
+inline WebOwner selftest_owner() { return WebOwner{"自检", "网页通道", ""}; }
+
 } // namespace aiwrite::web
