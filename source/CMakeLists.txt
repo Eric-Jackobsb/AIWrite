@@ -254,6 +254,7 @@ add_library(aiwrite_core STATIC
     engine/src/provider_resolve.cpp
     engine/src/executor.cpp
     engine/src/recent_files.cpp
+    engine/src/autosave.cpp          # M_patchAB §4（PC-01/02）：自动保存 + 崩溃恢复（api_probe --autosave-assert）
     ai/src/web_pow.cpp
     ai/src/deepseek/deepseek_web_client.cpp
     ai/src/dom_web_client.cpp        # L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
@@ -265,6 +266,7 @@ add_library(aiwrite_core STATIC
     ai/src/kimi/site_upload_kimi.cpp   # M8-14：Kimi 站点上传单元（模板性验证站）
     ai/src/deepseek/deepseek_official_provider.cpp
     ai/src/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）
+    ai/src/site_template.cpp          # M_patchAB §3.5（PB2-24）：自建网页版站点模板 + 落盘
     nodes/src/local_nodes.cpp
     nodes/src/register_executors.cpp
     web/src/channel_frames.cpp   # M7B 批 1：管道协议 v1 帧（纯函数；VB2-29 / VB2-32）

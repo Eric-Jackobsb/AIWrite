@@ -2,7 +2,7 @@
 
 > 本文是**给 AI 助手与新协作者的行为契约**：只写「读取顺序 + 命令 + 纪律 + 禁止项」，技术细节一律指向权威文档。
 > 接手任何改动前，请按 §1 顺序读文档，并遵守 §3 取证纪律、§4 改动伴随义务、§6 提交纪律、§7 禁止项、§9 表达规范（写给人类的文字）。
-> **本文 §2 的数字 = 最近一次全量实测（2026-10-09 本机）**；各任务**落地当时**的验收数字以对应计划文档为准（例：[docs/actionPlan/M_patchC_web_node_bind.md](docs/actionPlan/M_patchC_web_node_bind.md) §7.1 的历史行**不追溯改写**）。
+> **本文 §2 的数字 = 最近一次全量实测（2026-10-10 本机）**；各任务**落地当时**的验收数字以对应计划文档为准（例：[docs/actionPlan/M_patchC_web_node_bind.md](docs/actionPlan/M_patchC_web_node_bind.md) §7.1 的历史行**不追溯改写**）。
 
 ---
 
@@ -24,10 +24,10 @@
 
 ## 2. 命令表（都在仓库根执行；产物在 `build\bin\`）
 
-| 目的 | 命令 | 基线（**2026-10-09 本机实测**） |
+| 目的 | 命令 | 基线（**2026-10-10 本机实测** · 每个数字的唯一权威位见 §10.1） |
 |---|---|---|
-| 构建（Debug） | `cd source; .\build.ps1`（= `cmake --preset default` + `cmake --build --preset debug`）｜**日志自动落 `build\logs\build_debug_<yyyyMMdd_HHmmss>.log`**（`-LogName` 改名 / `-NoLog` 关闭） | **0 error / 0 warning** |
-| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===` · exit **0**；含 配置表 **50/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **执行器 452/0**（2026-10-09 批 3 新增 27 项 DOM 自检：425 → 452） |
+| 构建（Debug） | `cd source; .\build.ps1`（= `cmake --preset default` + `cmake --build --preset debug`）｜**日志自动落 `build\logs\build_debug_<yyyyMMdd_HHmmss>.log`**（`-LogName` 改名 / `-NoLog` 关闭） | **0 error / 0 warning**。⚠ 若报 `error MSB4018` + `FileTracker`（`GetOutOfDateItems` / `SetModuleDependencies`）⇒ **不是代码问题**、**重跑无效**：`.\build.ps1 -Reconfigure` 清空重建（陷阱 9 = [docs/loop_dev.md](docs/loop_dev.md) §10.1） |
+| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===` · exit **0**；含 配置表 **50/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **DOM 探测 27/0** · **执行器 464/0**（2026-10-10 实测；2026-10-09 批 3 曾为 425 → 452，**+12 = 上一批未提交改动**） |
 | 执行器自检 | `api_probe.exe --exec-selftest` | **464 / 0** · exit 0（2026-10-10 实测；与旧记 **452** 差 12 = **上一批未提交改动**（`source/nodes/src/local_nodes.cpp` 等），本批未改执行器断言 —— 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]`） |
 | 图模型自检 | `api_probe.exe --graph-selftest` | **110 / 0** · exit 0 |
 | 上传链路自检（离线三组；真机加 `--provider <id> --image <图>`） | `aiwrite.exe --upload-selftest` | **72 / 0** · exit 0（⚠️ 见 §3「GUI 子系统 stdout」；**不要并发跑**，共用 `%TEMP%\aiwrite-upload\selftest`） |
@@ -41,8 +41,10 @@
 | 夹具（抽真实源码脚本，迷你 DOM 真跑） | `node source\tools\poll_answer_gate_test.js` · `send_chain_test.js` · **`dom_gate_test.js`** | **44 / 0** · **17 / 0** · **15 / 0** |
 | 夹具**负向**打假（必须 FAIL） | 上三条加 `--old` | 门夹具 **18 / 26** · 链路 **13 / 4** · **DOM 判据 9 / 6** · **exit 1**（失败项 = 预期） |
 | 日志 | `%USERPROFILE%\.brain-ai\logs\app.log`（每 2 秒落盘，可直接 tail） | `[诊断]` 行限流输出 |
-| **一键自检（`PM-03`）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1 [-SkipBuild] [-SkipGui] [-SkipLoop]` | 构建 + 6 项自检/夹具 + `--upload-selftest` + 台账重建 ⇒ **12/12 PASS · exit 0**（**2026-10-10 实测** · 物证 `build\logs\check_all_<时间戳>.log`） |
-| **诊断 / 依赖（`PM-01`·`PM-04`）** | `api_probe.exe --diag-dump` ｜ `--diag-assert` ｜ `--dep-check` ｜ `--settings-assert` | 前两者 = 诊断报告（**8 分节 39 行**）打印/断言；`--dep-check` = `WebView2 运行时 152.0.4191.66（api）`（**2026-10-10 实测**）；`--settings-assert` = 默认通过 + 越界 **8 例全拦** + 边界值通过。均为**单行 PASS/FAIL**（不进 §2 分组数字） |
+| **一键自检（`PM-03`）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1 [-SkipBuild] [-SkipGui] [-SkipLoop]` | 构建 + 8 项自检/夹具 + `--upload-selftest` + 台账重建 ⇒ **14/14 PASS · exit 0**（**2026-10-10 实测** · 物证 `build\logs\check_all_<时间戳>.log`；12 → 13 = 同批新增 `--site-assert`，13 → 14 = 同批新增 `--autosave-assert`） |
+| **诊断 / 依赖（`PM-01`·`PM-04`）** | `api_probe.exe --diag-dump` ｜ `--diag-assert` ｜ `--dep-check` ｜ `--settings-assert` | 前两者 = 诊断报告（**8 分节 39 行**）打印/断言；`--dep-check` = `WebView2 运行时 152.0.4191.66（api）`（**2026-10-10 实测**）；`--settings-assert` = 默认通过 + 越界 **11 例全拦** + 边界值通过。均为**单行 PASS/FAIL**（不进 §2 分组数字） |
+| **自建站点闭环（`PB2-24` · `RM-D4`）** | `api_probe.exe --site-assert` | **PASS · exit 0**（**2026-10-10 实测**：纯函数 **47 / 0** + 真实写盘 → 重载 → 进表 / 进网页版下拉 / 进 provider 枚举 **20→21** / 新建节点运行前校验 / **旧实例刷新回归** / 清理零残留）。⚠ 会**临时**写并删除 `~/.brain-ai/providers.d/aiwrite-selftest-site.json`（自清理）；**界面点选回路未人工实测**，见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]` |
+| **自动保存 / 崩溃恢复（`PC-01` / `PC-02`）** | `api_probe.exe --autosave-assert` | **PASS · exit 0**（**2026-10-10 实测**：场景 **28 / 0** + 默认落点 = `snapshots/autosave.json`；含 **`VC-01` 原子写**（半截 `.tmp` 不参与恢复 / 可清理）+ **`VC-02` 恢复判定 4 场景** + 恢复后内容**指纹逐字相同**）。⚠ 场景全在**系统临时目录**内构造，**不碰**用户快照；**GUI「改图 → 静默 3 秒 → 写快照」与点「恢复」未人工实测**，见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]` |
 | **安装包（`M6-08`）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [-Version 0.2.0] [-SkipBuild] [-SkipInstaller]` | ①构建 ②payload `build\dist\payload`（**18 文件 / 28.7 MB** · **Python 摘钩** `*.py=0` · `.iss ↔ payload` 一致性锁 PASS）③`ISCC` 编译。exit **0 / 2（未装 ISCC：已打印获取方式）/ 1**。⚠ **本机未编译验证**（无 ISCC + winget 无网络 `0x80072efd`）⇒ 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]` |
 | VS Code | `Ctrl+Shift+B` 构建 · `F5` 调试 · Run Task：`build` / `build (release)` / `verify: api_probe 自检` / `verify: 图模型自检` / `log: 查看 app.log` / **`log: 查看最新构建日志`** | — |
 
@@ -150,7 +152,7 @@
 
 1. **用人类易读的语言**：先讲清「做了什么 / 为什么 / 影响什么」，再给细节；能用一句话说明白的，不要用缩写与代号堆砌。
 2. **不裸用 magic number（魔法数字 · 含义不明的裸数值）/ magic symbol（魔法符号 · 含义不明的生僻符号）**：
-   - 裸数值必须写清它是什么，例：`退出码 3`（`0x80000003`，CRT 断言中断）、`452 / 0`（执行器断言通过数 / 失败数）。
+   - 裸数值必须写清它是什么，例：`退出码 3`（`0x80000003`，CRT 断言中断）、`464 / 0`（执行器断言通过数 / 失败数）。
    - 生僻符号同样要写清，例：`335 → 397`（断言数由 335 增到 397，即 **+62**）；`≥2`（至少 2 个）。
 3. **链接与代号一律紧随括号注明内容**（**就地可读**，不必回查定义）：
    - 代号：`D-26`（网页版站点条目的**字段级回落**是否收紧）、`VB2-22⑧`（`format_answer_text` 排版纯函数的 **8 例**断言）、`PQ-09`（看板「待定 · 未拍板」分类里的编号，拍板后同批置 done）。
@@ -167,6 +169,22 @@
 - 与 [docs/DocMAP.md](docs/DocMAP.md) 的分工：**本文 = 行为契约**；**DocMAP = 文档地图**。
 - 基线数字会过期：本文数字**带实测日期**；变动时同步本文 + `CHANGELOG`（§4 义务 6），历史任务的数字留在原计划文档里、不追溯改写。
 - 已知取舍：本文**不会被 VS Code / AI 工具自动加载**（无钩子），所以任务开始时请显式要求「先读 `AI_README.md`」。
+
+### 10.1 数字口径（SSoT：每个数字只留一个权威位）
+
+> **起因（2026-10-10 审计）**：同一批基线数字被复制到 ≥6 份文档，而每批只同步其中一部分 ⇒ 必然漂移（实例：本文件 §2 `--selftest` 行曾写 `执行器 452/0`，而同表下行 `--exec-selftest` 行已是 `464/0`）。**对策 = 每个数字只认一个权威位，其余处一律写「见 X」，不复述数值。**
+
+| 数字 | **唯一权威位** | 其余文档怎么写 |
+|---|---|---|
+| 各命令的断言数 / 通过数（`--selftest` 各组 · `--exec-selftest` · `--graph-selftest` · `--upload-selftest` · 离线夹具 · `check_all` 项数） | **本文 §2** | 「见 [AI_README.md](AI_README.md) §2」 |
+| 门禁**逐条命令与期望**（构建 0/0 · 逐项 PASS） | **本文 §2** | [docs/loop_dev.md](docs/loop_dev.md) §4 = 同一批数字的**循环化用法**；两处不一致时**以本文 §2 为准**并立即同步另一处 |
+| **文档断链**数字（checked / broken） | **[docs/loop_dev.md](docs/loop_dev.md) §4** | 其他处只写判据（现行 = 「**全库 0**」） |
+| 看板各分类的 `（N 项）` | **[docs/DevPlan.todo](docs/DevPlan.todo) 本身** | 其他处写「见看板」，不写数字 |
+| 站点条数 / 各站能力与接线 | [docs/AI_Status.md](docs/AI_Status.md)（总览）→ `AI_Status_web.md` / `AI_Status_api.md` | 只写「见台账」 |
+| 里程碑**落地当时**的验收数字 | 对应 `docs/actionPlan/*.md` | **不追溯改写**（历史快照） |
+
+- **同步义务**：改权威位 ⇒ **只改权威位** + 在 `CHANGELOG` 记一行；某处若先前复制过数值，**改为指向权威位**，不再更新副本（否则下批必再漂移）。
+- **看板计数**：用一次性脚本从 `todotree` 递归数叶子核对（2026-10-10 订正 = `Test` 28→29 · `Docs` 14→21 · `Test > Loop Dev` 3→4；`Debug 15` / `Feature 72` / `Archive 31` / `M7B 7` / `待定 5` 经核对无误）。
 
 ---
 

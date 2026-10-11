@@ -83,7 +83,7 @@ F:\GameDao\Tools\AIwrite\build\logs\build_<config>_<yyyyMMdd_HHmmss>.log      # 
 - 看最新一份：VS Code 任务 **`log: 查看最新构建日志`**，或 `Get-ChildItem build\logs\*.log | Sort-Object LastWriteTime | Select-Object -Last 1`。
 - 实现缘由（踩坑留痕）：PS 5.1 的 `Tee-Object` **没有 `-Encoding`** 且默认写 **UTF-16LE**，直接 `| Tee-Object -FilePath` 会把日志写成 UTF-16 ⇒ 脚本改用 `StreamWriter`（UTF-8 无 BOM）。
 
-等价的纯 CMake 命令（脚本只是帮你设好 vcpkg 环境变量）：
+- **构建报 `error MSB4018` + `FileTracker`（任务 `GetOutOfDateItems` / `SetModuleDependencies`）** ⇒ **不是代码坏了**：VS 18 Insiders 的 FileTracker 在 `build\` **生成态陈旧**时会崩溃(`System.IndexOutOfRangeException: FileIsUnderNormalizedPath`)。**重跑无效**（`-p:TrackFileAccess=false` / `-nodeReuse:false` / 换 `%TEMP%` 实测均无效）⇒ 清空重建：`.\build.ps1 -Reconfigure`（保留 `build/logs/`）。物证：崩 `build\logs\pb224_build6.txt` ↔ 愈 `build\logs\pb224_build_reconf.txt`；登记 [../docs/loop_dev.md](../docs/loop_dev.md) §10.1 **陷阱 9**（`check_all.ps1` 命中该特征时也会直接在 `FAIL` 行提示这条命令）。
 
 ```powershell
 cd F:\GameDao\Tools\AIwrite\source
@@ -180,7 +180,7 @@ M1 验证工具：
                               # 【step 9 换代】选择器**命中数**诊断（只读）：**已走新通道（Pydoll）**
 .\api_probe.exe --selftest                  # V-04 HTTP + V-05 SHA3 自检
 .\api_probe.exe --graph-selftest            # 图模型/注册表/撤销栈/序列化 自检（110 项断言，无需网络）
-.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 + 图片解码 自检（452 项断言，无需网络；2026-10-09 实测）
+.\api_probe.exe --exec-selftest             # 拓扑 + 加载/运行前校验 + 执行器 + 图片解码 自检（464 项断言，无需网络；2026-10-10 实测）
 .\api_probe.exe --image-decode D:\a.webp   # 图片诊断：内容嗅探 / MIME / 解码(stb|wic) / 尺寸 / WIC 能力（M7）
 .\api_probe.exe --sha3 "abc"                # 单次 SHA3-256
 $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 Key）
@@ -229,9 +229,12 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 .\build\bin\api_probe.exe --diag-dump        # 打印诊断报告（8 分节）
 .\build\bin\api_probe.exe --diag-assert      # 诊断报告离线断言（单行 PASS/FAIL；exit 0/1）
 .\build\bin\api_probe.exe --dep-check        # 依赖自检：Edge WebView2 运行时（缺失时打印安装指引；exit 0/1）
-.\build\bin\api_probe.exe --settings-assert  # 设置面板校验纯函数断言（默认通过 + 越界 8 例全拦截；exit 0/1）
+.\build\bin\api_probe.exe --settings-assert  # 设置面板校验纯函数断言（默认通过 + 越界 11 例全拦截；exit 0/1）
+.\build\bin\api_probe.exe --site-assert      # 自建站点闭环断言（PB2-24：模板纯函数 47 项 + 真实写盘→重载→进表/进下拉/进枚举→新节点校验/旧实例刷新/清理）
+.\build\bin\api_probe.exe --autosave-assert  # 自动保存/崩溃恢复断言（PC-01/02：原子写 28 项场景；全程在系统临时目录内，不碰用户快照）
+                                             # ⚠ 会**临时**写并删除 ~\.brain-ai\providers.d\aiwrite-selftest-site.json（自清理）
 
-# —— 一键跑完所有离线自检（构建 + 8 项自检/夹具 + 站点台账重建）——
+# —— 一键跑完所有离线自检（构建 + 12 项自检/夹具 + 站点台账重建 ⇒ 经 `PB2-24` 增至 **13 项**、`PC-01/02` 增至**现行 14 项**，含 `--site-assert` / `--autosave-assert`）——
 powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1
 #   参数：-SkipBuild / -SkipGui / -SkipLoop / -OnlyBuild；打印汇总表 + exit 0/1
 #   物证：build\logs\check_all_<时间戳>.log（各项明细与 build 输出同目录）

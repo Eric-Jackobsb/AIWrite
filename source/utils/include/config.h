@@ -42,6 +42,19 @@ struct Config {
         //  * 老配置无此键 → 默认 false ⇒ **升级后的老用户会看到一次引导**（可跳过，无副作用）；
         //    如需再次查看：菜单「帮助 → 首次使用引导」
         bool first_run_done = false;
+
+        // ---- 自动保存与崩溃恢复（M_patchAB §4 · PC-01 / PC-02）----
+        //  * `autosave_enabled`：总开关（默认开）
+        //  * `autosave_idle_sec`：变更后**静默**多少秒才写快照（默认 3；≥1）
+        //  * `autosave_keep`：历史快照份数 `autosave_1..N`（默认 3 = 与 `kAutosaveKeepDefault`
+        //    一致；0 = 不留历史）。**落点**：`~/.brain-ai/snapshots/autosave.json` + `_<N>.json`
+        //  * `autosave_restore_prompt`：启动时发现快照比工作流新 ⇒ 是否弹「恢复未保存的更改？」
+        //    （默认 true；窗口里的「不再提示」把它写成 false —— PC-02 的「可禁用该提示」）
+        //  * 老配置无这些键 → 全部取默认值（行为 = 「自动保存开、3 秒、留 3 份、会提示」）
+        bool autosave_enabled        = true;
+        int  autosave_idle_sec       = 3;
+        int  autosave_keep           = 3;
+        bool autosave_restore_prompt = true;
     };
 
     struct Output {
@@ -112,7 +125,7 @@ void          set_app_config(Config config);
 //  * 已接线：ui.show_grid / ui.console_height / ui.running_animation /
 //    ui.show_node_library / ui.show_property_panel / ui.show_console / ui.show_output_window /
 //    ui.window_*（F3 窗口几何）/ output.archive_dir / output.keep_history / output.max_history /
-//    output.ttl_days（PC-05 归档）
+//    output.ttl_days（PC-05 归档）/ ui.autosave_*（PC-01/02 自动保存与恢复）
 //  * ui.grid_size：设计上属"网格间距"，但 vendored imgui-node-editor 的 Style 没有该字段，
 //    当前无法生效（如实登记，归口 PD-03 处理：升级库或自绘背景网格）
 //  * 已移除（`PQ-18②` · 2026-10-09）：general.language / general.startup —— 界面语言 / 启动行为不做

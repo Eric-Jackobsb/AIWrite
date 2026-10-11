@@ -23,6 +23,10 @@ struct SettingsPanelResult {
     bool        saved              = false; // 本帧刚保存成功
     bool        visibility_changed = false; // 面板可见性 / 画布选项变了 ⇒ 宿主需重取本地状态
     std::string message;                    // 状态栏文案（空 = 无）
+    // PB2-24 要点②：本帧「重新加载配置表」/「新建网页版站点」成功 ⇒ 宿主需重建 `provider`
+    //  参数枚举（`engine::refresh_provider_options(graph)`）——否则刚建的站点 id 会在
+    //  运行前校验被判「取值不在枚举范围内」
+    bool provider_table_reloaded = false;
 };
 
 // 菜单调用：打开设置窗口

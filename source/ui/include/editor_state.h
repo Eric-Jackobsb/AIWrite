@@ -8,6 +8,7 @@
 //  * 所有可验证的逻辑都在 engine::Graph 内，本层只做编排与日志
 // ============================================================================
 
+#include <chrono>
 #include <string>
 #include <utility>
 #include <vector>
@@ -50,6 +51,23 @@ struct EditorState {
     std::vector<engine::RecentEntry> recent_workflows() const; // 读取 ~/.brain-ai/recent.json
 
     std::string current_workflow_path;   // 当前文件路径（保存对话框的默认名用）
+
+    // ---- PC-01：自动保存（节流；主循环每帧调用 tick_autosave()）----
+    //  判据与落点见 engine/autosave.h；本层只负责**何时**写：
+    //   * 1 Hz 用 engine::graph_content_signature() 探测（视口平移 / 缩放不算变更）
+    //   * 从首次发现变更起，**静默 ≥ config.ui.autosave_idle_sec 秒**（默认 3）才写一次
+    //   * 仅变更时写（无变更 ⇒ 一次盘都不写）
+    //   * 启动时 `autosave_paused = true`（PC-02：先问「恢复未保存的更改？」再放行）
+    //     —— 否则启动时创建的示例工作流会在 3 秒后把真快照冲掉
+    void tick_autosave();                       // 主循环每帧调用一次（内部 1 Hz 探测）
+    void pause_autosave(bool paused);           // true = 暂停（不写、不探测）
+    void mark_autosave_baseline();              // 以当前图为「已保存」基线（不写盘）
+    void flush_autosave_on_exit();              // 退出前补写一次（有未保存更改时）
+    // PC-02：把快照恢复进当前图（**不覆盖原文件** —— 恢复后 `current_workflow_path` 留空，
+    //  保存必然走「另存为」，原文件由用户显式决定；原路径记在 restored_from_autosave_path）
+    bool restore_autosave(std::string* error);
+    std::string restored_from_autosave_path;    // 快照记录的原工作流路径（展示用；空 = 未命名）
+    bool autosave_paused = true;
 
     // ---- 运行输出归档（PC-05）----
     // 运行结束自动写入 outputs/<时间>-<工作流名>/（每节点 .txt + run.json）
@@ -123,6 +141,13 @@ private:
 
     std::vector<engine::Node> clipboard_nodes_;                        // 复制的节点
     std::vector<engine::Edge> clipboard_edges_;                        // 选区内部的连线
+
+    // ---- PC-01：自动保存节流状态（说明见上方 tick_autosave 注释）----
+    std::string                           autosave_signature_;      // 上次写入快照时的内容指纹
+    std::chrono::steady_clock::time_point autosave_last_probe_{};    // 上次探测时刻（1 Hz）
+    std::chrono::steady_clock::time_point autosave_last_change_{};   // 最近一次「发现变更」时刻
+    std::chrono::steady_clock::time_point autosave_retry_after_{};   // 写失败后的退避截止
+    bool                                  autosave_change_seen_ = false;
 };
 
 // 全局单例（UI 生命周期内唯一）

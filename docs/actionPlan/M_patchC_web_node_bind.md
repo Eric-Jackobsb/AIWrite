@@ -229,6 +229,8 @@
 | `aiwrite.exe --upload-selftest` | ≥ **72 / 0**（**串行**跑 —— 共用 `%TEMP%\aiwrite-upload\selftest` 素材目录，并发会假失败） |
 | `aiwrite.exe --web-dom-dump --provider <id>` | 只读枚举正常（用于 `PW-09` 回填） |
 | 文档断链自检 | **0** |
+> 📌 **本表 = 2026-10-08 快照，数字不追溯改写**（口径见 [../../AI_README.md](../../AI_README.md) §10.1）：**现行基线一律看 [../../AI_README.md](../../AI_README.md) §2** —— 例：`poll_answer_gate_test` 已随 `PW-07` / `PW-07i` 扩充，本表的 **12 / 0** 已不是现行值。
+
 
 ### 7.2 真机验收（`AW-*`）
 

@@ -75,6 +75,11 @@ void read_ui(const toml::table& t, Config::Ui& s)
     read_value(t, "window_pos_y", s.window_pos_y);
     read_value(t, "window_maximized", s.window_maximized);
     read_value(t, "first_run_done", s.first_run_done); // M6 首启引导（缺键 → 保持默认 false）
+    // PC-01/02：自动保存与崩溃恢复（缺键 → 保持默认：开 / 3 秒 / 3 份 / 会提示）
+    read_value(t, "autosave_enabled", s.autosave_enabled);
+    read_value(t, "autosave_idle_sec", s.autosave_idle_sec);
+    read_value(t, "autosave_keep", s.autosave_keep);
+    read_value(t, "autosave_restore_prompt", s.autosave_restore_prompt);
 }
 
 void read_output(const toml::table& t, Config::Output& s)
@@ -144,6 +149,11 @@ toml::table to_table(const Config& c)
     write_value(ui, "window_pos_y", c.ui.window_pos_y);
     write_value(ui, "window_maximized", c.ui.window_maximized);
     write_value(ui, "first_run_done", c.ui.first_run_done); // M6 首启引导标记
+    // PC-01/02：自动保存与崩溃恢复（M_patchAB §4）
+    write_value(ui, "autosave_enabled", c.ui.autosave_enabled);
+    write_value(ui, "autosave_idle_sec", c.ui.autosave_idle_sec);
+    write_value(ui, "autosave_keep", c.ui.autosave_keep);
+    write_value(ui, "autosave_restore_prompt", c.ui.autosave_restore_prompt);
     root.insert("ui", std::move(ui));
 
     toml::table output;

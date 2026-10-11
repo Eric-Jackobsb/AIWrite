@@ -10,6 +10,7 @@
 #include "texture_cache.h"
 #include "toolbar.h"
 #include "config.h"
+#include "autosave.h"     // PC-01/02：自动保存 / 崩溃恢复（engine::autosave_*）
 #include "credential.h"
 #include "diagnostics.h"
 #include "file_dialog.h"   // M6：菜单「帮助 → 打开日志/数据目录」（utils::open_folder）
@@ -26,6 +27,7 @@
 #include "app_version.h"          // 版本号单一来源（帮助 → 关于 / 诊断报告 / 安装包同源）
 #include "diagnostics_report.h"   // PM-04：一键复制诊断信息
 #include "settings_panel.h"       // M6-01：设置面板
+#include "node_registry.h"        // PB2-24：配置表重载后重建 `provider` 参数枚举
 #include "webview2_runtime.h"     // PM-01：WebView2 运行时依赖自检
 
 #include <imgui.h>
@@ -640,6 +642,49 @@ int run(const AppOptions& options)
         }
     }
 
+    // ---- PC-01/02：自动保存快照的启动处理（M_patchAB §4）----
+    //  ① 清理上次中断（进程被杀）残留的 `.tmp`：半成品**永不**参与恢复（恢复只读 autosave.json）
+    //  ② 判定是否需要询问「恢复未保存的更改？」，判据见 engine::autosave_should_offer_restore：
+    //     快照比工作流文件新 / 原文件不存在 / 快照未关联工作流 ⇒ 问一次（其余情况不打扰）
+    //  ③ 自动保存**先暂停**（`autosave_paused` 默认 true）：否则启动时刚创建的示例工作流会在
+    //     3 秒后把真快照覆盖掉 —— 询问有结论（或无需询问）时才放行
+    std::string autosave_temp_error;
+    const int   autosave_temp_removed = engine::autosave_cleanup_temp(&autosave_temp_error);
+    if (autosave_temp_removed > 0) {
+        log::info("[自动保存] 已清理上次中断残留的临时文件 " + std::to_string(autosave_temp_removed) +
+                  " 个（快照本身未受影响）");
+    }
+    if (!autosave_temp_error.empty()) {
+        log::warn("[自动保存] " + autosave_temp_error);
+    }
+
+    engine::AutosaveInfo autosave_info   = engine::autosave_probe();
+    std::string          autosave_reason;
+    bool                 autosave_ask    = false; // 需要弹恢复询问
+    bool                 autosave_popup_opened = false;
+    if (autosave_info.ok) {
+        log::info("[自动保存] 发现快照：" + autosave_info.saved_at + " · " +
+                  (autosave_info.name.empty() ? "未命名" : autosave_info.name) + " · 节点 " +
+                  std::to_string(autosave_info.nodes) + " / 连线 " +
+                  std::to_string(autosave_info.edges) +
+                  (autosave_info.workflow_path.empty()
+                       ? std::string(" · 未关联工作流文件")
+                       : " · 关联 " + autosave_info.workflow_path));
+    }
+    const bool autosave_should_ask =
+        config.ui.autosave_restore_prompt &&
+        engine::autosave_should_offer_restore(autosave_info, &autosave_reason);
+    if (autosave_should_ask) {
+        autosave_ask = true;
+        log::info("[自动保存] 将询问是否恢复未保存的更改（判据：" + autosave_reason + "）");
+    }
+    else {
+        // 无需询问（无快照 / 快照不比工作流新 / 用户选过「不再提示」）⇒ 直接放行自动保存
+        log::info("[自动保存] 无需恢复询问（" + autosave_reason + "）→ 自动保存已放行");
+        editor().mark_autosave_baseline();
+        editor().pause_autosave(false);
+    }
+
     // 诊断：安装首异常计数器（VEH）——用于定位第三方依赖反复抛异常 / 内存增长问题，
     // 结果会以「[诊断]」行写入 app.log（带限流）
     utils::diagnostics::install_exception_counter();
@@ -705,6 +750,9 @@ int run(const AppOptions& options)
 
         // ---- 执行会话推进（M2-04：一帧最多推进一个节点；无运行会话时为空操作）----
         editor().tick_run();
+
+        // ---- PC-01：自动保存节流（1 Hz 探测 + 静默 3 秒后写快照；暂停/无变更时零写盘）----
+        editor().tick_autosave();
 
         // ---- 诊断（限流输出）：放在"最小化检查"之前，保证窗口不可见时也能采样 ----
         //  · 首异常累计（有变化才输出，限流）
@@ -904,6 +952,71 @@ int run(const AppOptions& options)
             ImGui::EndMenuBar();
         }
 
+        // ---- PC-02：恢复未保存的更改（模态；宿主 = DockHost 窗口上下文，OpenPopup 需在同一窗口内）
+        if (autosave_ask) {
+            const char* kRestorePopup = "恢复未保存的更改？##autosave_restore";
+            if (!autosave_popup_opened) {
+                ImGui::OpenPopup(kRestorePopup);
+                autosave_popup_opened = true;
+            }
+            ImGui::SetNextWindowSize(ImVec2(620.0f, 0.0f), ImGuiCond_Appearing);
+            if (ImGui::BeginPopupModal(kRestorePopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::TextUnformatted("上次退出 / 退出前，当前工作流还有未保存的更改。");
+                ImGui::Separator();
+                ImGui::Text("快照时间：%s", autosave_info.saved_at.empty()
+                                                ? "（未知）"
+                                                : autosave_info.saved_at.c_str());
+                ImGui::Text("工作流名：%s",
+                            autosave_info.name.empty() ? "未命名" : autosave_info.name.c_str());
+                ImGui::Text("内容：节点 %d / 连线 %d", autosave_info.nodes, autosave_info.edges);
+                ImGui::TextWrapped("原文件：%s", autosave_info.workflow_path.empty()
+                                                     ? "（快照未关联工作流文件）"
+                                                     : autosave_info.workflow_path.c_str());
+                ImGui::TextDisabled("判据：%s", autosave_reason.c_str());
+                ImGui::Separator();
+                ImGui::TextDisabled("「恢复」= 载入快照并另存为新文件（不会覆盖原文件）；"
+                                    "「忽略」= 删除该快照，按当前内容继续。");
+
+                const auto finish_without_restore = [&](const char* status_text) {
+                    engine::autosave_clear(nullptr); // 用户明确拒绝 ⇒ 快照不再保留（否则下次又问）
+                    state.mark_autosave_baseline();
+                    state.pause_autosave(false);
+                    autosave_ask = false;
+                    state.set_status(status_text);
+                    ImGui::CloseCurrentPopup();
+                };
+
+                if (ImGui::Button("恢复", ImVec2(160.0f, 0.0f))) {
+                    std::string restore_error;
+                    if (state.restore_autosave(&restore_error)) {
+                        state.pause_autosave(false);
+                        autosave_ask = false;
+                        ImGui::CloseCurrentPopup();
+                    }
+                    else {
+                        state.set_status("恢复失败：" + restore_error);
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("忽略（保留当前内容）", ImVec2(200.0f, 0.0f))) {
+                    finish_without_restore("已忽略未保存的更改（快照已删除）");
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("忽略，且不再提示", ImVec2(180.0f, 0.0f))) {
+                    config.ui.autosave_restore_prompt = false; // PC-02：「可禁用该提示」
+                    if (save_config(paths::config_file(), config)) {
+                        set_app_config(config);
+                        log::info("[自动保存] 已写入 ui.autosave_restore_prompt = false（不再提示恢复）");
+                    }
+                    else {
+                        log::warn("[自动保存] 「不再提示」写盘失败：config.toml 不可写？");
+                    }
+                    finish_without_restore("已忽略未保存的更改，且不再提示（可在设置面板重新打开）");
+                }
+                ImGui::EndPopup();
+            }
+        }
+
         // ---- 工具栏（全部鼠标操作；设计 §6.7：MVP 不设快捷键）----
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f, 4.0f));
         if (ImGui::BeginChild("##toolbar", ImVec2(0.0f, ImGui::GetFrameHeight() + 10.0f), false)) {
@@ -990,6 +1103,13 @@ int run(const AppOptions& options)
             }
             state.set_status(settings_result.message);
         }
+        if (settings_result.provider_table_reloaded) {
+            // PB2-24 要点②：配置表重载 ⇒ 重建 `provider` 参数枚举（注册表 Definition + 已有节点实例）
+            //  * 不刷新的话：刚新建的站点 id 会在运行前校验被判「取值不在枚举范围内」
+            //  * 界面下拉本身读实时表（PB2-31 合并显示）⇒ 无需额外刷新
+            engine::refresh_provider_options(state.graph);
+            state.set_status("配置表已重载：提供商下拉 / 运行前校验已同步");
+        }
 
         // ---- 状态栏 ----
         ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x,
@@ -1052,6 +1172,9 @@ int run(const AppOptions& options)
 
     log::info("主窗口关闭，开始清理");
     editor().stop_run_async(); // PB-01：退出前 join 工作线程（幂等）
+
+    // ---- PC-01：退出前补写快照（有未保存的更改才写；正常退出与崩溃都能在下一次启动恢复）----
+    editor().flush_autosave_on_exit();
 
     // ---- 窗口几何退出落盘（F3 / PD-04）：节流保存之外的最终兜底 ----
     if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) == 0) {

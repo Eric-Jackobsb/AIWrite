@@ -65,6 +65,15 @@ std::string validate_settings(const Config& config)
         !error.empty()) {
         return error;
     }
+    // PC-01/02：自动保存节流阈值与历史份数（M_patchAB §4）
+    if (const std::string error = range_error("自动保存间隔（秒）", config.ui.autosave_idle_sec, 1, 600);
+        !error.empty()) {
+        return error;
+    }
+    if (const std::string error = range_error("自动保存历史份数", config.ui.autosave_keep, 0, 50);
+        !error.empty()) {
+        return error;
+    }
     return std::string();
 }
 

@@ -2,7 +2,7 @@
 
 > 项目：AI 小说/剧本创作软件（节点工作流 + DeepSeek 后端）
 > 当前进度：**M1 ✅ / M2 ✅**；**M3 🟡**（节点编辑器）、**M4 ✅ 核心完成**（文本生成链路）、**M5 🟡 核心切片完成**（图片理解 + 图片显示）、**M7 ✅ 第一轮代码与手册落地 / ✅ 第二轮 P7-a 已落地（v0.5.2）/ 🟡 P7-b 计划中**（第一轮 = 图片输入收口 + 节点精简 9→8 + 图片格式按内容嗅探/双解码后端 + **一次 CRT 断言崩溃的根因修复与冻结区 `I17`**；**第二轮 P7-a ✅ 已落地（2026-09-28）**：图片**多变长**端口 + **多选图片** + **统一资源目录**（`~/.brain-ai/assets/images/` 内容寻址 + `aiwrite-asset:` 令牌 + 一键迁移）+ official 收口（编码缓存 / 体积与耗时 / 三类错误文案）+ **UI A 档**（默认布局常显 / 空状态 / 面板三组折叠 / 图片卡片 / 错误条居中 / 状态栏 / 缩略图放大）—— 见 [actionPlan/M7.md](actionPlan/M7.md) §11–§14；**P7-b v0.5.3**（待确认）：网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道，**先做前置验证，未过则回滚**；**方案 B′（2026-09-29）：网页版图片理解首个目标站 = 豆包 `doubao-web`，先做只读侦察（`P7b-05b`），结论审核通过后才启动 C++↔Python 管道本体；`deepseek-web` 保持文字主线不动**）；补丁系列：`Patch A` ✅ 全部完成、`M_patchB`（Provider 可插拔化）**L1 已收口 ✅ / L3 ✅ / L4 部分落地**，**前两期已完成部分已归档**（[Archive/actionPlan/](Archive/actionPlan/)）—— **补丁系列所有剩余项统一见 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)**（要点：配置表 / 用户覆盖 / API 参数化 / **网页版去硬编码** / **多站点会话并存** / `config.toml` 多 provider / `--provider-selftest`；**L4（登录层去 DeepSeek 化）**、**L2 工厂**、**原 Patch C/D/PM** 均归入承接文档）；**M7 第三轮 `M7B` 已立项（计划中）**：网页通道**整体迁 Pydoll** —— WebView2 **退场**（嵌入控件易被站点识别为非真实浏览器）、`builtin:deepseek` 协议栈退役、**CDP `Network` 事件重建 SSE 增量**（保住逐字流式）、**只维护一套登录态**、**作废不变量 `I2`**（改由 `I20` CLI 契约替代：`--provider` 必填 / 缺参列候选 + 退出码 2）—— **前置验证 7/9 已过**（`M7B-01`/`02`/`03`/`04`/`05`/`08`/`09`；余 `M7B-06`/`07` 真站点登录 + `M7B-06b`）· **批 1 step 1~6 已落地**（协议词表 / 命名管道 / Pydoll 驱动 / 守护进程主循环 / **L2 加密快照 `session.py`（`VB2-39`）** / **C++ 新通道 `pydoll_channel`（`--pydoll-selftest` 已过）**；**生产路径未接线**）· **目录迁移完成（2026-10-03）**：Python **运行代码**归 `source/python/`（含 `_probe/` 与 `.venv`），**运行期数据仍留 `~/.brain-ai`**，并新增决议 **`MB-D0-8`**（登录态持久化四层：**L1 干净退出 / L2 DPAPI 加密快照 / L3 启动自愈 attach / L4 异常退出可见**）· **⚠️ 运行时通道现状（2026-10-03 实测）：主程序 GUI 与网页节点仍走 WebView2**（Pydoll 新通道已建成但**未接线**，仅 `--pydoll-selftest` / `--pydoll-login <id>` 可用；切换归批 3 `M7B-20`；逐入口归属见 §1.4）—— 📦 **`M7B` 已归档（2026-10-05 · 路线退场）** → [Archive/actionPlan/M7B.md](Archive/actionPlan/M7B.md)；**M7 第四轮 `M8`（方案 E）已立项**：网页通道**文字生成回退 WebView2** + **图片上传改走 C++ native HTTP**、Python / 命名管道 / 守护进程整体退场 —— 见 [actionPlan/M8.md](actionPlan/M8.md)；M6 未开始
-> 最近更新：2026-10-09
+> 最近更新：2026-10-10（**文档可信度收口**：看板计数订正 `Test` 28→29 · `Docs` 14→21 · `Test > Loop Dev` 3→4；`--selftest` 补 **DOM 探测** 组、执行器订为 **464**；`--settings-assert` 越界订为 **11 例**；**文档断链清零**（判据升级为「全库 0」）；数字口径 **SSoT** 落 [../AI_README.md](../AI_README.md) §10.1）
 > 文件名：**`DocMAP.md`**（2026-10-08 由 `README.md` 更名 · `git mv` 保留历史；历史文档（含 `docs/Archive/**`）里出现的 `docs/README.md` 均指本文）
 
 ---
@@ -55,7 +55,7 @@ F:\GameDao\Tools\AIwrite\build\bin\aiwrite.exe
 |---|---|
 | 构建 / 运行 / 中文界面 / 日志 / 配置（A-01、A-02、A-07、A-08） | ✅ 已验证 |
 | HTTP、SHA3（V-04、V-05） | ✅ 已验证 |
-| 节点画布渲染与交互（V-02、A-03） | ✅ 已升级为真实节点系统（M2 P1/P2）：节点/连线/参数/撤销全部可鼠标操作，逻辑层自检 70 项全绿 |
+| 节点画布渲染与交互（V-02、A-03） | ✅ 已升级为真实节点系统（M2 P1/P2）：节点/连线/参数/撤销全部可鼠标操作，逻辑层自检全绿（现行 `--graph-selftest` **110 / 0**；数字见 [../AI_README.md](../AI_README.md) §2） |
 | WebView2 登录 + Cookie（V-03 / A-04、A-05） | 🟡 自动化链路已通过（`webview2_login --selftest` → Cookie 5 条）；⏳ 运行 `webview2_login.exe` 手动登录一次 |
 | DeepSeek API 生成（V-06 / A-06） | ⏳ 需设置 `DEEPSEEK_API_KEY` |
 | M3 节点编辑器验收 | ⏳ 按 [节点编辑器使用说明.md](节点编辑器使用说明.md) §8 的 22 项清单人工确认 |
@@ -99,6 +99,7 @@ F:\GameDao\Tools\AIwrite\build\bin\aiwrite.exe
 ### 5.3 本次全量梳理结果（2026-10-08 · `docs/**` 活文档）
 
 > 📌 **后续增量**：2026-10-09 新增 **画布渲染性能专项** [actionPlan/M_canvas_snapshot.md](actionPlan/M_canvas_snapshot.md)（**🟡 部分落地 · v2**：`CS-01` 指标行已落地 + 计划外 P0 根因热修；`CS-04`+ 暂缓）⇒ 见下表末行；`节点编辑器使用说明.md` 因新增 §10.12 而同步其「⬜ 待定」列说明。
+> 📌 **后续增量（2026-10-10 · 文档可信度收口）**：**文档断链清零**（判据升级为「全库 0」；7 条真断链 = `actionPlan/M7B.md` 未指向 `Archive/`，1 条 = 检查器跨反引号误判）· [loop_dev.md](loop_dev.md) §10.1 陷阱补至 **10 条** · 数字口径 **SSoT** 落 [../AI_README.md](../AI_README.md) §10.1（本文与各计划文档不再复述数字）。
 
 | 文档 | ✅ 已固定 | 📦 已失效（标记不删） | ⬜ 待定（→ 看板） |
 |---|---|---|---|
@@ -114,7 +115,7 @@ F:\GameDao\Tools\AIwrite\build\bin\aiwrite.exe
 | [actionPlan/M8.md](actionPlan/M8.md) | §13 站点上传模板（`M8-24`~`M8-37`）· `M8-Q1` 结案（`D-36②`） | §3.1 ①/③ 路线（原生复刻 · crawl `lHg`） | §7 `M8-Q2`~`M8-Q6` → `PQ-04`~`PQ-08`（✅ 4 项已拍板 2026-10-09 · 余 `M8-Q4` = `PQ-06` 待定） |
 | [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) | §7 `PD-01` 不做 · §8 附录 B–E 现行规格 | §6 `PB-04`（已展开为 `PB2-*`） | §9 `D-30` / `D-31` ✅ 已拍板（2026-10-09）· `D-26` / `D-32` → `PQ-09` / `PQ-12` ⏳ 待定；`PD-08` ✅（`PQ-18` = ② 移除并记 M6；**代码已落地 2026-10-09**） |
 | [actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md) | §9 `D-33`~`D-36` · `PW-01` / `PW-03` / `PW-07` / `PW-07g` · §5 `I24`~`I26` | §4.5 原计划「类名收窄 / 祖先排除」（未采用 · 被整串门取代） | ✅ 全部已拍板（2026-10-09）：`W-D8` → `PQ-13`（改为报错）· A2/A1 分叉 → `PQ-14`（不做）· `PW-14` → `PQ-15`（不排期） |
-| [loop_dev.md](loop_dev.md) | 全篇 ✅ 已固定（2026-10-09 新增 · 同日 R1 实测收紧 · `SMOKE7`~`9` 再收一次）：§1 启动闸 · §2 三层结构 · §3 匿名优先 8 步（**S3 判据 = 三口径：`rc=0` 且 `n3=done` 且归档正文非站侧错误/忙碌串**）· §4 门禁 · §5 失败四分类 + **R1 归因台账 + `SMOKE7`~`9` 第三口径行** · §6 物证目录 / 五态 / 退出码 `0/1/2/3` · §7 记录位 · §8 停止条件 · §10 前置模块 + **§10.1 已知陷阱 8 条**（2026-10-10 增：7「声明≠实测」· 8「门禁正则与真实输出不符 ⇒ 假 `FAIL`」）· §11 轮次表（**R1** + 批 3 探针 / `SMOKE7`~`10` / `SMOKE11`~`13` 三行「非轮次」） | —（§3.2 判据为初版，随实测收紧） | —（`TST-L01` ✅ 已落地（`source/tools/loop_verify.ps1` · 取代手工 `s3_driver.ps1`）· `TST-L05` ✅ 已落地（站点状态台账 · 2026-10-10 · §2.2 + [AI_Status.md](AI_Status.md)（总览）+ [AI_Status_web.md](AI_Status_web.md) / [AI_Status_api.md](AI_Status_api.md)（分片））· `TST-L03` 🟡 报告模板已由驱动生成、首份基线 = R1；**不进待定分类**） |
+| [loop_dev.md](loop_dev.md) | 全篇 ✅ 已固定（2026-10-09 新增 · 同日 R1 实测收紧 · `SMOKE7`~`9` 再收一次）：§1 启动闸 · §2 三层结构 · §3 匿名优先 8 步（**S3 判据 = 三口径：`rc=0` 且 `n3=done` 且归档正文非站侧错误/忙碌串**）· §4 门禁 · §5 失败四分类 + **R1 归因台账 + `SMOKE7`~`9` 第三口径行** · §6 物证目录 / 五态 / 退出码 `0/1/2/3` · §7 记录位 · §8 停止条件 · §10 前置模块 + **§10.1 已知陷阱 10 条**（2026-10-10 增：7「声明≠实测」· 8「门禁正则与真实输出不符 ⇒ 假 `FAIL`」· **9「构建 `MSB4018` + `FileTracker` = `build\` 生成态陈旧，非代码问题」** · **10「`Param::value` 是 `nlohmann::json` ⇒ `+=` 是数组追加」**）· §11 轮次表（**R1** + 批 3 探针 / `SMOKE7`~`10` / `SMOKE11`~`13` 三行「非轮次」） | —（§3.2 判据为初版，随实测收紧） | —（`TST-L01` ✅ 已落地（`source/tools/loop_verify.ps1` · 取代手工 `s3_driver.ps1`）· `TST-L05` ✅ 已落地（站点状态台账 · 2026-10-10 · §2.2 + [AI_Status.md](AI_Status.md)（总览）+ [AI_Status_web.md](AI_Status_web.md) / [AI_Status_api.md](AI_Status_api.md)（分片））· `TST-L03` 🟡 报告模板已由驱动生成、首份基线 = R1；**不进待定分类**） |
 | [AI_Status.md](AI_Status.md) | §一 门禁基线（**权威位** = [loop_dev.md](loop_dev.md) §4 / [../AI_README.md](../AI_README.md) §2，本表是入口索引）· §二 台账**汇总**（**机器生成** · `TST-L05` · 指向 [AI_Status_web.md](AI_Status_web.md) / [AI_Status_api.md](AI_Status_api.md)） | — | —（§三 轮次 / §四 下一步为**滚动更新**、非设计待定；回写约定见 §四 约定 10） |
 | [AI_Status_web.md](AI_Status_web.md) | §二 网页版台账两张表（**机器生成** · `TST-L05` · `kind=web` × 11 站）· §三 卡点 / §四 纪律（人工滚动） | — | —（§三 卡点随轮次增减；表格一律脚本重建、不手改） |
 | [AI_Status_api.md](AI_Status_api.md) | §二 官方 API 台账两张表（**机器生成** · `TST-L05` · `kind=official` × 9 条）· §三 卡点 / §四 纪律（人工滚动） | — | —（§三 卡点随就绪度增减；表格一律脚本重建、不手改） |

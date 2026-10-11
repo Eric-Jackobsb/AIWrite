@@ -30,21 +30,21 @@
 | `Archive/actionPlan/M_patchA.md` §7（PM-xx） | **§6** | 并行小项 |
 | `Archive/actionPlan/M_patchA.md` §1.8 / §12（不做与决策） | **§7 / §9** | 明确不做 + 决策点 |
 | `Archive/actionPlan/M_patchB.md` §3 L2（PB2-08…12）+ `PB2-04`/`PB2-05` 残余 | **§3.1** | 协议 / 适配器实现（工厂） |
-| `Archive/actionPlan/M_patchB.md` §3 `PB2-07` / `PB2-25` / `PB2-29` / `PB2-30` / `PB2-24` | **§3.2 – §3.5** | L1 尾项 + L4（**网页版会话失效可诊断 / 逐站选择器回填**）—— ⚠️ `PB2-25`、`PB2-28`（探测适用性）、`PB2-29`（逐站回填）**将并入 [M7B.md](M7B.md)**（2026-09-28）：`PB2-25` → `M7B-07`/`M7B-22`（证据来源改 CDP）；`PB2-28` → **作废**（`I16` 升级为全局「不注入任何站点内部端点」）；`PB2-29` → `M7B-29`（在 **Pydoll 通道上一次测完**，不在 WebView2 里重复测） |
+| `Archive/actionPlan/M_patchB.md` §3 `PB2-07` / `PB2-25` / `PB2-29` / `PB2-30` / `PB2-24` | **§3.2 – §3.5** | L1 尾项 + L4（**网页版会话失效可诊断 / 逐站选择器回填**）—— ⚠️ `PB2-25`、`PB2-28`（探测适用性）、`PB2-29`（逐站回填）**将并入 [M7B.md](../Archive/actionPlan/M7B.md)**（2026-09-28）：`PB2-25` → `M7B-07`/`M7B-22`（证据来源改 CDP）；`PB2-28` → **作废**（`I16` 升级为全局「不注入任何站点内部端点」）；`PB2-29` → `M7B-29`（在 **Pydoll 通道上一次测完**，不在 WebView2 里重复测） |
 | `Archive/actionPlan/M_patchB.md` §7 附录 B/C/D/E | **§8**（**现行版本**） | JSON 规范 / 加载顺序 / 自建站点 / 站点清单 |
 
 ### 0.3 执行原则（承接，不改语义）
 
 沿用 `M_patchA` §0.3 五条（**运行态值不进文档** / **只读暴露** / **脱敏** / **一次提交一个补丁** / **不引入新依赖**）+ `M_patchB` §0.4 追加三条（**表数据优先于 C++ 常量** / **不静默回落** / **不实测不填值**），并守全部不变量 **`I1`…`I16`**（其中 `I2`「`deepseek-web` 与无参路径行为逐字不变」、`I15`「登录态判据不得依赖 `userToken`」、`I16`「探测不适用站点不得注入 DeepSeek 端点」在 L4 残项里最关键）。
 
-### 0.4 回归基线（**2026-10-09 实测** · 每次提交必须重跑并贴结果）
+### 0.4 回归基线（**2026-10-09 实测 · 2026-10-10 复测订正** · 每次提交必须重跑并贴结果）
 
 | 命令 | 期望（当前实测） |
 |---|---|
 | 构建（MSVC /W4，4 目标） | **0 error / 0 warning** |
-| `api_probe.exe --selftest` | 七组全 PASS · exit 0（含 执行器 **452 / 0**） |
+| `api_probe.exe --selftest` | 七组全 PASS · exit 0（含 **DOM 探测 27 / 0** · 执行器 **464 / 0**） |
 | `api_probe.exe --graph-selftest` | **110 通过 / 0 失败** |
-| `api_probe.exe --exec-selftest` | **452 通过 / 0 失败**（2026-10-09 批 3：**425 → 452**，新增 27 项 DOM 探测报告自检） |
+| `api_probe.exe --exec-selftest` | **464 通过 / 0 失败**（**2026-10-10 复测**；2026-10-09 批 3：**425 → 452**，新增 27 项 DOM 探测报告自检） |
 | `aiwrite.exe --provider-selftest` | **50 通过 / 0 失败** |
 | `aiwrite.exe --provider-dump` | **20 条**（official 9 / web 11） |
 | `aiwrite.exe --cred-selftest` | **8/8 PASS**（本轮未复跑） |
@@ -57,8 +57,8 @@
 | `aiwrite.exe --run-selftest` | PASS（离线无 Key：**3/5 为预期**） |
 | `aiwrite.exe --run-selftest --web --provider <id>` | **exit 0 = 生成成功**（需该条目选择器就绪 + 会话有效） |
 | `aiwrite.exe --run-selftest --web`（内置 DeepSeek 路径） | 5/5 —— ⚠️ 受官网侧会话失效（`R19`）影响时需先解决 `PB2-25`/重登 |
-| 离线夹具 `node source/tools/*_test.js` | `poll_answer_gate_test` **12 / 0** · `send_chain_test` **17 / 0** · `dom_gate_test` **15 / 0**（各加 `--old` 负向**必须 FAIL**：**5 / 7** · **13 / 4** · **6 / 15** · 退出码 1） |
-| 文档断链自检 `python vcpkg-cache/check_links.py` | **本轮不得新增** —— 2026-10-09 实测 **checked 610 / broken 8**（8 条**全部为存量**、已登记 `DBG-L01`；判据**不是**「全库 0」） |
+| 离线夹具 `node source/tools/*_test.js` | `poll_answer_gate_test` **44 / 0** · `send_chain_test` **17 / 0** · `dom_gate_test` **15 / 0**（各加 `--old` 负向**必须 FAIL**：**18 / 26** · **13 / 4** · **9 / 6** · 退出码 1） |
+| 文档断链自检 `python vcpkg-cache/check_links.py` | **全库 0** —— **2026-10-10 实测 checked 818 / broken 0**（存量 8 条已清零：7 条真断链 = `actionPlan/M7B.md` 未指向 `Archive/`，1 条 = 检查器跨反引号误判；判据由「本轮不得新增」**升级为「全库 0」**） |
 
 ### 0.5 旧路径映射（归档后如何查历史）
 
@@ -96,8 +96,8 @@
 | 15 | L4 | `PB2-25` 网页版会话失效**可诊断**（`--web-probe` 判据加「端点 `code=0`」+ 面板/校验「重新登录」入口 + `token_expr` 表驱动容错） | `B2-e2` | `AB2-17` / `VB2-20` | `FEA-M_patchB-25` | 需真实失效响应 |
 | 16 | L4 | `PB2-29` 内置站点 **`answer_selector` 逐站实测回填**（+ `verified:true` + §8 附录 E 两列） | `B2-e2` | `AB2-21` | `FEA-M_patchB-29…30` | **必须人工登录 + 手动发一条消息** |
 | 17 | L4 | `PB2-30②` 面板「测试选择器」按钮（复用只读探测，把命中数/建议显示在界面） | `B2-e2` | `AB2-22` | `FEA-M_patchB-29…30` | — |
-| 18 | L4 | `PB2-24` 自助闭环：新建站点条目 UI + **重新加载配置表**（下拉即时刷新）+ 配置表错误/警告界面可见（下拉「合并显示」＝ `PB2-31` **已 ✅ v16**） | `B2-e2` | `AB2-22` | `FEA-M_patchB-29…30` | 新建后需一次真实运行 |
-| 19 | C | `PC-01` autosave（节流 + 原子写）· `PC-02` 恢复流程 | `C1` | `VC-01` / `VC-02` | `FEA-M2-01` | — |
+| 18 | L4 | `PB2-24` 自助闭环：新建站点条目 UI + **重新加载配置表**（下拉即时刷新）+ 配置表错误/警告界面可见（下拉「合并显示」＝ `PB2-31` **已 ✅ v16**） | `B2-e2` | `AB2-22` | `FEA-M_patchB-29…30` | ✅ **已落地（2026-10-10）** —— 代码 + 离线断言（`api_probe --site-assert`）见 §3.5「✅ 已落地」；**界面点选回路待真人点一次**；新建后需一次真实运行 |
+| 19 | C | `PC-01` autosave（节流 + 原子写）· `PC-02` 恢复流程 —— ✅ **已落地（2026-10-10）**：纯逻辑落 `engine/autosave.*`（**落点调整**：原写 `ui/editor_state.*`，因 GUI 目标不可离线断言而改）+ `ui/editor_state.*` 节流编排 + `ui/app.cpp` 恢复询问；`api_probe --autosave-assert` **28 / 0** · `check_all.ps1` **14 / 14**；⛔ 真人点选（改图 → 写快照 → 点「恢复」）未做 | `C1` | `VC-01` / `VC-02` | `FEA-M2-01` | — |
 | 20 | C | `PC-03` 最近列表治理（存在性校验 + 灰显 + 清理失效） | `C1` | `VC-03` | `FEA-M2-02` | — |
 | 21 | C | `PC-04` 版本迁移框架（workflow `version` + `config_version` + 迁移自检） | `C1` | `VC-03` | `FEA-M2-03`、`DBG-M6-02` | — |
 | 22 | D | `PD-03` 设置面板（`ui/settings_panel`；全量配置接线 + 落盘 + 范围/路径校验） | `D1` | `VD-03` | `FEA-M6-01` | — |
@@ -215,7 +215,7 @@
 
 ### 3.5 `PB2-24` 自建站点闭环（`B2-e2`）
 
-- **现状证据**：`reload_provider_specs()` **全工程零调用点**；`src/ui` 无任何「配置表 / 重新加载 / 测试连接」入口；`registerAllNodes()` 幂等 → 「提供商」枚举在首次注册时**一次性**生成，运行中 reload **不刷新下拉**；配置表错误 / 警告**只在 `app.log`**（界面不可见）。
+- **初查现状（2026-10-10 之前 · 下面三条**已全部消除** —— 见本小节末「✅ 已落地」）**：`reload_provider_specs()` **全工程零调用点**；`src/ui` 无任何「配置表 / 重新加载 / 测试连接」入口；`registerAllNodes()` 幂等 → 「提供商」枚举在首次注册时**一次性**生成，运行中 reload **不刷新下拉**；配置表错误 / 警告**只在 `app.log`**（界面不可见）。
 - **要点**：
   1. 「**新建网页版站点…**」按钮 → 从内置条目复制模板 → 写 `~/.brain-ai/providers.d/<id>.json`（**必须带 `schema_version` 信封**，见 §8 附录 C）→ 立即可用；
   2. `reload_provider_specs()` **接线** + `provider` 参数改**动态枚举**（或提供重建接口）→ 下拉即时刷新；
@@ -223,6 +223,15 @@
 - **已 ✅ 部分**：`PB2-31` 提供商下拉「合并显示」（v16 · 仅 ImGui 层 · **经用户界面验证通过**）。
 - **依赖**：与 §3.4 的 `PB2-30②` 同批实现最省事（两者都读只读诊断结果）。
 - **验收**：`AB2-22`；风险 `R8`（坏表 → 报错 + 上一份可用表/最小兜底）、`R18`（照抄也能建出站点）。
+
+**✅ 已落地（2026-10-10 · 代码 + 离线断言；作者 = 本批）**：三条要点全部实现 ——
+
+1. **新建站点**：设置面板分区⑥「**新建网页版站点…**」模态（模板来源下拉 = 空白 / 从内置条目复制 —— **只抄身份**（`login_url` / `window_title` / `cookie_names` / `token_expr`），**内置 `builtin:*` 的 `web.*` 选择器不抄**）→ 写 `~/.brain-ai/providers.d/<id>.json`：**带 `schema_version` 信封**（§8 附录 C）、**强制 `web.adapter=dom`**、**`verify=false`**（`PB2-26` 口径：无实测不写 `verified`）、**原子写**（`.tmp` → 改名）、**默认拒绝覆盖**（需勾选）。落点 `source/ai/{include,src}/site_template.*`（纯函数 ⇒ 可离线断言）。
+2. **重载 → 下拉 / 校验刷新**：`reload_provider_specs_and_refresh()` = **重载 + 刷新单入口**；`refresh_provider_options(Graph&)` 会**连已有节点实例的 `provider` 枚举一起重建并保留当前值**（`registerAllNodes()` 幂等导致的「枚举只在首次注册时生成」不再是坑）。落点 `source/engine/{include,src}/node_registry.*`。
+3. **错误 / 警告界面可见**：面板 §⑥ 列出配置表**逐条中文错误 / 警告**（含未知字段、缺 `answer_selector`）+ 「**重新加载配置表**」+ 「打开站点目录」按钮 ⇒ 手改 JSON 后**点一下即生效**，不必重启。
+- **验证**：`api_probe --site-assert` **PASS · exit 0** —— 纯函数 **47 / 0** + 端到端：写盘 → 重载 → 进表 / 进网页版下拉 / 进 `provider` 枚举（**20 → 21**）→ 新建节点运行前校验通过 → **旧实例刷新回归**（打回旧枚举 ⇒ 先被判越界、刷新后通过，证明护栏真实）→ 清理（条目数回落 **20 → 20** · 磁盘零残留）；`check_all.ps1` **13/13 PASS**；构建 **0 error / 0 warning**。物证 `build/logs/`。
+- **⛔ 未人工实测（如实登记）**：界面**点选**回路「新建 → 下拉出现 → 选中 → 打开登录窗口」需**真人点一次鼠标**（本机无 GUI 自动化）；同一条代码路径已由 `--site-assert` 覆盖。
+- **同批**：唯一不顺带做的是 `PB2-30②` 面板「测试选择器」按钮（**仍 ⬜**，与 §3.4 逐站取选择器同批）。
 
 ---
 
@@ -233,8 +242,8 @@
 
 | 编号 | 要点 | 落点 | 验证 |
 |---|---|---|---|
-| `PC-01` | **autosave**：工作流变更后**节流**（≥3 秒且空闲）写 `~/.brain-ai/snapshots/autosave.json`；**原子写**（临时文件 + rename）；保留最近 N 份（`autosave_1..N`） | `ui/editor_state.{h,cpp}`、`utils/paths`（复用 `snapshots_dir()`） | `VC-01`（模拟写入中断不产生半个 JSON；autosave 可正常加载） |
-| `PC-02` | **恢复流程**：启动时若 autosave 比最近打开的工作流新 → 弹一次「恢复未保存的更改？」（可禁用该提示）；恢复后**不覆盖原文件**，另存需确认 | `ui/app.cpp`、`ui/editor_state.*` | `VC-02`（构造场景 → 出现询问；恢复后图内容与 autosave 一致） |
+| `PC-01` | **autosave**：工作流变更后**节流**（≥3 秒且空闲）写 `~/.brain-ai/snapshots/autosave.json`；**原子写**（临时文件 + rename）；保留最近 N 份（`autosave_1..N`）　✅ **已落地（2026-10-10）· 落点调整**：纯逻辑 = `source/engine/{include,src}/autosave.*`（**原计划 `ui/editor_state.*`** —— 但 `ui/**` 属 GUI 可执行目标、`api_probe` 链接不到，放那里**无法离线断言** `VC-01`），`ui/editor_state.*` 只做**时机编排**（1 Hz 内容指纹探测 + 静默 `ui.autosave_idle_sec` 秒 + 无变更不写 + 失败退避 10 秒）；默认目录仍复用 `paths::snapshots_dir()`。历史轮转 = **先复制旧最新成 `autosave_1` 再原子替换最新** ⇒ 不存在「`autosave.json` 缺失窗口」 | `engine/autosave.{h,cpp}`（新）、`ui/editor_state.{h,cpp}`、`utils/paths`（复用 `snapshots_dir()`） | `VC-01`（✅ `--autosave-assert`：半截 `.tmp` 不参与恢复 / 可清理 / 清理后仍可加载 + 写后无 `.tmp` 残留 + `keep=2/0` 轮转） |
+| `PC-02` | **恢复流程**：启动时若 autosave 比最近打开的工作流新 → 弹一次「恢复未保存的更改？」（可禁用该提示）；恢复后**不覆盖原文件**，另存需确认　✅ **已落地（2026-10-10）**：判定 = 快照比工作流 mtime 新 / 原文件不存在 / 未命名 ⇒ 问一次；模态三按钮「恢复 / 忽略（保留当前内容）/ 忽略，且不再提示（写 `ui.autosave_restore_prompt=false`）」；**恢复后 `current_workflow_path` 留空 ⇒ 保存必走另存**（原路径记 `restored_from_autosave_path`） | `ui/app.cpp`、`ui/editor_state.*` | `VC-02`（✅ `--autosave-assert` 4 场景 + 恢复后**内容指纹逐字相同**；GUI 实测：启动判定日志 + 12 秒后快照哈希不变 = 启动不冲掉真快照；⛔ 真人点「恢复」未做） |
 | `PC-03` | **最近列表治理**：打开前校验存在性；失效条目**灰显**并标注「（文件不存在）」；提供「清理失效条目」 | `engine/recent_files.{h,cpp}`、`ui/app.cpp` | `VC-03` |
 | `PC-04` | **版本迁移框架**：`workflow_io` 的 `version` 与 `config_version` 建迁移表（当前只 warn）；**未知高版本明确拒绝**并提示；新增迁移自检 | `engine/workflow_io.cpp`、`utils/config.cpp` | `VC-03`（构造 v1.0 旧文件 → 加载并写回当前版本；未来版本 → 明确拒绝） |
 
@@ -424,7 +433,7 @@
 **三步**：
 
 1. 新建文件 `~/.brain-ai/providers.d/<你的id>.json`（**必须**带信封 `schema_version` + `providers` 数组；文件名任意，按名升序合并）；
-2. 保存后**重启 AIwrite**（当前版本没有「重新加载配置表」入口 —— 见 `PB2-24`）；
+2. 保存后**点设置面板的「重新加载配置表」**即生效（**不必重启**；2026-10-10 `PB2-24` 之前需要重启）；
 3. 「提供商配置」→「提供商」下拉里出现该条目 → 选中（模式会带出建议值 `web`）→「打开登录窗口」即打开**该站点**。
 
 **最小可用样例（实测通过；以 Kimi 为例）**：
@@ -497,7 +506,7 @@
 
 - **为什么没有选择器**：`adapter=dom` 的生成字段（`input_selector` / `send` / `answer_selector`）与 `cookie_names` / `token_expr` **必须实测**；本轮**不填假值**（避免 L3 落地后误判「已适配」）→ 采用**登录型条目**（`PB2-26`：可加载 + 生成未就绪如实标记）。
 - **合规**：只做**有头登录 + 用户手动 + 不代填密码 + 不绕过验证**；自动化生成需 L3 落地，且由用户自担各站点 ToS 风险（与 `R19` 同族）。
-- **自行新增站点**：照**附录 D** 格式放进 `~/.brain-ai/providers.d/` 并**重启**（无 reload 入口 —— `PB2-24`）。
+- **自行新增站点**：① **界面**（2026-10-10 起）= 「设置 → 提供商与站点表 → **新建网页版站点…**」（`PB2-24` ✅）；② **手工**照**附录 D** 格式放进 `~/.brain-ai/providers.d/` 后点面板「**重新加载配置表**」即生效（**不必重启** —— `PB2-24` ✅）。
 
 ---
 
@@ -534,6 +543,8 @@
 | 2026-10-09 | **v3** | **待定项拍板落盘（只改文档 · 零代码改动）**：`D-30`（`PQ-10` = ① `cookie_names` 命中优先）· `D-31`（`PQ-11` = ③ 明确不做 + 文案改「分段落定」）就地改 ✅ 并留「原文（拍板依据）」；`D-26`（`PQ-09`）· `D-32`（`PQ-12`）**维持待定**。同批：§1 第 23/30 行、§2.5、§5 第 24/25 行、§7 `FEA-M3-07` 行同步改 ✅；[../DocMAP.md](../DocMAP.md) §5.3 · [../DevPlan.todo](../DevPlan.todo) · [../CHANGELOG.md](../CHANGELOG.md)。**⚠️ 已登记但未落地的代码项**：`D-30` ① 的判据收紧（`web_session_state()`）、`PQ-18` ② 的配置字段移除与断言登记。**（订正（2026-10-09 · v4）：其中 `PQ-18②` 已同日落地 ⇒ 见 v4 行；`D-30` ① 仍待。）** |
 | 2026-10-09 | **v4** | **`PQ-18②` 代码落地（`config` 字段清理 · 代码 + 文档；含 §5「明确不做」补 `PD-08`/i18n）**：① `utils/config.h` 删 `General` 结构体与 `Config::general` 成员（并注明「旧 `[general]` 节静默忽略、保存不再写回」）；② `utils/config.cpp` 删 `read_general()`、写入端 `[general]` 节、加载端读取，未接清单 **8 → 6 项**；③ `tools/api_probe.cpp` 配置往返不再拿 `general.language` 当探针字段、`PA-08` 断言由「清单须含 `general.language`」改为「**不含** `general.*`」并同步打印文案。**实测（2026-10-09 本机）**：构建 **0 error / 0 warning**；`--selftest` 七组全 PASS · exit **0**（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 上传模板 21/0 · 执行器 **425 / 0**）；`--exec-selftest` **425 / 0** · `--graph-selftest` **110 / 0** · `--upload-selftest` **72 / 0** —— **数字全无变动**（`PA-08` 为单行 PASS/FAIL，非计数断言 ⇒ `PQ-05` 契约下无需新增登记行）。运行时物证（临时 `USERPROFILE`，未碰用户 `~/.brain-ai`）：新生成 `config.toml` **无 `[general]` 节**；含 `[general]` 的旧配置**加载正常**（`aiwrite.exe --upload-selftest` exit 0）。同批：[../CHANGELOG.md](../CHANGELOG.md) · [../DevPlan.todo](../DevPlan.todo) · [M6.md](M6.md) · [../DocMAP.md](../DocMAP.md)（§5.3 表 3 行）· [../ai_writer_nodes.md](../ai_writer_nodes.md)（§19.1 多语言行）。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6）。 |
 | 2026-10-09 | **v5** | **批 3 · 网页站批量探测报告链路落地（代码 + 测试 + 文档）· 本文只动 §0.4 基线**：刷新为 2026-10-09 实测 —— `--exec-selftest` **425 → 452**（新增 27 项 DOM 探测报告自检）· `--graph-selftest` **110 / 0**（未变）· 新增三行（批量探测 `--provider all`（`FEA-L01`/`FEA-L03`：11 站 = 可用 8 / 需登录 2 / 失败 1 · exit 1）· 会话清单 `--web-session-list`（`FEA-L02`）· 离线夹具含 `dom_gate_test`（15/0；`--old` 6/15））；断链口径由「broken 0」改为「**本轮不得新增**」（实测 checked 610 / broken 8，8 条全部为存量）。逐项背景 / 物证见 [../CHANGELOG.md](../CHANGELOG.md) 批 3 条目与 [../loop_dev.md](../loop_dev.md) §3.1 · §4 · §6.2 · §6.3 · §10。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。
+| 2026-10-10 | **v6** | **`PB2-24` 自建站点闭环落地（代码 + 离线断言 · 本文 §1 第 18 行 / §3.5 / 附录 D 就地改 ✅）**：① 新增 `source/ai/{include,src}/site_template.*`（模板纯函数 + **原子写** + 默认拒覆盖；**强制信封 / `adapter=dom` / `verify=false`**）；② `source/engine/{include,src}/node_registry.*` 新增 `provider_option_ids()` / `findMutable()` / `provider_param_options()` / `refresh_provider_options()`（2 重载，带 `Graph&` 时**保留已选值**）/ `reload_provider_specs_and_refresh()`（单入口）；③ 设置面板 §⑥ 新增「**新建网页版站点…**」模态 + 「**重新加载配置表**」+ 错误/警告明细 + 打开站点目录，`SettingsPanelResult.provider_table_reloaded` ⇒ `app.cpp` 刷新画布内已有节点实例枚举；④ 新开关 `api_probe --site-assert`（纯函数 **47 / 0** + 端到端：写盘 → 进表 → 进下拉 → 进枚举 **20 → 21** → 新节点校验 → **旧实例刷新回归** → 清理零残留；**模拟应用启动次序**）并接入 `check_all.ps1`（**12 → 13 项**）。**验证（2026-10-10 本机）**：构建 **0 / 0**；`--site-assert` **PASS · exit 0**；`check_all.ps1` **13/13 PASS**；`--selftest` / `--exec-selftest` **464 / 0** / `--graph-selftest` **110 / 0** 无回归；GUI 冒烟无崩溃。**⛔ 界面点选回路未人工实测**（需真人点一次）· **`PB2-30②` 仍未做**。同批：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]` · [../变量术语对照表.md](../变量术语对照表.md)（§10.2 · §14 附表 · §15）· [../roadmap.md](../roadmap.md) §十二 第 2 条 · [../DevPlan.todo](../DevPlan.todo) `FEA-M_patchB-29…30` · [../AI_Status.md](../AI_Status.md) §一/§四 · [M6.md](M6.md) `M6-10`。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
+| 2026-10-10 | **v7** | **`PC-01` / `PC-02` 自动保存 + 崩溃恢复落地（代码 + 离线断言 · 本文 §1 第 19 行 / §4 两行就地改 ✅）**：① 新增 `source/engine/{include,src}/autosave.*`（`autosave_paths` / `autosave_probe` / `graph_content_signature`（不含 viewport）/ `autosave_write`（**原子写 + 先复制旧最新成 `autosave_1` ⇒ 无缺失窗口**）/ `autosave_load` / `autosave_clear` / `autosave_cleanup_temp` / `autosave_should_offer_restore` / `autosave_selftest`）；**落点调整（如实登记）**：原计划 `ui/editor_state.*`，因 `ui/**` 属 GUI 可执行目标、`api_probe` 链接不到 ⇒ 纯逻辑下沉 `engine/` 才能离线断言 `VC-01`/`VC-02`，`ui/` 只保留**时机编排**（`tick_autosave` 1 Hz 指纹探测 + 静默 `ui.autosave_idle_sec` 秒 + 无变更不写 + 失败退避 10 秒 + `flush_autosave_on_exit`）与**启动闸门** `autosave_paused`（防启动示例工作流冲掉真快照）；② `ui/app.cpp` 启动序 = 清残留 `.tmp` → 判定 → 模态（恢复 / 忽略 / 忽略且不再提示），**恢复后 `current_workflow_path` 留空 ⇒ 保存必走另存（不覆盖原文件）**；③ 配置新增 `ui.autosave_enabled` / `autosave_idle_sec` / `autosave_keep` / `autosave_restore_prompt`（设置面板 **§⑦ 数据安全（自动保存）**；`--settings-assert` 越界例 **8 → 11**）；④ 新开关 `api_probe --autosave-assert`（**28 / 0**）并接入 `check_all.ps1`（**13 → 14 项**）。**验证（2026-10-10 本机）**：构建 **0 / 0**；`--autosave-assert` **PASS · exit 0**（28/28）；`check_all.ps1` **14 / 14 PASS · exit 0**（`check_all_20261010_202628.log`）；GUI 实测（真机）：启动判定日志出现 + **12 秒后快照哈希不变**（种子事后删除，零残留）。**⚠ 同批踩坑 → 陷阱 10**：`Param::value` 是 `nlohmann::json`，**`value += "文本"` 语义 = `push_back`**（对字符串抛 `type_error` → `terminate` → `0x80000003`，stdout 缓冲丢失 ⇒ 看不出跑了），已改显式赋值 + 自检逐项 `fflush`。**⛔ 未验证（如实登记）**：GUI「改图 → 静默 3 秒 → 写快照」与「点『恢复』」需真人点一次鼠标（同一代码路径已由 `--autosave-assert` 覆盖）。同批：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]` · [../DevPlan.todo](../DevPlan.todo) `FEA-M2-01` / `TST-M2-03` · [../AI_Status.md](../AI_Status.md) §一/§四 · [../变量术语对照表.md](../变量术语对照表.md) §6/§9/§10/§14/§15 · [../节点编辑器使用说明.md](../节点编辑器使用说明.md) §10.13 · [../loop_dev.md](../loop_dev.md) §10.1 陷阱 10 · [../../source/README.md](../../source/README.md) · [../../AI_README.md](../../AI_README.md) §2。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
 
 
 

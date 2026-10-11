@@ -221,7 +221,7 @@
                 "children": [],
                 "todo": {
                   "id": 240,
-                  "content": "DBG-L01 文档断链自检 8 条（2026-10-09 实测「检查 588 链接 / broken 8」）：全部来自本轮未改动的旧文档 —— actionPlan/M8.md · actionPlan/M_patchAB_rest.md · ai_writer_nodes.md ×3 · 节点编辑器使用说明.md ×3；疑为检查器把表格内斜杠文本误判为链接 —— 与 §0.4 基线「broken 0」不符，待核实后二选一：修链接 / 收敛检查器 ｜ loop_dev.md §4",
+                  "content": "DBG-L01 文档断链自检（**2026-10-10 收口**）：**7 条真断链已全部修复**（皆为 `actionPlan/M7B.md` 未指向 `Archive/` —— `ai_writer_nodes.md` ×3 · `节点编辑器使用说明.md` ×3 · `actionPlan/M_patchAB_rest.md` ×1）；第 8 条 = **检查器跨反引号误判**（`actionPlan/M8.md` 表内 `](../ → ../../` 字样），已改文档表述规避，但**检查器缺陷本身未修**。实测 **checked 806 / broken 0**；判据由「本轮不得新增」**升级为「全库 0」**。**残余（故本项未置 `done`）**：① 检查器跨行 / 跨反引号误判未收敛；② 断链与文档一致性**尚未纳入 `check_all.ps1`** —— 两者并作「文档门禁」专项 ｜ loop_dev.md §4",
                   "done": false,
                   "level": "warning",
                   "fileLink": "docs/loop_dev.md · §4"
@@ -276,8 +276,8 @@
                 "children": [],
                 "todo": {
                   "id": 19,
-                  "content": "FEA-M2-01 autosave：变更节流写 snapshots/autosave.json（原子写），启动时提示恢复未保存更改 ｜ §5.1 PC-01/PC-02",
-                  "done": false,
+                  "content": "FEA-M2-01 autosave：变更节流写 snapshots/autosave.json（原子写），启动时提示恢复未保存更改 ｜ §5.1 PC-01/PC-02 ✅ 已落地（2026-10-10）：纯逻辑 engine/autosave.* + ui 节流编排 + 启动恢复询问；api_probe --autosave-assert 28/0 · check_all 14/14；⛔ 真人点选（改图→写快照→点恢复）未做",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -1057,7 +1057,7 @@
                 "children": [],
                 "todo": {
                   "id": 158,
-                  "content": "FEA-M_patchB-29…30 L4 站点数据落地 + 自助闭环：内置站点选择器逐站实测回填（verified:true + 附录 E 两列）+ --run-selftest --web --provider <id> + 面板「测试选择器」+ PB2-24 并入（新建条目 / 重新加载配置表 / 下拉即时刷新） ｜ §3 PB2-29/PB2-30 · 验收 AB2-21/AB2-22 · 清单见附录 E ｜ 进度：v15 已完成 **12/12 逐站直连实测**（登录窗口都打开各自站点；3 条域名修正为最终域：kimi→www.kimi.com、tongyi→www.qianwen.com、ernie→wenxin.baidu.com）+ **4 条输入框选择器实测回填**（kimi/qwen/yuanbao/ernie，已进 assets/providers.json；--provider-dump 确认只剩 answer_selector）+ --run-selftest --web --provider <id> ✅ + 新工具 --web-dom-dump（只读枚举候选+建议）；剩余：11 条 answer_selector 需人工登录并手动发一条消息后取回（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环 ｜ 进度（2026-09-28 复核）：维持原文结论 —— 12/12 逐站直连 + 4 条输入框选择器已实测回填；剩余 = 11 条 answer_selector（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环",
+                  "content": "FEA-M_patchB-29…30 L4 站点数据落地 + 自助闭环：内置站点选择器逐站实测回填（verified:true + 附录 E 两列）+ --run-selftest --web --provider <id> + 面板「测试选择器」+ PB2-24 并入（新建条目 / 重新加载配置表 / 下拉即时刷新） ｜ §3 PB2-29/PB2-30 · 验收 AB2-21/AB2-22 · 清单见附录 E ｜ 进度：v15 已完成 **12/12 逐站直连实测**（登录窗口都打开各自站点；3 条域名修正为最终域：kimi→www.kimi.com、tongyi→www.qianwen.com、ernie→wenxin.baidu.com）+ **4 条输入框选择器实测回填**（kimi/qwen/yuanbao/ernie，已进 assets/providers.json；--provider-dump 确认只剩 answer_selector）+ --run-selftest --web --provider <id> ✅ + 新工具 --web-dom-dump（只读枚举候选+建议）；剩余：11 条 answer_selector 需人工登录并手动发一条消息后取回（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环 ｜ 进度（2026-09-28 复核）：维持原文结论 —— 12/12 逐站直连 + 4 条输入框选择器已实测回填；剩余 = 11 条 answer_selector（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环 ｜ 进度（2026-10-10）：**PB2-24 自助闭环 ✅ 已落地**（设置面板「新建网页版站点…」写 `~/.brain-ai/providers.d/<id>.json` + 「重新加载配置表」+ 下拉/运行前校验即时刷新 + 配置表错误/警告界面可见；离线断言 `api_probe --site-assert` = 纯函数 47/0 + 端到端全绿 · 已进 `check_all.ps1`（本项落地时 13/13 · 现行全量 14/14）；**界面点选回路待真人点一次**）⇒ 剩余 = 11 条 answer_selector（唯一人工关卡，现行清单 10 条）+ 面板「测试选择器」",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
@@ -1244,7 +1244,7 @@
                 "children": [],
                 "todo": {
                   "id": 61,
-                  "content": "TST-M2-03 autosave 恢复与版本迁移用例（VC-02 / VC-03）待 PC-01/02/04 落地后补测 ｜ §5.2",
+                  "content": "TST-M2-03 autosave 恢复与版本迁移用例（VC-02 / VC-03）：✅ VC-02 已覆盖（api_probe --autosave-assert：判定 4 场景 + 恢复后内容指纹逐字相同）；VC-03 待 PC-04 落地后补测 ｜ §5.2",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
@@ -1594,7 +1594,7 @@
             ],
             "todo": {
               "id": 232,
-              "content": "Loop Dev · 网页站循环（3 项 · TST-L01 ✅ 已落地 / TST-L03 🟡 部分）",
+              "content": "Loop Dev · 网页站循环（4 项 · TST-L01 ✅ 已落地 / TST-L03 🟡 部分 / TST-L05 ✅ 已落地）",
               "done": false,
               "level": "default"
             }
@@ -1602,7 +1602,7 @@
         ],
         "todo": {
           "id": 54,
-          "content": "Test（28 项）",
+          "content": "Test（29 项）",
           "done": false,
           "level": "warning"
         }
@@ -1943,7 +1943,7 @@
         ],
         "todo": {
           "id": 74,
-          "content": "Docs（14 项）",
+          "content": "Docs（21 项）",
           "done": false,
           "level": "secondary"
         }

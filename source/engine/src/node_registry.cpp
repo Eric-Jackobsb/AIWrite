@@ -183,6 +183,16 @@ const Definition* NodeRegistry::find(const std::string& type) const
     return nullptr;
 }
 
+Definition* NodeRegistry::findMutable(const std::string& type)
+{
+    for (Definition& definition : definitions_) {
+        if (definition.type == type) {
+            return &definition;
+        }
+    }
+    return nullptr;
+}
+
 std::vector<const Definition*> NodeRegistry::listTypes() const
 {
     std::vector<const Definition*> result;
@@ -296,12 +306,9 @@ void registerAllNodes()
     // --- N-05 Provider Config（配置）---------------------------------------
     {
         // M_patchB L1（PB2-05）：提供商列表来自**配置表**（official 在前、web 在后，顺序稳定）
-        const ai::ProviderSpecs& specs        = ai::provider_specs();
-        std::vector<std::string>  official_ids = specs.ids("official");
-        std::vector<std::string>  web_ids      = specs.ids("web");
-        std::vector<std::string>  provider_ids;
-        provider_ids.insert(provider_ids.end(), official_ids.begin(), official_ids.end());
-        provider_ids.insert(provider_ids.end(), web_ids.begin(), web_ids.end());
+        // PB2-24：口径抽到 `provider_option_ids()` —— 重载配置表后由
+        //         `refresh_provider_options()` 就地重建枚举（此处与刷新**同一份**逻辑）
+        std::vector<std::string> provider_ids = provider_option_ids();
         if (provider_ids.empty()) {
             provider_ids.push_back("deepseek"); // 极小概率（表不可用时 engine 侧兜底）
         }
@@ -422,6 +429,108 @@ void registerAllNodes()
         };
         registry.registerNode(std::move(definition));
     }
+}
+
+// ============================================================================
+//  PB2-24 要点②：`provider` 动态枚举（实现）
+// ============================================================================
+
+std::vector<std::string> provider_option_ids()
+{
+    const ai::ProviderSpecs& specs        = ai::provider_specs();
+    std::vector<std::string>  official_ids = specs.ids("official");
+    std::vector<std::string>  web_ids      = specs.ids("web");
+    std::vector<std::string>  ids;
+    ids.reserve(official_ids.size() + web_ids.size());
+    ids.insert(ids.end(), official_ids.begin(), official_ids.end());
+    ids.insert(ids.end(), web_ids.begin(), web_ids.end());
+    return ids;
+}
+
+namespace {
+
+// 就地替换 Definition 里 `provider` 的枚举（默认值不在新枚举里 ⇒ 落到首项）
+void apply_provider_options(Definition& definition, const std::vector<std::string>& ids)
+{
+    for (Param& param : definition.params) {
+        if (param.id != "provider" || param.type != ParamType::Enum) {
+            continue;
+        }
+        param.enum_options = ids;
+        const std::string current =
+            param.default_value.is_string() ? param.default_value.get<std::string>() : std::string();
+        if (!ids.empty() && std::find(ids.begin(), ids.end(), current) == ids.end()) {
+            param.default_value = ids.front();
+        }
+        return;
+    }
+}
+
+// 就地替换节点实例里 `provider` 的枚举（**保留当前值**：可能是刚新建的站点 id）
+void apply_provider_options(Node& node, const std::vector<std::string>& ids)
+{
+    for (Param& param : node.params) {
+        if (param.id != "provider" || param.type != ParamType::Enum) {
+            continue;
+        }
+        param.enum_options = ids;
+        if (param.is_empty() && !ids.empty()) {
+            param.value = ids.front();
+        }
+        return;
+    }
+}
+
+} // namespace
+
+void refresh_provider_options()
+{
+    const std::vector<std::string> ids = provider_option_ids();
+    if (ids.empty()) {
+        return; // 表不可用（极小概率）：保留原枚举，绝不把下拉清空
+    }
+    if (Definition* definition = NodeRegistry::instance().findMutable("ProviderConfig")) {
+        apply_provider_options(*definition, ids);
+    }
+}
+
+void refresh_provider_options(Graph& graph)
+{
+    const std::vector<std::string> ids = provider_option_ids();
+    if (ids.empty()) {
+        return;
+    }
+    if (Definition* definition = NodeRegistry::instance().findMutable("ProviderConfig")) {
+        apply_provider_options(*definition, ids);
+    }
+    for (Node& node : graph.nodes) {
+        apply_provider_options(node, ids);
+    }
+}
+
+void reload_provider_specs_and_refresh(Graph* graph)
+{
+    ai::reload_provider_specs();
+    if (graph != nullptr) {
+        refresh_provider_options(*graph);
+    }
+    else {
+        refresh_provider_options();
+    }
+}
+
+std::vector<std::string> provider_param_options()
+{
+    const Definition* definition = NodeRegistry::instance().find("ProviderConfig");
+    if (definition == nullptr) {
+        return {};
+    }
+    for (const Param& param : definition->params) {
+        if (param.id == "provider" && param.type == ParamType::Enum) {
+            return param.enum_options;
+        }
+    }
+    return {};
 }
 
 } // namespace aiwrite::engine

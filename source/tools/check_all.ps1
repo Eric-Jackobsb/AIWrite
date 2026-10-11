@@ -69,15 +69,33 @@ if (-not $SkipBuild) {
     Write-Both "`n== ① 构建（Debug） =="
     $buildOut = Join-Path $logDir "check_all_$stamp`_build.txt"
     Push-Location $sourceDir
-    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $sourceDir 'build.ps1') *> $buildOut
-    $buildCode = $LASTEXITCODE
-    Pop-Location
-    $buildText = Get-Content $buildOut -Raw
+    # 构建失败（含 VS 工具链偶发 `MSB4018 GetOutOfDateItems`）时**不得中止整套自检** ——
+    # 本脚本的用途就是「一条命令看全部结论」：失败要打印 `FAIL 构建` 行，并继续跑后面各项。
+    # （`$ErrorActionPreference='Stop'` 会把原生命令的 stderr 升级成终止性错误 ⇒ 这里临时降级）
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $buildCode = 1
+    try {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $sourceDir 'build.ps1') *> $buildOut
+        $buildCode = $LASTEXITCODE
+    } catch {
+        $buildCode = 1
+    } finally {
+        $ErrorActionPreference = $prevEap
+        Pop-Location
+    }
+    $buildText = if (Test-Path $buildOut) { Get-Content $buildOut -Raw -ErrorAction SilentlyContinue } else { '' }
     $errCount  = ([regex]::Matches($buildText, 'error C\d+|error LNK\d+|error MSB\d+')).Count
     $warnCount = ([regex]::Matches($buildText, 'warning C\d+')).Count
+    $buildDetail = "exit=$buildCode · error=$errCount · warning=$warnCount"
+    if ($buildText -match 'MSB4018' -and $buildText -match 'GetOutOfDateItems') {
+        # 已知工具链偶发（VS Insiders FileTracker + `build\` 生成态陈旧）⇒ 给可操作提示，
+        # 别让人以为是代码坏了；**重跑无效**，要清空重建（陷阱 9 / loop_dev.md §10.1）
+        $buildDetail += ' · ⚠ MSB4018 FileTracker（`build\` 生成态陈旧 · 重跑无效）⇒ 清空重建：cd source; .\build.ps1 -Reconfigure'
+    }
     Add-Result '构建（0 error / 0 warning）' `
         ($buildCode -eq 0 -and $errCount -eq 0 -and $warnCount -eq 0) `
-        "exit=$buildCode · error=$errCount · warning=$warnCount"
+        $buildDetail
 } else {
     Write-Both "`n== ① 构建：已跳过（-SkipBuild） =="
 }
@@ -124,6 +142,16 @@ Add-Result 'api_probe --dep-check' ($r.Code -eq 0) `
 $r = Invoke-Capture $apiProbe '--settings-assert' 'settings'
 Add-Result 'api_probe --settings-assert' ($r.Code -eq 0) `
     (((($r.Text -split "`n") | Where-Object { $_ -match '默认配置通过' } | Select-Object -First 1) -replace '^\s+', ''))
+
+# PB2-24：自建网页版站点闭环（纯函数 + 真实落盘 → 重载 → 下拉/校验即时可用；**自清理**）
+$r = Invoke-Capture $apiProbe '--site-assert' 'site'
+$siteLine = (($r.Text -split "`n") | Where-Object { $_ -match '纯函数 .* 进表=' } | Select-Object -First 1)
+Add-Result 'api_probe --site-assert' ($r.Code -eq 0) ($siteLine -replace '^\s+', '')
+
+# PC-01/02：自动保存 / 崩溃恢复（场景在系统临时目录内构造；**不碰用户数据与快照**；自清理）
+$r = Invoke-Capture $apiProbe '--autosave-assert' 'autosave'
+$autosaveLine = (($r.Text -split "`n") | Where-Object { $_ -match '场景 .* 默认落点=' } | Select-Object -First 1)
+Add-Result 'api_probe --autosave-assert' ($r.Code -eq 0) ($autosaveLine -replace '^\s+', '')
 
 # ---- ③ node 夹具（离线；直接读源码脚本）----
 Write-Both "`n== ③ 夹具（node） =="

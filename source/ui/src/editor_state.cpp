@@ -1,5 +1,6 @@
 #include "editor_state.h"
 
+#include "autosave.h"
 #include "node_registry.h"
 #include "validate.h"
 #include "workflow_io.h"
@@ -13,6 +14,7 @@
 #include "paths.h"
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
@@ -111,6 +113,9 @@ void EditorState::clear_workflow()
     clipboard_edges_.clear();
     log_summary("[新建] 已清空画布");
     set_status("画布已清空（撤销栈也已清空）");
+
+    // PC-01/02：清空画布**不删**快照（保守：不替用户决定丢弃可恢复内容），只重设基线
+    mark_autosave_baseline();
 }
 
 void EditorState::create_sample_workflow()
@@ -741,6 +746,140 @@ void EditorState::abort_run_if_any(const std::string& reason)
     set_status("运行已终止（" + reason + "）");
 }
 
+// ----------------------------------------------------------- 自动保存（PC-01）----
+// 时机与判据（落点 engine::autosave_*；本层只回答「现在写不写」）：
+//  * 1 Hz 探测：engine::graph_content_signature(graph) 与「上次写入时的指纹」比较
+//    —— 指纹不含 viewport ⇒ 画布平移 / 缩放不会触发写盘
+//  * 首次发现变更时记时刻；**静默 ≥ autosave_idle_sec 秒**（默认 3）才写一次
+//  * 无变更 ⇒ 一次盘都不写；写失败 ⇒ 退避 10 秒（避免每帧重试砸盘 + 刷日志）
+void EditorState::pause_autosave(bool paused)
+{
+    autosave_paused = paused;
+    if (!paused) {
+        autosave_last_probe_ = std::chrono::steady_clock::now(); // 解闸后重新计时
+    }
+}
+
+void EditorState::mark_autosave_baseline()
+{
+    autosave_signature_   = engine::graph_content_signature(graph);
+    autosave_change_seen_ = false;
+    autosave_last_probe_  = std::chrono::steady_clock::now();
+    autosave_retry_after_ = {};
+}
+
+void EditorState::tick_autosave()
+{
+    if (autosave_paused) {
+        return;
+    }
+    const Config& config = app_config();
+    if (!config.ui.autosave_enabled) {
+        return;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    if (now < autosave_retry_after_) {
+        return; // 写失败退避中
+    }
+    if (now - autosave_last_probe_ < std::chrono::milliseconds(1000)) {
+        return;
+    }
+    autosave_last_probe_ = now;
+
+    const std::string signature = engine::graph_content_signature(graph);
+    if (signature != autosave_signature_) {
+        autosave_change_seen_ = true;
+        autosave_last_change_ = now; // 持续变更 ⇒ 时刻不断后移（= 「静默」判据）
+        return;
+    }
+    if (!autosave_change_seen_) {
+        return;
+    }
+
+    const int idle_seconds = std::max(1, config.ui.autosave_idle_sec);
+    if (now - autosave_last_change_ < std::chrono::seconds(idle_seconds)) {
+        return;
+    }
+
+    engine::AutosaveInfo info;
+    std::string          error;
+    if (engine::autosave_write(graph, current_workflow_path, config.ui.autosave_keep, &info,
+                               &error)) {
+        autosave_signature_   = signature;
+        autosave_change_seen_ = false;
+        log::info("[自动保存] 已写入快照（节点 " + std::to_string(graph.nodes.size()) + " / 连线 " +
+                  std::to_string(graph.edges.size()) +
+                  (current_workflow_path.empty() ? "，未命名工作流"
+                                                 : "，关联 " + current_workflow_path) +
+                  "）");
+        set_status("已自动保存：未保存的更改已暂存（崩溃/退出后可恢复）");
+        return;
+    }
+
+    log::warn("[自动保存] 写入失败：" + error + "（10 秒后重试）");
+    autosave_retry_after_ = now + std::chrono::seconds(10);
+}
+
+bool EditorState::restore_autosave(std::string* error)
+{
+    engine::AutosaveInfo info = engine::autosave_probe();
+    engine::Graph        loaded;
+    std::string          load_error;
+    if (!engine::autosave_load(loaded, &load_error)) {
+        if (error != nullptr) {
+            *error = load_error;
+        }
+        log::error("[自动保存] 恢复失败：" + load_error);
+        return false;
+    }
+
+    abort_run_if_any("恢复自动保存");
+    graph = std::move(loaded);
+    undo.clear();
+    selected_nodes.clear();
+    selected_links.clear();
+    selected_node.clear();
+    request_navigate_to_content = true;
+
+    // PC-02：**不覆盖原文件** —— 恢复后当前路径留空 ⇒ 保存必然走「另存为」（用户显式确认目标）
+    restored_from_autosave_path = info.workflow_path;
+    current_workflow_path.clear();
+
+    mark_autosave_baseline(); // 恢复内容 = 当前状态（否则会立刻再写一份同样的快照）
+    log::info("[自动保存] 已恢复快照（节点 " + std::to_string(graph.nodes.size()) + " / 连线 " +
+              std::to_string(graph.edges.size()) + "）" +
+              (restored_from_autosave_path.empty() ? "（快照未关联工作流文件）"
+                                                   : "（原文件 " + restored_from_autosave_path +
+                                                         "，保存将另存为新文件）"));
+    set_status("已恢复未保存的更改（另存为新文件，不会覆盖原工作流）");
+    return true;
+}
+
+void EditorState::flush_autosave_on_exit()
+{
+    if (autosave_paused) {
+        return;
+    }
+    const Config& config = app_config();
+    if (!config.ui.autosave_enabled) {
+        return;
+    }
+    if (engine::graph_content_signature(graph) == autosave_signature_) {
+        return; // 没有未保存的更改 ⇒ 不写盘
+    }
+
+    engine::AutosaveInfo info;
+    std::string          error;
+    if (engine::autosave_write(graph, current_workflow_path, config.ui.autosave_keep, &info,
+                               &error)) {
+        log::info("[自动保存] 退出前已补写快照（下次启动会询问是否恢复未保存的更改）");
+    }
+    else {
+        log::warn("[自动保存] 退出前补写失败：" + error);
+    }
+}
+
 // ------------------------------------------------------------- 工作流文件 ----
 bool EditorState::save_workflow_to(const std::string& path, std::string* error)
 {
@@ -766,6 +905,17 @@ bool EditorState::save_workflow_to(const std::string& path, std::string* error)
     log::info("工作流已保存: " + path);
     log::workflow("[工作流-保存] " + path + "（节点 " + std::to_string(graph.nodes.size()) +
                   "，连线 " + std::to_string(graph.edges.size()) + "）");
+
+    // PC-01：显式保存成功 ⇒ 「已无未保存的更改」：清掉快照 + 重设基线（不会紧接着又写一份）
+    {
+        std::string autosave_error;
+        engine::autosave_clear(&autosave_error);
+        if (!autosave_error.empty()) {
+            log::warn("[自动保存] 清空旧快照失败：" + autosave_error);
+        }
+        mark_autosave_baseline();
+    }
+
     set_status("已保存：" + path);
     return true;
 }
@@ -811,6 +961,10 @@ bool EditorState::open_workflow_from(const std::string& path, std::string* error
     request_navigate_to_content = true; // 视图跟随新内容
     current_workflow_path       = path;
     engine::push_recent_file(path, graph.name);
+
+    // PC-01/02：换图**不删**快照（任何情况下都不丢稿；「快照 vs 工作流」的新旧由 mtime 判定），
+    //  只把当前图设为「已保存」基线 ⇒ 不因换图本身触发一次写盘
+    mark_autosave_baseline();
 
     log::info("工作流已打开: " + path);
     log::workflow("[工作流-加载] " + path + "（节点 " + std::to_string(graph.nodes.size()) +

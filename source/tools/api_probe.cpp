@@ -24,6 +24,7 @@
 #include "paths.h"
 
 #include "graph.h"
+#include "autosave.h"     // PC-01/02：自动保存 / 崩溃恢复（--autosave-assert）
 #include "node_registry.h"
 #include "recent_files.h"
 #include "undo_stack.h"
@@ -55,6 +56,7 @@
 #include "diagnostics_report.h" // M6（PM-04）：诊断报告离线断言
 #include "settings_validation.h" // M6（M6-01）：设置面板校验纯函数断言
 #include "webview2_runtime.h"    // M6（PM-01）：依赖自检（WebView2 运行时）
+#include "site_template.h"        // PB2-24：自建网页版站点模板 + 落盘断言
 
 #include <fstream>
 #include <sstream>
@@ -95,6 +97,8 @@ struct Options {
     bool diag_assert     = false; // --diag-assert：诊断报告离线断言（单行 PASS/FAIL）
     bool dep_check       = false; // --dep-check：依赖自检（WebView2 运行时；缺依赖 ⇒ exit 1）
     bool settings_assert = false; // --settings-assert：设置面板校验纯函数断言（单行 PASS/FAIL）
+    bool site_assert     = false; // --site-assert：自建站点闭环断言（模板纯函数 + 落盘/重载端到端）
+    bool autosave_assert = false; // --autosave-assert：自动保存 / 崩溃恢复断言（PC-01 / PC-02）
 };
 
 // NIST FIPS 202 标准测试向量
@@ -118,6 +122,10 @@ void print_usage()
     std::printf("  api_probe --diag-assert             # 诊断报告离线断言（单行 PASS/FAIL；exit 0/1）\n");
     std::printf("  api_probe --dep-check               # 依赖自检：WebView2 运行时（缺失时打印安装指引；exit 0/1）\n");
     std::printf("  api_probe --settings-assert         # 设置面板校验纯函数断言（单行 PASS/FAIL；exit 0/1）\n");
+    std::printf("  api_probe --site-assert             # 自建网页版站点闭环断言（会临时写入再删除\n"
+                "                                      ~/.brain-ai/providers.d/aiwrite-selftest-site.json；exit 0/1）\n");
+    std::printf("  api_probe --autosave-assert         # 自动保存 / 崩溃恢复断言（PC-01/PC-02；临时目录内构造\n"
+                "                                      场景，不碰用户数据与快照；exit 0/1）\n");
 
 }
 
@@ -4267,6 +4275,21 @@ bool test_settings_assert()
         c.error.retry_count = 99;
         bad_cases.push_back({"重试次数 99（>10）", c});
     }
+    {
+        aiwrite::Config c = good;
+        c.ui.autosave_idle_sec = 0; // PC-01：静默阈值下限 = 1 秒
+        bad_cases.push_back({"自动保存间隔 0（<1）", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.ui.autosave_keep = -1; // PC-01：历史份数 0 = 关闭，负数非法
+        bad_cases.push_back({"自动保存历史份数 -1", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.ui.autosave_keep = 99; // 上限 50
+        bad_cases.push_back({"自动保存历史份数 99（>50）", c});
+    }
 
     const std::string default_error = aiwrite::utils::validate_settings(good);
     bool              bad_ok        = true;
@@ -4284,6 +4307,8 @@ bool test_settings_assert()
     edge.ui.grid_size       = 200;
     edge.output.ttl_days    = 0;
     edge.output.max_history = 1;
+    edge.ui.autosave_idle_sec = 1;  // PC-01：边界值（下限）
+    edge.ui.autosave_keep     = 50; // PC-01：边界值（上限）
     const bool edge_ok = aiwrite::utils::validate_settings(edge).empty();
 
     const bool ok = default_error.empty() && bad_ok && edge_ok;
@@ -4293,6 +4318,156 @@ bool test_settings_assert()
     if (!ok && !default_error.empty()) {
         std::printf("         默认配置被误拒: %s\n", default_error.c_str());
     }
+    return ok;
+}
+
+// PB2-24：自建网页版站点**闭环**断言（纯函数 + 真实落盘 → 重载 → 立即可用；**自清理**）
+//  ① 纯函数：ai::site_template_selftest()（生成 / 校验 / 覆盖策略 / 缺信封护栏）
+//  ② 端到端：写 ~/.brain-ai/providers.d/<id>.json → reload → 三处同时生效：
+//       · 条目进表（kind=web / adapter=dom）· 进「网页版」下拉来源（ids("web")）
+//       · 进 `provider` 参数枚举（engine::provider_param_options()）
+//     ＋新建的 ProviderConfig 节点实例**运行前校验通过**（要点②的核心回归）
+//  ③ 收尾：删文件 + reload ⇒ 条目消失 / 条目数回落（零残留）
+bool test_site_assert()
+{
+    std::printf("[PB2-24] 自建网页版站点闭环：新建 → 重新加载 → 下拉 / 校验即时可用\n");
+
+    int       pure_passed = 0;
+    const int pure_failed = aiwrite::ai::site_template_selftest(&pure_passed);
+
+    // 模拟**应用启动顺序**：先注册节点类型（`ProviderConfig` 的 provider 枚举在此一次性生成），
+    // 之后才是「新建站点 → 重新加载」——只有这样才能证明刷新入口（要点②）真的生效
+    aiwrite::engine::registerAllNodes();
+    const std::size_t enum_before = aiwrite::engine::provider_param_options().size();
+
+    // ---- 端到端：临时写进真实用户目录（固定 id；开始前清残留，结束前必删）----
+    const std::string            site_id = "aiwrite-selftest-site";
+    aiwrite::ai::WebSiteTemplate tpl;
+    tpl.id              = site_id;
+    tpl.display         = "自检站点（AIwrite；由 --site-assert 临时创建）";
+    tpl.login_url       = "https://selftest.example.com/chat";
+    tpl.input_selector  = "div.selftest-input";
+    tpl.send_kind       = "key";
+    tpl.send_value      = "Enter";
+    tpl.answer_selector = ".selftest-answer";
+    tpl.done_kind       = "selector_gone";
+    tpl.done_selector   = "button.selftest-stop";
+    tpl.cookie_names    = "selftest_session, selftest_token";
+    tpl.notes           = "自检写入：本次自检结束前会被删除";
+
+    const std::filesystem::path dir  = aiwrite::paths::user_providers_dir();
+    const std::filesystem::path file = dir / (site_id + ".json");
+    std::error_code             ec;
+    std::filesystem::remove(file, ec); // 上次异常中断的残留（幂等）
+
+    const std::size_t before_items = aiwrite::ai::provider_specs().items.size();
+
+    std::string err;
+    const bool  wrote = aiwrite::ai::write_user_site_file(tpl, dir, false, &err, nullptr);
+    if (!wrote) {
+        std::printf("         落盘失败: %s\n", err.c_str());
+    }
+    bool        in_table    = false;
+    bool        in_web_ids  = false;
+    bool        in_enum     = false;
+    bool        enum_grew   = false; // 枚举确实**被重建**（而非注册时恰好已含）
+    bool        fresh_ok    = false; // 新建节点（重载后建）校验通过
+    bool        stale_ok    = false; // **旧实例**（重载前已存在的节点）刷新后校验通过
+    std::string instance_err;
+    if (wrote) {
+        // 界面「创建并重新加载」的等价动作：reload 表（面板读结果）→ 重建 provider 枚举（宿主）
+        aiwrite::ai::reload_provider_specs();
+        const aiwrite::ai::ProviderSpecs& table   = aiwrite::ai::provider_specs();
+        const aiwrite::ai::ProviderSpec*  created = table.find(site_id);
+        in_table = created != nullptr && created->kind == "web" && created->web.adapter == "dom";
+        for (const std::string& id : table.ids("web")) {
+            if (id == site_id) {
+                in_web_ids = true;
+            }
+        }
+        aiwrite::engine::refresh_provider_options();
+        const std::vector<std::string> enum_after = aiwrite::engine::provider_param_options();
+        for (const std::string& id : enum_after) {
+            if (id == site_id) {
+                in_enum = true;
+            }
+        }
+        enum_grew = enum_after.size() > enum_before; // 证明重建入口真干活（要点②）
+
+        // 新建 ProviderConfig 节点并选中新站点 → **运行前校验必须通过**（要点②回归）
+        aiwrite::engine::Graph graph;
+        std::string            node_error;
+        const std::string      node_id = graph.addNode("ProviderConfig", 0.0f, 0.0f, &node_error);
+        aiwrite::engine::Node* node    = graph.findNode(node_id);
+        if (node != nullptr) {
+            if (aiwrite::engine::Param* provider = node->findParam("provider")) {
+                provider->value = site_id;
+            }
+            if (aiwrite::engine::Param* mode = node->findParam("mode")) {
+                mode->value = std::string("web");
+            }
+            std::vector<std::string> errors;
+            graph.validateParams(*node, &errors);
+            fresh_ok = errors.empty();
+            if (!fresh_ok) {
+                instance_err = errors.front();
+            }
+
+            // 模拟「重载前已存在的节点」：把实例枚举打回旧值，再走一次刷新入口
+            if (aiwrite::engine::Param* provider = node->findParam("provider")) {
+                provider->enum_options = {"stale-only"};
+            }
+            std::vector<std::string> stale_before;
+            graph.validateParams(*node, &stale_before); // 未刷新 ⇒ 必须被判越界（证明护栏真实存在）
+            aiwrite::engine::refresh_provider_options(graph);
+            std::vector<std::string> stale_errors;
+            graph.validateParams(*node, &stale_errors);
+            stale_ok = !stale_before.empty() && stale_errors.empty();
+            if (!stale_ok && instance_err.empty() && !stale_errors.empty()) {
+                instance_err = stale_errors.front();
+            }
+        }
+    }
+
+    // ---- 收尾：删除 + 重载 ⇒ 条目消失 / 条目数回落（零残留；不给用户留垃圾）----
+    std::filesystem::remove(file, ec);
+    // 单入口（`reload_provider_specs_and_refresh`）—— 无画布 ⇒ 只刷注册表 Definition
+    aiwrite::engine::reload_provider_specs_and_refresh();
+    const bool cleaned = aiwrite::ai::provider_specs().find(site_id) == nullptr &&
+                         !std::filesystem::exists(file);
+    const bool count_back = aiwrite::ai::provider_specs().items.size() == before_items;
+
+    const bool ok = pure_failed == 0 && wrote && in_table && in_web_ids && in_enum && enum_grew &&
+                    fresh_ok && stale_ok && cleaned && count_back;
+    std::printf("   %-6s 纯函数 %d/%d · 写盘=%s 进表=%s 进网页版下拉=%s 进 provider 枚举=%s"
+                "（%zu→%zu）· 新节点校验=%s 旧实例刷新=%s · 清理=%s 条目数回落=%s（%zu → %zu）\n",
+                ok ? "PASS" : "FAIL", pure_passed, pure_passed + pure_failed,
+                wrote ? "是" : "否", in_table ? "是" : "否", in_web_ids ? "是" : "否",
+                in_enum ? "是" : "否", enum_before, enum_before + (enum_grew ? 1u : 0u),
+                fresh_ok ? "是" : "否", stale_ok ? "是" : "否", cleaned ? "是" : "否",
+                count_back ? "是" : "否", before_items, aiwrite::ai::provider_specs().items.size());
+    if (!instance_err.empty()) {
+        std::printf("         节点校验: %s\n", instance_err.c_str());
+    }
+    return ok;
+}
+
+
+bool test_autosave_assert()
+{
+    std::printf("[PC-01/02] 自动保存 / 崩溃恢复断言（M_patchAB §4：VC-01 原子写 · VC-02 恢复流程）\n");
+
+    int       passed        = 0;
+    const int failed        = aiwrite::engine::autosave_selftest(&passed);
+    const bool pure_ok      = failed == 0;
+
+    // 落点回归：默认目录必须是 snapshots/（与 PC-01 计划「复用 snapshots_dir()」一致）
+    const std::filesystem::path expected = aiwrite::paths::snapshots_dir() / "autosave.json";
+    const bool                  path_ok  = aiwrite::engine::autosave_paths().latest == expected;
+
+    const bool ok = pure_ok && path_ok;
+    std::printf("   %-6s 场景 %d/%d · 默认落点=%s（%s）\n", ok ? "PASS" : "FAIL", passed,
+                passed + failed, path_ok ? "是" : "否", expected.string().c_str());
     return ok;
 }
 
@@ -4355,6 +4530,12 @@ int main(int argc, char** argv)
         else if (arg == "--settings-assert") { // M6：设置面板校验断言
             options.settings_assert = true;
         }
+        else if (arg == "--site-assert") { // PB2-24：自建站点闭环断言
+            options.site_assert = true;
+        }
+        else if (arg == "--autosave-assert") { // PC-01/02：自动保存 / 崩溃恢复断言
+            options.autosave_assert = true;
+        }
         else if (arg == "--help" || arg == "-h") {
             print_usage();
             return 0;
@@ -4380,7 +4561,8 @@ int main(int argc, char** argv)
     if (options.sha3_text == "" && !options.selftest && !options.graph_selftest &&
         !options.exec_selftest && options.http_url.empty() && options.chat_prompt.empty() &&
         options.image_path.empty() && !options.diag_dump && !options.diag_assert &&
-        !options.dep_check && !options.settings_assert) {
+        !options.dep_check && !options.settings_assert && !options.site_assert &&
+        !options.autosave_assert) {
         print_usage();
         aiwrite::log::shutdown();
         return 2;
@@ -4471,6 +4653,16 @@ int main(int argc, char** argv)
     }
     if (options.settings_assert) { // M6-01：设置校验断言
         if (!test_settings_assert()) {
+            exit_code = 1;
+        }
+    }
+    if (options.site_assert) { // PB2-24：自建站点闭环断言（自清理）
+        if (!test_site_assert()) {
+            exit_code = 1;
+        }
+    }
+    if (options.autosave_assert) { // PC-01/02：自动保存 / 崩溃恢复断言（自清理）
+        if (!test_autosave_assert()) {
             exit_code = 1;
         }
     }

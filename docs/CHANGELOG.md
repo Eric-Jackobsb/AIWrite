@@ -25,6 +25,81 @@
 ---
 
 ## [Unreleased] — M7（图片收口 + 节点精简）+ M5 核心切片（M5-C）已落地；**M7 第二轮 P7-a 已落地（v0.5.2）**；M7 第三轮 `M7B` 立项（网页通道整体迁 Pydoll —— 📦 已于 2026-10-05 退场归档）；**M7 第四轮 `M8` 立项（网页通道方案 E）**
+**📖 本小节阅读方式（2026-10-10 增）**
+
+- **顺序**：批次**自下向上**追加 ⇒ **最新的在最上面**（本小节自下一行起约 1.7k 行，占全文 ≈95%）。
+- **定位**：每条批次标题都是「**Emoji + 加粗**」独立成行 ⇒ 用下表跳转，或直接 `Ctrl+F` 搜 Emoji（`💾` / `📚` / `🔁` / `🧩` …）。**更早批次（≤ 2026-10-07）不在本索引内**。
+- **维护（每批 ≈10 秒）**：新批次落地时**在表首加一行**（日期 + Emoji + 标题），且标题里带 `（yyyy-MM-dd）`。
+
+| 日期 | 批次（新 → 旧） |
+|---|---|
+| 2026-10-10 | 📚 文档可信度收口（审计订正 + 断链清零 + 数字口径 SSoT） |
+| 2026-10-10 | 💾 `PC-01` / `PC-02` 自动保存 + 崩溃恢复 |
+| 2026-10-10 | 🧩 M6 收口 · 第一批：设置面板 / 首启引导 / 依赖自检 / 诊断报告 / 一键自检 / 安装包骨架 |
+| 2026-10-10 | 🧹 站点条目去重 · 移除 `tongyi-web` + 台账「历史条目」口径修复（`T-L26`） |
+| 2026-10-10 | 🔁 批 9 · 站点状态台账 `TST-L05` 落地 |
+| 2026-10-09 | 🔁 批 8 · VA-07 假阴性修复（字节 → 码点）+ `TST-L01` 循环总驱动 + `R1` 首轮 + 判据收紧为三口径 |
+| 2026-10-09 | 🧱 批 7 · `FEA-L05` 目录再规范化（每模块 `src/` + `include/`） |
+| 2026-10-09 | 🧰 批 6 · 构建日志统一到 `build/logs/` |
+| 2026-10-09 | 🩹 批 5 · 画布个位数 FPS 事故修复（`CS-01` 指标行 + 根因热修） |
+| 2026-10-09 | 🎴 批 4 · 画布渲染性能专项「文档先行」 |
+| 2026-10-09 | 🌀 循环开发规则落地（批 1） |
+| 2026-10-09 | 🧱 批 2 · `FEA-L04` 目录规范化重构（头文件与实现分离） |
+| 2026-10-09 | 🌀 批 3 · 网页站批量探测报告链路 + 离线判据夹具（`FEA-L01` / `L02` / `L03` / `TST-L02`） |
+| 2026-10-09 | 🧪 全 AI「人工暂停 / 中止」测试工作流 `testAllAI.json` |
+| 2026-10-09 | 🔧 `PQ-18②` 代码落地：`config.toml` 移除 `general.language` / `general.startup` |
+| 2026-10-09 | 🎯 待定项拍板落盘：`PQ-02` / `04` / `05` / `07` / `08` / `10` / `11` / `13`~`19` 共 14 项 |
+| 2026-10-09 | 📝 协作契约新增「表达规范」（`AI_README.md` §9） |
+| 2026-10-08 | 🗂️ `docs/**` 全量状态梳理：固定已完成需求 · 标记失效设计（不删除） |
+| 2026-10-08 | 🆕 协作契约 + 文档地图更名：新增 `AI_README.md` · `docs/README.md` → `docs/DocMAP.md` |
+| 2026-10-08 | 🧵 `PW-07g` 答案文本保真：页面无损搬运 + C++ 纯函数排版 |
+| 2026-10-08 | 📨 `PW-07f` 真实发送链路：CDP 可信输入 + 回执验证 + 兜底点击 |
+| 2026-10-08 | ↩️ `PW-08` 答案归属门 v2「已回退」 |
+| 2026-10-08 | 🔒 `PW-07` 答案归属门（精简版）落地 + `PW-07b..n` 隔离存档 |
+
+**📚 文档可信度收口（审计订正 + 断链清零 + 数字口径 SSoT · 2026-10-10 · ⚠️ 零产品代码改动）**
+
+- **起因**：一次**只读审计**（代码 + 文档）发现「**关于代码的说法**」已落后于代码：7 类基线数字与实际实测不符 + 8 条文档断链，而门禁 **14/14 全绿**、构建 **0/0** —— **不是代码问题，是文档漂移**。
+- **根因（4 条）**：① 同一批数字被复制到 ≥6 份文档，每批只同步其中一部分；② 「同步相关计划行」靠人脑记忆，无机械清单；③ 看板 `（N 项）` 手写、无脚本核算；④ **文档一致性没有门禁**（`check_all` 14 项全是代码 / 夹具断言）。
+- **数字订正（`N1`~`N7`）**：`AI_README` §2 `--selftest` 行 `执行器 452/0` → **464/0** 并补 **DOM 探测 27/0** 组 · 同表 `--settings-assert` 越界 `8 例` → **11 例** · `AI_Status` 断链 `769/8` → **818/0** · `DocMAP` 「自检 70 项」→ 指向 `--graph-selftest 110/0`、「陷阱 8 条」→ **10 条** · `loop_dev` §4 夹具 `poll 12/0` → **44/0**（负向 `5/7` → **18/26**）· `M_patchAB_rest` §0.4 `452` → **464** · `source/README` `452 项` → **464 项** / 越界 `8 例` → **11 例** / `check_all 13 项` → **12 → 13 → 14 项**。
+- **看板计数订正（脚本递归核算）**：`Test` 28 → **29** · `Docs` 14 → **21** · `Test > Loop Dev` 3 → **4**；`Debug 15` / `Feature 72` / `Archive 31` / `M7B 7` / `待定 5` 经核对**无误**。
+- **断链清零**：7 条真断链（`actionPlan/M7B.md` 未指向 `Archive/`：`ai_writer_nodes.md` ×3 · `节点编辑器使用说明.md` ×3 · `actionPlan/M_patchAB_rest.md` ×1）→ 全部改指 `Archive/actionPlan/M7B.md`；1 条检查器误判（`actionPlan/M8.md` 表内跨反引号字样）→ 改文档表述规避 ⇒ 实测 **checked 818 / broken 0**，判据**由「本轮不得新增」升级为「全库 0」**。
+- **新增口径契约**：[../AI_README.md](../AI_README.md) **§10.1 数字口径（SSoT）** —— 每个数字只留一个权威位（命令断言数 / 门禁 = §2；断链 = [loop_dev.md](loop_dev.md) §4；看板计数 = [DevPlan.todo](DevPlan.todo) 本身；台账 = [AI_Status.md](AI_Status.md) 系列），其余处**只写「见 X」不复述数值**。
+- **本小节新增阅读索引**：见上方「📖 本小节阅读方式」（表首加一行即可维护）。
+- **⛔ 未在本批（如实登记）**：① `vcpkg-cache/check_links.py` 的**跨反引号 / 跨行误判未收敛**；② 断链检查与文档一致性**尚未纳入 `check_all.ps1`** —— 两者并作「**文档门禁**」专项（`DBG-L01` 保持未 `done`）；③ 原 3 项人工阻塞项（`PB2-24` 界面点选 · `PC-01/02` GUI 点选 · 11 条 `answer_selector`）仍需真人操作，本批**不含**。
+- **涉及文件（仅文档 · 无 `source/**` 代码改动）**：`AI_README.md` · `docs/{DocMAP, AI_Status, loop_dev, DevPlan.todo, CHANGELOG}.md` · `docs/actionPlan/{M_patchAB_rest, M8}.md` · `docs/{ai_writer_nodes, 节点编辑器使用说明}.md` · `source/README.md`（仅说明性文字）。
+- **⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+**💾 `PC-01` / `PC-02` 自动保存 + 崩溃恢复：节流快照（原子写）→ 启动询问「恢复未保存的更改？」（2026-10-10 · 新增 `api_probe --autosave-assert`，`check_all.ps1` **13 → 14 项**）**
+
+- **落地清单（= [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §4 第 19 行；**落点调整已登记**）：**
+  - **纯逻辑层（新增 `source/engine/{include,src}/autosave.*`，进 `aiwrite_core`）**：`AutosavePaths` / `autosave_paths()`（默认目录 = `paths::snapshots_dir()` = `~/.brain-ai/snapshots`）· `autosave_probe()`（只读元信息，不解析整图）· `graph_content_signature()`（**不含 viewport** 的内容指纹）· `autosave_write()`（**原子写**：`.tmp` → `rename`；且**先复制**旧最新成 `autosave_1` 再替换 ⇒ **任何时刻 `autosave.json` 都是完整 JSON**，不存在「文件缺失窗口」）· `autosave_load()` / `autosave_clear()` / `autosave_cleanup_temp()` · `autosave_should_offer_restore()` · `autosave_selftest()`（**28 项**）。
+  - **为什么不在 `ui/editor_state.*`（原计划落点）**：`ui/**` 属 GUI 可执行目标，`api_probe` 链接不到 ⇒ 放那里**无法离线断言** `VC-01` / `VC-02`。现落点 = 纯逻辑在 `engine/`（可断言），`ui/` 只做**时机编排**（节流 / 暂停 / 基线）。
+  - **节流（`ui/editor_state.{h,cpp}`）**：`tick_autosave()` 由主循环每帧调用 —— 1 Hz 用内容指纹探测（**平移 / 缩放不算变更**）、从首次发现变更起**静默 ≥ `ui.autosave_idle_sec` 秒**（默认 3）才写一次、**无变更 ⇒ 一次盘都不写**、写失败退避 10 秒；`flush_autosave_on_exit()` 退出前补写；**启动时 `autosave_paused = true`**（否则启动时创建的示例工作流会在 3 秒后把真快照冲掉）⇒ 询问有结论 / 无需询问后才放行。
+  - **恢复流程（`ui/app.cpp`）**：启动 ≡ ①`autosave_cleanup_temp()` 清残留 `.tmp`（半成品**永不**参与恢复）②`autosave_probe()` + `autosave_should_offer_restore()` 判定 ③需要时弹模态（快照时间 / 工作流名 / 节点·连线数 / 原文件 / **判据原文** + 「恢复」/「忽略（保留当前内容）」/「忽略，且不再提示」）。**恢复后 `current_workflow_path` 留空 ⇒ 保存必走另存，不覆盖原文件**（原路径记在 `EditorState::restored_from_autosave_path`，日志与状态栏写明）；「不再提示」写 `ui.autosave_restore_prompt = false`；**显式保存成功 ⇒ 清快照 + 重设基线**；换图 / 清空画布**不删**快照（只重设基线 —— 任何情况下不替用户丢稿）。
+  - **配置（`utils/config.{h,cpp}` · 设置面板 **§⑦「数据安全（自动保存）」**）**：新增 `ui.autosave_enabled` / `ui.autosave_idle_sec`（限 1~600 秒）/ `ui.autosave_keep`（限 0~50 份，0 = 不留历史）/ `ui.autosave_restore_prompt`；`validate_settings()` 与 `--settings-assert` 越界例 **8 → 11 例**（边界值 1 / 50 必须通过）。
+  - **离线断言**：`api_probe --autosave-assert`（`engine::autosave_selftest()`）—— **28 / 0**：写（无 `.tmp` 残留）/ 读（元信息 + 图内容**指纹逐字相同** + 参数与视口还原 + 快照本身可被普通「打开工作流…」读）/ 指纹语义（平移缩放不算变更）/ **`VC-01` 中断**（半截 `.tmp` 不影响恢复来源 → 可被清理 → 清理后仍可加载）/ 历史轮转（`keep=2` ⇒ 只留 `_1`/`_2`；`keep=0` ⇒ 不留）/ **`VC-02` 判定 4 场景**（无快照 / 未命名 + 有快照 / 原文件不存在 / 快照更新 / 工作流更新）。默认落点回归：`autosave_paths().latest == snapshots/autosave.json`。
+- **验证（2026-10-10 本机 · 物证在 `build/logs/`）**：构建 **0 error / 0 warning**（`pc01_build3.txt`）；`api_probe --autosave-assert` **PASS · exit 0**（场景 **28 / 28**）；`--settings-assert` PASS（越界 **11 例**全拦）；**`check_all.ps1` 14 / 14 PASS · exit 0**（`check_all_20261010_202628.log`）。**GUI 实测（真机 · 只动 `~/.brain-ai/snapshots/`，且事后删除种子）**：预置一份「未关联工作流文件」的快照 → 启动 → `app.log` 记「发现快照：… · 默认工作流 · 节点 5 / 连线 4 · 未关联工作流文件」+「将询问是否恢复未保存的更改（判据：快照未关联工作流文件（未命名工作流））」；**运行 12 秒后快照哈希不变**（证明启动不冲掉真快照）、**窗口正常关闭后哈希仍不变**（无未保存更改 ⇒ 不写盘）、退出后 `snapshots/` 零残留。
+- **⚠ 同批踩坑（已登记陷阱 10 · 物证 `build/logs/pc01_autosave2.txt` 崩在第 14 项）**：`Param::value` 是 `nlohmann::json`，**`value += "文本"` 不是字符串拼接** —— `json::operator+=` 的语义 = `push_back`（数组追加），对字符串会抛 `type_error` ⇒ 未捕获异常 → `terminate` → **`0x80000003`**（Debug 下表现为 breakpoint；stdout 缓冲丢失 ⇒ 看不到 PASS 行，极易误判成「没跑」）。对策：写参数值一律**显式赋值**；自检 `CheckCounter` 每项 `std::fflush(stdout)`。
+- **⛔ 未在本机验证（如实登记）**：GUI **「改图 → 静默 3 秒 → 写快照」与「点『恢复』」仍未经真人鼠标**（本机无 GUI 自动化）——需真人做一次：「改一个节点参数 / 拖节点 → 静默 3 秒 → `~/.brain-ai/snapshots/autosave.json` 出现或更新 → 重启 → 弹窗点『恢复』→ 画布内容一致（标题栏/状态栏提示『已恢复未保存的更改』）」。同一条代码路径（`tick_autosave()`→`autosave_write()`、`restore_autosave()`→`autosave_load()`）已由 `--autosave-assert` 覆盖。
+- **涉及文件**：新增 `source/engine/include/autosave.h` · `source/engine/src/autosave.cpp`；改动 `source/ui/include/editor_state.h` · `source/ui/src/editor_state.cpp` · `source/ui/src/app.cpp` · `source/ui/src/settings_panel.cpp` · `source/utils/include/config.h` · `source/utils/src/config.cpp` · `source/utils/src/settings_validation.cpp` · `source/tools/api_probe.cpp` · `source/tools/check_all.ps1` · `source/CMakeLists.txt`。
+
+
+
+- **落地清单（= [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §3.5；`RM-D4` 必做项，面向非技术用户「**不接触 JSON**」）**：
+  - **站点模板 / 写盘**（新增 `source/ai/include/site_template.h` · `source/ai/src/site_template.cpp`）：`WebSiteTemplate` + `site_template_default()`（空白模板）/ `site_template_from_spec()`（从内置条目复制 —— **只复制身份**（`login_url` / `window_title` / `cookie_names` / `token_expr`）；**选择器仅在源条目 `adapter=dom` 时复制** ⇒ 内置 `builtin:*` 的 `web.*` 选择器**不会**被照抄，见 §8 附录 D）、`site_id_error()` / `site_template_error()`（id 合法性 / 与内置冲突 / 已存在文件）、`site_file_json()`（**强制 `schema_version` 信封** + `web.adapter=dom` + **`verify=false`**）、`write_user_site_file()`（`.tmp` → 原子改名；**默认拒绝覆盖**，需显式允许）、`split_names()` / `join_names()`（全角逗号 / 分号 / 顿号归一）、`site_template_selftest()`（**8 组 47 项**）。
+  - **重载 → 下拉 / 校验刷新**（`source/engine/{include,src}/node_registry.*`）：新增 `provider_option_ids()` / `findMutable()` / `provider_param_options()` / `refresh_provider_options()`（**两个重载**：仅注册表 Definition；带 `Graph&` 时连**已有节点实例**的 `provider` 枚举一并重建并**保留当前值**）/ `reload_provider_specs_and_refresh()`（重载 + 刷新的**单入口**）。⇒ 修掉「`registerAllNodes()` 幂等 ⇒ 枚举只在首次注册时生成，运行中 reload 不刷新下拉 / 新站点被运行前校验误判越界」。
+  - **界面**（`source/ui/{include,src}/settings_panel.*` · `source/ui/src/app.cpp`）：设置面板分区⑥新增「**新建网页版站点…**」模态（模板来源下拉 + id / 显示名 / 登录地址 / 窗口标题 / Cookie 名 / `token_expr` + 覆盖勾选）；「创建并重新加载」= **写盘 → 重载 → 回读复核**，失败时框内给中文原因与下一步；分区⑥ 同批扩为**配置表错误 / 警告明细列表** + 「**重新加载配置表**」+ 「打开站点目录」按钮（不再是「错误只在 `app.log`」）。新增 `SettingsPanelResult.provider_table_reloaded` ⇒ 宿主 `app.cpp` 据此调 `engine::refresh_provider_options(state.graph)`。
+  - **离线断言**：`api_probe --site-assert`（`test_site_assert()`）—— 纯函数 **47 项** + **真实写盘 → 重载 → 进表 / 进网页版下拉 / 进 provider 枚举（20 → 21）→ 新建节点运行前校验通过 → 旧实例刷新回归 → 清理（条目数回落 20 → 20、磁盘零残留）**；且**模拟应用启动次序**（`registerAllNodes()` **先于** 重载）；接入 `check_all.ps1`（**12 → 13 项**）。
+- **口径（边界）**：① 用户自建条目**一律 `web.adapter=dom`**；② 生成条目 **`verify=false`** —— 沿用 `PB2-26`「没有真实测量就不写 `verified`」；③ 重载一律**单一入口 / 单一刷新标志**（不做「谁 reload 谁记得刷新」）。
+- **验证（2026-10-10 本机 · 物证在 `build/logs/`）**：构建 **0 error / 0 warning**；`api_probe --site-assert` **PASS · exit 0**（纯函数 **47 / 0**；端到端逐项「是」；枚举 **20 → 21**；清理「是」）；`check_all.ps1` **13 / 13 PASS · exit 0**（`check_all_20261010_195059.log`；同批 `194909` 亦全绿）；`--selftest` 七组全 PASS · `--exec-selftest` **464 / 0** · `--graph-selftest` **110 / 0** · `--settings-assert` PASS（无回归）；离屏夹具 **44 / 0 · 17 / 0 · 15 / 0**；**GUI 冒烟**（隔离 `USERPROFILE` 于 `%TEMP%`）：首启 → 默认工作流 → 首帧就绪、`FPS 59~78`、无崩溃、stderr 空。
+- **⛔ 未在本机验证（如实登记）**：**界面「点选」回路未人工实测**（本机无 GUI 自动化）——「点『新建网页版站点…』→ 填表 → 创建 → 下拉真的出现 → 选中 → 打开登录窗口」这一步需**真人点一次鼠标**；同一条代码路径（`write_user_site_file()` + `reload_provider_specs*` + 枚举重建 + 运行前校验）已由 `--site-assert` 覆盖。
+- **同批未做**：`PB2-30②` 面板「测试选择器」按钮（仍 ⬜，与 §3.4 逐站取选择器同批）。
+- **`check_all.ps1` 加固（同批 · 顺带）**：① 构建步的 `$ErrorActionPreference` 临时降级 ⇒ **构建失败也照常打印 13 项汇总表**（此前会被终止性错误打断，只剩「== ① 构建 ==」一行就退出 —— 与「一条命令看全部结论」的用途相反）；② 命中 `error MSB4018` + `FileTracker` 时在 `FAIL` 行直接给处置命令。
+- **⚠ 同批踩坑（环境问题 · 已登记陷阱 9）**：VS 18 Insiders 的 `FileTracker.FileIsUnderNormalizedPath` 在 `build\` **生成态陈旧**时会崩（`error MSB4018` · `GetOutOfDateItems` / `SetModuleDependencies` · 物证 `build\logs\pb224_build6.txt`），**重跑无效**（`-p:TrackFileAccess=false` / `-nodeReuse:false` / 换 `%TEMP%` 均无效）⇒ `cd source; .\build.ps1 -Reconfigure`（清空重建）后 **exit 0**（物证 `pb224_build_reconf.txt`），随后 `check_all.ps1` **13/13 PASS**。**不是代码问题**；登记 [loop_dev.md](loop_dev.md) §10.1 陷阱 9 + [../source/README.md](../source/README.md) 构建段。**连带（实测 · 已处置）**：`-Reconfigure` 清掉 `build\loop\**` 轮次物证 ⇒ 其后的 `-StatusOnly` 会把台账重建为降级版（`覆盖轮次 39 → 0` · web 文字理解 `8 → 7` · 汇总 `10 → 9`）⇒ 已 `git checkout` 还原 `docs/AI_Status_web.md` / `docs/AI_Status_api.md` 并手还原 `docs/AI_Status.md` 哨兵块（**本轮未提交**；后续轮次重新累积即复原）。
+- **涉及文件**：新增 `source/ai/include/site_template.h` · `source/ai/src/site_template.cpp`；改动 `source/engine/{include,src}/node_registry.{h,cpp}` · `source/ui/include/settings_panel.h` · `source/ui/src/settings_panel.cpp` · `source/ui/src/app.cpp` · `source/tools/api_probe.cpp` · `source/tools/check_all.ps1` · `source/CMakeLists.txt`。
+- **⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
 
 **🧩 M6 收口 · 第一批：设置面板 / 首启引导 / 依赖自检 / 诊断报告 / 一键自检 / 安装包骨架（2026-10-10）**
 
@@ -34,15 +109,15 @@
   - `M6-02` / `PM-01` 依赖自检：新增 `utils/webview2_runtime.{h,cpp}` —— **三路只读探测**（`WEBVIEW2_BROWSER_EXECUTABLE_FOLDER` → 加载器 API `GetAvailableCoreWebView2BrowserVersionString` → EdgeUpdate 注册表 `pv`），命中路径写进 `source` 字段（**不靠推测**）。`api_probe --dep-check` 实测 **PASS · `WebView2 运行时 152.0.4191.66（api）`**。
   - `M6-02` / `PM-02` 首次使用引导：`ui/app.cpp` 内三步引导窗口（① 环境检查含「随包安装 / 打开下载页 / 重新检测」② 载入示例工作流 ③ 选模型与凭据 → 打开设置面板）；任何结束方式都写 `[ui] first_run_done = true`；新增配置键 `first_run_done`（**缺键 → false** ⇒ 升级用户也会看到一次，可跳过；菜单「帮助 → 首次使用引导」可再看）。
   - `PM-04` 诊断报告：新增 `utils/diagnostics_report.{h,cpp}`（**8 分节 39 行**：程序 / 系统 / 依赖 / 路径 / 配置 / 站点表 / 凭据 / 归档与工作流；**只出凭据条数** —— 不出条目名、密钥、Cookie）+ 菜单「帮助 → 复制诊断信息」+ 日志/数据目录快捷入口 + `api_probe --diag-assert` / `--diag-dump`。
-  - `PM-03` 一键自检：新增 `source/tools/check_all.ps1`（构建 → 8 项自检/夹具 → 台账重建；汇总表 + 退出码；输出落 `build/logs/check_all_<时间戳>.log`）——实测 **12 项全 PASS · exit 0**。
+  - `PM-03` 一键自检：新增 `source/tools/check_all.ps1`（构建 → 8 项自检/夹具 → 台账重建；汇总表 + 退出码；输出落 `build/logs/check_all_<时间戳>.log`）——实测 **12 项全 PASS · exit 0**（**同批 `PB2-24` 追加 `--site-assert` ⇒ 现行 13 项，见上一条条目**）。
   - `M6-08` 安装包骨架：新增 `packaging/aiwrite.iss`（Inno Setup 6）+ `source/tools/package.ps1`（构建 → payload → `ISCC`；退出码 0 / 2（缺 ISCC）/ 1）+ `packaging/webview2/README.md`（`PQ-02`「附带 Bootstrapper」的**可选件**落点与获取方式）。payload 实测 **18 个文件 / 28.7 MB** + `build\dist\manifest.txt`。
   - **接线新增两项**（`unwired_config_fields()` **6 → 4** 项）：`output.auto_open_on_complete`（归档成功后用资源管理器打开本次归档目录，`EditorState::archive_run_outputs()`；新增 `utils::open_folder()`）、`advanced.log_ttl_days`（启动清理 `logs/` 下超期日志，新增 `log::purge_old_files()`；**活动文件 `app.log` / `workflow.log` 永不按年龄删**）。
   - **版本号单一来源**：新增 `utils/app_version.h`（`kAppVersion = "0.2.0"` = 收敛前「帮助 → 关于」里的**原字符串**；⛔ 本批**不改版本号**，见 AI_README §6）；菜单「关于」、诊断报告、`package.ps1 -Version` 默认值同源。
 - **口径变更（四处同步：代码 + 注释 + 离线断言 + 文档）**：`api_probe` 的 PA-08 未接清单断言由「**含** `output.auto_open_on_complete` / `advanced.log_ttl_days`」改为「**不含**」（接线后不再是"改了没效果"），并新增**失败时的逐例明细打印**；该行是**单行 PASS/FAIL**（非逐项计数）⇒ `--selftest` 的分组数字不变。
-- **验证（2026-10-10 本机 · 逐条实测，物证在 `build/logs/`）**：构建 **0 error / 0 warning**（`build_debug_20261010_171941.log`）· `api_probe --selftest` **七组全 PASS · exit 0**（PA-08 行 = **4 项**）· `--exec-selftest` **464 / 0** · `--graph-selftest` **110 / 0** · `--diag-assert` **PASS（39 行 / 脱敏 OK）** · `--dep-check` **PASS（152.0.4191.66 · api）** · `--settings-assert` **PASS（默认通过 + 越界 8 例全拦截 + 边界值通过）** · `aiwrite --upload-selftest` **72 / 0** · 离线夹具 **44 / 0 · 17 / 0 · 15 / 0** · `check_all.ps1` **12/12 PASS · exit 0**；**GUI 冒烟**（隔离 `USERPROFILE` 于 `%TEMP%`）：`[依赖] WebView2 运行时 152.0.4191.66（api）` + `[日志] 已清理 1 个超过 30 天的旧日志`（自建 40 天前旧日志被删、新日志保留）+ `[ui] first_run_done = false` 落盘 + 60 FPS 无崩溃。
+- **验证（2026-10-10 本机 · 逐条实测，物证在 `build/logs/`）**：构建 **0 error / 0 warning**（`build_debug_20261010_171941.log`）· `api_probe --selftest` **七组全 PASS · exit 0**（PA-08 行 = **4 项**）· `--exec-selftest` **464 / 0** · `--graph-selftest` **110 / 0** · `--diag-assert` **PASS（39 行 / 脱敏 OK）** · `--dep-check` **PASS（152.0.4191.66 · api）** · `--settings-assert` **PASS（默认通过 + 越界 8 例全拦截 + 边界值通过）** · `aiwrite --upload-selftest` **72 / 0** · 离线夹具 **44 / 0 · 17 / 0 · 15 / 0** · `check_all.ps1` **12/12 PASS · exit 0**（**同批后追加 `PB2-24` ⇒ 现行 13 项 = 12 项 + `--site-assert`，见本文件最上方 `PB2-24` 条目**）；**GUI 冒烟**（隔离 `USERPROFILE` 于 `%TEMP%`）：`[依赖] WebView2 运行时 152.0.4191.66（api）` + `[日志] 已清理 1 个超过 30 天的旧日志`（自建 40 天前旧日志被删、新日志保留）+ `[ui] first_run_done = false` 落盘 + 60 FPS 无崩溃。
   * ⚠ `--exec-selftest` 的 **464** 与 AI_README §2 旧记的 **452** 差 12：本批**未改执行器断言**（改动文件清单见下）⇒ 按 §4 义务 6 把基线更新为「本轮实测值 + 日期」，差值归属**上一批未提交改动**（`git diff` 显示 `source/nodes/src/local_nodes.cpp` 等 36 个文件、+1120/−108）。
 - **⛔ 未在本机验证（如实登记 · 不写"应该没问题"）**：① **安装包编译**：本机无 `ISCC.exe`，且 winget 无网络（`0x80072efd`）⇒ 未装 Inno Setup。payload 阶段已实测；`.iss` 侧改为**离线一致性锁**（把 `.iss` 的 `Source:` 通配逐条对到 payload，实测 `*.exe⇒2` / `*.dll⇒15` / `assets\*⇒1` / `webview2\*⇒0（可选件缺席仅告警）`）兜住"注释说打了、实际没进包"。② `.iss` 的 `[Code] BootstrapperExists` 与 `[Run]` 可选依赖项（Inno 文档标准写法）**未编译验证**。③ `PQ-02`「附带 Bootstrapper」= **未附带**（本机取不到该 exe；`packaging/webview2/README.md` 给了两条获取方式）。
-- **未做（本批范围外 · 计划仍在 [actionPlan/M6.md](actionPlan/M6.md)）**：`M6-03` 其余 5 个示例 JSON、`M6-04` 重试/失败汇总、`M6-06` 边界用例、`M6-07` 启动/渲染优化、**`PB2-24` 自建站点闭环（`RM-D4` 必做 · 未开工）**、自动保存/最近列表治理（P7 残项）。
+- **未做（本批范围外 · 计划仍在 [actionPlan/M6.md](actionPlan/M6.md)）**：`M6-03` 其余 5 个示例 JSON、`M6-04` 重试/失败汇总、`M6-06` 边界用例、`M6-07` 启动/渲染优化、自动保存/最近列表治理（P7 残项）。**`PB2-24` 自建站点闭环（`RM-D4` 必做）原列在本行「未做」里 —— ✅ 同日已落地，见本文件上一条 `PB2-24` 条目**。
 - **涉及文件**：新增 `source/utils/{include,src}/app_version.h`·`diagnostics_report.{h,cpp}`·`settings_validation.{h,cpp}`·`webview2_runtime.{h,cpp}`、`source/ui/include/settings_panel.h`、`source/ui/src/settings_panel.cpp`、`source/tools/check_all.ps1`、`source/tools/package.ps1`、`packaging/aiwrite.iss`、`packaging/webview2/README.md`；改动 `source/ui/src/app.cpp`（菜单 + 引导 + 依赖自检 + 日志清理）、`source/ui/src/editor_state.cpp`（自动打开归档）、`source/utils/src/{config.cpp,log.cpp,file_dialog.cpp}`、`source/utils/include/{config.h,log.h,file_dialog.h}`、`source/tools/api_probe.cpp`（4 个新开关 + 3 个新断言 + 未接清单口径）、`source/CMakeLists.txt`（4 个新源文件 + `version.lib`）。
 - **⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
 

@@ -55,28 +55,28 @@
 > 完整台账（含每站 `history[]` 跨轮轨迹）：`build/loop/SITE_STATUS.json`（机器读）· `build/loop/SITE_STATUS.md`（人读，随 `build/` 易失）。
 > **长期保留的人读位** = [AI_Status.md](AI_Status.md) §二（总览）+ [AI_Status_web.md](AI_Status_web.md) §二 / [AI_Status_api.md](AI_Status_api.md) §二（**两份分通道台账**）—— 都在 `docs/` 里、随版本库走，不会被清 `build/` 带走。
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-10 · 覆盖轮次 39：R1 · SMOKE · SMOKE2 · SMOKE3 · SMOKE4 · SMOKE5 · SMOKE6 · SMOKE6 · SMOKE7 · SMOKE8 · SMOKE9 · SMOKE10 · SMOKE11 · SMOKE12 · SMOKE13 · T-L06 · T-L06b · T-L06c · T-L06d · T-L07 · T-L08 · T-L09 · T-L10 · T-L11 · T-L12 · T-L13 · T-L14 · T-L15 · T-L16 · T-L17 · T-L18 · T-L19 · T-L20 · T-L21 · T-L22 · T-L23 · T-L24 · T-L25 · T-L26
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-10 · 覆盖轮次 0：
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > **判据**：**文字理解** = 「文本 → 取回文本」S3 三口径通过（``rc=0`` + ``n3=done`` + 正文非站侧错误串）；**图片理解** = 「图片 → 取回文本」链路（站点上传双证据 + 取回正文）。
 > 两列是**链路**、不是模型强弱；来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。
 
-**汇总**：共 20 站（web 11 / official 9）· 文字理解 ✅ 实测 **10** · 图片理解 ✅ 实测 **3** · 🟡 就绪/声明 6 · ⬜ 未接/未声明 9 · ⚠ 声明不一致 1
+**汇总**：共 20 站（web 11 / official 9）· 文字理解 ✅ 实测 **9** · 图片理解 ✅ 实测 **3** · 🟡 就绪/声明 6 · ⬜ 未接/未声明 9 · ⚠ 声明不一致 1
 
 **主表（状态 · 跨轮）**
 
 | # | id | 类型 | 最近轮次 | S2 探测 | 输入命中/候选 | 登录证据 | S3 rc | n3 | 正文码点 | 最终态 | 下一动作 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | `spark-web` | web·dom | T-L16 | 失败 | 0/0 | — | — | — | — | 失败（探测级 · §5.1③） | 冷启动后重测；仍失败要有 DOM 物证才可分②改版 |
-| 2 | `gemini-web` | web·dom | T-L25 | 未测 | / | — | 0 | done | 22 | 可用（匿名） | — |
-| 3 | `doubao-web` | web·dom | T-L21 | 未测 | / | — | 0 | done | 41 | 可用（匿名） | — |
+| 1 | `spark-web` | web·dom | — | — | — | — | — | — | — | 未测 | S2 探到「可用」后跑 S3 |
+| 2 | `gemini-web` | web·dom | — | — | — | — | — | — | — | 未测 | S2 探到「可用」后跑 S3 |
+| 3 | `doubao-web` | web·dom | — | — | — | — | — | — | — | 未测 | S2 探到「可用」后跑 S3 |
 | 4 | `deepseek-web` | web·deepseek-web | — | — | — | — | — | — | — | ✅ 已实测（协议型适配器） | — |
-| 5 | `qwen-web` | web·dom | T-L16 | 可用 | 1/1 | — | — | — | — | 未测（S3 未跑） | S2 探到「可用」后跑 S3 |
-| 6 | `claude-web` | web·dom | T-L16 | 需登录 | 0/0 | login-url:/login | — | — | — | 需登录 | 人工在窗口内登录一次 → 重跑 S3 |
-| 7 | `yuanbao-web` | web·dom | T-L25 | 未测 | / | — | 0 | done | 672 | 可用（匿名） | — |
-| 8 | `chatgpt-web` | web·dom | T-L16 | 可用 | 1/1 | login-node x8 | — | — | — | 未测（S3 未跑） | S2 探到「可用」后跑 S3 |
-| 9 | `ernie-web` | web·dom | T-L25 | 未测 | / | — | 0 | done | 697 | 可用（匿名） | — |
-| 10 | `kimi-web` | web·dom | T-L21 | 未测 | / | — | 0 | done | 70 | 可用（匿名） | 侦察 attach_selector → 真机一次 |
-| 11 | `chatglm-web` | web·dom | T-L21 | 未测 | / | — | 0 | done | 10044 | 可用（匿名） | — |
+| 5 | `qwen-web` | web·dom | — | — | — | — | — | — | — | 未测 | S2 探到「可用」后跑 S3 |
+| 6 | `claude-web` | web·dom | — | — | — | — | — | — | — | 未测 | S2 探到「可用」后跑 S3 |
+| 7 | `yuanbao-web` | web·dom | — | — | — | — | — | — | — | 未测 | S2 探到「可用」后跑 S3 |
+| 8 | `chatgpt-web` | web·dom | — | — | — | — | — | — | — | 未测 | S2 探到「可用」后跑 S3 |
+| 9 | `ernie-web` | web·dom | — | — | — | — | — | — | — | 未测 | S2 探到「可用」后跑 S3 |
+| 10 | `kimi-web` | web·dom | — | — | — | — | — | — | — | 未测 | 侦察 attach_selector → 真机一次 |
+| 11 | `chatglm-web` | web·dom | — | — | — | — | — | — | — | 未测 | S2 探到「可用」后跑 S3 |
 | 12 | `openrouter` | official·openai | — | — | — | — | — | — | — | 🟡 声明·未实测 | 有 Key / 环境就绪时真机一次 |
 | 13 | `zhipu` | official·openai | — | — | — | — | — | — | — | ✅ 已实测 | — |
 | 14 | `openai` | official·openai | — | — | — | — | — | — | — | 🟡 声明·未实测 | 有 Key / 环境就绪时真机一次 |
@@ -91,17 +91,17 @@
 
 | id | 文字理解 | 图片理解 | 依据（图片理解） |
 |---|---|---|---|
-| `spark-web` | ✅ 实测（SMOKE2） | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
-| `gemini-web` | ✅ 实测（T-L25） | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
-| `doubao-web` | ✅ 实测（T-L21） | ✅ 实测 | B3 真视觉（256×256 纯红 → 描述正确）+ upload_adapter=builtin:doubao 双证据 PASS（协议记录 §8.3/§9/§10.2） |
+| `spark-web` | ⬜ 未测 | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
+| `gemini-web` | ✅ 实测 | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
+| `doubao-web` | ✅ 实测 | ✅ 实测 | B3 真视觉（256×256 纯红 → 描述正确）+ upload_adapter=builtin:doubao 双证据 PASS（协议记录 §8.3/§9/§10.2） |
 | `deepseek-web` | ✅ 实测 | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
-| `qwen-web` | ⬜ 未测（S3 未通过） | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
-| `claude-web` | ⬜ 未测（S3 未通过） | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
-| `yuanbao-web` | ✅ 实测（T-L25） | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
-| `chatgpt-web` | ⬜ 未测（S3 未通过） | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
-| `ernie-web` | ✅ 实测（T-L25） | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
-| `kimi-web` | ✅ 实测（T-L21） | 🟡 就绪·未实测 | 接线 builtin:kimi · attach_selector 待侦察/待真机 |
-| `chatglm-web` | ✅ 实测（T-L21） | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
+| `qwen-web` | ⬜ 未测 | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
+| `claude-web` | ⬜ 未测 | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
+| `yuanbao-web` | ✅ 实测 | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
+| `chatgpt-web` | ⬜ 未测 | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
+| `ernie-web` | ✅ 实测 | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
+| `kimi-web` | ✅ 实测 | 🟡 就绪·未实测 | 接线 builtin:kimi · attach_selector 待侦察/待真机 |
+| `chatglm-web` | ✅ 实测 | ⬜ 未接 | 无 web.upload_adapter（VLM + 网页版组合会明确报错） |
 | `openrouter` | 🟡 声明·未实测 | 🟡 声明·未实测 | capabilities.vision=true（无真机物证） |
 | `zhipu` | ✅ 实测 | ✅ 实测 | E-02 真跑（智谱 glm-4v-flash · 图片理解节点） |
 | `openai` | 🟡 声明·未实测 | 🟡 声明·未实测 | capabilities.vision=true（无真机物证） |
@@ -206,12 +206,12 @@ Start-Process -FilePath .\build\bin\aiwrite.exe -ArgumentList '--web-dom-dump','
 | 检查 | 命令 | 期望 |
 |---|---|---|
 | 构建 | `cd source; .\build.ps1` | **0 error / 0 warning** |
-| 工具 / 契约自检 | `api_probe.exe --selftest` | 七组全 PASS · exit **0**（含执行器 **452 / 0** —— 2026-10-09 批 3 新增 27 项 DOM 自检后 **425 → 452**） |
-| 图模型 / 执行器自检 | `--graph-selftest` / `--exec-selftest` | **110 / 0** · **452 / 0** |
+| 工具 / 契约自检 | `api_probe.exe --selftest` | 七组全 PASS · exit **0**（含 **DOM 探测 27 / 0** · 执行器 **464 / 0** —— 2026-10-10 实测；2026-10-09 批 3 曾为 425 → 452，452 → 464 的 +12 = 上一批未提交改动） |
+| 图模型 / 执行器自检 | `--graph-selftest` / `--exec-selftest` | **110 / 0** · **464 / 0** |
 | 提供商标记 | `aiwrite.exe --provider-selftest` / `--provider-dump` | **50 / 0** · **20 条**（official 9 / web 11）（`TST-L01` 门禁已把 `--provider-dump` 作为「条数快照」自动跑，见 `gate/dump.txt`） |
 | **站点上传模板**（离线 · 不起浏览器） | `aiwrite.exe --upload-selftest` | **72 / 0** · exit **0**（2026-10-10 实测；`M8-24`~`M8-27` 上传模板契约，站点侧接线出问题时先跑这条；门禁 `gate/upload.txt`） |
-| 离线夹具 | `node source\tools\poll_answer_gate_test.js` · `send_chain_test.js` · **`dom_gate_test.js`** | **12 / 0** · **17 / 0** · **15 / 0**（各自 `--old` 负向必 FAIL；`dom_gate_test.js --old` = **6 / 15** · exit 1） |
-| 文档断链 | `python vcpkg-cache\check_links.py` | **新增断链 0** —— 2026-10-09 批 3 实测 = 检查 **610** 链接 / broken **8**；**R1 收轮复跑 = 检查 669** · **`TST-L05` 落地复跑 = 检查 683**（同一 broken 8，新增 14 条链接全有效）（数字涨 = 本文档批量新增 ⇒ broken 集合**不变**）⇒ 门禁判据是「**本轮不得新增**」，**不是**「全库 0」；8 条全部来自未改动的旧文档，已登记 `DBG-L01` |
+| 离线夹具 | `node source\tools\poll_answer_gate_test.js` · `send_chain_test.js` · **`dom_gate_test.js`** | **44 / 0** · **17 / 0** · **15 / 0**（各自 `--old` 负向必 FAIL：**18 / 26** · **13 / 4** · **9 / 6** · exit 1） |
+| 文档断链 | `python vcpkg-cache\check_links.py` | **全库 0** —— **2026-10-10 实测 = 检查 818 / broken 0**（判据**已升级为「全库 0」**；历史：批 3 = 610 / 8 · `R1` 收轮 = 669 / 8 · `TST-L05` 落地 = 683 / 8 —— 数字涨 = 文档批量新增、broken 集合不变。8 条存量已于 2026-10-10 清零 = **7 条真断链**（`actionPlan/M7B.md` 未指向 `Archive/`）+ **1 条检查器跨反引号误判**，见 `DBG-L01`） |
 
 > 上表是 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §0.4 回归基线的**循环化用法**（原表的数字以该处与 [../AI_README.md](../AI_README.md) §2 为准；数字变动时先改那两处，再同步本文）。
 > **门禁的意义**：站点循环的数字只在"起点是绿的"前提下才有可比性；起点不绿 ⇒ **先停下汇报，不进循环**。
@@ -383,7 +383,7 @@ build/loop/<轮次>-<时间戳>/         例：build/loop/R1-20261009-2055/
 | `FEA-L04` | 目录规范化重构：header → `source/include/**`（镜像 `src/**`）；`source/src/ai/` 下按 AI 分目录；CMake 与连带文档同步 | Feature | ✅ 已落地（2026-10-09） |
 | `FEA-L05` | **目录再规范化（取代 `FEA-L04` 的两棵镜像树形态）**：每个模块自带 `src/` + `include/`（头文件模块内**拍平**；引用改**裸名** `#include "graph.h"`）；入口 → `source/app/src/main.cpp`；CMake 头文件根 **1 → 6** | Feature | ✅ 已落地（2026-10-09 · 104 文件搬迁 · 回归数字逐项不变） |
 | `TST-L01` | `source/tools/loop_verify.ps1` 总驱动（门禁 + S2 探测 + S3 逐站 + 报告落盘） | Test | ✅ 已落地（2026-10-09 · R1 + SMOKE1~SMOKE9 实测；**绿判据 = 三口径 `rc=0` 且 `n3=done` 且归档正文非站侧错误串**，见 §10.1 陷阱 3 / 陷阱 6） |
-| `TST-L02` | `source/tools/dom_gate_test.js` 夹具 + `--old` 负向打假 | Test | ✅ 已落地（2026-10-09 · **15 / 0**；`--old` **6 / 15** 如实 FAIL · exit 1） |
+| `TST-L02` | `source/tools/dom_gate_test.js` 夹具 + `--old` 负向打假 | Test | ✅ 已落地（2026-10-09 · **15 / 0**；`--old` **9 / 6** 如实 FAIL · exit 1） |
 | `TST-L03` | 物证目录 + 报告三块模板 + 首份循环基线报告 | Test | 🟡 部分落地（2026-10-09 · 目录 + 三块模板**已由 `TST-L01` 生成**；首份基线 = **R1-20261009-2055**，人工固化中） |
 | `TST-L05` | **站点状态台账**：`source/assets/site_capability_evidence.json`（实测证据唯一人工维护点）+ `providers.json`（声明）× `build/loop/*/report.json`（轮次物证）⇒ 生成「20 站 × 文字理解 / 图片理解」两列表 + `history[]`，回写 §2.2 哨兵块；`-StatusOnly` 零副作用重建 | Test | ✅ 已落地（2026-10-10 · 覆盖 12 轮累积 · 21 站 · 文字理解 ✅ 9 / 图片理解 ✅ 3 · ⚠ 声明不一致 1） |
 
@@ -408,6 +408,9 @@ build/loop/<轮次>-<时间戳>/         例：build/loop/R1-20261009-2055/
 | 6 | **`n3=done` ≠ 真生成了答案**（站点自己的错误串被当成答案） | `SMOKE7-20261009-2200`（`kimi-web`）：`rc=0` + `n3=done` + **stdout 整轮丢失**，但归档正文 **49 码点** = 站点侧「System is currently busy. Please try again later.」⇒ 按旧口径会被记「可用」（假绿）；`SMOKE8` / `SMOKE9` 复现同一现象（**均如实 exit 1**）。**源码反证**：全仓 `grep`「currently busy / try again later」= 0 命中 ⇒ 该串**不是我们写的**，是站点返回的。**反面校准**：`SMOKE10-20261009-2208`（`ernie-web`）归档正文 **74 码点**的**合法答案** + `busy=""` ⇒ 判 `可用（匿名）` · **exit 0**（判据未误伤合法短答案）。**复现命令**：`powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\loop_verify.ps1 -Round SMOKE9 -Providers kimi-web -SkipGates -SkipProbe`（物证见 §11 烟测行） | S3 判据加**第三口径**：归档正文 **≤ 120 码点 且命中已知错误短语**（`system is currently busy` / `please try again later` / `rate limit` / `too many requests` / `系统繁忙` / `服务繁忙` / `访问过于频繁` / `请求过于频繁` / `请稍后再试` / `稍后再试` / `服务暂不可用` / `服务异常`）⇒ 判「未真生成」：状态＝`失败（站侧忙碌/拒绝…）`、**重试 1 次照旧**、轮次 **exit 1**；报告 ① 新增一行「n3=done 但正文＝站侧错误串」+ 站点对象加 `busy` / `body_cps` 两字段 + 附录就地给处置（重跑 / 复核限流） |
 | 7 | **「声明」被当成「实测」**（`capabilities.vision` / `verified` / `web.upload_adapter`） | 20 条条目里 `deepseek` 声明 `vision=false`，而其**官方 API 图片理解已真机实测通过**（`M7-09` / `M7-10`）；另有 6 条网页版条目「接线就绪但无真机物证」——只看 `providers.json` 会把这两种都写错 | 台账（`TST-L05` · §2.2）把**声明**与**实测**分两处：实测只认 `source/assets/site_capability_evidence.json`（+ `build/loop/*/report.json` 轮次物证）；冲突时实测优先、列内打 `⚠`、摘要计数（`-StatusOnly` 可复现）。**回填 `providers.json` 属产品侧动作，不在循环内做** |
 | 8 | **门禁正则与真实输出不符 ⇒ 假 `FAIL`**（判据层缺陷：假绿会放过坏数据，假红会腐蚀「门禁全绿」的信任） | `SMOKE11-20261010-0943`：`provider-selftest` **`rc=0`** 却判 `FAIL` —— 旧正则 `(?m)^.*\d+\s*/\s*\d+.*$` 要求「数字–斜杠–数字」**紧邻**，而真实末行是 **`[配置表自检] 50 项通过 / 0 项失败`**（数字与 `/` 之间夹汉字）⇒ **永不匹配**。**复现命令**：`powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\loop_verify.ps1 -Round X -SkipProbe -Providers ernie-web`（物证 `build\loop\X-*\gate\provider.txt` 末行 + `report.json` 的 `gates[]`） | 判据逐字取自真实输出：`(?m)^\[配置表自检\]\s*\d+\s*项通过\s*/\s*\d+\s*项失败\s*$`（源码 `loop_verify.ps1` ① 门禁段）；**同一物证**上「旧正则 0 命中 / 新正则命中 `[配置表自检] 50 项通过 / 0 项失败`」= 反向可打假；夹具三行（`12 / 0` 形态）不受影响 |
+| 9 | **构建偶发 `error MSB4018` + `FileTracker.FileIsUnderNormalizedPath`（任务 `GetOutOfDateItems` / `SetModuleDependencies`）—— 看着像代码坏了，其实是 `build\` 生成态陈旧**（环境问题，不是判据问题） | 2026-10-10 `PB2-24` 收尾连续 **8 次** `cmake --build` 全崩（`System.IndexOutOfRangeException` at `Microsoft.Build.Utilities.FileTracker.FileIsUnderNormalizedPath`，`vcxproj` = `ZERO_CHECK`）且**重跑无效**；`-p:TrackFileAccess=false` / `-nodeReuse:false -m:1` / 改 `%TEMP%` 到非 8.3 路径 **均无效**；`source\build.ps1 -Reconfigure`（清空 `build\`、保留 `logs\`、重新 configure）后 **exit=0**，紧接着 `check_all.ps1` **13/13 PASS**。**复现命令**：改任一源文件 → `cd source; .\build.ps1`（工具链 = VS 18 Insiders / MSBuild v180）。**物证**：崩 `build\logs\pb224_build6.txt` · `check_all_20261010_194555.log`（构建 FAIL 行）；愈 `build\logs\pb224_build_reconf.txt` · `check_all_20261010_194909.log` / `..._195059.log`（清空重建后连续两次 13/13 全绿） | ① 先分辨：`error MSB4018` + `FileTracker` 且**无 `error C`** ⇒ **代码没坏**，别去改代码 ② 对症 = `source\build.ps1 -Reconfigure`（**不是重跑**）③ `check_all.ps1` ① 构建段已加固：`$ErrorActionPreference` 临时降级 ⇒ 构建失败也**照常打印 13 项汇总表**（此前会被终止性错误打断、只剩一行「① 构建」），并在命中该特征时直接在 `FAIL` 行给上面的处置命令。⚠ **连带代价（实测）**：`-Reconfigure` 会清掉 `build\loop\**`（轮次物证）⇒ 此后 `loop_verify.ps1 -StatusOnly` 重建出的台账会**降级**（本次实测：`覆盖轮次 39 → 0`、`AI_Status_web.md` 文字理解 `8 → 7`、`AI_Status.md` 汇总 `10 → 9`）⇒ **重建前先备份 `build\loop\`**，或事后 `git checkout -- docs/AI_Status_web.md docs/AI_Status_api.md` + 手还原 `AI_Status.md` 哨兵块（本批已如此还原，未提交） |
+| 10 | **`Param::value` 是 `nlohmann::json` ⇒ `value += "文本"` 不是字符串拼接**（是**数组追加** `push_back`）—— 看着编译通过，运行时抛异常、进程直接死 | 2026-10-10 `PC-01/02` 自检第 14 项起崩：`exit=-2147483645`（`0x80000003` · Debug 下 `terminate`→`abort` 的断点），`build\logs\pc01_autosave2.txt` 只留到第 13 项 `PASS`（**stdout 全缓冲 ⇒ 缓冲丢失，看不出是崩了还是没跑**）；`vcpkg-installed/.../nlohmann/json.hpp` 的 `reference operator+=(basic_json&&)` 正文 = `push_back(std::move(val))`。**复现命令**：`.\build\bin\api_probe.exe --autosave-assert`（改回 `+=` 即崩）；**愈后物证** `build\logs\pc01_autosave3.txt`（28/28 PASS · exit 0） | ① 写 `Param::value` 一律**显式赋值**（`param->value = std::string(...)` / `= it.value()`），**不要**用 `+=` / `+`；② 自检类输出**逐项 `std::fflush(stdout)`**（否则崩溃时缓冲丢失，会被误判成「没跑」）；③ 见到 `0x80000003` / `退出码 3` 先按「未捕获异常」查（`type_error` / `filesystem_error`），别按「逻辑没跑到」查 |
+
 
 
 

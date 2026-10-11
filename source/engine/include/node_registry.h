@@ -38,6 +38,9 @@ public:
 
     void registerNode(Definition definition);
     const Definition* find(const std::string& type) const;
+    // PB2-24 要点②：**可写**查找（供「配置表重载后重建参数枚举」就地改注册表；
+    //  * 只在刷新枚举这类**入口单一**的场合使用；其它地方一律走 `find()` 的只读语义
+    Definition* findMutable(const std::string& type);
 
     // 全部类型（按分类、再按注册顺序）
     std::vector<const Definition*> listTypes() const;
@@ -52,5 +55,40 @@ private:
 
 // 注册 MVP 的 8 个节点（幂等）
 void registerAllNodes();
+
+// ============================================================================
+//  PB2-24 要点②：`provider` 参数**动态枚举**（配置表重载后下拉 / 校验即时跟上）
+//
+//  背景（§3.5 现状证据）：`registerAllNodes()` 幂等 ⇒ 「提供商」枚举在**首次注册时一次性**
+//  生成；运行中 `ai::reload_provider_specs()` 只换表，**不会**动注册表里的枚举 ⇒
+//  ① 界面下拉走 `ai::provider_specs()` 的实时表（`PB2-31` 合并显示）**已自动刷新**；
+//  ② 但**运行前校验**（`Graph::validateParams`）比对的是节点实例里的 `enum_options` 副本 ⇒
+//     刚新建、曾未注册过的站点 id 会被误判「取值不在枚举范围内」。
+//
+//  用法：任何 `ai::reload_provider_specs()` **之后必须刷新下游**（否则新建站点会被运行前校验
+//  误判「取值不在枚举范围内」）。两条现行路径（**效果一致**，都在 `--site-assert` 的覆盖范围内）：
+//   * 调用方**持有画布**（CLI / 未来菜单命令）⇒ `reload_provider_specs_and_refresh(&graph)`
+//     —— 重载 + 两层刷新一次完成（单入口）；
+//   * 设置面板**无画布**（`ui/src/settings_panel.cpp`）⇒ 自己 `ai::reload_provider_specs()`
+//     读表显示错误 / 警告，再置 `SettingsPanelResult.provider_table_reloaded`
+//     ⇒ 宿主 `ui/src/app.cpp` 调 `refresh_provider_options(state.graph)`。
+//   * 带 `graph` 的刷新会**保留已选值**（只换选项表）
+// ============================================================================
+
+// 当前配置表里的提供商 id（official 在前、web 在后；与 N-05 注册时的口径完全一致）
+std::vector<std::string> provider_option_ids();
+
+// 只刷新**注册表 Definition**（之后新建的节点实例用新枚举）
+void refresh_provider_options();
+
+// 刷新注册表 + **已有图**里所有节点实例的 `provider` 枚举（运行前校验因此不再误判）
+void refresh_provider_options(Graph& graph);
+
+// 重载配置表 + 刷新下游（UI / CLI 只需调用这一个；`graph` 可为 nullptr）
+//  * 单一入口：避免「谁 reload 谁忘了刷新」——`R8` 的配套要求
+void reload_provider_specs_and_refresh(Graph* graph = nullptr);
+
+// 只读：当前注册表里 `ProviderConfig.provider` 的枚举选项（自检 / 界面提示用；空 = 未注册）
+std::vector<std::string> provider_param_options();
 
 } // namespace aiwrite::engine
