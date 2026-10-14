@@ -575,7 +575,10 @@ std::vector<std::string> implemented_protocols()
     // L1 已接线：openai 兼容（含智谱 / 硅基流动 / Ollama / 任意用户条目）
     //            + 内置网页版适配器 deepseek-web（现有 web_chat/PoW）
     // L3（PB2-13）：通用 DOM 适配器（选择器驱动）→ protocol=dom 也已实现
-    return {"openai", "deepseek-web", "dom"};
+    // L2（B2-b · PB2-09/10/11）：工厂新增 anthropic（Messages API）与 gemini（generateContent）
+    //  * 与 `provider_factory.cpp` 的 `factory_protocols()` **必须一致** → 自检 `V-14` 断言
+    //    （单体真值 = 工厂；本清单供「提示 / 校验 / --provider-selftest」只读展示）
+    return {"openai", "anthropic", "gemini", "deepseek-web", "dom"};
 }
 
 std::vector<std::string> implemented_web_adapters()
@@ -1636,12 +1639,60 @@ int provider_spec_selftest(int* passed_out)
         counter.check(has_text(report.warnings, "不支持"), "adapter 不支持字段 → 警告（R12）");
     }
 
+    // ---------- 7.5) 嵌套 schema 名（`R18`）：文档/示例写**嵌套**，实现**按嵌套读** ----------
+    //  * 风险原文（归档 §5 `R18`）：文档用**扁平**字段名（`send_kind`）、实现读**嵌套**
+    //    （`send{kind,value}` / `done_when{kind,selector}`）⇒ 照抄也建不出站点。
+    //    本用例把「两边一致」钉成断言：嵌套写法**逐字生效**，扁平写法**明确警告 + 跳过该条**。
+    {
+        const std::string nested_layer = R"JSON({
+  "schema_version": 1,
+  "providers": [ { "id": "nested-dom", "display": "嵌套 DOM", "kind": "web", "protocol": "dom",
+      "web": { "adapter": "dom", "login_url": "https://nested.example.com/",
+               "input_selector": "#chat-input",
+               "send": { "kind": "key", "value": "Enter" },
+               "answer_selector": ".markdown-body",
+               "done_when": { "kind": "selector_gone", "selector": "button[aria-label*='停止']" } } } ]
+})JSON";
+        SpecLoadReport      report;
+        const ProviderSpecs specs = merge_provider_specs({{"user", nested_layer}}, &report);
+        const ProviderSpec* nested = specs.find("nested-dom");
+        counter.check(nested != nullptr && !web_login_only(nested) &&
+                          nested->web.send_kind == "key" && nested->web.send_value == "Enter" &&
+                          nested->web.done_kind == "selector_gone" &&
+                          nested->web.done_selector == "button[aria-label*='停止']" &&
+                          nested->web.answer_selector == ".markdown-body",
+                      "嵌套 schema（R18）：`send{kind,value}` / `done_when{kind,selector}` 逐字生效");
+
+        const std::string flat_layer = R"JSON({
+  "schema_version": 1,
+  "providers": [ { "id": "flat-dom", "display": "扁平 DOM", "kind": "web", "protocol": "dom",
+      "web": { "adapter": "dom", "login_url": "https://flat.example.com/",
+               "input_selector": "#chat-input",
+               "send_kind": "key", "send_value": "Enter",
+               "done_kind": "selector_gone", "done_selector": "button" } } ]
+})JSON";
+        SpecLoadReport      flat_report;
+        const ProviderSpecs flat_specs = merge_provider_specs({{"user", flat_layer}}, &flat_report);
+        const ProviderSpec* flat       = flat_specs.find("flat-dom");
+        // 现行口径（`PB2-26` 修订后）：缺 `send` 的 `dom` 条目**保留**但降级为
+        // 「登录型站点条目」（生成未就绪）—— 即「照抄也建不出站点」，但**当场说清原因**
+        counter.check(flat != nullptr && web_login_only(flat) &&
+                          has_text(flat_report.warnings, "send_kind") &&
+                          has_text(flat_report.warnings, "登录型站点条目"),
+                      "扁平字段名（错误写法）：条目仍在，但降级为**登录型站点条目**"
+                      "（未知字段警告 + 生成未就绪）");
+    }
+
     // ---------- 8) 未实现协议（表里有、程序没有）→ 警告而非报错 ----------
     {
+        // ⚠️ 这里的 protocol 必须**确实没实现**（`implemented_protocols()` 里没有）——
+        //    2026-10-11（L2 底座）：原用例用 `anthropic`，该协议本批已实现 ⇒ 断言失去意义，
+        //    改用仍未实现的 `cohere-v2`；表里写了、程序没有 ⇒ 仍是**警告**（条目保留，可选），
+        //    运行期由 `provider_factory` **明确报错**（`R9`）
         const std::string future = R"JSON({
   "schema_version": 1,
   "providers": [ { "id": "future-api", "display": "未来协议", "kind": "official",
-                   "protocol": "anthropic", "api_base": "https://api.anthropic.com" } ]
+                   "protocol": "cohere-v2", "api_base": "https://api.cohere.ai" } ]
 })JSON";
         SpecLoadReport      report;
         const ProviderSpecs specs = merge_provider_specs({{"user", future}}, &report);

@@ -1,5 +1,6 @@
 #include "property_panel.h"
 
+#include "connection_test.h"   // M_patchAB（PB2-07 / PB2-30②）：面板诊断按钮
 #include "node_registry.h"
 #include "provider_resolve.h"
 #include "editor_state.h"
@@ -1272,6 +1273,67 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         }
     }
     } // P7a-15：「参数」分组结束
+
+    // ---- M_patchAB §3.2 / §3.4（`PB2-07` / `PB2-30②`）：面板诊断按钮（异步 · 只读）----
+    //  * 「测试连接」= 配置表离线断言 + 条目诊断（API：有 Key 时一条 ping；web：登录态与端点一致性）
+    //  * 「测试选择器」= 复用只读探测 `ai::dom_site_probe()`（仅 `adapter=dom` 条目）
+    //  * 结果：明细 → Console（`log::info`）+ 本区；一行结论 → 状态栏（主线程写）
+    {
+        ImGui::Separator();
+        // 生效条目：本区在「参数」分组**之外**，故就地再解析一次（`resolve_display_provider` 是纯函数）
+        const engine::EffectiveProvider diag_effective =
+            engine::resolve_display_provider(editor().graph, *node);
+        const std::string diag_provider =
+            diag_effective.provider.empty() ? std::string() : diag_effective.provider;
+        ImGui::TextUnformatted("诊断（只读 · 异步）");
+        ImGui::TextDisabled("条目：%s（kind %s）",
+                            diag_provider.empty() ? "(未解析)" : diag_provider.c_str(),
+                            diag_effective.kind.empty() ? "?" : diag_effective.kind.c_str());
+
+        const bool busy = diagnostic_running(); // 任一诊断在跑 ⇒ 两个按钮都禁用（互斥）
+        ImGui::BeginDisabled(busy || diag_provider.empty());
+        if (ImGui::Button("测试连接（表校验 + 登录态 / 连通性）", ImVec2(-FLT_MIN, 0.0f))) {
+            log::info("[参数面板] 触发「测试连接」（条目 " + diag_provider + "）");
+            request_connection_check(diag_provider);
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("API 条目：配置表断言 + 有 Key 时发一条 ping（「请只回复 pong」）；\n"
+                              "网页版条目：登录态 + 生效端点一致性（**不发送任何提示词**）；\n"
+                              "码语义与 CLI 一致：0 通过 / 1 失败 / 2 无 Key 或未登录");
+        }
+
+        const bool dom_entry = diag_effective.kind == "web" && diag_effective.spec != nullptr &&
+                               diag_effective.spec->web.adapter == "dom";
+        ImGui::BeginDisabled(busy || !dom_entry);
+        if (ImGui::Button("测试选择器（只读诊断）", ImVec2(-FLT_MIN, 0.0f))) {
+            log::info("[参数面板] 触发「测试选择器」（条目 " + diag_provider + "）");
+            request_selector_check(diag_provider);
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip(dom_entry
+                                  ? "复用只读探测：不写入页面、不发送内容、不读任何值；\n"
+                                    "显示命中数 / 登录判据 / 修复建议（并写入 Console）"
+                                  : "仅对 `adapter=dom` 的网页版条目可用（其它条目没有站点选择器）");
+        }
+
+        if (busy) {
+            ImGui::TextDisabled("正在诊断：%s…（界面保持响应）", diagnostic_title().c_str());
+        }
+        const std::string diag_report_text = diagnostic_report();
+        if (!diag_report_text.empty()) {
+            const int   code    = diagnostic_code();
+            const char* verdict = code == 0 ? "通过"
+                                            : (code == 2 ? "未就绪 / 缺 Key"
+                                                         : (code == 3 ? "需人工登录" : "失败"));
+            ImGui::TextDisabled("%s · 最近结果（%s）：%s", diagnostic_title().c_str(), verdict,
+                                diagnostic_summary().c_str());
+            if (ImGui::CollapsingHeader(("诊断明细##diag_" + node->id).c_str())) {
+                ImGui::TextUnformatted(diag_report_text.c_str());
+            }
+        }
+    }
 
     // M5-01 收尾：图片输入的尺寸摘要（只读文件头，不需要 GL 上下文）
     // P7a-04/07：先解析资源令牌 → 真实路径；缺失时给可操作告警（不再只说「读不到文件头」）

@@ -234,10 +234,14 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 .\build\bin\api_probe.exe --autosave-assert  # 自动保存/崩溃恢复断言（PC-01/02：原子写 28 项场景；全程在系统临时目录内，不碰用户快照）
                                              # ⚠ 会**临时**写并删除 ~\.brain-ai\providers.d\aiwrite-selftest-site.json（自清理）
 
-# —— 一键跑完所有离线自检（构建 + 12 项自检/夹具 + 站点台账重建 ⇒ 经 `PB2-24` 增至 **13 项**、`PC-01/02` 增至**现行 14 项**，含 `--site-assert` / `--autosave-assert`）——
+# —— 一键跑完所有离线自检（构建 + 离线自检/夹具 + GUI 自检 + 站点台账 + 文档断链 ⇒ `PB2-24` = 13 项、`PC-01/02` = 14 项、**`M_patchAB` 批 5 = 现行 15 项**）——
 powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1
 #   参数：-SkipBuild / -SkipGui / -SkipLoop / -OnlyBuild；打印汇总表 + exit 0/1
 #   物证：build\logs\check_all_<时间戳>.log（各项明细与 build 输出同目录）
+#   构建时也可顺带跑一遍（`PM-03`）：`cd source; .\build.ps1 -SelfCheck`（编译成功后调 check_all，失败指向 check_all 日志）
+
+# —— 文档断链自检（`DBG-L01` 收口 · 判据 = **全库 0** · 已入 `check_all` 第 ⑥ 项）——
+python source\tools\check_links.py            # checked 1197 / broken 0（含仓库根 *.md；剔除代码块与行内代码；退出码 0/1）
 
 # —— 打包「一键安装包」（Inno Setup · `M6-08`）——
 powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [-Version 0.2.0] [-SkipBuild] [-SkipInstaller]
@@ -431,8 +435,42 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 | `vcpkg.json` 的 `webview2` + `CMakeLists.txt` 的 `unofficial-webview2` | **移除**（`PM-01` WebView2 Runtime 检测**作废**；改 `M7B-14` 浏览器检测：Chrome 缺失 → Edge 兜底） |
 | `paths::webview2_profile()` | 退役 → `pydoll_profile()`（`~/.brain-ai/pydoll-profile`）；旧目录**保留为遗留、不自动删** |
 
-## 5. 在 VS Code 中调试（F5）
+### 4.4 可插拔 Provider（L2 底座 · 2026-10-11 · `M_patchAB` 批 6）
 
+> **一句话**：**换厂商 = 表里加一条 / 换协议 = 工厂加一个分支**；节点侧只认一份接口。
+
+| 层 | 文件 | 职责 |
+|---|---|---|
+| 接口 | `ai/include/inference_provider.h` + `ai/src/inference_provider.cpp` | `GenerateParams` / `GenerateResult` / `class InferenceProvider{name, protocol, caps, generate}`；**能力门控** `capability_gate()`（纯函数，节点 / 界面 / 自检同一判据）与 `caps_for_call()`（**无表条目时守老行为**） |
+| 传输 | `ai/include/http_json.h` + `ai/src/http_json.cpp` | 通用 JSON POST：**可取消**（`run_cancellable` ⇒ 取消立即返回）· 表驱动连接 / 读超时 · 4 MB 响应上限 · `raw_head` 诊断；纯函数 `append_query_param` / `parse_json_text` / `json_error_message` |
+| 协议 | `ai/src/anthropic_provider.cpp`（Messages API）· `ai/src/gemini_provider.cpp`（generateContent）· `ai/src/deepseek/deepseek_official_provider.cpp`（openai 兼容，含多模态） | 各自的**请求体构造 / 响应解析 / 错误文案**（构造与解析都是纯函数 ⇒ `--selftest` V-13 离线断言） |
+| 网页版 | `ai/src/deepseek/deepseek_web_client.cpp`（经 `DeepSeekWebProvider` 收编）· `ai/src/dom_web_client.cpp`（`protocol=dom`） | 网页版通道**不经工厂**的 `dom` 由 DOM 适配器承载（需要页面上下文） |
+| 分派 | `ai/include/provider_factory.h` + `ai/src/provider_factory.cpp` | 按表 `protocol` 建 provider；**未知 `protocol` 明确报错**（`R9`，绝不静默回落） |
+| 接线 | `nodes/src/local_nodes.cpp` | 门控 / 提示**全部来自表 `capabilities`**（不再有 `mode == "web"` 之类的硬编码分流） |
+
+**新增一家（openai 兼容）**：往 `~/.brain-ai/providers.d/xx.json` 写一条 `{id, display, kind:"official", protocol:"openai", api_base, chat_path, auth_style, env_names, capabilities{…}, models[…]}`（**嵌套**写法，见 `ai/include/provider_spec.h` 头注释）→ 界面「设置 → 提供商与站点表 → 重新加载配置表」→ 下拉即出现。
+**新增一条协议**：实现 `InferenceProvider`（建议直接复用 `http_json`）+ 在 `provider_factory.cpp` 分发 + `provider_spec.cpp` 的 `implemented_protocols()` 同步登记 —— **`--selftest` 的 V-14 会替你核对**「表里每条 `protocol` 都有实现」。
+**验证命令**：`api_probe.exe --selftest`（V-13 请求构造 / V-14 工厂分派与门控 / V-15 回环端到端）· `api_probe.exe --exec-selftest` · `aiwrite.exe --provider-selftest --provider anthropic|gemini`（需 Key）· `aiwrite.exe --provider-dump`（末行给出**已实现协议**）。
+
+### 4.5 网络与凭据（代理 / 自签证书 / 凭据库 · 2026-10-11 · `M_patchAB` 批 7）
+
+> **一句话**：出不去就填代理；证书不受信才开自签兼容（**默认严格**）；API Key 一律 DPAPI 加密落盘（**永不落明文**）。
+
+| 项 | 配置（`config.toml`） | 行为 |
+|---|---|---|
+| 代理 | `[network].proxy` | 手填优先；例 `http://127.0.0.1:7890`（带 `user:pass@` 也支持；日志里口令**打码**） |
+| 读环境变量 | `[network].proxy_from_env`（默认 **true**） | 按目标 scheme 取 `HTTPS_PROXY` / `HTTP_PROXY`，兜底 `ALL_PROXY`（大小写都试） |
+| 排除清单 | `[network].no_proxy` | 非空则**覆盖**环境变量 `NO_PROXY`；支持 `*` · `host` · `.corp.com` 后缀 · `host:port` · 逗号分隔 |
+| 自签证书 | `[network].insecure_tls`（默认 **false = 严格校验**） | 唯一开关；界面打开时红字「⚠ 危险」；**只在内网/离线环境使用** |
+| 凭据位置 | `[credentials].dir` | 空 = `~/.brain-ai/credentials` |
+| 凭据保留 | `[credentials].ttl_days` | 「即将过期」提示 + 启动惰性清理（`0` = 不清理） |
+| 凭据后端 | `[credentials].backend` | 本版本**只支持** `dpapi`；其它值 ⇒ `save/load` **明确报错且不写任何文件** |
+
+**优先级（好解释、可断言）**：`NO_PROXY` 命中 ⇒ **直达** → `[network].proxy` → 环境变量（按 scheme）→ `ALL_PROXY`。
+**自检**：`api_probe.exe --selftest` 的 **V-16**（16 条）—— 含**回环证明**（把代理指到本机 `httplib::Server`：目标域名**不存在**但请求经代理成功，服务器侧回读**绝对 URI**）与**回环反面**（直达时代理**收不到**请求）；`api_probe.exe --settings-assert` 覆盖代理 / TTL / 后端三类非法值。
+**诊断**：`aiwrite.exe --cred-list` / `--cred-purge` 都会打印「后端 / 保留天数」；`api_probe.exe --diag-dump` 的 `[凭据]` 节新增「后端 / TTL」一行（**不出条目名与密钥**）。
+
+## 5. 在 VS Code 中调试（F5）
 已提供 `.vscode/launch.json`（7 个配置）与 `.vscode/tasks.json`（9 个任务）：
 
 1. 打开工作区 `F:\GameDao\Tools\AIwrite`
@@ -547,5 +585,9 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 | `utils/src/file_dialog.cpp` | 原生文件/目录对话框（nativefiledialog-extended，`NFD::Init/Quit` 配对） |
 | `utils/src/image_decode.cpp` | **图片格式嗅探 + 解码（M7 · 冻结区）**：魔数嗅探（内容优先）/ stb 与 WIC 双后端 / WIC 能力枚举 / 可操作错误文案 |
 | `utils/src/asset_store.cpp` | **统一资源目录（P7a-04）**：内容寻址归档 `<SHA3-256>.<ext>`（同内容一份）/ 令牌 `aiwrite-asset:<摘要>` 解析 / 缺失文案（`~/.brain-ai/assets/images/`） |
-| `tools/api_probe.cpp` | V-04/V-05/V-06 命令行验证工具 + `--graph-selftest` 图模型自检 + `--exec-selftest` 执行器自检 |
+| `ai/include/inference_provider.h` · `ai/src/inference_provider.cpp` | **L2 底座（`M_patchAB` 批 6）**：统一推理接口 + 能力门控（`capability_gate` / `caps_for_call`）+ openai 兼容与内置网页版实现 |
+| `ai/include/provider_factory.h` · `ai/src/provider_factory.cpp` | **L2 分派**：按表 `protocol` 建 provider（`openai` / `anthropic` / `gemini` / `deepseek-web`）；未知 protocol 明确报错（`R9`） |
+| `ai/include/http_json.h` · `ai/src/http_json.cpp` | **L2 传输**：通用 JSON POST（可取消 / 表驱动超时 / 响应上限 / 诊断）+ query 拼接 / JSON 解析 / 错误提取纯函数 |
+| `ai/src/anthropic_provider.cpp` · `ai/src/gemini_provider.cpp` | **L2 协议**：Anthropic Messages API · Gemini generateContent（请求构造与响应解析均为纯函数） |
+| `tools/api_probe.cpp` | V-04/V-05/V-06 命令行验证工具 + `--graph-selftest` 图模型自检 + `--exec-selftest` 执行器自检 + `--selftest` 十二组（含 V-11…V-15） |
 | `tools/webview2_login.cpp` | V-03 WebView2 登录 + Cookie 提取（仅内存，脱敏打印）—— ⚠️ **计划删除**（`M7B-30`，改 `pydoll_login`） |

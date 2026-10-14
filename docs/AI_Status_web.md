@@ -20,7 +20,7 @@
 ## 二、网页版台账（11 站 · 机器生成 · 跨轮累积）
 
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-11 · 覆盖轮次 0：
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-14 · 覆盖轮次 0：
 > **范围**：`kind=web` 的 **11 站**（DOM 自动化 10 站 + 协议型适配器 `deepseek-web` 1 站）· **文字理解**判据 = S3 **三口径**（`rc=0` + `n3=done` + 归档正文非站侧错误/忙碌串）；**图片理解**判据 = 站点上传双证据 + 取回正文。
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > 来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。

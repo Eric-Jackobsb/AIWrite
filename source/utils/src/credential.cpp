@@ -1,5 +1,6 @@
 #include "credential.h"
 
+#include "config.h" // M_patchAB §2.3（PB-06 剩余）：[credentials] backend / dir / ttl_days
 #include "log.h"
 #include "paths.h"
 
@@ -186,13 +187,39 @@ bool dpapi_unprotect(const std::string&, std::string*, std::string* error)
 
 std::string credentials_dir()
 {
+    // M_patchAB §2.3（`PB-06` 剩余）：目录取自 `config.toml [credentials].dir`
+    //  * 空 ⇒ 默认 `~/.brain-ai/credentials`（与改造前逐字一致）
+    //  * 未初始化配置缓存（进程早期 / 工具）⇒ `app_config()` 返回默认值 ⇒ 仍是默认目录
+    const Config& config = app_config();
+    if (!config.credentials.dir.empty()) {
+        const std::filesystem::path expanded = paths::expand(config.credentials.dir);
+        if (!expanded.empty()) {
+            return expanded.string();
+        }
+    }
     return (paths::data_root() / "credentials").string();
+}
+
+std::string credentials_backend_error()
+{
+    // 只实现 dpapi（Windows 当前用户作用域）；其它 backend ⇒ **明确报错**而不是静默降级
+    const Config& config = app_config();
+    if (config.credentials.backend.empty() || config.credentials.backend == "dpapi") {
+        return {};
+    }
+    return "凭据后端「" + config.credentials.backend +
+           "」尚未实现（本版本只支持 dpapi；请在 config.toml [credentials].backend 改回 dpapi）";
 }
 
 bool save_credential(const std::string& ref, const std::string& secret, std::string* error)
 {
     if (ref.empty() || secret.empty()) {
         if (error != nullptr) { *error = "ref 或 secret 为空"; }
+        return false;
+    }
+    // M_patchAB §2.3（PB-06 剩余）：凭据后端未实现 ⇒ 明确拒绝（不静默降级成明文）
+    if (const std::string backend_error = credentials_backend_error(); !backend_error.empty()) {
+        if (error != nullptr) { *error = backend_error; }
         return false;
     }
     const std::string dir = credentials_dir();
@@ -233,6 +260,11 @@ bool save_credential(const std::string& ref, const std::string& secret, std::str
 
 std::string load_credential(const std::string& ref, std::string* error)
 {
+    // M_patchAB §2.3（PB-06 剩余）：后端未实现 ⇒ 直接给出**可操作**原因（不是「凭据不存在」）
+    if (const std::string backend_error = credentials_backend_error(); !backend_error.empty()) {
+        if (error != nullptr) { *error = backend_error; }
+        return {};
+    }
     const std::string path = file_for(ref);
     std::ifstream     stream(path, std::ios::binary);
     if (!stream) {

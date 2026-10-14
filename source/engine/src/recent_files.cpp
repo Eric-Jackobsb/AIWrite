@@ -124,4 +124,51 @@ void clear_recent_files()
     save_recent({});
 }
 
+// ---- M_patchAB §4（PC-03 / FEA-M2-02）：最近列表治理 ----
+
+std::vector<RecentStatus> recent_with_status()
+{
+    std::vector<RecentStatus> result;
+    for (const RecentEntry& entry : load_recent_files()) {
+        RecentStatus status;
+        status.entry  = entry;
+        std::error_code ec;
+        status.exists = std::filesystem::is_regular_file(entry.path, ec) && !ec;
+        result.push_back(std::move(status));
+    }
+    return result;
+}
+
+std::size_t count_missing_recent()
+{
+    std::size_t missing = 0;
+    for (const RecentStatus& status : recent_with_status()) {
+        if (!status.exists) {
+            ++missing;
+        }
+    }
+    return missing;
+}
+
+std::size_t prune_missing_recent()
+{
+    const std::vector<RecentEntry>  entries = load_recent_files();
+    std::vector<RecentEntry>        kept;
+    std::size_t                     removed = 0;
+    for (const RecentEntry& entry : entries) {
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(entry.path, ec) && !ec) {
+            kept.push_back(entry);
+        }
+        else {
+            ++removed;
+            log::info("[最近列表] 清理失效条目: " + entry.path);
+        }
+    }
+    if (removed > 0) {
+        save_recent(kept); // 写盘（失败时 save_recent 自己记 warn）
+    }
+    return removed;
+}
+
 } // namespace aiwrite::engine

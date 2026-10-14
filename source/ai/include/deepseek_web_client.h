@@ -11,8 +11,10 @@
 // ============================================================================
 
 #include <functional>
+#include <memory>
 #include <string>
 
+#include "cancel_token.h"     // M_patchAB §2.1（PB-02）：协作式取消（真取消）
 #include "provider_spec.h"   // M_patchB L1（PB2-05）：站点端点来自配置表
 #include "session_store.h"
 #include "web_owner.h"       // M_patchC（PW-02）：归属（纯数据）
@@ -36,6 +38,8 @@ struct WebChatRequest {
     // M_patchC（`PW-02`）：归属 —— 与节点级 DOM 路径一致（同 owner + 同站点 ⇒ 复用同一个窗口；
     // 空 = 未标注，CLI 等无节点上下文的调用点用）
     web::WebOwner        owner;
+    // ---- M_patchAB §2.1（PB-02 真取消）：本次调用的取消令牌（空 = 不可取消）----
+    std::shared_ptr<const CancelToken> cancel;
 };
 
 struct WebChatResult {
@@ -45,6 +49,8 @@ struct WebChatResult {
     std::string raw_head;     // 原始响应前 N 行（诊断）
     long long   pow_attempts = 0;
     std::string error;
+    // M_patchAB §2.1（PB-02 真取消）：本次失败是否**因取消**（取消 ≠ 站点/网络错误）
+    bool        cancelled    = false;
 };
 
 // 用内存会话调用网页版生成；不落盘、不写日志明文（日志只记长度与状态）

@@ -1,5 +1,7 @@
 #include "deepseek_web_client.h"
 
+#include "cancel_token.h"   // M_patchAB §2.1（PB-02 真取消）：CancelWatch（主动关 socket）
+
 #include "web_pow.h"
 #include "log.h"
 #include "webview_host.h"
@@ -193,6 +195,15 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
     client.set_read_timeout(180, 0);
     client.enable_server_certificate_verification(true);
 
+    // ---- M_patchAB §2.1（PB-02 真取消）：网页版请求也受同一令牌管 ----
+    //  * 置位 ⇒ `Client::stop()` 主动关 socket（挑战 / 求解 / 生成三段都在同一连接上）
+    if (request.cancel != nullptr && request.cancel->cancelled()) {
+        result.cancelled = true;
+        result.error     = "已取消（用户点了「停止」）：请求未发出";
+        return result;
+    }
+    CancelWatch cancel_watch(request.cancel.get(), [&client] { client.stop(); });
+
     // ---------------------------------------------------------- 1) 挑战 -----
     const httplib::Headers headers = base_headers(session, endpoints.host);
     const std::string      challenge_path = endpoints.challenge_path.empty()
@@ -206,6 +217,12 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
                     nlohmann::json{{"target_path", completion_path}}.dump(),
                     "application/json");
     if (!challenge_resp) {
+        // PB-02：挑战阶段就被取消 ⇒ 归因「已取消」（不是站点/网络错误）
+        if (cancel_watch.aborted() || cancel_watch.cancelled()) {
+            result.cancelled = true;
+            result.error     = "已取消（用户点了「停止」）：挑战请求被中断";
+            return result;
+        }
         result.error = "挑战请求失败: " + httplib::to_string(challenge_resp.error());
         return result;
     }
@@ -291,8 +308,24 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
     body["thinking_enabled"] = request.thinking_enabled;
     body["search_enabled"]   = request.search_enabled;
 
+    // ---- M_patchAB §2.1（PB-02 真取消）：生成前协作检查点 ----
+    //  * 求解 / 会话准备期间被取消 ⇒ **不发**这一发请求（省流量、避免留痕）
+    //  * 请求**进行中**的中断为尽力而为（httplib 0.15.3 `Client::stop()` 不唤醒阻塞读；
+    //    官方 API 路径已改用「可取消执行」`ai::run_cancellable` —— 网页版保持单连接流程，
+    //    延迟上限 = 读超时 180 s，已登记真机批复核）
+    if (cancel_watch.cancelled()) {
+        result.cancelled = true;
+        result.error     = "已取消（用户点了「停止」）：生成请求未发出";
+        return result;
+    }
     const auto response =
         client.Post(completion_path, call_headers, body.dump(), "application/json");
+    if (cancel_watch.aborted() || cancel_watch.cancelled()) {
+        result.cancelled = true;
+        result.error     = "已取消（用户点了「停止」）：生成请求被中断（socket 已关闭）";
+        log::info("[网页版] 已取消：生成请求被中断");
+        return result;
+    }
     if (!response) {
         result.error = "调用失败: " + httplib::to_string(response.error());
         return result;

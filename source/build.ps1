@@ -8,6 +8,7 @@
 #      .\build.ps1 -Target aiwrite      # 只编译某个目标
 #      .\build.ps1 -LogName my.log      # 自定义日志文件名（仍落 build/logs/）
 #      .\build.ps1 -NoLog               # 本次不写日志
+#      .\build.ps1 -SelfCheck           # 编译成功后再跑「一键自检」并输出摘要（PM-03）
 #
 #  产物：<AIWRITE_ROOT>/build/bin/{aiwrite,api_probe,webview2_login}.exe
 #
@@ -26,7 +27,12 @@ param(
 
     [string]$LogName = '',
 
-    [switch]$NoLog
+    [switch]$NoLog,
+
+    # M_patchAB §6（PM-03）：编译成功后再跑「一键自检」并输出摘要（默认关 ⇒ 不拖慢日常构建）
+    #  * 自检 = `tools/check_all.ps1`（构建 / 自检 / 夹具 / GUI 自检 / 站点台账 共 14 项）
+    #  * 失败时给**日志文件路径 + 失败项名**（逐项明细在 check_all 日志里；行号级细节看各工具日志）
+    [switch]$SelfCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -119,6 +125,24 @@ try {
         Get-ChildItem $binDir -Filter '*.exe' | ForEach-Object {
             Write-BuildLog ('   ' + $_.Name + '  ' + [math]::Round($_.Length / 1KB, 1) + ' KB')
         }
+    }
+
+    # ---- M_patchAB §6（PM-03）：`-SelfCheck` ⇒ 编译成功后跑「一键自检」并输出摘要 ----
+    if ($SelfCheck) {
+        $checkAll = Join-Path $sourceDir 'tools/check_all.ps1'
+        Write-BuildLog "[build] 一键自检: $checkAll" 'Cyan'
+        if (-not (Test-Path $checkAll)) {
+            Write-BuildLog "[build] 自检脚本缺失：$checkAll" 'Red'
+            throw "自检脚本缺失 (PM-03)"
+        }
+        # 自检自身会再跑一次构建（幂等、全增量）；失败项与日志路径由它打印
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $checkAll
+        $script:SelfCheckExit = $LASTEXITCODE
+        if ($script:SelfCheckExit -ne 0) {
+            Write-BuildLog "[build] 自检失败（exit=$script:SelfCheckExit）—— 明细见 build\logs\check_all_*.log" 'Red'
+            throw "一键自检失败 (exit=$script:SelfCheckExit)"
+        }
+        Write-BuildLog '[build] 一键自检通过（明细见上方 check_all 汇总）' 'Green'
     }
 }
 catch {

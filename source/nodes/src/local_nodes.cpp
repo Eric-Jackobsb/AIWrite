@@ -2,9 +2,13 @@
 
 #include "provider_spec.h"          // M_patchB L1：配置表（生效提供商 / 站点端点）
 #include "provider_resolve.h"   // M_patchB L1：EffectiveProvider
+#include "inference_provider.h" // M_patchAB §3.1（B2-b · PB2-12）：能力门控（表驱动）
 
 #include "deepseek_official_provider.h"
+#include "cancel_token.h"     // M_patchAB §2.1（PB-02）：取消令牌 / 可中断等待
 #include "credential.h"
+#include "config.h"           // M_patchAB §2.6（PB-08 残项）：timeout.* / error.* 接线
+#include "retry_policy.h"     // M_patchAB §2.6：可重试状态 / 退避 / 次数钳制（纯函数）
 #include "asset_store.h"         // P7a-04：资源令牌解析（统一资源目录）
 #include "paths.h"               // P7a-01/02：image 端口多值 + 多选路径解析
 #include "deepseek_web_client.h"
@@ -443,10 +447,25 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         throw engine::NodeError("文本生成：提示词为空（请连接 PromptTemplate 或直接填写 prompt）");
     }
 
-    // 网页版：把 system_prompt 前置拼进 prompt（网页版请求体没有 system 角色槽位）
-    const std::string system_prompt = params.value("system_prompt", std::string());
-    std::string       prompt        = prompt_raw;
-    if (mode == "web" && !system_prompt.empty()) {
+    // ---- M_patchAB §3.1（`B2-b` · `PB2-12`）：**能力驱动**（门控与提示文案来自配置表）----
+    //  * 取代此前散落的 `mode == "web"` 硬编码判断：视觉 / seed / 系统角色由表 `capabilities` 决定
+    //  * 无表条目时按调用通道取能力（`web` → 内置网页版协议的能力），守 `I2` 既有行为
+    const std::string        system_prompt = params.value("system_prompt", std::string());
+    const int                seed_param    = params.value("seed", 0);
+    const ai::ProviderCaps   caps          = ai::caps_for_call(effective.spec, mode == "web");
+    ai::GenerateParams       gate_params;
+    gate_params.system_prompt = system_prompt;
+    gate_params.seed          = seed_param;
+    const ai::CapabilityGate gate = ai::capability_gate(caps, gate_params, false);
+    for (const std::string& warning : gate.warnings) {
+        ctx.console("[文本生成] " + warning);
+    }
+    if (!gate.blocking.empty()) {
+        throw engine::NodeError("文本生成：" + gate.blocking.front());
+    }
+    std::string prompt = prompt_raw;
+    if (gate.system_prompt_inlined) {
+        // 该通道没有 system 角色槽位 ⇒ 前置拼接（与改造前网页版口径逐字一致）
         prompt = system_prompt + "\n\n" + prompt;
     }
 
@@ -479,10 +498,54 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
                                     "）");
         }
         console_provider_line(ctx, "[文本生成]", effective, "official");
+        // PB-02（真取消）：把本运行的取消令牌交给 HTTP 层（置位 ⇒ 主动关 socket）
+        official.cancel = ctx.cancel_token;
+
+        // ---- M_patchAB §2.6（`PB-08` 残项）：把 `config.toml [timeout] / [error]` 接上线 ----
+        //  * 超时：**表未声明**（`limits.* <= 0`）时才用配置值（表优先，PB2-04 口径不变）
+        //  * 重试：`error.retry_enabled / retry_count / retry_interval_ms` —— 只对**可重试**失败
+        //    （429 / 5xx / 网络超时）重试；凭证 / 余额 / 请求不合法**不重试**（避免加剧风控）
+        const aiwrite::Config& runtime_config = aiwrite::app_config();
+        if (official.options.connect_timeout_s <= 0) {
+            official.options.connect_timeout_s =
+                std::max(1, runtime_config.timeout.connect_ms / 1000);
+        }
+        if (official.options.read_timeout_s <= 0) {
+            official.options.read_timeout_s =
+                std::max(1, runtime_config.timeout.first_byte_ms / 1000);
+        }
+        const int max_retries =
+            ai::clamp_retry_count(runtime_config.error.retry_enabled,
+                                  runtime_config.error.retry_count);
         ctx.console("[文本生成] 官方 API 请求：" + official.model + "，提示词 " +
                     std::to_string(official.prompt.size()) + " 字节" +
-                    (system_prompt.empty() ? "" : "（含系统提示词）"));
-        const ai::OfficialChatResult official_result = ai::official_chat(official);
+                    (system_prompt.empty() ? "" : "（含系统提示词）") +
+                    (max_retries > 0 ? ("；重试上限 " + std::to_string(max_retries) + " 次") : ""));
+        ai::OfficialChatResult official_result;
+        for (int attempt = 0;; ++attempt) {
+            official_result = ai::official_chat(official);
+            if (official_result.ok && !official_result.text.empty()) {
+                break;
+            }
+            // 取消优先：取消导致的失败**不重试**（归因由执行器记「[取消]」）
+            if (official_result.cancelled || ctx.is_cancelled()) {
+                throw engine::NodeError(
+                    official_result.error.empty()
+                        ? std::string("文本生成（官方 API）已取消（用户点了「停止」）")
+                        : official_result.error);
+            }
+            if (attempt >= max_retries ||
+                !ai::http_status_retryable(official_result.http_status)) {
+                break; // 不可重试 / 已用尽
+            }
+            const int delay_ms = ai::retry_delay_ms(runtime_config.error.retry_interval_ms, attempt);
+            ctx.console("[文本生成] 第 " + std::to_string(attempt + 1) + " 次重试（HTTP " +
+                        std::to_string(official_result.http_status) + "，等 " +
+                        std::to_string(delay_ms) + " ms；可重试失败 = 429 / 5xx / 网络超时）");
+            if (ai::sleep_interruptible(ctx.cancel_token.get(), delay_ms)) {
+                throw engine::NodeError("文本生成（官方 API）已取消（用户点了「停止」）：重试等待被中断");
+            }
+        }
         if (!official_result.ok || official_result.text.empty()) {
             throw engine::NodeError("文本生成（官方 API）失败：" +
                                     (official_result.error.empty() ? std::string("未取到文本")
@@ -576,6 +639,7 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     request.prompt           = prompt;
     request.model_type       = (model == "expert") ? "expert" : "default";
     request.thinking_enabled = (model == "deepseek-reasoner");
+    request.cancel           = ctx.cancel_token; // PB-02（真取消）：挑战 / 生成两段都可中断
     // M_patchB L1（PB2-05 / PB2-17）：站点端点来自**生效条目**（PB2-22：站点不可用时上面已抛错，不会用内置默认）
     if (!site.endpoints.host.empty()) {
         request.endpoints = site.endpoints;
@@ -595,16 +659,13 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         request.on_delta = ctx.on_delta;
     }
 
-    // 网页版不支持采样参数：参数保持默认即无提示；改过则提示一次（官方 API 生效见 PB-05）
+    // 采样参数：该通道的请求体没有这些槽位（协议口径，`deepseek-web` 的请求体只有
+    // prompt/model_type/thinking/search）——改过就提示一次；seed 由上面的**能力门控**统一提示
     const double temperature = params.value("temperature", 0.7);
     const int    max_tokens  = params.value("max_tokens", 2048);
     const double top_p       = params.value("top_p", 1.0);
-    if (params.value("seed", 0) > 0) {
-        ctx.console("[文本生成] 提示：网页版不支持 seed，已忽略（重跑本身即会产生不同结果；"
-                    "需要可复现请切官方 API）");
-    }
     if (temperature != 0.7 || max_tokens != 2048 || top_p != 1.0) {
-        ctx.console("[文本生成] 提示：网页版不支持 temperature / max_tokens / top_p，已忽略"
+        ctx.console("[文本生成] 提示：本通道不支持 temperature / max_tokens / top_p，已忽略"
                     "（这些参数仅对官方 API 生效）");
     }
 
@@ -732,9 +793,10 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
                     (dom.steps.empty() ? "" : ("｜" + dom.steps)));
         return dom.text;
     }
-    // 能力门控（表驱动）：表内声明 vision=false 的模型直接拒绝；表外模型放行（交给后端报错）
+    // 能力门控（`PB2-12`，表驱动）：① 逐模型的视觉声明（表内 vision=false ⇒ 拒绝并给替代）
+    //                              ② provider 级 `capabilities.vision`（表里声明不支持 ⇒ 拦路）
+    bool declared = false;
     if (effective.spec != nullptr) {
-        bool declared = false;
         if (!ai::spec_model_supports_vision(*effective.spec, model, &declared)) {
             const std::string suggested = !effective.spec->vision_model_default.empty()
                                               ? effective.spec->vision_model_default
@@ -748,14 +810,20 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
                         " 的视觉能力，已按允许调用处理（若失败请改用表内视觉模型）");
         }
     }
+    const ai::ProviderCaps vlm_caps = ai::caps_for_call(effective.spec, false);
+    ai::GenerateParams     vlm_gate_params;
+    vlm_gate_params.prompt = prompt;
+    vlm_gate_params.images = images;
+    const ai::CapabilityGate vlm_gate = ai::capability_gate(vlm_caps, vlm_gate_params, true);
+    for (const std::string& warning : vlm_gate.warnings) {
+        ctx.console("[图片理解] " + warning);
+    }
+    if (!vlm_gate.blocking.empty()) {
+        throw engine::NodeError("图片理解：" + vlm_gate.blocking.front());
+    }
     if (model.empty()) {
         throw engine::NodeError("图片理解：未解析到模型名（请连接「提供商配置」节点，"
                                 "并在「模型（自定义）」填写视觉模型名，如 glm-4v-flash）");
-    }
-    if (model == "deepseek-chat" || model == "deepseek-reasoner") {
-        ctx.console("[图片理解] 提示：DeepSeek 官方 API 无视觉模型；请把「提供商配置」的 API 地址与"
-                    "「模型（自定义）」改为兼容的视觉服务（如智谱 https://open.bigmodel.cn/api/paas/v4 + "
-                    "glm-4v-flash）");
     }
     for (const std::string& path : images) {
         std::error_code code;
@@ -793,6 +861,8 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
                                                            : effective.key_ref));
     }
     console_provider_line(ctx, "[图片理解]", effective, "official");
+    // PB-02（真取消）：图片理解同样受本运行的取消令牌管（多模态编码完成后即发请求）
+    official.cancel = ctx.cancel_token;
 
     ctx.console("[图片理解] 请求：" + official.model + "，图片 " + std::to_string(images.size()) +
                 " 张，提示词 " + std::to_string(prompt.size()) + " 字节" +

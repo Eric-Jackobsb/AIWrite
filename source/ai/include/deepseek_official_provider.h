@@ -22,6 +22,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cancel_token.h"    // M_patchAB §2.1（PB-02）：协作式取消（真取消）
 #include "provider_spec.h"   // M_patchB L1 / PB2-04：按表取端点·认证·env·超时
 
 namespace aiwrite::ai {
@@ -58,6 +59,9 @@ struct OfficialChatRequest {
     int         seed        = 0; // M_rerun：>0 时随请求发送（0 = 不指定）
     // M_patchB L1：请求参数（端点 / 认证 / env / 超时）；默认值 = 改造前行为
     ProviderOptions options;
+    // ---- M_patchAB §2.1（PB-02 真取消）：本次调用的取消令牌（空 = 不可取消）----
+    //  * 置位 ⇒ 发起前直接返回「已取消」；请求进行中 ⇒ `Client::stop()` 主动关 socket
+    std::shared_ptr<const CancelToken> cancel;
 };
 
 struct OfficialChatResult {
@@ -67,6 +71,8 @@ struct OfficialChatResult {
     std::string error;
     std::string raw_head;
     double      elapsed_ms = 0.0;
+    // M_patchAB §2.1（PB-02 真取消）：本次失败是否**因取消**（取消 ≠ 站点/网络错误）
+    bool        cancelled  = false;
     // M7 / P7a-10：多模态编码指标（供 Console 打印「编码后体积与耗时」）
     //  * encoded_bytes = 全部 data URL 的**字符数**（≈ 原始字节 × 1.33）
     //  * encode_ms     = 本轮图片读取 + base64 的耗时（缓存命中时接近 0）

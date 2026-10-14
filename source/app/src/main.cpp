@@ -12,6 +12,8 @@
 #include "output_panel.h"
 #include "deepseek_official_provider.h"
 #include "provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）
+#include "provider_factory.h"    // L2（B2-b · PB2-09）：按表 protocol 分派
+#include "inference_provider.h"  // L2（B2-b · PB2-08）：统一推理接口（ping 走同一入口）
 #include "node_registry.h"
 #include "workflow_io.h"   // VA-07：graph_to_json（运行前 JSON 基线 / TST-L01 判据）
 #include "deepseek_web_client.h"
@@ -29,6 +31,7 @@
 #include "pipe_client.h"      // M7B 批 1 step 2：命名管道客户端（--pipe-selftest / M7B-02）
 #include "pydoll_channel.h"   // M7B 批 2：新通道（--pydoll-login / --pydoll-selftest）
 #include "session_store.h"   // M_patchB：--provider-selftest 的网页版登录态检查
+#include "connection_test.h" // M_patchAB（PB2-07 / PB2-30②）：退出前收尾后台诊断线程
 #include "session_snapshot.h" // 批 3（FEA-L02）：--web-session-list 的 L2 快照只读元数据
 
 #include <cstdio>
@@ -179,7 +182,7 @@ void print_usage()
     std::printf("                   全新进程必然为空）② L2 DPAPI 快照**只读元数据**（路径 / 字节 / 时间）\n");
     std::printf("                   ③ 每条网页版条目的登录判据配置（cookie_names）\n");
     std::printf("                   退出码 0=清单成功（有无会话都算成功）/ 1=读快照元数据异常\n");
-    std::printf("  --run-selftest [--web]\n");
+    std::printf("  --run-selftest [--web] [--official]\n");
     std::printf("                   执行自检：创建示例工作流 → 运行到结束，打印各节点状态与统计\n");
     std::printf("                   --web：LLMGenerate 走网页版真实生成（需已登录过一次）\n");
     std::printf("                   默认 LLMGenerate 为占位实现，预期该节点 error、下游 skipped\n");
@@ -223,6 +226,106 @@ void print_usage()
     std::printf("                   （需该站点已登录过一次；离屏窗口自动复用，用户无需干预）\n");
 
     std::printf("  --help           显示本帮助\n");
+}
+
+// M_patchAB §2.4（PB-09）：`--run-selftest --official` —— **有 Key 时真实生成一次**
+//  * 语义与其余自检一致：0 = 成功 / 1 = 失败 / 2 = 缺 Key 或参数不可用（**不发请求**）
+//  * 只发**一次**请求（「请只回复 pong」，消耗极小额度）；Key 只以来源 + 长度呈现（脱敏 R20）
+std::string join_names(const std::vector<std::string>& items); // 定义见文件下方（--provider-* 区）
+int official_generate_selftest(const std::string& provider_id)
+{
+    const aiwrite::ai::ProviderSpecs specs = aiwrite::ai::provider_specs();
+
+    // 条目：显式 `--provider <id>` 优先，否则第一个 official 条目
+    std::string entry_id = provider_id;
+    if (entry_id.empty()) {
+        const std::vector<std::string> ids = specs.ids("official");
+        entry_id                           = ids.empty() ? std::string() : ids.front();
+    }
+    if (entry_id.empty()) {
+        std::printf("[官方 API 自检] ✗ 配置表里没有 official 条目\n");
+        return 2;
+    }
+    const aiwrite::ai::ProviderSpec* spec = specs.find(entry_id);
+    if (spec == nullptr) {
+        std::printf("[官方 API 自检] ✗ 表里没有 id=%s（用 --provider-dump 查看全部）\n", entry_id.c_str());
+        return 2;
+    }
+    if (spec->kind != "official") {
+        std::printf("[官方 API 自检] ✗ 条目 %s 不是 official 条目（kind=%s）\n", entry_id.c_str(),
+                    spec->kind.c_str());
+        return 2;
+    }
+    if (spec->protocol != "openai") {
+        std::printf("[官方 API 自检] ✗ 条目 %s 的 protocol=%s 本版本尚未实现（已实现：%s）\n",
+                    entry_id.c_str(), spec->protocol.c_str(),
+                    join_names(aiwrite::ai::implemented_protocols()).c_str());
+        return 2;
+    }
+
+    const std::string api_base = aiwrite::ai::resolve_api_base(*spec, std::string());
+    const std::string model    = aiwrite::ai::resolve_model(*spec, std::string(), std::string(), false);
+    const std::string key_ref  = aiwrite::ai::resolve_key_ref(*spec, std::string());
+    if (api_base.empty()) {
+        std::printf("[官方 API 自检] ✗ 条目 %s 未填 api_base：请用 --api-base 指定，或在 providers.json 补齐\n",
+                    entry_id.c_str());
+        return 2;
+    }
+
+    // Key：环境变量（表内 env 名按序）→ 凭据库（与节点运行期同序，PB-06）
+    std::string       key;
+    std::string       key_source;
+    for (const std::string& env_name : spec->env_names) {
+        const char* value = std::getenv(env_name.c_str());
+        if (value != nullptr && *value != '\0') {
+            key        = value;
+            key_source = "环境变量 " + env_name;
+            break;
+        }
+    }
+    if (key.empty() && !key_ref.empty()) {
+        std::string       load_error;
+        const std::string stored = aiwrite::utils::load_credential(key_ref, &load_error);
+        if (!stored.empty()) {
+            key        = stored;
+            key_source = "凭据库 " + key_ref;
+        }
+    }
+    if (key.empty()) {
+        std::printf("[官方 API 自检] ✗ 未找到 API Key（环境变量 %s / 凭据库 %s）\n"
+                    "  提示：在界面「提供商配置 → API Key」填一次即入库（PB-06）\n",
+                    join_names(spec->env_names).c_str(), key_ref.c_str());
+        return 2;
+    }
+
+    aiwrite::ai::OfficialChatRequest request;
+    request.options         = aiwrite::ai::provider_options_from(*spec);
+    request.api_base        = api_base;
+    request.options.api_base = api_base;
+    request.api_key         = key;
+    request.model           = model;
+    request.prompt          = "请只回复 pong";
+    request.temperature     = 0.0;
+    request.max_tokens      = 16;
+    std::printf("[官方 API 自检] 条目=%s · 地址=%s · 模型=%s · 凭据来源=%s（脱敏：不打印 Key）\n",
+                entry_id.c_str(), api_base.c_str(), model.c_str(), key_source.c_str());
+    std::printf("[官方 API 自检] 发一次真实生成（「请只回复 pong」，消耗极小额度）…\n");
+
+    const aiwrite::ai::OfficialChatResult result = aiwrite::ai::official_chat(request);
+    std::printf("[官方 API 自检] HTTP %d · 耗时 %lld ms · 取消=%s\n", result.http_status,
+                static_cast<long long>(result.elapsed_ms), result.cancelled ? "是" : "否");
+    if (!result.ok || result.text.empty()) {
+        std::printf("[官方 API 自检] FAIL：%s\n",
+                    result.error.empty() ? "未取到文本" : result.error.c_str());
+        return 1;
+    }
+    std::string reply = result.text;
+    if (reply.size() > 120) {
+        reply.resize(120);
+        reply += "…";
+    }
+    std::printf("[官方 API 自检] PASS：回复=[%s]\n", reply.c_str());
+    return 0;
 }
 
 // --run-selftest：不打开窗口，直接验证 EditorState 的运行接线（start_run / tick_run / 状态文本）
@@ -1572,11 +1675,12 @@ int provider_selftest(const std::string& provider_id, const std::string& api_bas
     }
 
     // ---- API 条目：协议实现检查 → Key 解析（env 列表 → 凭据库）→ 一条 ping ----
-    if (spec->protocol != "openai") {
-        std::printf("[Provider 自检] %s 的 protocol=%s 本版本尚未实现（已实现：%s）"
+    //  * L2（`B2-b` · PB2-09/10/11）：**按表 protocol 经工厂分派**（不再只认 openai）
+    if (!aiwrite::ai::factory_implements(spec->protocol)) {
+        std::printf("[Provider 自检] %s 的 protocol=%s 本版本尚未实现（工厂已实现：%s）"
                     "：跳过联网测试\n",
                     spec->display.c_str(), spec->protocol.c_str(),
-                    join_names(aiwrite::ai::implemented_protocols()).c_str());
+                    aiwrite::ai::factory_protocols_text().c_str());
         return offline_failed == 0 ? 0 : 1;
     }
     const std::string effective_base = aiwrite::ai::resolve_api_base(*spec, api_base);
@@ -1616,15 +1720,27 @@ int provider_selftest(const std::string& provider_id, const std::string& api_bas
     }
     std::printf("[Provider 自检] 凭据来源=%s，发一条 ping（消耗极小额度）…\n", key_source.c_str());
 
-    aiwrite::ai::OfficialChatRequest request;
-    request.api_base    = effective_base;
-    request.model       = effective_model;
-    request.prompt      = "请只回复：pong";
-    request.max_tokens  = 16;
-    request.temperature = 0.0;
-    request.top_p       = 1.0;
-    request.api_key     = key;
-    const aiwrite::ai::OfficialChatResult ping = aiwrite::ai::official_chat(request);
+    // ---- L2（`B2-b`）：经**工厂**按表 protocol 分派（openai / anthropic / gemini 三协议同一入口）----
+    aiwrite::ai::ProviderRuntimeConfig runtime;
+    runtime.api_base    = effective_base;
+    runtime.model       = effective_model;
+    runtime.api_key     = key;
+    runtime.options     = aiwrite::ai::provider_options_from(*spec);
+    runtime.console_tag = "[Provider 自检]";
+    const aiwrite::ai::ProviderCreation created = aiwrite::ai::create_provider(*spec, runtime);
+    if (created.provider == nullptr) {
+        std::printf("[Provider 自检] FAIL：%s\n", created.error.c_str());
+        return 1;
+    }
+    std::printf("[Provider 自检] 协议=%s，实现=%s\n", created.provider->protocol().c_str(),
+                created.provider->name().c_str());
+
+    aiwrite::ai::GenerateParams ping_params;
+    ping_params.prompt      = "请只回复：pong";
+    ping_params.max_tokens  = 16;
+    ping_params.temperature = 0.0;
+    ping_params.top_p       = 1.0;
+    const aiwrite::ai::GenerateResult ping = created.provider->generate(ping_params);
     std::printf("[Provider 自检] HTTP %d，耗时 %.0f ms\n", ping.http_status, ping.elapsed_ms);
     if (!ping.ok || ping.text.empty()) {
         std::printf("[Provider 自检] FAIL：%s\n",
@@ -1644,6 +1760,7 @@ int main(int argc, char** argv)
     bool login_selftest   = false;
     bool run_selftest_flag = false;
     bool run_selftest_web  = false;
+    bool run_selftest_official = false; // M_patchAB §2.4（PB-09）：有 Key 时真实生成一次
     bool web_probe_flag    = false;
     bool web_session_selftest_flag = false;
     bool dom_adapter_selftest_flag = false; // L3（PB2-15）：选择器探测 / 诊断
@@ -1698,10 +1815,18 @@ int main(int argc, char** argv)
             pydoll_login_id = argv[++i];
         }
         else if (arg == "--cred-list") {
+            // M_patchAB §2.3（PB-06 剩余）：TTL 取自 `[credentials].ttl_days`
+            //  * CLI 分支早于界面配置加载 ⇒ 这里先**只读**载入一次真实配置（与 api_probe 同口径）
+            aiwrite::Config cli_config;
+            if (aiwrite::load_config(aiwrite::paths::config_file(), cli_config)) {
+                aiwrite::set_app_config(cli_config);
+            }
+            const int ttl_days = aiwrite::app_config().credentials.ttl_days;
             const std::vector<aiwrite::utils::CredentialInfo> items =
-                aiwrite::utils::list_credentials(30);
-            std::printf("凭据库（%s）：%zu 条\n", aiwrite::utils::credentials_dir().c_str(),
-                        items.size());
+                aiwrite::utils::list_credentials(ttl_days);
+            std::printf("凭据库（%s）：%zu 条（后端 %s / 保留 %d 天）\n",
+                        aiwrite::utils::credentials_dir().c_str(), items.size(),
+                        aiwrite::app_config().credentials.backend.c_str(), ttl_days);
             for (const aiwrite::utils::CredentialInfo& info : items) {
                 std::printf("  %-28s 更新=%lld 剩余TTL=%d 天\n", info.ref.c_str(),
                             info.updated_at, info.ttl_remaining_days);
@@ -1731,9 +1856,15 @@ int main(int argc, char** argv)
             return failed == 0 ? 0 : 1;
         }
         else if (arg == "--cred-purge") {
+            aiwrite::Config cli_config;
+            if (aiwrite::load_config(aiwrite::paths::config_file(), cli_config)) {
+                aiwrite::set_app_config(cli_config);
+            }
+            const int   ttl_days = aiwrite::app_config().credentials.ttl_days;
             std::string purge_error;
-            const int   removed = aiwrite::utils::purge_expired_credentials(30, &purge_error);
-            std::printf("已清理过期凭据 %d 个（TTL 30 天）\n", removed);
+            const int   removed = aiwrite::utils::purge_expired_credentials(ttl_days, &purge_error);
+            std::printf("已清理过期凭据 %d 个（TTL %d 天，取自 [credentials].ttl_days）\n", removed,
+                        ttl_days);
             return 0;
         }
         else if (arg == "--web-probe") {
@@ -1834,6 +1965,9 @@ int main(int argc, char** argv)
         }
         else if (arg == "--web") {
             run_selftest_web = true; // 与 --run-selftest 组合：真实调用网页版生成
+        }
+        else if (arg == "--official") {
+            run_selftest_official = true; // 与 --run-selftest 组合：有 Key 时真实生成一次（PB-09）
         }
         else if (arg == "--timeout") {
             if (i + 1 >= argc) {
@@ -2194,13 +2328,21 @@ int main(int argc, char** argv)
 
     // 执行自检（不需要 GUI）：验证 EditorState 的运行接线
     if (run_selftest_flag) {
-        const int selftest_code = run_selftest(run_selftest_web, provider_id);
+        // M_patchAB §2.4（PB-09）：`--run-selftest --official` = 有 Key 时**真实生成一次**
+        // （与 `--run-selftest` / `--run-selftest --web` 并列；缺 Key ⇒ 2，语义同其余自检）
+        const int selftest_code = run_selftest_official && !run_selftest_web
+                                      ? official_generate_selftest(provider_id)
+                                      : run_selftest(run_selftest_web, provider_id);
         aiwrite::log::info("AIwrite 运行自检退出，返回码 " + std::to_string(selftest_code));
         aiwrite::log::shutdown();
         return selftest_code;
     }
 
     const int exit_code = aiwrite::ui::run(options);
+
+    // 退出前收尾：后台诊断线程（`PB2-07` / `PB2-30②`）→ 再关网页版窗口 → 最后关日志
+    //  * 顺序理由：诊断可能正在用站点窗口 / 写日志 ⇒ 先等它结束（超时则分离并如实记日志）
+    aiwrite::ui::stop_diagnostics();
 
     // 若用户留着网页版登录窗口就退出了程序：先收尾（关窗口、等线程结束），再关日志
     aiwrite::web::stop_login_window();

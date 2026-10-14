@@ -205,8 +205,9 @@ void Executor::recordRun(const Node& node, NodeState state, double duration_ms, 
 // ---------------------------------------------------------------- Executor ----
 Executor::Executor()
 {
-    ctx_.outputs   = &outputs_;
-    ctx_.cancelled = &cancelled_;
+    ctx_.outputs      = &outputs_;
+    ctx_.cancelled    = &cancelled_;
+    ctx_.cancel_token = cancel_token_; // M_patchAB（PB-02）：节点把令牌交给 HTTP 层
     // PB-03：节点实现按段吐出的增量 → 统一在异步模式下转成事件
     ctx_.on_delta  = [this](const std::string& text) { handleDelta(text); };
 }
@@ -243,6 +244,9 @@ void Executor::reset()
     state_ = ExecState::Idle;
     current_node_.clear();
     cancelled_ = false;
+    // PB-02：每次运行换一枚**新令牌**（上一轮的取消不影响下一轮）
+    cancel_token_     = std::make_shared<ai::CancelToken>();
+    ctx_.cancel_token = cancel_token_;
     outputs_.clear();
     run_infos_.clear();
     start_time_ = {};
@@ -253,6 +257,9 @@ void Executor::cancel()
 {
     if (state_ == ExecState::Running) {
         cancelled_ = true;
+        if (cancel_token_ != nullptr) {
+            cancel_token_->request_cancel(); // PB-02：唤醒阻塞中的 HTTP 调用（主动关 socket）
+        }
     }
 }
 
@@ -332,7 +339,8 @@ bool Executor::tick(Graph* graph)
         state_    = ExecState::Cancelled;
         end_time_ = std::chrono::steady_clock::now();
         current_node_.clear();
-        ctx_.console("[执行器] 已取消：" + summary());
+        // PB-02：取消记录（`AB-01`：日志里必须能看出「谁在什么时候被停了」）
+        ctx_.console("[执行器] 已取消（用户点了「停止」）：" + summary());
         return false;
     }
     if (cursor_ >= plan_.size()) {
@@ -666,6 +674,22 @@ bool Executor::executeNode(Graph& graph, const std::string& node_id)
         return true;
     }
     catch (const std::exception& ex) {
+        // ---- M_patchAB §2.1（PB-02 真取消）：取消**不算失败** ----
+        //  * 取消导致的异常 ⇒ 节点记 `Skipped` + 取消记录（含耗时），会话由下一次 tick 翻 Cancelled
+        //  * 只改归因与统计口径，不改任何既有失败路径
+        if (ctx_.is_cancelled()) {
+            const double cancelled_ms = ms_since(started);
+            node->state               = NodeState::Skipped;
+            node->error_message       = "已取消（用户点了「停止」）：" + std::string(ex.what());
+            notifyState(node_id, NodeState::Skipped);
+            ++skipped_;
+            recordRun(*node, NodeState::Skipped, cancelled_ms, node->error_message);
+            ctx_.console("[取消] " + node_id + " 已中断（" + format_ms(cancelled_ms) + "）：" +
+                         node->error_message);
+            markDownstreamSkipped(graph, node_id);
+            current_node_.clear();
+            return true; // 让 tick 顶部把会话翻成 Cancelled（不再执行后续节点）
+        }
         node->state         = NodeState::Error;
         node->error_message = ex.what();
         notifyState(node_id, NodeState::Error);

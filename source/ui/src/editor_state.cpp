@@ -12,6 +12,8 @@
 #include "text_export.h"
 #include "output_archive.h"
 #include "paths.h"
+#include "probe_verdict.h"   // M_patchAB（PB-07）：会话失效错误串反查（纯函数）
+#include "provider_resolve.h" // M_patchAB（PB-07）：失败节点 → 生效条目 id（开哪一站的登录窗口）
 
 #include <algorithm>
 #include <chrono>
@@ -640,10 +642,45 @@ void EditorState::refresh_last_error()
         last_error.message =
             node.error_message.empty() ? std::string("执行失败") : node.error_message;
         last_error.at = local_time_text();
+
+        // ---- M_patchAB §2.2（`PB-07`）：失败原因**反查**会话失效 ⇒ 错误条给「重新登录」入口 ----
+        //  * 判据 = 纯函数（401 / 40002 / 403 / 40003 /「会话已失效」/ invalid token …）；
+        //    只有判据命中才给入口（不猜、不误报：普通超时 / 解析失败不显示按钮）
+        const web::SessionFailure failure = web::classify_session_failure_text(last_error.message);
+        if (failure.session_related) {
+            const engine::EffectiveProvider effective =
+                engine::resolve_effective_provider(graph, node);
+            last_error.relogin_available   = true;
+            last_error.relogin_needed      = failure.needs_relogin;
+            last_error.relogin_provider_id = effective.provider;
+            last_error.relogin_text        = web::session_relogin_text(failure, effective.provider);
+            log::warn("[会话诊断] " + node.id + "：" + last_error.relogin_text);
+        }
         log::info("[错误条] " + node.id + " 失败：" + last_error.message);
         return;
     }
     last_error = LastError{}; // 本次运行无失败 → 清空（成功运行不留旧错误）
+}
+
+// ---- M_patchAB（PB2-07 / PB2-30②）：后台诊断结论（工作线程写、主线程每帧取一次）----
+void EditorState::post_background_status(const std::string& text)
+{
+    std::lock_guard<std::mutex> lock(background_mutex_);
+    background_status_  = text;
+    background_pending_ = true;
+}
+
+bool EditorState::take_background_status(std::string* out)
+{
+    std::lock_guard<std::mutex> lock(background_mutex_);
+    if (!background_pending_) {
+        return false;
+    }
+    if (out != nullptr) {
+        *out = background_status_;
+    }
+    background_pending_ = false;
+    return true;
 }
 
 std::string EditorState::workflow_display_name() const

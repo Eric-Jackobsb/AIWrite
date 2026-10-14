@@ -9,6 +9,7 @@
 // ============================================================================
 
 #include <chrono>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -89,10 +90,25 @@ struct EditorState {
         std::string node_id;
         std::string message;
         std::string at; // 本地时间 HH:MM:SS
+        // ---- M_patchAB §2.2（`PB-07`）：会话失效 → 界面「重新登录」入口 ----
+        //  * 由 `refresh_last_error()` 用纯函数 `web::classify_session_failure_text()` **反查**
+        //    失败原因得出（只有判据命中才给入口 —— 不猜、不误报）
+        //  * 按钮打开的是**该失败节点生效条目**的登录窗口（`resolve_effective_provider` 解析）
+        bool        relogin_available   = false; // 错误条是否显示入口
+        bool        relogin_needed      = false; // true = 会话已失效（必须重登）/ false = 请求被拒（验证类）
+        std::string relogin_provider_id;         // 生效条目 id（按钮据此开对应站点窗口）
+        std::string relogin_text;                // 可操作文案（含判据与下一步）
     };
     LastError last_error;
     void      clear_last_error();
     void      refresh_last_error();
+
+    // ---- M_patchAB §3.2 / §3.4（`PB2-07` / `PB2-30②`）：后台诊断结果回收 ----
+    //  * 界面「测试连接 / 测试选择器」在工作线程执行（**界面不阻塞**）：
+    //    细节走 Console（`log::info`），结论经本接口投递给主线程写状态栏
+    //  * 工作线程只写、主线程每帧取一次（`std::mutex` 保护）；未取走时后来的结论**覆盖**前者
+    void post_background_status(const std::string& text);
+    bool take_background_status(std::string* out);
 
     // 画布每帧同步的选择信息
     std::vector<std::string> selected_nodes;
@@ -141,6 +157,11 @@ private:
 
     std::vector<engine::Node> clipboard_nodes_;                        // 复制的节点
     std::vector<engine::Edge> clipboard_edges_;                        // 选区内部的连线
+
+    // ---- M_patchAB（PB2-07 / PB2-30②）：后台诊断结论（工作线程写、主线程取）----
+    std::mutex  background_mutex_;
+    std::string background_status_;
+    bool        background_pending_ = false;
 
     // ---- PC-01：自动保存节流状态（说明见上方 tick_autosave 注释）----
     std::string                           autosave_signature_;      // 上次写入快照时的内容指纹

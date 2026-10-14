@@ -17,12 +17,12 @@
 ## 二、官方 API 台账（9 条 · 机器生成 · 跨轮累积）
 
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-11 · 覆盖轮次 0：
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-14 · 覆盖轮次 0：
 > **范围**：`kind=official` 的 **9 条**（`openai` / `anthropic` / `gemini` 协议直连：不起浏览器、不走 DOM、不依赖登录态）· **文字理解**判据 = 真机 HTTP 200 且取回正文（或 `providers.json` `verified=true`）；**图片理解**判据 = 多模态真机一次 —— `capabilities.vision=true` 只是**声明**（§10.1 陷阱 7）。
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > 来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。
 
-**汇总（official）**：共 9 条 · 文字理解 ✅ 实测 **2** · 图片理解 ✅ 实测 **2** · ⚠ 协议未实现 2 · ⚠ 未填 `api_base` 1 · ⚠ 声明未回填 1
+**汇总（official）**：共 9 条 · 文字理解 ✅ 实测 **2** · 图片理解 ✅ 实测 **2** · ⚠ 协议未实现 2 · ⚠ 未填 `api_base` 1 · ⚠ 声明未回填 0
 
 **表 A · 协议与就绪**
 
@@ -34,7 +34,7 @@
 | 4 | `ollama` | openai | ✅ 已实现 | `http://localhost:11434/v1` | true | false | 🟡 声明·未实测 |
 | 5 | `gemini` | gemini | ⚠ 未实现 | `https://generativelanguage.googleapis.com` | true | false | ⚠ 协议未实现 |
 | 6 | `custom-official` | openai | ✅ 已实现 | **—（未填）** | true | false | ⚠ 未填 api_base |
-| 7 | `deepseek` | openai | ✅ 已实现 | `https://api.deepseek.com` | false | true | ✅ 已实测 |
+| 7 | `deepseek` | openai | ✅ 已实现 | `https://api.deepseek.com` | true | true | ✅ 已实测 |
 | 8 | `anthropic` | anthropic | ⚠ 未实现 | `https://api.anthropic.com` | true | false | ⚠ 协议未实现 |
 | 9 | `siliconflow` | openai | ✅ 已实现 | `https://api.siliconflow.cn/v1` | true | false | 🟡 声明·未实测 |
 
@@ -48,7 +48,7 @@
 | 4 | `ollama` | 🟡 声明·未实测 | — | 🟡 声明·未实测 | capabilities.vision=true（无真机物证） | — | 有 Key / 环境就绪时真机一次 |
 | 5 | `gemini` | ⚠ 协议未实现 | — | ⚠ 协议未实现 | 协议实现前该链路不可用 | — | 协议实现后重测 |
 | 6 | `custom-official` | ⚠ 未填 api_base | — | 🟡 待 base+Key | 未填 api_base | — | 填 providers.json api_base + Key 后真机一次 |
-| 7 | `deepseek` | ✅ 实测 | M7-09 实测（用户验证）+ providers.json verified=true | ✅ 实测 ⚠声明未回填 | app.log 2026-09-29 01:03 · 模型 deepseek-flash · HTTP 200（759 字节）· 官方 API 真视觉（M7-10 剩声明回填） | vision 声明未回填 | 回填 providers.json capabilities.vision（M7-10） |
+| 7 | `deepseek` | ✅ 实测 | M7-09 实测（用户验证）+ providers.json verified=true | ✅ 实测 | app.log 2026-09-29 01:03 · 模型 deepseek-flash · HTTP 200（759 字节）· 官方 API 真视觉；声明已回填 capabilities.vision=true + vision_model_default=deepseek-flash（M8-21 · 2026-10-11） | — | — |
 | 8 | `anthropic` | ⚠ 协议未实现 | — | ⚠ 协议未实现 | 协议实现前该链路不可用 | — | 协议实现后重测 |
 | 9 | `siliconflow` | 🟡 声明·未实测 | — | 🟡 声明·未实测 | capabilities.vision=true（无真机物证） | — | 有 Key / 环境就绪时真机一次 |
 

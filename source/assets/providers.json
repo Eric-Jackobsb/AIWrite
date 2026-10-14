@@ -44,15 +44,16 @@
       "auth_style": "bearer",
       "env_names": ["DEEPSEEK_API_KEY"],
       "key_ref_default": "brain-ai/deepseek",
-      "capabilities": { "vision": false, "seed": true, "system_role": true, "stream": false },
+      "capabilities": { "vision": true, "seed": true, "system_role": true, "stream": false },
       "models": [
         { "id": "deepseek-chat", "label": "deepseek-chat（通用）" },
-        { "id": "deepseek-reasoner", "label": "deepseek-reasoner（推理）" }
+        { "id": "deepseek-reasoner", "label": "deepseek-reasoner（推理）" },
+        { "id": "deepseek-flash", "label": "deepseek-flash（原生多模态 · 视觉）", "vision": true }
       ],
-      "vision_model_default": "",
+      "vision_model_default": "deepseek-flash",
       "limits": { "image_max_bytes": 8388608, "connect_timeout_s": 15, "read_timeout_s": 180 },
       "verified": true,
-      "notes": "已实测真实生成（PB-05）。官方 API 无视觉模型：图片理解请选择 zhipu 等视觉服务",
+      "notes": "已实测真实生成（PB-05）。视觉：V4.1-Flash（`deepseek-flash`）原生多模态 —— 2026-09-29 用户实测官方 API 图片理解通过（M7-09 / M8-21），故 `capabilities.vision` 已回填 true 并给出 `vision_model_default`；未填视觉模型时仍会明确提示改用可用的视觉服务",
       "docs_url": "https://api-docs.deepseek.com"
     },
     {

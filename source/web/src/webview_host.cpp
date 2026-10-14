@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "web_error.h"      // M_patchC（PW-05）：三类归因文案（纯函数）
+#include "probe_verdict.h"  // M_patchAB §3.3（PB2-25）：探测判据收紧（纯函数：结论 / 判据 / 下一步）
 #include "window_table.h"   // M_patchC（PW-02 / PW-06 / PW-08）：窗口表 + 复位计划（纯函数）
 
 using Microsoft::WRL::Callback;
@@ -3251,16 +3252,29 @@ static int protocol_probe_with(const LoginRequest& base_request, const ai::Provi
     std::printf("错误           : %s\n", probe.error.c_str());
     std::printf("================================\n");
 
-    const bool pass = probe.ok && probe.has_user_token;
-    if (probe.ok && !probe.has_user_token) {
-        std::printf("[网页版探测] 提示：未取到 userToken → 请先在登录窗口完成一次登录"
-                    "（`aiwrite.exe --login-selftest` 或界面参数面板的「打开登录窗口」）\n");
+    // M_patchAB §3.3（PB2-25）：判据**收紧** —— 「有凭证」不再等于 PASS：
+    //  * 还需**判据端点** HTTP 200 且 `code=0`（旧判据在端点 `code=40003` 时会**假 PASS**）
+    //  * 结论四分类与可操作下一步由纯函数 `judge_probe_result()` 给出（离线可断言）
+    const std::string required_path = request.probe_paths.empty()
+                                          ? std::string("/api/v0/users/current")
+                                          : request.probe_paths.front();
+    const ProbeJudgement judgement =
+        judge_probe_result(probe, required_path, /*probe_applicable=*/true);
+    std::printf("结论           : %s\n", probe_verdict_name(judgement.verdict).c_str());
+    std::printf("判据           : %s\n", judgement.reason.c_str());
+    std::printf("下一步         : %s\n", judgement.next_step.c_str());
+    std::printf("================================\n");
+    if (judgement.needs_relogin) {
+        std::printf("[网页版探测] 提示：**会话已失效** → 请在界面参数面板点「打开登录窗口」重新登录；\n"
+                    "             界面错误条同样会给出「重新登录」入口（PB-07）\n");
     }
-    std::printf("[网页版探测] 结果：%s（退出码 %d）\n", pass ? "PASS" : "FAIL", pass ? 0 : 1);
-    log::info("[网页版探测] 自检结束：" + probe.summary());
+    std::printf("[网页版探测] 结果：%s（退出码 %d）\n", judgement.pass ? "PASS" : "FAIL",
+                judgement.pass ? 0 : 1);
+    log::info("[网页版探测] 自检结束：" + probe.summary() + " ｜ 结论=" +
+              probe_verdict_name(judgement.verdict) + "：" + judgement.reason);
 
     SessionStore::instance().clear(); // 自检不留会话
-    return pass ? 0 : 1;
+    return judgement.pass ? 0 : 1;
 }
 
 // PB2-23：「默认站点」入口（旧行为，逐字不变 —— 守 I2）

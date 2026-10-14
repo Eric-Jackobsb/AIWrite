@@ -27,6 +27,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cancel_token.h"   // M_patchAB §2.1（PB-02 真取消）：取消令牌（纯逻辑 + 线程）
 #include "graph.h"
 
 namespace aiwrite::engine {
@@ -91,7 +92,17 @@ struct ExecutionContext {
     //  * 只读运行态：绝不写入 Graph / 不落盘
     std::string  run_id;
 
-    bool is_cancelled() const { return cancelled != nullptr && cancelled->load(); }
+    // ---- M_patchAB §2.1（PB-02 真取消）：同一运行会话共享的取消令牌 ----
+    //  * 由 `Executor::cancel() / requestStop()` 置位；节点实现把它交给长耗时调用
+    //    （HTTP 层据此**主动关 socket** ⇒ 阻塞中的读立刻返回，验收「1 秒内生效」）
+    //  * 只读：节点实现**不得**自行置位（取消入口只有执行器 / UI 的「停止」）
+    std::shared_ptr<const ai::CancelToken> cancel_token;
+
+    bool is_cancelled() const
+    {
+        return (cancelled != nullptr && cancelled->load()) ||
+               (cancel_token != nullptr && cancel_token->cancelled());
+    }
     void console(const std::string& text) const
     {
         if (on_console) {
@@ -226,6 +237,8 @@ private:
     ExecState                state_ = ExecState::Idle;
     std::string              current_node_;
     std::atomic<bool>        cancelled_{false};
+    // M_patchAB §2.1（PB-02 真取消）：本次会话的取消令牌（每次 start 换新）
+    ai::CancelTokenPtr       cancel_token_ = std::make_shared<ai::CancelToken>();
     NodeOutputs              outputs_;
     std::vector<NodeRunInfo> run_infos_; // PA-01：逐节点运行信息（只读暴露）
     ExecutionContext         ctx_;

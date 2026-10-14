@@ -17,7 +17,7 @@
 | [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) | **补丁系列剩余工作总集**（Patch A/B 残项 + 数据安全 + 交互打磨 + 并行小项 + `B2` 残项）—— **后续唯一执行入口**；含现行规格（附录 B `JSON` 规范 / C 加载顺序 / D 自建站点 / E 站点清单两列）与待拍板决策 |
 | [Archive/actionPlan/M_patchA.md](Archive/actionPlan/M_patchA.md) · [Archive/actionPlan/M_patchB.md](Archive/actionPlan/M_patchB.md) | **已完成部分已归档（2026-09-27）**：Patch A（结果回流与可观测性）· `M_patchB`（Provider 可插拔化：**JSON 配置表** + **API 与网页版同表同机制** + L1 收口 + L3 DOM 站点适配器 + L4 部分落地）—— 历史规格与各批次实测记录 |
 | [actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md) | **补丁系列第三期（🆕 2026-10-06 · 拍板 2026-10-07）**：网页版「节点 ↔ 窗口」绑定与页面就绪判据 —— 真机归因（`imgTest` 三次运行）· 缺口 `G1`–`G6` · 修正 `W-D1`–`W-D8` · 不变量 `I24` / `I25` / `I26` · 计划 `PW-01`…`PW-13` · **已拍板 `D-33`…`D-36`**（②独立窗口真并行 / ①`answer_selector`可选 / ③复位首次+失败 / ②`web.attach`诊断字段） | 网页版**多节点 / 多运行**异常时**先读** |
-| [DevPlan.todo](DevPlan.todo) | **开发计划看板**：TodoList 格式（根键 `todotree`），Debug / Feature / Test / Docs / Archive / `M7B`（📦 已退场）/ **待定 · 未拍板（`PQ-xx` · 未拍板项）** 分层，每条含一行描述与 `fileLink` 文档链接 |
+| [DevPlan.todo](DevPlan.todo) | **开发计划看板**：TodoList 格式（根键 `todotree`），Debug / Feature / Test / Docs / **Archive**（已完成任务归档 · 2026-10-13 起由 `ARC-ORG-01` 承载 124 项，根计数 32→**156**）/ `M7B`（📦 已退场）/ **待定 · 未拍板**（`PQ-xx` · **空落点分支**，已拍板历史 20 项已整组归档）/ `M8 网页通道` / `M_patchC 网页节点归属` 分层，每条含一行描述与 `fileLink` 文档链接 |
 | [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) | M1 实测环境、验证结果与问题记录（已归档） |
 | [Archive/README.md](Archive/README.md) | 归档索引与归档规则 |
 | [../source/README.md](../source/README.md) | 源码构建 / 运行 / 调试说明 |
@@ -33,6 +33,17 @@
 
 | 日期 | 批次（新 → 旧） |
 |---|---|
+| 2026-10-13 | 🗃️ 看板归档：`Archive` 启用 + 已完成任务整批移入（124 项 · 组计数重算 16 处 · 零代码 · 批 9-4） |
+| 2026-10-13 | 🧭 创作流程依据文档落盘 + 归位 + 登记：`Creation_Roadmap_Guideline`（`CR-*` · 断链 **1283 → 1341 / 0** · 零代码 · 批 9-3） |
+| 2026-10-12 | 🧭 节点扩展「四层定向」文档收口：`M_node_expansion` v6 用户拍板落盘（`NE-D38`/`NE-D39` · 零代码） |
+| 2026-10-12 | 🆕 节点扩展 L1 文档收口：`M_8nodes_extension` 建立 + 归位（断链 100 → 0 · 零代码） |
+| 2026-10-11 | 🧾 `M_patchAB` 批 8：文档口径收口（权威位实测回填 · 零代码） |
+| 2026-10-11 | 🌐 `M_patchAB` 批 7：代理 / 自签证书 / 凭据库配置（`PB-06` 剩余 · V-16 回环证明） |
+| 2026-10-11 | 🧩 `M_patchAB` 批 6：L2 底座（可插拔 Provider 抽象 + 工厂按表分派 + Anthropic / Gemini 协议 + 能力驱动接线） |
+| 2026-10-11 | 🧰 `M_patchAB` 批 5：视觉能力声明回填（`M8-21`）+ `PM-03` 一键自检 + `DBG-L01` 断链入闸 |
+| 2026-10-11 | 🗂️ `M_patchAB` 批 4：版本迁移 + 最近列表治理 + `timeout.*`/`error.*` 接线（`PC-03`·`PC-04`） |
+| 2026-10-11 | ⏹️ `M_patchAB` 批 3：真取消 + 自检扩展（`PB-02`·`PB-09` · V-11/V-12） |
+| 2026-10-11 | 🩺 `M_patchAB` 批 2：会话失效可诊断 + 面板诊断按钮（`PB2-25`·`PB-07`·`PB2-07`·`PB2-30②`） |
 | 2026-10-11 | 🧩 `M_patchC` 批 1：窗口表 / 归属 / 归因分离 / 复位（`PW-02`·`04`·`05`·`06`·`08` · 纯离线） |
 | 2026-10-11 | 🎯 待拍板项清零：`PQ-01`/`03`/`06`/`09`/`12`/`20` 六项全部拍板（含**推翻「节点数维持 8」**） |
 | 2026-10-11 | 🛌 `M8` Phase 3 拍板：Pydoll 栈**休眠保留 · 不删**（`M8-Q7` = ② · 零代码） |
@@ -61,6 +72,179 @@
 | 2026-10-08 | 📨 `PW-07f` 真实发送链路：CDP 可信输入 + 回执验证 + 兜底点击 |
 | 2026-10-08 | ↩️ `PW-08` 答案归属门 v2「已回退」 |
 | 2026-10-08 | 🔒 `PW-07` 答案归属门（精简版）落地 + `PW-07b..n` 隔离存档 |
+
+---
+
+**🗃️ 看板归档：`Archive` 启用 + 已完成任务整批移入（2026-10-13 · 零代码批 · 批 9-4）**
+
+- **背景（本批要解决的 = 看板看不出「还剩什么」）**：`DevPlan.todo` 的 `Debug / Feature / Test / Docs / M7B / M8 / M_patchC` 七个根分支下散布着 **124 个 `done:true` 的叶子任务**（已完成但仍留在原分类里），组计数标签也停在归档前的数字 ⇒ 看板无法一眼看出待办量。
+- **规则（用户拍板 · 口径 A）**：① **所有已完成**任务移入 `Archive`；② **打了组、但仅部分子任务完成**的组 **不整体移入**（组留下，组内已完成的子项移入）；③ 组计数标签 `（N 项）` 按移动后**真实叶子数**重算；④ `待定 · 未拍板` 整组归档并同步修正权威位表述。
+- **本轮落地（纯看板结构 · 零代码 · JSON 结构未变 = 仍是 `todotree.tree` 嵌套）**：
+  * **`Archive` 分支原本已存在**（`key=88` · 32 项 · 全完成）⇒ 无需新建，直接启用。
+  * 新增容器 **`ARC-ORG-01 已完成任务整批归档（2026-10-13 · 批 9-4 · 124 项）`**，其下按**来源根**分 8 组：`来自 · Debug（9）` / `Feature（58）` / `Test（14）` / `Docs（19）` / `M7B（1）` / `M8 网页通道（2）` / `M_patchC 网页节点归属（1）` + `待定 · 未拍板（20 · 整组移入）` ⇒ **84 个移动单元 · 124 个叶子**。
+  * **计数标签自动重算 16 处**：根级 `Debug 15→6` · `Feature 72→14` · `Test 29→15` · `Docs 23→4` · `M7B 7→6`；组级 `M4 5→2`（Debug）· `M2 3→2` / `M4 19→7` / `M6 9→1` / `M7 10→2` / `Patch B · L1 收口 10→1` / `L4 3→1`（Feature）· `M6 3→2` / `M7 8→1` / `Loop Dev 4→1`（Test）· `M6 4→2`（Docs）。
+  * **3 处语义标签人工修正**：`M8 网页通道` 已勾账 2 项已移入 · `M_patchC 网页节点归属` 已勾账 1 项已移入 · `Test > Loop Dev` 枚举后缀改为「仅余 TST-L03」。
+  * **`Archive` 根计数 32 → 156**；根分支仍是 **9 个**（顺序不变）—— `待定 · 未拍板` 的**历史 20 项整组移入**后，**原位补建空落点分支**（[../AI_README.md](../AI_README.md) §7 / [DocMAP.md](DocMAP.md) §五 硬规则要求**新 ⬜ 项必须有登记处**，故该分支不删除、只清空）。
+  * **复核判据**：**`Archive` 之外已完成叶子 = 0**（各根 `done_leaves` 全为 0）。
+- **验证（2026-10-13 本机实测）**：`check_links.py` ⇒ **checked 1349 / broken 0**（批 9-3 终值 1341 ⇒ **本批 +8**）；`DevPlan.todo` **JSON 有效**（无重复 id · **CRLF 完好**）；本批**未改 `source/**`** ⇒ `check_all` 其余数字与批 9-3 一致。
+- **落点**：`docs/DevPlan.todo` · [../AI_README.md](../AI_README.md) §7 · [DocMAP.md](DocMAP.md) §5.1/§5.2 · [变量术语对照表.md](变量术语对照表.md) §11.2 · [AI_Status.md](AI_Status.md) · 本文件。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🧭 创作流程依据文档落盘 + 归位 + 登记：`Creation_Roadmap_Guideline`（2026-10-13 · 零代码批 · 批 9-3）**
+
+- **背景（本批要解决的 = 新文档落在 `docs/` 根 ⇒ 其内部相对链接全断）**：新增 `docs/Creation_Roadmap_Guideline.md`（**创作流程框架 / L2 节点设计依据**）。该文**内部 16 条相对链接是按 `docs/actionPlan/` 层级书写**（`M_node_expansion.md` · `M_8nodes_extension.md` · `../ai_writer_nodes.md` · `../roadmap.md` · `../DocMAP.md` · `../DevPlan.todo` · `../CHANGELOG.md` · `../../AI_README.md`），却落在 `docs/` 根 ⇒ 实测 **broken 16**（基线 **1283 / 0**）。**修法 = 归位**（与批 9-0 同款：归位后**相对层级 / 自链 / 外部引用三者同时自洽**，无需逐条改链接）。
+- **本轮落地（纯文档 · 零代码）**：
+  * **归位**：`docs/Creation_Roadmap_Guideline.md` → `docs/actionPlan/Creation_Roadmap_Guideline.md` ⇒ **broken 16 → 0**（`check_links.py` 实测：**归位前 = 1303 / broken 16** ⇒ 归位后 **1303 / broken 0 · exit 0** ⇒ 同批**登记面同步 +38** ⇒ 本批终值 **checked 1341 / broken 0 · exit 0**）。全库**无其他文件引用它**（归位前为**孤立未登记文档**）。
+  * **五处登记**（补齐该文 §8 自述的四处、并使其成立；第 5 处 = 与批 9-0/9-1 同款给编号表加行）：① [../AI_README.md](../AI_README.md) §5 编号空间新增 **`CR-*`**（创作流程阶段）/ **`CR-OPS-*`**（原子操作）/ **`CR-GAP-*`**（缺口）；② [DocMAP.md](DocMAP.md) **文档地图 + §5.3 表**各新增一行 + §最近更新 + §后续增量；③ [DevPlan.todo](DevPlan.todo) 新增 `DOCS-CR-01`（Docs 组 · 叶子计数 **22 → 23**）；④ 本文件索引 + 本节；⑤ [变量术语对照表.md](变量术语对照表.md) **§11.2** 新增 `CR-*` / `CR-OPS-*` / `CR-GAP-*` 行（并**就地修正** `L2-*` / `L3-*` / `G-*` 行里已过期的「任务号等 L1 完成后立」⇒ 改为「**`L2-01…` / `L3-01…` 已先立** · `NE-D39`」）+ §15 修订记录一行。
+  * **新文档 v1.1**：§10 补「**归位 + 登记**」记录（**正文一字未改**）。
+  * **口径顺带对齐**：`M_8nodes_extension.md` 版本 **v1.1 → v1.3** 在 [DocMAP.md](DocMAP.md) 两处（文档地图 + §5.3）落地（批 9-1 = v1.2 · 批 9-2 = v1.3 此前仅落在该文自身）；`M_node_expansion.md` 的 §12 引用改记 **v5/v6**；DocMAP §5.3 的「`mode` 默认值」开口项标注 **✅ 已结案**（`NE-D38` · 批 9-2）。
+- **验证（2026-10-13 本机实测 · 批 9-3）**：**`check_all.ps1` 15 / 15 PASS · exit 0**（物证 `build/logs/check_all_20261013_133743.log` —— ① 构建 **0 error / 0 warning** · ② `--selftest` 十三组全 PASS · `--exec-selftest` **546 / 0** · `--graph-selftest` **110 / 0** · `--diag-assert` **40 行** · `--dep-check` PASS（`WebView2 运行时 152.0.4191.66（api）`）· `--settings-assert` PASS（越界 **15** + 边界）· `--site-assert` PASS（**47 / 47** · 20→21→20）· `--autosave-assert` PASS（**28 / 28**）· ③ 夹具 **44 / 0** · **17 / 0** · **15 / 0** · ④ `--upload-selftest` **72 / 0** · ⑤ `loop_verify -StatusOnly` exit 0 · ⑥ `check_links` **1341 / broken 0**）—— 其中 `python source\tools\check_links.py` 单独复跑同值：**checked 1341 / broken 0 · exit 0**（**归位前 = 1303 / broken 16 · exit 1**；链路 = 批 9-2 基线 **1283** ⇒ 新文档落盘 **+20** = **1303 / broken 16** ⇒ 归位 **1303 / 0** ⇒ 登记面同步 **+38** ⇒ **1341 / 0**）；本批**未改 `source/**`**（`DevPlan.todo` 仅新增 1 个 Docs 叶子）⇒ 其余门禁数字与批 9-2 逐项一致。
+- **落点**：[actionPlan/Creation_Roadmap_Guideline.md](actionPlan/Creation_Roadmap_Guideline.md) §8 / §10 · [../AI_README.md](../AI_README.md) §5 · [DocMAP.md](DocMAP.md) · [DevPlan.todo](DevPlan.todo) · [loop_dev.md](loop_dev.md) §4 · [AI_Status.md](AI_Status.md) §一 · 本文件。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🧭 节点扩展「四层定向」文档收口：`M_node_expansion` v6 用户拍板落盘（2026-10-12 · 零代码批 · 批 9-2）**
+
+- **背景（本批要解决的 = 上游文档升 v4/v5 后，与代码实测不符的前提 + 与姊妹文档互相矛盾 —— 批 9-1 实为取证批，本批为用户拍板落盘）**：`M_node_expansion.md` 升为 **v4（四层全部定向）** 后，批 9-1 复核发现 **① 一处红灯**（节点数硬断言行号误记，且与姊妹文档 `M_8nodes_extension.md` 的实测值**互相矛盾**）· **② 三项前提与代码不符** · **③ 四处行号错** · **④ 两处编号「同号不同义」** ⇒ 直接按该文 §9「改动清单」动手会**改错文件位置**。本批把用户 7 项拍板逐条落盘（①B `DevPlan.todo` · ②B 任务号先立 · ③A 保持现状 · ④A `PD-06①` 保留 · ⑤A 一次提交 · ⑥A 第 93 行改记 · ⑦A ②=不撞）。
+- **本轮落地（纯文档 · 零代码 · 主文档升 v5）**：
+  * 🔴 **P0-1（红灯）**：节点数硬断言真身 = `api_probe.cpp` **`:1936`**（`expect_eq(check, std::to_string(registry.size()), "8", …)`）/ **`:1938–1940`**（`expected_types[]`）/ **`:1950–1957`**（分类计数五条）—— 原稿写的 **`:803/805` 属 `ai::resolve_proxy` 代理用例区**（该区 `:799-812`）。同批补「参数级断言在 `:1964–1985`（只查**存在与范围**、**无参数个数断言**）」。姊妹文档已于批 9-0 按此实测值收口 ⇒ **两文一致**。
+  * 🟠 **P1-1**：§2.4 / §4.3.3 原结论「落进**新分类**也**自动出现**」**作废** —— `ui/src/node_library.cpp` 第 **29–31 行**分类数组是**硬编码五类**、第 33–34 行只遍历该数组 ⇒ 新分类必须**同批改 3 处**：`node_registry.h` 第 19 行枚举 / 第 21–22 行 `categoryName()`+`categoryKey()` / `node_library.cpp` 第 29–31 行数组（已写入 §2.4 / §4.3.3 / §9 #2）。
+  * 🟠 **P1-2**：§4.4.2 ⑧ 原写「**L1 已落地**参数二级分组」**作废**（与本稿「L1 实施未开始」自相矛盾，且全库无该实现）⇒ 改为 **L1 计划项（未落地）**；现状 = 一级「参数」`CollapsingHeader`（`ui/src/property_panel.cpp` 第 1053–1055 行 · P7a-15）。
+  * 🟠 **P1-3**：「**节点数维持 8**」结论实为 **三处**（原稿写「两处」）—— ③ = `docs/节点编辑器使用说明.md` **§4 标题第 93 行**（**尚未改记**，roadmap §十 第 200 行 / `ai_writer_nodes.md` §4.4 第 207 行已改记）⇒ 已写入 §3.2 表 + §1 + §10。
+  * 🟡 **行号更正四处（实测）**：`source/README.md` **573 / 579**（原 535 / 541 · 那两行是 Python 目录口径与 Pydoll `result` 两层）· `变量术语对照表.md` 节点编号表 **103–111** + §12 偏差表 **415**（原 111 / 413 · 413 是 `[general]` 行）· `节点编辑器使用说明.md` **§4 标题 93 + 节点表 95–104**（原 106 · 106 是 M7 注记）· `executor.h` **75–77**（原 74–76、115）· `DocMAP.md` **§一 / §5.3**（原 §5.2 · §5.2 是「三条纪律」）；**归档件 `M7.md` 移出同步范围**（DocMAP §5.2 纪律 2「归档不回改」）。
+  * 🔵 **编号改号两处（消除同号不同义）**：① L1 细节别名 **`NE-D8`~`NE-D14` → `NE-D30`~`NE-D37`**（逐条对齐姊妹文档 `NE-D3`~`NE-D13`；**并补齐遗漏的 `NE-D36` 超时+重试**）；② L1 收尾决议 **`L1-1`/`L1-2`/`L1-3` → `L1-R1`/`L1-R2`/`L1-R3`**（与姊妹文档登记的**任务号** `L1-*` 区分）。
+  * ⚪ **结案三项**：`source/CMakeLists.txt` **不是目录 glob**（第 **279–280 行**逐个列出 `nodes/src/local_nodes.cpp` / `register_executors.cpp`；注释第 288–292 行「逐个列出」口径）⇒ L2 必须手工加行 · L3 候选 ⑦⑧⑨ **不撞 §19.1**（14 项名单见 `ai_writer_nodes.md` 第 1124–1139 行）· L3 ②「分类折叠」与 §19.1「节点折叠/展开」**同名近义消歧**（且现状节点库分类已是 `CollapsingHeader`，`node_library.cpp` 第 38 行）。
+  * **姊妹文档同步（v1.2）**：`M_8nodes_extension.md` 删「上游是**讨论稿**（摊开四层、无推荐）」→ 改「上游现为**实施依据文档**（四层全部定向）· L1 细节由本文承接」；文首「上游依据」注明 v5；§2 前言补**两文 `NE-D` 编号分工**。
+  * **登记面同步**：[../AI_README.md](../AI_README.md) §5 登记 `L1-R*` / `L2-*` / `L3-*` / `G-*` + 两处「同形不同物」警示 · [DocMAP.md](DocMAP.md) **§一 文档行 + §最近更新 + §5.3**（三处口径由 v2「讨论中」→ **v5「四层全部定向」**）· [变量术语对照表.md](变量术语对照表.md) §11.2 增 3 行 · [AI_Status.md](AI_Status.md)「最近更新」一句。
+- **验证（2026-10-12 本机实测 · 批 9-2 全量复跑留底）**：**`check_all.ps1` 15 / 15 PASS · exit 0**（物证 `build/logs/check_all_20261012_214953.log`）—— ① 构建 **0 error / 0 warning** · ② `--selftest` **十三组全 PASS** · `--exec-selftest` **546 / 0** · `--graph-selftest` **110 / 0** · `--diag-assert` **40 行** · `--dep-check` PASS（`WebView2 运行时 152.0.4191.66（api）`）· `--settings-assert` PASS（越界 **15** + 边界 **3**）· `--site-assert` PASS（**47 / 47** · 20→21→20）· `--autosave-assert` PASS（**28 / 28**）· ③ 夹具 **44 / 0** · **17 / 0** · **15 / 0** · ④ `--upload-selftest` **72 / 0** · ⑤ `loop_verify -StatusOnly` exit 0 · ⑥ **`check_links` 1283 / broken 0**（本批新增链接当场复检）⇒ **与批 8 基线逐项一致**（纯文档批：本次 `DevPlan.todo` 只改 box 252 一行块的状态与措辞（①B），未新增条目）。
+- **落点**：[actionPlan/M_node_expansion.md](actionPlan/M_node_expansion.md) §1 / §2.1 / §2.2 / §2.4 / §2.5 / §3.2 / §4.2 / §4.3.3 / §4.4.2 / §7 / §9 / §10 / §11 / §12（v5）· [actionPlan/M_8nodes_extension.md](actionPlan/M_8nodes_extension.md) §12（v1.2）· 本文件。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🆕 节点扩展 L1：`M_8nodes_extension` 建立 + 归位（2026-10-12 · 零代码批 · 批 9-0）**
+
+- **背景（本批要解决的 = 新计划文档落在子目录 ⇒ 全库断链）**：`M_node_expansion.md` 与新建的 `M_8nodes_extension.md` 曾落在 `docs/actionPlan/nodes_expansion/` 子目录 ⇒ ① 子目录内**相对链接层级未 +1**（69 处）；② 新文档 14 条内部链接按「`actionPlan/` 根下」书写 ⇒ 全部不匹配；③ 全库外部引用（`AI_README` / `CHANGELOG` / `DocMAP` / `roadmap` 等）仍指旧路径（17 处）⇒ 实测 **broken 100**（基线记 **0**）。**修法 = 归位**（挪回 `actionPlan/` 根 + 删空子目录）—— 归位后相对层级、新文档自链、外部引用**三者同时自洽**，无需逐条改链接。
+- **本轮落地（纯文档 · 零代码）**：
+  * **归位**：`docs/actionPlan/M_node_expansion.md` + `docs/actionPlan/M_8nodes_extension.md`（删除空目录 `nodes_expansion/`）⇒ **broken 100 → 0**（`check_links.py` 实测：归位前 **1219 / broken 100 · exit 1** ⇒ 归位后 **1219 / 0** ⇒ 同批索引同步 **+26** 链接 ⇒ **checked 1246 / broken 0 · exit 0**；批 9-1 索引同步后累计 = **1283 / 0**）。
+  * **新文档 v1.1**（[actionPlan/M_8nodes_extension.md](actionPlan/M_8nodes_extension.md)）：就地纠正 **6 项与代码不符的前提 + 9 项数字 / 口径**（逐条见该文 **§12**）—— P1-1 节点数硬断言真身 = `api_probe.cpp:1936` / `:1938` / `:1953-1959`（非 `:803/805`）· P1-2 超时/重试**官方 API 线已接线**（真实对象 = **web 线硬编码** `dom_web_client.h:44` / `upload_registry.cpp:39`；重试消费点在 `local_nodes.cpp:506-541`，**非** `executor.cpp`）· P1-3 N-05 连接测试按钮**批 2 已落地**（`property_panel.cpp:1277-1332`）⇒ 降为「收口 / 复核」· P1-4 网页版图片理解**已落地**（`M8-14` · `local_nodes.cpp:724`「先上传，再发送」）· P1-5 `resolve_official_key` 不存在（真身 = `ai::resolve_api_key`）· P1-6 缩放**已有**（`ai/image_convert`）· 裁剪 = 新增 · **EXIF 零实现**；P2 数字：`--selftest` **十三组** · `--provider-selftest` **52/0** · N-06 `mode` 现状默认 **`web`**（`node_registry.cpp:371` · 改默认值 = 行为变更 ⇒ 待拍板）· 已有一级「参数」`CollapsingHeader` · Console 侧忽略提示已有。
+  * **登记与索引同步**：[../AI_README.md](../AI_README.md) §5 编号空间新增 **`L1-*`**（任务）/ **`VL1-*`**（离线验证）/ **`AL1-*`**（人工验收）· [DocMAP.md](DocMAP.md) §一 文档行 + §最近更新 + §5.3 · [变量术语对照表.md](变量术语对照表.md) §11.2 补 **`I17` / `I18` / `I19`** 与 `L1-*` 三项（并标注与 PatchB 的 `L1` 层**同形不同物**）· 权威位复检：[AI_Status.md](AI_Status.md) §一 + [loop_dev.md](loop_dev.md) §4（断链 **1197 → 1219 → 1246**；批 9-1 复检 **1283**）· 本文件索引 + 本节。
+- **验证（2026-10-12 本机实测）**：**`check_all.ps1` 15 / 15 PASS · exit 0**（物证 `build/logs/check_all_20261012_185437.log`）—— ① 构建 **0 error / 0 warning**（`error=0 · warning=0`）· ② `--selftest` **十三组全 PASS**（末行「结果: SHA3 … 网络与凭据」13 组）· `--exec-selftest` **546 / 0** · `--graph-selftest` **110 / 0** · `--diag-assert` **40 行** · `--dep-check` PASS（`WebView2 运行时 152.0.4191.66（api）`）· `--settings-assert` PASS（越界 **15** 例全拦 + 边界 **3**）· `--site-assert` PASS（纯函数 **47/47** · 枚举 **20→21→20** · 零残留）· `--autosave-assert` PASS（场景 **28/28**）· ③ 夹具 **44 / 0** · **17 / 0** · **15 / 0** · ④ `--upload-selftest` **72 / 0** · ⑤ `loop_verify -StatusOnly` exit 0 · ⑥ **`check_links` 1246 / broken 0**（批 9-1 复检 **1283 / 0**）；另：`--provider-selftest` **52 / 0 · exit 0**。⇒ **与批 8 基线逐项一致**（纯文档批未改 `source/**` · 未改 `DevPlan.todo` JSON ⇒ 运行链路数字不变）。
+- **落点**：[actionPlan/M_8nodes_extension.md](actionPlan/M_8nodes_extension.md) §7.3 / §10 / §11 / §12 · [actionPlan/M_node_expansion.md](actionPlan/M_node_expansion.md)（仅位置变更）· [../AI_README.md](../AI_README.md) §5 · [DocMAP.md](DocMAP.md) · [变量术语对照表.md](变量术语对照表.md) · [AI_Status.md](AI_Status.md) §一 · [loop_dev.md](loop_dev.md) §4 · 本文件。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🧾 `M_patchAB` 批 8：文档口径收口 —— 权威位实测回填（2026-10-11 · 零代码批）**
+
+- **背景（本批要解决的 = 数字 SSoT 在「权威位自身」漂移）**：批 2→7 连续落地时，改代码的一方漏改文档的**唯一权威位** ⇒ 权威位自称「现行」却与实测不符：`--selftest` 记 **50/0 · 490/0**（实测 **52/0 · 546/0**，且已 **十三组**）· `--exec-selftest` 记 **490**（实测 **546**）· `--provider-selftest` 记 **50**（实测 **52**）· `--settings-assert` 记「越界 **11** 例」（实测 **15 例 + 边界值 3 项**）· `--diag-assert` 记「**39** 行」（实测 **40 行**）· `check_all` 记 **14/14**（实测 **15/15**）· 断链记 **1161**（实测 **1184**）。另发现 3 处**自称「现行」的复制位**（`M6.md` §一 `M6-10` 行 / §二 `M6-10` 行、`milestone_plan.md` §一 `M6` 行）与 1 处**工具注释**（`source/README.md` §4 `check_links` 行）同源漂移。
+- **本轮落地（零代码 · 只改「自称现行」的位）**：
+  * **权威位回填（`AI_README.md` §2）**：`--selftest`（配置表 **52/0** · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · DOM 探测 27/0 · 执行器 **546/0** · **十三组**，补**同日链** 464 → +26 → +34 → +20 → +2 与**组数链** 七组 → 九组 → 十二组 → 十三组）· `--exec-selftest` **546/0** · `check_all` **15/15**（枚举补齐「第 ⑥ 项文档断链」）· `--diag-dump`/`--diag-assert` **8 分节 40 行** · `--settings-assert` **越界 15 例 + 边界值 3 项**（两节新增例）；表头基线日期 → **2026-10-11**。
+  * **门禁表回填（`loop_dev.md` §4）**：`--selftest` **十三组**（补 V-13 23/0 · V-14 13/0 · V-15 11/0 · V-16 16/0）· `--exec-selftest` **546/0** · `--provider-selftest` **52/0** · 断链 **1197/0**（链：批 5 = 1161 → 批 6 = 1175 → 批 7 = 1184 → **批 8 = 1197**，本批文档回填新增链接当场复检）。
+  * **「现行」复制位对齐**：`M6.md` §一（`M6-10`：「现行 **15** 项」+ 枚举补**文档断链** + 链尾 **15/15（`DBG-L01` 批 · 2026-10-11 · 现行）**）· `M6.md` §二（载体 ✅ **15/15**）· `milestone_plan.md` §一（`M6-10` 一键自检 **15/15**）· `source/README.md` §4（`check_links` 注释 **1184**）· `DocMAP.md` §最近更新（补 批 6→7 + 批 8 一行口径）。
+  * **不追溯改写（口径 = [../AI_README.md](../AI_README.md) §10.1）**：所有**带日期 / 批次标记**的历史行**保留原值** —— `M6.md` §一 `M6-10` 行内的 12/12 · 13/13 · 14/14 链、`AI_Status.md` §四 第 5 / 第 6 条（14/14）、[actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md) §7.1 / §7.1b 快照表（490 / 425 等）、[actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §5 历史批次行、本文件旧批、[loop_dev.md](loop_dev.md) §10.1 陷阱 9 物证（13/13）。
+- **验证（2026-10-11 本机 · 全部当场实测）**：构建 **0 error / 0 warning** · `--selftest` **exit 0**（**十三组**）· `--exec-selftest` **546/0** · `--graph-selftest` **110/0** · `--provider-selftest` **52/0**（末行 `[配置表自检] 52 项通过 / 0 项失败` · 条目 **20** = official 9 / web 11）· `--settings-assert` **PASS**（越界 **15** + 边界 **3**）· `--diag-dump` **40 行** · `--dep-check` **PASS**（`WebView2 运行时 152.0.4191.66（api）`）· 夹具 **44/0** · **17/0** · **15/0** · `--upload-selftest` **72/0** · `check_links` **1197/0**（exit 0，本批新增链接复检）· `check_all.ps1` **15/15 PASS · exit 0**（物证 `build/logs/check_all_20261011_215819.log`，构建行 = `PASS 构建（0 error / 0 warning）exit=0 · error=0 · warning=0`）。
+- **落点**：[../AI_README.md](../AI_README.md) §2 · [loop_dev.md](loop_dev.md) §4 · [actionPlan/M6.md](actionPlan/M6.md) §一 / §二 · [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) §一 · [../source/README.md](../source/README.md) §4 · [DocMAP.md](DocMAP.md) §最近更新 · 本文件索引与本节。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🌐 `M_patchAB` 批 7：代理 / 自签证书 / 凭据库配置（2026-10-11 · 批次 `B3-b` · `PB-06` 剩余 · 纯离线批）**
+
+- **背景（归档 `M_patchA` §4.1 `PB-06` 残余）**：① `HTTPS_PROXY` / `HTTP_PROXY` **完全没接**（企业网络里模型请求一律直连失败）；② 证书不受信时只能靠 `api_probe --insecure` 单命令绕过（界面 / 节点里**无入口**）；③ `config.toml [credentials]`（目录 / TTL / backend）三项**写死在代码里**（`~/.brain-ai/credentials` / 30 天 / `dpapi`），改了配置**没有任何效果**；④ 面板里「网络超时 / 错误与重试」还挂着「**暂不生效**」的旧标签，而这两项**批 4 已接线**（说明与实现不一致）。
+- **本轮落地（代码 + 离线断言）**：
+  * 🆕 `ai/http_net.{h,cpp}`：网络策略**一处收敛** —— 纯函数 `host_of_url()` / `no_proxy_matches()`（`*` · 精确 · `.corp.com` 后缀 · `host:port` · 逗号分隔 · 大小写不敏感） / `resolve_proxy()`（优先级：**`NO_PROXY` 命中 ⇒ 直达** → `[network].proxy` → `HTTPS_PROXY`/`HTTP_PROXY`（按目标 scheme）→ `ALL_PROXY`；`[network].no_proxy` 非空则**覆盖**环境变量） + `resolve_http_net()`（含 `verify_tls`）+ **唯一副作用点** `apply_http_net(client, …)`（`set_proxy` + `set_proxy_basic_auth` + `enable_server_certificate_verification`）+ `describe_http_net()`（**代理口令打码**）。环境变量读取做成**可注入**的 `EnvLookup` ⇒ 断言不受开发机环境影响。
+  * **接线（两条 HTTP 路径）**：`ai/http_json.cpp`（Anthropic / Gemini / 三协议共用传输）与 `ai/deepseek/deepseek_official_provider.cpp`（openai 兼容官方 API）在**主线程**解析网络策略（读进程配置缓存），以**值语义**放进工作线程的作业对象（守 `run_cancellable` 的「work 自持全部对象」契约）。`HttpJsonRequest` 新增 `std::optional<HttpNetOptions> net` = **显式覆盖**（自检 / 工具需要确定性时使用）。
+  * **配置（`utils/config.*`）**：新增 `[network]{proxy, proxy_from_env, no_proxy, insecure_tls}` 与 `[credentials]{backend, dir, ttl_days}` 两节的读写；`insecure_tls` **默认 false = 严格校验**（唯一开关）。`unwired_config_fields()` 注释同步（`network.*` / `credentials.*` 已从「未接」变为「已接」）。
+  * **凭据（`utils/credential.*`）**：`credentials_dir()` 改读 `[credentials].dir`（空 ⇒ 默认目录，行为不变）；新增 `credentials_backend_error()`，在 `save_credential()` / `load_credential()` 入口拦下**未实现的后端**（`kms` 等）⇒ **明确报错 + 零文件留痕**（不静默降级、不落明文）；`app.cpp` 启动惰性清理 / `--cred-list` / `--cred-purge` / 诊断报告全部改取 `[credentials].ttl_days`。
+  * **界面（`ui/settings_panel.cpp`）**：新增 **「网络与证书（代理 / 自签）」** 与 **「凭据库（保存位置 / 保留天数）」** 两节；`insecure_tls` 打开时红字提示「⚠ 危险：仅建议内网/离线环境使用」；同时**修掉两处过期标签** —— 「网络超时」「错误与重试」不再写「暂不生效」，改为如实口径（官方 API 默认超时 / 只对 429 · 5xx · 网络超时重试）。
+  * **校验（`utils/settings_validation.cpp`）**：代理必须带 `http://` / `https://` / `socks5://` 且**有主机名**；`credentials.ttl_days` 范围 0…3650；`backend` 只接受 `dpapi`（其余给出「换后端要先实现对应加解密」的可操作提示）。
+  * **自检扩展**：`api_probe --selftest` **十二组 → 十三组** —— 新增 **V-16（16 条）**：`host_of_url` / `NO_PROXY` 四态（含 `corp.com.evil.com` **不被后缀骗过**、`host:port` 必须连端口匹配）/ 代理优先级五态（配置 > 环境、按 scheme 取、`ALL_PROXY` 兜底、`no_proxy` 覆盖环境、`proxy_from_env=false`）/ 证书默认严格 + 唯一开关 / 口令打码 + **回环证明**（把代理指到本机 `httplib::Server`：目标域名**不存在**但请求经代理成功，服务器侧回读**绝对 URI**）＋**回环反面**（策略为「直达」时代理**收不到**请求）+ 凭据三态（目录真的生效 / 未实现后端明确报错且零留痕 / 读取给出同一条原因）；`--settings-assert` **越界 11 → 15 例**（新增代理缺前缀 / 只有 scheme / 凭据 TTL -1 / 后端 kms），边界值新增「合法代理 + 自签开关 + TTL 0」三项**必须通过**。
+- **验证（2026-10-11 本机）**：构建 **0 error / 0 warning**；`api_probe --selftest` **十三组全 PASS · exit 0**（V-16 **16 / 0**）；`--exec-selftest` **546 / 0**；`--graph-selftest` **110 / 0**；`--settings-assert` **越界 15 例全拦截 + 边界值通过**；`--diag-assert` **40 行**（凭据节新增「后端 / TTL」一行）；`check_all.ps1` **15 / 15 · exit 0**；断链 **1184 / 0**（**入闸当场抓到 1 条真断链**：本批 CHANGELOG 里把 `节点编辑器使用说明.md` 误写成 `../节点编辑器使用说明.md` ⇒ 已修）。
+- **⛔ 需真机（如实登记）**：**企业网络下的实测**（真实 `HTTPS_PROXY` / 自签证书站点）需人工环境；面板两节按钮的点选归真机批。
+- **落点**：[actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §0.4（基线）/ §2.3（落地表）/ §1（勾账）· [AI_Status.md](AI_Status.md) §一 / §四 · [../source/README.md](../source/README.md) §4.5 · [节点编辑器使用说明.md](节点编辑器使用说明.md)（设置面板节）。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🧩 `M_patchAB` 批 6：L2 底座 —— 可插拔 Provider 抽象 + 工厂按表分派 + Anthropic / Gemini 协议 + 能力驱动接线（2026-10-11 · 批次 `B2-b` · `PB2-04`…`PB2-12`）**
+- **背景（归档 `M_patchB` §3 L2 整批保留「做」的理由 = 可插拔底座）**：① 三条协议（OpenAI 兼容 / Anthropic Messages / Gemini generateContent）此前只能靠 `mode == "web"` 这类**硬编码判断**分流，新增厂商要动节点代码；② `anthropic` / `gemini` 条目在表里已存在却**没有实现**（`--provider-selftest` 直接跳过）；③ 视觉 / `seed` / 系统角色的门控散落在节点里，与表的 `capabilities` **两个真值来源**；④ `provider_spec.h` 头注释用**扁平**字段名、实现读**嵌套**（风险 `R18`：照抄也建不出站点）。
+- **本轮落地（代码 + 离线断言）**：
+  * 🆕 `ai/http_json.{h,cpp}`：**通用 JSON POST**（三条协议共用同一套传输语义）—— `http_post_json()` 走 `run_cancellable`（工作线程 + 50 ms 令牌轮询 ⇒ 取消**立即返回**）、连接 / 读超时按表、响应体上限（默认 4 MB）、`raw_head` 诊断；纯函数 `append_query_param()`（Gemini `?key=`）/ `parse_json_text()` / `json_error_message()`（**兼容三种错误形状**）。头文件**不暴露 httplib**。
+  * 🆕 `ai/inference_provider.{h,cpp}`（`PB2-08`）：`GenerateParams`（system_prompt / prompt / images / temperature / max_tokens / top_p / seed / **on_delta 槽位保留**）/ `GenerateResult`（ok / http_status / text / error / raw_head / elapsed_ms / **cancelled** / 编码指标 / protocol / provider_name）+ `class InferenceProvider{name, protocol, caps, generate}`；**不新开** `generateStream` / `generateWithImage` 虚函数（决策 `D-09`）。能力门控 `capability_gate()` 为**纯函数**（节点 / 界面 / 自检同一判据）：`vision=false + 图片` ⇒ **拦路**（可操作文案）；`seed` 不支持 ⇒ 提示「已忽略」（**不拦路**，与既有网页版口径一致）；`system_role=false` ⇒ 指示调用方**前置拼接**系统提示词。`caps_for_call(spec, web_mode)`：有表条目用**本条** `capabilities`；无表条目的 `web` 调用用内置网页版协议的能力 ⇒ **老工作流行为不变**（`I2` / `I19`）。
+  * 🆕 `ai/anthropic_provider.{h,cpp}`（`PB2-10`）：`/v1/messages` + `x-api-key` + `anthropic-version`；请求体 `{model, max_tokens（**必填**，缺省兜底 2048）, system（**顶层**）, messages}`、`temperature` **钳制到 0…1**、图片 `content[] = {type:image, source:{type:base64, media_type, data}}`（**不带** data URL 前缀）；响应 `content[].text` **逐块拼接**（忽略 `tool_use` 等非文本块）；错误带出 `[error.type] message`。
+  * 🆕 `ai/gemini_provider.{h,cpp}`（`PB2-11`）：`/v1beta/models/{model}:generateContent` + `?key=`（`auth_style=query` ⇒ **不发凭证头**）；请求体 `{contents[0].parts[{text},{inline_data{mime_type,data}}], systemInstruction, generationConfig{temperature,topP,maxOutputTokens,seed}}`；响应 `candidates[0].content.parts[].text` 拼接；**被安全策略挡住时**（`promptFeedback.blockReason` / `finishReason != STOP`）给出**原因**而不是「无内容」。
+  * 🆕 `ai/provider_factory.{h,cpp}`（`PB2-09`）：按表 `protocol` 分派 `openai` / `anthropic` / `gemini` / `deepseek-web`（`DeepSeekWebProvider` **收编**既有 `web_chat()`，`--web-chat` 行为逐字不变 ⇒ `I2`）；`dom` ⇒ **明确说明**由 DOM 适配器承载（需要页面上下文，不经工厂）；**未知 `protocol` ⇒ 明确报错 + `unsupported_protocol=true`**（`R9`，绝不静默回落）。
+  * **能力驱动接线**（`PB2-12`）：`nodes/local_nodes.cpp` 删掉 `mode == "web"` 的硬编码分流 —— 系统提示词是否前置拼接由 `capabilities.system_role` 决定、视觉拦路由 `capabilities.vision` 决定（**保留**逐模型 `vision=false` 的既有拒绝与「表内视觉模型」建议）、`seed` 提示由门控统一给出、`mode=web` 无表条目时按内置网页版能力取（`caps_for_call`）；`import` `inference_provider.h` 成为节点侧唯一能力入口。
+  * **`main.cpp`（`--provider-selftest`）**：协议实现检查改问**工厂**（`factory_implements` / `factory_protocols_text`），ping 改走**工厂 → `generate()`** 同一入口 ⇒ `--provider-selftest --provider anthropic|gemini` 有 Key 时可直接真机出结果（打印「协议 / 实现」两行）。
+  * **`PB2-05` 残余**：`provider_spec.h` 头注释改为**嵌套** schema 名全表（`capabilities{}` / `limits{}` / `web.endpoints{}` / `web.send{kind,value}` / `web.done_when{kind,selector}` …）+ 明确「扁平名会被判未知字段 ⇒ 降级为登录型条目」；归档路径改指 `docs/Archive/actionPlan/M_patchB.md`。面板「配置表管理区」四按钮**并入 §3.5（`PB2-24`）** 并已随该批落地（新建站点 / 重新加载 / 打开用户目录 + 批 2 的「测试连接」「测试选择器」）。
+  * **自检扩展**：`api_probe --selftest` **九组 → 十二组** —— **V-13**（**23 条**：两协议端点 / 请求体 / 图片块 / `max_tokens` 兜底 / `temperature` 钳制 / 响应拼接 / 拦截原因 / data URL 拆分）、**V-14**（**13 条**：工厂分派逐条与表 `caps` 一致 + **对随程序发布的 `providers.json` 做 R9 全量核对** + dom / 未知 protocol 的明确报错 + 能力门控四场景 + `auth_style=none` 无需 Key）、**V-15**（**11 条**：本机回环**端到端** —— Anthropic / Gemini 真实请求 + **服务器侧回读**表驱动头与正文 + 401 原因 + 1 s 读超时 + 取消 ≤1.5 s）。`provider_spec_selftest()` 新增 **R18 两条**（嵌套写法逐字生效 / 扁平写法降级并告警）；原「未实现协议 → 警告」用例的示例 protocol 由 `anthropic` 改为 `cohere-v2`（**该协议本批已实现** ⇒ 旧断言失去意义，正是 R9 闸门该抓的东西）。
+- **验证（2026-10-11 本机）**：构建 **0 error / 0 warning**；`api_probe --selftest` **十二组全 PASS · exit 0**（V-13 **23 / 0** · V-14 **13 / 0** · V-15 **11 / 0**；含配置表 **52 / 0**）、`--exec-selftest` **546 / 0**（544 → 546 = R18 两条）、`--graph-selftest` **110 / 0**、`aiwrite --provider-dump` 末行「已实现协议：openai、anthropic、gemini、deepseek-web、dom」、`check_all.ps1` **15 / 15 · exit 0**、断链 **1184 / 0**。V-15 实测：Anthropic 端到端 39 ms · 读超时 1004~1019 ms · 取消 **309 ms**。
+- **⛔ 需真机 / 有 Key（如实登记）**：`anthropic` / `gemini` 的**真实生成**（`--provider-selftest --provider anthropic|gemini`、`--vlm-selftest` 用视觉模型）需 Key；两条协议的**流式**仍归 `PB-03` 暂停项（`on_delta` 槽位保留，整段到达一次性回调）。
+- **落点**：[actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §0.4（基线）/ §3.1（落地表）/ §1（勾账）· [loop_dev.md](loop_dev.md) §10.1（陷阱 12 / 13）· [AI_Status.md](AI_Status.md) §一 / §四 · [../source/README.md](../source/README.md) §4。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🧰 `M_patchAB` 批 5：视觉能力声明回填（`M8-21` / `FEA-M7-09`）+ `PM-03` 一键自检 + `DBG-L01` 断链入闸（2026-10-11）**
+
+- **背景**：① `M8-21` 是 `M8` 里程碑**唯一主线代码项**（并 `FEA-M7-09` / `M7-10`）：`deepseek` 条目的 `capabilities.vision` 一直是 `false`（过时 notes 写着「官方 API 无视觉模型」），而 2026-09-29 早已**实测通过**官方 API 视觉 ⇒ 台账上长期挂着「⚠ 声明未回填」；② `PM-03` 在 §0.6 拍板为「只加一行调用 + 文档提及」；③ `DBG-L01` 残余两条 = 「检查器跨行 / 跨反引号误判未收敛」+「断链与文档一致性尚未纳入 `check_all`」。
+- **本轮落地**：
+  * **`M8-21`（`providers.json` 声明回填）**：`deepseek` 条目 `capabilities.vision` **false → true**、新增模型 **`deepseek-flash`（V4.1-Flash 原生多模态）**（`"vision": true`）、`vision_model_default` **空 → `deepseek-flash`**、`notes` 改为实测口径（2026-09-29 用户实测通过 · 归 `M7-09` / `M8-21`）。**三处落点复核结论**：`nodes/local_nodes.cpp`（`VLMGenerate` 网页版分支已在 `M8-14` 接线 = 上传双证据 → 注入 → 发送 → 取答案）、`engine/provider_resolve.cpp`（**已按能力表 / 上传单元判定**，不再写死「web 不支持」）、`ui/property_panel.cpp`（提示按生效条目）—— 均**无「写死 web 不支持」残留**（`grep` 复核），故本项**只需回填声明**。
+  * **`site_capability_evidence.json`**：`deepseek.image` 的 evidence 补记「声明已回填」，并把 `_doc` 里「以 deepseek 为例」的历史例改标为历史（避免台账继续对不上）。
+  * **`PM-03`（`source/build.ps1`）**：新增 **`-SelfCheck`** 开关 —— 编译成功后调用 `source/tools/check_all.ps1` 并输出摘要；失败时打印 `check_all` 日志路径并抛错（默认关 ⇒ 不拖慢日常构建）；用法行写进脚本头注释。
+  * **`DBG-L01`（文档断链入闸）**：🆕 **`source/tools/check_links.py`**（**入库**，取代 `vcpkg-cache/` 临时脚本）—— 仓库根由**脚本位置推导**（不再写死绝对路径）、**剔除围栏代码块与行内代码跨度**、链接目标必须同一行且无空白（**修掉跨行 / 跨反引号误判**）、逐条打印 `文件:行 -> 目标`、退出码 0/1；`source/tools/check_all.ps1` 新增 **⑥ 文档断链** 项 ⇒ **`check_all` 14 项 → 15 项**。
+- **验证（2026-10-11 本机）**：构建 **0 error / 0 warning**；`build.ps1 -SelfCheck` ⇒ 编译成功 + **一键自检 15/15 PASS**；`api_probe --exec-selftest` **544 / 0**；`--selftest` **九组全 PASS · exit 0**；`aiwrite --provider-selftest` **50 / 0**（20 条 · 警告 13）；`check_links.py` **checked 1161 / broken 0 · exit 0**（新判据口径，含仓库根 `*.md`）。
+- **⛔ 真机（如实登记）**：`deepseek-flash` 视觉的**真机复跑**（`--vlm-selftest` / E-02 用该模型）与 `M8-14` 网页版图片理解的豆包端到端仍属真机批。
+- **落点**：[actionPlan/M8.md](actionPlan/M8.md) §0.5（`M8-21` 状态）· [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §1 / §6 · [AI_Status.md](AI_Status.md) · [loop_dev.md](loop_dev.md) §4（断链**权威位**改为入库脚本）· [../source/README.md](../source/README.md) §4。**⛔ 未提交**。
+
+---
+
+**🗂️ `M_patchAB` 批 4：跨版本文件迁移（`PC-04`）+ 最近列表治理（`PC-03`）+ `timeout.*` / `error.*` 接线上线（2026-10-11 · 纯离线批）**
+
+- **背景**：① `DBG-M6-02`：工作流 / 配置文件**跨版本只能 warn 后被拒或硬读**（旧实现甚至会把「未来版本」的文件按当前规则读坏）；② `FEA-M2-02`：最近列表**不校验存在性**（点失效条目报错、列表越积越多）；③ `DBG-M6-01` / `FEA-M6-07`：`timeout.*` / `error.*` 改了**没效果**（在 `unwired_config_fields()` 清单里）。
+- **本轮落地（代码 + 离线断言）**：
+  * 🆕 `engine/migration.{h,cpp}`（`PC-04`）：**表驱动**迁移框架 —— `migrate_workflow()` 判定「缺版本 ⇒ 按当前处理（记一条说明）/ 同主版本 ⇒ 原样通过 / 旧主版本 ⇒ 走迁移表（**生产表当前为空**，如实记「无需迁移」）/ **未来主版本 ⇒ 明确拒绝** + 可操作错误」；`migrate_workflow_with(表, 文档)` 供自检用夹具表覆盖**机制本身**（含「步骤失败 ⇒ 整体拒绝且原因透传」）；**拒绝时不改动调用方文档**（不会把新版文件降级写坏）。
+  * `engine/migration.cpp` 的 `migration_selftest()`（**20 条断言**）：工作流 8 条 + 迁移机制夹具 4 条 + 配置 4 条 + **端到端 4 条**（临时目录：`config_version = 99` ⇒ 加载成功但标记「未来版本」+ `save_config()` **拒绝写回** + **原文件一字未改**；正常配置 ⇒ 保存 / 回读一致）。
+  * `engine/workflow_io.cpp`：`graph_from_json()` 接线迁移（在**副本**上迁移后再解析）⇒ 未来版本**拒绝载入**（旧行为只 warn）。
+  * `utils/config.{h,cpp}`（`PC-04` 配置侧）：`migrate_config()`（缺版本 ⇒ 补 1；未来版本 ⇒ 置 `Config::version_newer_than_supported`）+ `save_config()` **护栏**（标记为真时拒绝写盘并记 error）—— 避免「先备份再降级覆盖主文件」。
+  * `engine/recent_files.{h,cpp}`（`PC-03`）：新增 `RecentStatus` / `recent_with_status()`（只读校验存在性）/ `count_missing_recent()` / `prune_missing_recent()`（一键清理 + 逐条日志）；`ui/app.cpp`「文件 → 最近打开」**失效项灰显不可点** + 悬停解释 + 「清理失效条目（N）」+ 状态栏回执。
+  * `ai/include/retry_policy.h` + `ai/src/retry_policy.cpp`（`PB-08` 残项）：`http_status_retryable()`（**可重试** = 429 / 5xx / 网络超时 0；**不重试** = 400/401/402/403/404 —— 避免加剧风控）、`retry_delay_ms()`（线性退避 + 上限 30 s）、`clamp_retry_count()`（开关 / 负数 / 上限 5）；`cancel_token.h` 新增 `sleep_interruptible()`（重试等待可被取消打断）。
+  * `nodes/local_nodes.cpp`（官方 API 路径）：`timeout.connect_ms` / `first_byte_ms` 作为**表未声明时**的默认连接 / 读超时（表优先口径不变）；`error.*` 真正生效 —— 只对**可重试**失败重试、取消时立即放弃、每次重试写 Console。
+  * `utils/src/config.cpp`：`timeout.*` / `error.*` 从 `unwired_config_fields()` **移除**（`api_probe` 的 PA-08 断言同步改为「**不在**清单里」）。
+- **验证（2026-10-11 本机）**：构建 **0 error / 0 warning**；`api_probe --exec-selftest` **524 → 544 / 0**（+20 = 迁移自检）；`--selftest` **九组全 PASS · exit 0**（V-12 由 11 → **17 / 0**：+6 = 重试策略与可中断等待；V-10 工作流文件组新增「存在性校验 / 失效清理」两列）；`--graph-selftest` **110 / 0**；`check_all.ps1` **14 项 · 失败 0**；`--diag-assert` 未接清单字段数下降（39 行）。
+- **⛔ 真人点选（如实登记）**：「最近打开」里失效项灰显 / 「清理失效条目」的实际点选、以及 GUI 侧「未来版本配置保存被拒」的提示可见性，归真机批（同一条代码路径已由离线断言覆盖）。
+- **落点**：[actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)（§0.4 基线 / §4 `PC-03`·`PC-04` / §5 配置残项）· [AI_Status.md](AI_Status.md) · [../AI_README.md](../AI_README.md) §2（数字**权威位**）。**⛔ 未提交**。
+
+---
+
+**⏹️ `M_patchAB` 批 3：网页/官方通道**真取消**（`PB-02`）+ 自检扩展（`PB-09`：V-11 / V-12）（2026-10-11 · 纯离线批 · 含一条 httplib 实测结论）**
+
+- **背景**：`DBG-M4-02` / `FEA-M4-02` —— 点「■ 停止」只能**不再开始新节点**，正在执行的 HTTP 调用照旧阻塞到底（`cancel` 语义不彻底）；`PB-09` 要求的 V-11（无 Key 请求构造）/ V-12（取消/超时语义）此前**没有任何自动化证据**。
+- **本轮落地（代码 + 离线断言）**：
+  * 🆕 [../source/ai/include/cancel_token.h](../source/ai/include/cancel_token.h) + `ai/src/cancel_token.cpp`：`CancelToken`（跨线程置位）+ `CancelWatch`（同步调用期间轮询并调用「中断动作」）+ **`run_cancellable()`（主路径：工作线程执行 + 调用方轮询令牌 ⇒ 取消**立即**返回，工作线程自行收尾）**；契约写进头注释（`work` 必须自持全部对象，取消后可能仍在跑）。
+  * **实测结论（如实登记 · 影响设计）**：**httplib 0.15.3 的 `httplib::Client::stop()` 不能唤醒另一线程中阻塞的读** —— `shutdown(SD_BOTH)` 后读仍等到服务端响应才返回（离线复现：4 秒响应 ⇒ 取消后仍 4016 ms）。因此主路径改用 `run_cancellable`，socket 层 `stop()` 只作尽力而为。
+  * `ai/deepseek/deepseek_official_provider.{h,cpp}`：`OfficialChatRequest.cancel` / `OfficialChatResult.cancelled`；**发起前**协作检查（已取消 ⇒ 不发请求、不耗额度）+ **请求期间** `run_cancellable`（取消 ⇒ 立即归因「已取消」）；请求数据（端点 / 头 / 正文 / 结果槽）全部搬进 `shared_ptr` 作业对象 ⇒ 取消后后台线程安全收尾。
+  * `ai/deepseek/deepseek_web_client.{h,cpp}`：同款 `cancel` / `cancelled`；挑战 → 求解 → 生成之间加协作检查点（求解期间取消 ⇒ **不发**生成请求）；请求**进行中**的中断为尽力而为（保持单连接流程不破坏真机路径，延迟上限 = 读超时，已登记真机复核）。
+  * `engine/executor.{h,cpp}`（`PB-02` 语义收口）：`ExecutionContext.cancel_token` + `is_cancelled()` 同时看令牌；**每次 `start()` 换新令牌**（上一轮取消不污染下一轮）；`cancel()/requestStop()` 置位令牌；**取消导致的节点异常记 `Skipped`（不是 `Error`）+「[取消] nX 已中断（N ms）」日志**，会话随后翻 `Cancelled`（`AB-01` 的可核对记录）。
+  * `nodes/local_nodes.cpp`：文本生成（官方）/ 图片理解 / 网页版三条路径都把令牌交给 HTTP 层。
+  * `deepseek_official_provider.cpp` **顺手修一个真缺陷**：`build_auth_headers()` 在**无 Key** 时会发出 `Authorization: Bearer `（空值）⇒ 现在**无 Key 不构造凭证头**（V-11 断言直接覆盖）。
+  * `api_probe --selftest` **七组 → 九组**：新增 **V-11 无 Key 请求构造**（6 条）与 **V-12 取消与超时语义**（11 条，**本机回环** `httplib::Server`：/slow 4 s、/fast 立即；判据 = 取消后 **1.5 s 内**返回且 `cancelled=true`、读超时 1 s 对 4 s 响应给出含「超时」的可操作错误）。
+  * `aiwrite.exe --run-selftest --official`（新）：有 Key 时**真实生成一次**（「请只回复 pong」）；缺 Key ⇒ 打印可操作提示 + 退出码 **2**（与其余自检同语义）。
+- **验证（2026-10-11 本机）**：构建 **0 error / 0 warning**；`api_probe --selftest` **九组全 PASS · exit 0**（V-11 **6 / 0** · V-12 **11 / 0**；取消（请求中）实测 **369 ms** · 读超时实测 **1027 ms** · 正常路径 32 ms）；`--exec-selftest` **524 / 0**（本批未改执行器断言数）；`--graph-selftest` **110 / 0**；`aiwrite --run-selftest` **PASS · exit 0**（离线预期不变）；`aiwrite --run-selftest --official` 无 Key ⇒ **exit 2** + 可操作提示；`check_all.ps1` **14 项 · 失败 0**。
+- **⛔ 需真机 / 有 Key（如实登记）**：`VB-02` / `AB-01` 的 GUI 点选（运行中点「■ 停止」→ 状态栏与日志 1 秒内出现取消记录）需真人点一次；官方 API 真实生成（`--run-selftest --official`）与网页版「请求进行中取消的实际延迟」归真机批。
+- **落点**：[actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)（§0.4 基线 / §2.1 / §2.4）· [loop_dev.md](loop_dev.md) §10.1（陷阱 11 = httplib `stop()` 不唤醒阻塞读）· [AI_Status.md](AI_Status.md) · [../AI_README.md](../AI_README.md) §2（数字**权威位**）。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🩺 `M_patchAB` 批 2：网页版「会话失效可诊断」+ 面板诊断按钮（2026-10-11 · `PB2-25` / `PB-07` / `PB2-07` / `PB2-30②` · 纯离线能力 + GUI 入口）**
+
+- **背景（v9 实测登记 · 三个问题）**：① `--web-probe` 判据偏松 —— 只看 `probe.ok && has_user_token` ⇒ **端点 `code=40003`（请求被拒）时仍打印 PASS**；② 会话失效只在**运行期**错误串里出现「invalid token」，界面**没有「重新登录」入口**（`DBG-M4-05` / `FEA-M4-07`）；③ 面板只有 CLI 才能跑连通性 / 选择器诊断（`PB2-07` / `PB2-30②` 一直只有 CLI 侧）。
+- **本轮落地（代码 + 离线断言）**：
+  * **`PB2-25` 判据收紧**：🆕 [../source/web/include/probe_verdict.h](../source/web/include/probe_verdict.h)（纯函数）+ `web/src/probe_verdict.cpp` —— `parse_endpoints_report()` 把端点报告（`<path> -> <HTTP 状态> <响应体>`，` || ` 连接）解析为结构化行（容错取 `code` / `biz_code`）；`judge_probe_result()` 给出**七分类**结论：`Pass`（脚本通 + 有凭证 + **判据端点 200 且 `code=0`**）/ `NotLoggedIn` / `SessionInvalid`（401 · 40002，**需重新登录**）/ `RequestRejected`（403 · 40003，风控 / PoW / 前端版本）/ `EndpointUnknown`（端点缺失 / 传输失败 / 200 但无 `code`）/ `ScriptFailed` / `NotApplicable`（DOM 站点只读诊断），**每类都带判据与可操作下一步**；`web/webview_host.cpp` 的 `--web-probe` 改用它 ⇒ **端点 40003 不再假 PASS**（退出码 1），并新增「结论 / 判据 / 下一步」三行输出。
+  * **`PB-07` 会话失效引导（界面入口）**：同头的 `classify_session_failure_text()` 做**错误串反查**（容错匹配 `HTTP 401/403`、`code=40002/40003`、`biz_code=…`、「会话已失效」、「invalid token」等，**独立数字边界** ⇒ `40010` 不误判成 401）；`ui/editor_state.cpp` 的 `refresh_last_error()` 据此给 `last_error` 补 `relogin_available / relogin_needed / relogin_provider_id / relogin_text`（生效条目 id 由 `resolve_effective_provider()` 解析）；`ui/error_bar.cpp` 新增**「会话已失效，点此重新登录」**按钮（会话被拒时显示「站点拒绝请求，点此处理」），点击调 `ui::open_web_login_window(id)` 打开**该条目**的登录窗口（严格解析、**不回落**内置默认站点 —— `D-22②` / `I14`；只碰 `界面#登录窗口` 归属 —— `I24`）。**判据不命中时绝不显示按钮**（普通超时 / 解析失败不误报）。
+  * **`PB2-07` 面板「测试连接」**：🆕 [../source/ui/include/connection_test.h](../source/ui/include/connection_test.h) + `ui/src/connection_test.cpp` —— 工作线程执行（**界面不阻塞**）：① 离线 = `ai::provider_spec_selftest()`（**与 CLI 同一实现**，不重写第二套）；② API 条目 = 协议实现检查 → 按表解析 Key（env → 凭据库，同 CLI 顺序）→ 有 Key 时发一条 ping（「请只回复 pong」，打印 HTTP / 耗时 / 回复前 60 字，**不打印 Key**）；③ 网页版条目 = 站点可用性 + 登录态（`web_session_state`，`I15`）+ 端点一致性，**不发送任何提示词**（避免误触发站点调用与风控）；码语义与 CLI 一致（0 / 1 / 2）。
+  * **`PB2-30②` 面板「测试选择器」**：复用**只读**探测 `ai::dom_site_probe()`（不写入页面、不发送内容、不读任何值），把命中数 / 登录判据 / 修复建议同时写进 Console 与面板结果区；码语义与 `--web-adapter-selftest` 一致（0 全命中 / 1 有缺项 / 2 条目不可用 / 3 需人工登录）。两个按钮在参数面板「诊断（只读 · 异步）」区（任意节点可用；选择器按钮仅 `adapter=dom` 条目），明细可在「诊断明细」折叠区看。
+  * **线程与退出契约**：`EditorState::post_background_status()` / `take_background_status()`（工作线程只**投递**结论，主线程每帧取一次写状态栏 —— `ui/app.cpp`）；`ui::stop_diagnostics()` 在 `main.cpp` 里于 `log::shutdown()` **之前**调用（等待 → 超时则分离并**如实记日志**），避免退出期写日志竞态。
+- **验证（2026-10-11 本机）**：构建 **0 error / 0 warning**；`api_probe --exec-selftest` **490 → 524 / 0**（本批新增 **34** 条离线断言 = 报告解析 10 + 判据 15 + 错误串反查 9）；`--selftest` 七组全 PASS · exit 0；`--graph-selftest` **110 / 0**；`aiwrite --provider-selftest` **50 / 0**（20 条）；`check_all.ps1` **14 项 · 失败 0**；`check_links.py` **1097 / 0**。
+- **⛔ 需真实失效响应 / 真人点选（如实登记）**：`VB2-20`（伪造失效 Token ⇒ `--web-probe` 退出码 1 + 界面出现重登入口 + 重登后 `--run-selftest --web` 5/5）与两个新按钮的**点选回路**需真机（本机无 GUI 自动化、无失效响应样本）⇒ 与 `PW-*` / `AW-*` 同批。
+- **落点**：[actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md)（§0.4 基线 / §2.2 / §3.2 / §3.3 / §3.4 进度）· [AI_Status.md](AI_Status.md) · [loop_dev.md](loop_dev.md) · [../AI_README.md](../AI_README.md) §2（数字**权威位**）。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
 
 ---
 

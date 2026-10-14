@@ -45,8 +45,13 @@ bool credential_available(const std::string& ref);
 //  * save/erase/purge 内部已自动调用；外部改动（手工删文件）由 30 秒 TTL 兜底
 void invalidate_credential_cache(const std::string& ref);
 
-// 凭据目录（默认 ~/.brain-ai/credentials）
+// 凭据目录（M_patchAB §2.3 · `PB-06` 剩余：取自 `config.toml [credentials].dir`；
+//  * 空 ⇒ 默认 `~/.brain-ai/credentials`）
 std::string credentials_dir();
+
+// 凭据**后端**是否可用（`[credentials].backend`）：空串 = 可用；非空 = 可操作错误文案
+//  * 本版本只实现 `dpapi`（Windows DPAPI，当前用户作用域）⇒ 其它值**明确报错**（不静默降级）
+std::string credentials_backend_error();
 
 // Key 优先级：节点参数 → 环境变量 DEEPSEEK_API_KEY → 凭据库(ref)
 ResolvedSecret resolve_secret(const std::string& param_key, const std::string& ref);

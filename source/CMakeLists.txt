@@ -255,7 +255,10 @@ add_library(aiwrite_core STATIC
     engine/src/executor.cpp
     engine/src/recent_files.cpp
     engine/src/autosave.cpp          # M_patchAB §4（PC-01/02）：自动保存 + 崩溃恢复（api_probe --autosave-assert）
+    engine/src/migration.cpp         # M_patchAB §4（PC-04）：版本迁移框架（workflow + config；未来版本明确拒绝）
     ai/src/web_pow.cpp
+    ai/src/cancel_token.cpp          # M_patchAB §2.1（PB-02）：协作式取消 + 取消监视（纯逻辑 + 线程）
+    ai/src/retry_policy.cpp          # M_patchAB §2.6（PB-08 残项）：可重试状态 / 退避 / 次数钳制
     ai/src/deepseek/deepseek_web_client.cpp
     ai/src/dom_web_client.cpp        # L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
     ai/src/upload_supply_probe.cpp  # M8 Phase 2：C++ 供料探针（WebView2 会话供料 + 站点只读 GET）
@@ -266,6 +269,12 @@ add_library(aiwrite_core STATIC
     ai/src/kimi/site_upload_kimi.cpp   # M8-14：Kimi 站点上传单元（模板性验证站）
     ai/src/deepseek/deepseek_official_provider.cpp
     ai/src/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）
+    ai/src/http_json.cpp              # L2（B2-b）：通用 JSON POST（取消 / 超时 / 错误归因三协议共用）
+    ai/src/http_net.cpp               # M_patchAB §2.3（PB-06 剩余）：代理 / 自签证书策略（纯逻辑 + 应用点）
+    ai/src/inference_provider.cpp     # L2（PB2-08/12）：统一推理接口 + 能力门控 + openai/网页版实现
+    ai/src/anthropic_provider.cpp     # L2（PB2-10）：Anthropic Messages API 适配器
+    ai/src/gemini_provider.cpp        # L2（PB2-11）：Gemini generateContent 适配器
+    ai/src/provider_factory.cpp       # L2（PB2-09）：按表 protocol 分派（未知 ⇒ 明确报错，R9）
     ai/src/site_template.cpp          # M_patchAB §3.5（PB2-24）：自建网页版站点模板 + 落盘
     nodes/src/local_nodes.cpp
     nodes/src/register_executors.cpp
@@ -274,6 +283,7 @@ add_library(aiwrite_core STATIC
     web/src/pydoll_channel.cpp   # M7B 批 2：新通道（Pydoll 守护进程）—— 本批**不接线**（只 --pydoll-login / --pydoll-selftest）
     web/src/session_snapshot.cpp # M7B 批 2：L2 快照只读视图（MB-D0-8；**只碰元数据**，不读内容）
     web/src/session_store.cpp
+    web/src/probe_verdict.cpp    # M_patchAB §2.2/§3.3（PB-07 / PB2-25）：会话诊断纯函数（判据收紧 + 错误串反查）
     web/src/webview_host.cpp)    # 网页版登录 + 会话 + 协议探测 + 页面内 PoW 求解
 # 头文件根 = **每个模块自己的 `include/`**（模块自带走 src/ + include/）—— 见 AI_README.md §11「代码组织规范」
 #  * 实现（.cpp）在 source/<模块>/src/**；头文件在 source/<模块>/include/**（模块内**拍平**，不再镜像子目录）
@@ -340,6 +350,8 @@ add_executable(aiwrite WIN32
     ui/src/text_view.cpp
     ui/src/texture_cache.cpp
     ui/src/settings_panel.cpp)  # M6（M6-01）：设置面板（config.toml 可调项）
+# M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：面板诊断按钮 + 错误条「重新登录」（PT-07）
+target_sources(aiwrite PRIVATE ui/src/connection_test.cpp)
 target_link_libraries(aiwrite PRIVATE
     aiwrite_core
     imgui_node_editor

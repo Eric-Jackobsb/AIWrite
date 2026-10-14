@@ -40,8 +40,11 @@ std::vector<std::string> unwired_config_fields()
         // 口径变更（2026-10-10 · M6）：以下两项**已接线**，故从清单移除（不再是「改了没效果」）——
         //  * `output.auto_open_on_complete` → EditorState::archive_run_outputs() 归档成功后打开该目录
         //  * `advanced.log_ttl_days`        → 启动时清理 logs/ 下超过该天数的旧日志（不含 app.log / workflow.log）
-        "timeout.*",                    // 连接 / 首字节 / 流空闲超时（Patch B：PB-08）
-        "error.*",                      // 重试开关 / 次数 / 间隔（Patch B：PB-08）
+        // 口径变更（2026-10-11 · M_patchAB 批 4）：`timeout.*` / `error.*` **已接线**，故从清单移除 ——
+        //  * `timeout.connect_ms` / `first_byte_ms` → 官方 API 的**默认**连接 / 读超时
+        //    （**表未声明** `limits.*` 时生效；表优先，见 nodes/local_nodes.cpp 与 PB2-04 口径）
+        //  * `error.retry_enabled / retry_count / retry_interval_ms` → 官方 API 节点重试
+        //    （只对**可重试**失败重试：429 / 5xx / 网络超时；凭证 / 余额 / 请求不合法**不重试**）
         "providers.deepseek.*",     // 仅作默认值来源：实际以 ProviderConfig 节点参数为准
                                     // （PB2-06 起支持 [providers.<id>] 多节；厂商元数据以配置表为准）
     };
@@ -121,6 +124,23 @@ void read_provider(const toml::table& t, Config::Provider& s)
     read_value(t, "api_key_ref", s.api_key_ref);
 }
 
+// M_patchAB §2.3（`PB-06` 剩余）：`[network]`
+void read_network(const toml::table& t, Config::Network& s)
+{
+    read_value(t, "proxy", s.proxy);
+    read_value(t, "proxy_from_env", s.proxy_from_env);
+    read_value(t, "no_proxy", s.no_proxy);
+    read_value(t, "insecure_tls", s.insecure_tls);
+}
+
+// M_patchAB §2.3（`PB-06` 剩余）：`[credentials]`
+void read_credentials(const toml::table& t, Config::Credentials& s)
+{
+    read_value(t, "backend", s.backend);
+    read_value(t, "dir", s.dir);
+    read_value(t, "ttl_days", s.ttl_days);
+}
+
 template <typename T>
 void write_value(toml::table& table, const char* key, const T& value)
 {
@@ -182,6 +202,21 @@ toml::table to_table(const Config& c)
     write_value(advanced, "log_ttl_days", c.advanced.log_ttl_days);
     root.insert("advanced", std::move(advanced));
 
+    // M_patchAB §2.3（`PB-06` 剩余）：`[network]`（代理 / 自签证书）
+    toml::table network;
+    write_value(network, "proxy", c.network.proxy);
+    write_value(network, "proxy_from_env", c.network.proxy_from_env);
+    write_value(network, "no_proxy", c.network.no_proxy);
+    write_value(network, "insecure_tls", c.network.insecure_tls);
+    root.insert("network", std::move(network));
+
+    // M_patchAB §2.3（`PB-06` 剩余）：`[credentials]`（凭据库三参数）
+    toml::table credentials;
+    write_value(credentials, "backend", c.credentials.backend);
+    write_value(credentials, "dir", c.credentials.dir);
+    write_value(credentials, "ttl_days", c.credentials.ttl_days);
+    root.insert("credentials", std::move(credentials));
+
     toml::table providers;
     // M_patchB L1（PB2-06）：多 provider —— 写出全部 `[providers.<id>]`；
     //  * 旧成员 `deepseek` 始终作为 `deepseek` 条目的权威（兼容既有代码/自检）
@@ -204,6 +239,41 @@ toml::table to_table(const Config& c)
 
 } // namespace
 
+// ---- M_patchAB §4（`PC-04`）：配置文件版本迁移（纯逻辑；`save_config` 的护栏同源）----
+int current_config_version()
+{
+    return 1;
+}
+
+ConfigMigrationOutcome migrate_config(Config& config)
+{
+    ConfigMigrationOutcome outcome;
+    outcome.from = config.config_version;
+    outcome.to   = current_config_version();
+
+    if (config.config_version <= 0) {
+        config.config_version               = outcome.to; // 老文件（无 config_version 键）
+        config.version_newer_than_supported = false;
+        outcome.migrated                    = true;
+        outcome.notes.emplace_back("配置文件没有 config_version（老文件）⇒ 按 " +
+                                   std::to_string(outcome.to) + " 处理");
+        return outcome;
+    }
+    if (config.config_version > outcome.to) {
+        config.version_newer_than_supported = true;
+        outcome.future                      = true;
+        outcome.notes.emplace_back(
+            "配置文件版本 " + std::to_string(config.config_version) + " 比本程序支持的 " +
+            std::to_string(outcome.to) +
+            " 更新：已按已知字段加载，**拒绝覆盖写回**（原文件保持不动，保存会被拒绝）");
+        log::warn("[配置] " + outcome.notes.back());
+        return outcome;
+    }
+    config.version_newer_than_supported = false;
+    return outcome;
+}
+
+
 bool load_config(const std::filesystem::path& file, Config& out)
 {
     out = Config{};
@@ -213,7 +283,6 @@ bool load_config(const std::filesystem::path& file, Config& out)
         log::info("配置文件不存在，生成默认配置: " + file.string());
         return save_config(file, out);
     }
-
     try {
         const toml::table root = toml::parse_file(file.string());
         read_value(root, "config_version", out.config_version);
@@ -223,6 +292,10 @@ bool load_config(const std::filesystem::path& file, Config& out)
         if (const toml::table* section = root["timeout"].as_table()) read_timeout(*section, out.timeout);
         if (const toml::table* section = root["error"].as_table())   read_error(*section, out.error);
         if (const toml::table* section = root["advanced"].as_table()) read_advanced(*section, out.advanced);
+        // M_patchAB §2.3（`PB-06` 剩余）：`[network]` / `[credentials]`（缺节 ⇒ 全部取默认值）
+        if (const toml::table* section = root["network"].as_table()) read_network(*section, out.network);
+        if (const toml::table* section = root["credentials"].as_table())
+            read_credentials(*section, out.credentials);
 
         // M_patchB L1（PB2-06）：多 provider 实例参数 —— 任意 `[providers.<id>]` 节都读入映射
         // （旧文件的 `[providers.deepseek]` 据此自动迁移，幂等）；随后与旧成员 `deepseek` 同步镜像
@@ -241,6 +314,12 @@ bool load_config(const std::filesystem::path& file, Config& out)
             out.deepseek = it->second; // 镜像（旧代码读 Config::deepseek）
         }
 
+        // M_patchAB §4（PC-04）：版本迁移（补齐版本号 / 未来版本标记）
+        const ConfigMigrationOutcome migration = migrate_config(out);
+        for (const std::string& note : migration.notes) {
+            log::info("[配置迁移] " + note);
+        }
+
         log::info("配置已加载: " + file.string() + " (config_version=" +
                   std::to_string(out.config_version) + ")");
         return true;
@@ -257,6 +336,15 @@ bool load_config(const std::filesystem::path& file, Config& out)
 
 bool save_config(const std::filesystem::path& file, const Config& config)
 {
+    // ---- M_patchAB §4（PC-04）：**拒绝降级写回** ----
+    //  * 磁盘上的配置文件版本比本程序新（`load_config` 已标记）⇒ 保存会被拒绝：
+    //    否则会先把用户的新版配置备份成 `.bak`、再用旧格式覆盖主文件（等于降级写坏）
+    if (config.version_newer_than_supported) {
+        log::error("[配置] 保存被拒绝：磁盘配置版本比本程序支持的 " +
+                   std::to_string(current_config_version()) +
+                   " 更新（请升级 AIwrite；原文件未改动）");
+        return false;
+    }
     try {
         std::error_code ec;
         if (file.has_parent_path()) {

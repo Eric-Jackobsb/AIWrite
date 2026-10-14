@@ -275,14 +275,12 @@ DiagnosticsReport collect_diagnostics()
                     std::to_string(specs.count_kind("web")) + "）");
     lines.push_back("来源层数 = " + std::to_string(spec_report.files.size()));
     std::string first_error;
-    for (const std::string& item : spec_report.errors) {
-        first_error = truncate(item, 160);
-        break;
+    if (!spec_report.errors.empty()) {
+        first_error = truncate(spec_report.errors.front(), 160);
     }
     std::string first_warning;
-    for (const std::string& item : spec_report.warnings) {
-        first_warning = truncate(item, 160);
-        break;
+    if (!spec_report.warnings.empty()) {
+        first_warning = truncate(spec_report.warnings.front(), 160);
     }
     lines.push_back("错误数 = " + std::to_string(spec_report.errors.size()) +
                     (first_error.empty() ? "" : "（首条：" + first_error + "）"));
@@ -290,9 +288,13 @@ DiagnosticsReport collect_diagnostics()
                     (first_warning.empty() ? "" : "（首条：" + first_warning + "）"));
 
     // ---- [凭据]（**只出条数**：既不输出条目名，也不输出密钥 / 密文）----
+    // M_patchAB §2.3（PB-06 剩余）：目录 / 后端 / TTL 全部取自 `config.toml [credentials]`
+    const int ttl_days = app_config().credentials.ttl_days;
     lines.push_back("[凭据]");
     lines.push_back("凭据库目录 = " + credentials_dir());
-    lines.push_back("已配置凭据数 = " + std::to_string(list_credentials(30).size()) +
+    lines.push_back("后端 = " + app_config().credentials.backend + " / TTL = " +
+                    std::to_string(ttl_days) + " 天");
+    lines.push_back("已配置凭据数 = " + std::to_string(list_credentials(ttl_days).size()) +
                     "（只出条数，不出条目名与密钥）");
 
     // ---- [归档与工作流] ----

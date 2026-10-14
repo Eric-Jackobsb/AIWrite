@@ -10,13 +10,27 @@
 //    ④ ~/.brain-ai/providers.json                  用户字段级覆盖（可 replace_all）
 //    ⑤ C++ 最小兜底（仅 ①〜② 都缺失时：custom-official + deepseek）
 //
-//  设计约束（见 docs/actionPlan/M_patchB.md §0.4 / 附录 B·C）：
+//  设计约束（见 docs/Archive/actionPlan/M_patchB.md §0.4 / 附录 B·C）：
 //    * 厂商元数据与网页版站点元数据**全部来自表**，C++ 内不出现具体厂商常量
 //      （唯一例外：本实现里的最小兜底表，2 条）
 //    * 加载 / 合并 / 校验**全部是纯函数**，无网络、无 Key 即可断言
 //    * 表里**禁止**出现明文密钥（键名/值双重检测 → 警告 + 拒绝该字段）
 //    * 表坏 / 缺 → 明确报错 + 上一份可用表或最小兜底，绝不崩溃
 //    * `kind=official` 与 `kind=web` **同一套加载/合并/校验/覆盖**（web 同机制）
+//
+//  JSON schema 名（**嵌套**写法 —— 与实现逐字一致，风险 `R18`；自检用例 7.5）：
+//    * 条目级：`id` / `display` / `kind` / `protocol` / `capabilities{vision,seed,system_role,stream}`
+//      / `models[]{id,label,vision}` / `vision_model_default` / `limits{image_max_bytes,
+//      connect_timeout_s,read_timeout_s}` / `verified` / `notes` / `docs_url`
+//    * official：`api_base` / `chat_path` / `auth_style` / `auth_header` / `extra_headers{}`
+//      / `env_names[]` / `key_ref_default`
+//    * web：`web{adapter, login_url, window_title, endpoints{host, completion_path,
+//      challenge_path, session_create_path, session_fetch_path, users_path}, probe_paths[],
+//      cookie_names[], token_expr, input_selector, send{kind,value}, answer_selector,
+//      done_when{kind,selector}, answer_poll_ms, answer_max_polls, attach, upload_adapter,
+//      attach_selector, upload_accept}`
+//      ⚠️ 写成扁平名（`send_kind` / `done_kind` …）会被判「未知字段」并因**缺少 `send`**
+//         跳过该条 —— 这正是「照抄也建不出站点」的根因（`R18`）
 // ============================================================================
 
 #include <cstddef>

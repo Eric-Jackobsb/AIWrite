@@ -1,5 +1,6 @@
 #include "deepseek_official_provider.h"
 
+#include "http_net.h" // M_patchAB §2.3（PB-06 剩余）：代理 / 自签证书
 #include "image_decode.h" // M7-05：图片格式按内容嗅探（扩展名可能骗人）
 #include "log.h"
 
@@ -375,6 +376,11 @@ std::vector<std::pair<std::string, std::string>> build_auth_headers(const Provid
     if (style == "none" || style == "query") {
         return headers; // query 走 URL 拼接（见 official_chat）
     }
+    // M_patchAB §2.4（PB-09 · V-11）：**无 Key ⇒ 不构造凭证头** ——
+    // 旧实现会发出 `Authorization: Bearer `（空值）⇒ 既无意义又易被误判为「已带凭证」
+    if (api_key.empty()) {
+        return headers;
+    }
     std::string name = options.auth_header;
     if (name.empty()) {
         name = (style == "api-key") ? "api-key"
@@ -402,6 +408,15 @@ ProviderOptions provider_options_from(const ProviderSpec& spec)
 OfficialChatResult official_chat(const OfficialChatRequest& request)
 {
     OfficialChatResult result;
+
+    // ---- M_patchAB §2.1（PB-02 真取消）：发起前的协作检查点 ----
+    //  * 已取消 ⇒ **不发请求**（不消耗额度、不留站点痕迹），归因 = 「已取消」
+    if (request.cancel != nullptr && request.cancel->cancelled()) {
+        result.cancelled = true;
+        result.error     = "已取消（用户点了「停止」）：请求未发出";
+        log::info("[官方 API] 已取消：请求未发出（模型 " + request.model + "）");
+        return result;
+    }
 
     // M5-02：多模态请求先整体编码/校验图片（失败则不发起 HTTP，直接给出可操作错误）
     // P7a-10：同时统计**编码后体积与耗时**（P7a-08 缓存命中时耗时接近 0）
@@ -436,9 +451,6 @@ OfficialChatResult official_chat(const OfficialChatRequest& request)
             request.api_key);
     }
 
-    httplib::Client client(base);
-    client.set_connection_timeout(options.connect_timeout_s, 0);
-    client.set_read_timeout(options.read_timeout_s, 0);
     httplib::Headers headers;
     for (const std::pair<std::string, std::string>& header :
          build_auth_headers(options, request.api_key)) {
@@ -449,11 +461,76 @@ OfficialChatResult official_chat(const OfficialChatRequest& request)
     }
     headers.emplace("Accept", "application/json");
 
+    const std::string body_text = build_request_body(request, image_data_urls).dump();
+
+    // ---- M_patchAB §2.1（PB-02 真取消）：**可取消执行**（主路径）----
+    //  * 实测（2026-10-11 · httplib 0.15.3）：`Client::stop()` **不能**唤醒阻塞中的读
+    //    ⇒ 取消靠「工作线程 + 调用方轮询令牌立即返回」，socket 层 stop() 只作尽力而为
+    //  * 注意：`job` 里的所有东西（端点 / 头 / 正文 / 结果槽）都由工作线程自持 ——
+    //    取消后工作线程仍会跑完（最长到读超时），**不得**引用本函数栈上的对象
+    struct HttpJob {
+        std::string    base;
+        std::string    path;
+        httplib::Headers headers;
+        std::string    body;
+        int            connect_timeout_s = 15;
+        int            read_timeout_s    = 180;
+        // M_patchAB §2.3（PB-06 剩余）：代理 / 证书校验（主线程按配置 + 环境解析后传入）
+        std::string    proxy;
+        bool           verify_tls = true;
+        std::mutex     mutex;
+        bool           finished = false;
+        httplib::Result response{nullptr, httplib::Error::Success, httplib::Headers{}};
+        double         elapsed_ms = 0.0;
+    };
+    auto job         = std::make_shared<HttpJob>();
+    job->base        = base;
+    job->path        = path;
+    job->headers     = headers;
+    job->body        = body_text;
+    job->connect_timeout_s = options.connect_timeout_s;
+    job->read_timeout_s    = options.read_timeout_s;
+    {
+        const HttpNetOptions net_options = resolve_http_net(base + path);
+        job->proxy                       = net_options.proxy;
+        job->verify_tls                  = net_options.verify_tls;
+    }
+
     const auto started = std::chrono::steady_clock::now();
-    const auto response =
-        client.Post(path, headers, build_request_body(request, image_data_urls).dump(),
-                    "application/json");
-    result.elapsed_ms   = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    const bool aborted = run_cancellable(request.cancel.get(), [job] {
+        httplib::Client client(job->base);
+        client.set_connection_timeout(job->connect_timeout_s, 0);
+        client.set_read_timeout(job->read_timeout_s, 0);
+        apply_http_net(client, HttpNetOptions{job->proxy, std::string(), job->verify_tls});
+        const auto begin    = std::chrono::steady_clock::now();
+        auto       response = client.Post(job->path, job->headers, job->body, "application/json");
+        const double ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - begin)
+                .count();
+        std::lock_guard<std::mutex> lock(job->mutex);
+        job->response   = std::move(response);
+        job->elapsed_ms = ms;
+        job->finished   = true;
+    });
+    if (aborted) {
+        result.cancelled = true;
+        result.error     = "已取消（用户点了「停止」）：请求被中断（已立即返回；"
+                           "后台线程继续收尾，结果丢弃）";
+        log::info("[官方 API] 已取消：请求被中断（立即返回，耗时 " +
+                  std::to_string(static_cast<long long>(
+                      std::chrono::duration<double, std::milli>(
+                          std::chrono::steady_clock::now() - started)
+                          .count())) +
+                  " ms）");
+        return result;
+    }
+
+    httplib::Result response{nullptr, httplib::Error::Success, httplib::Headers{}};
+    {
+        std::lock_guard<std::mutex> lock(job->mutex);
+        response         = std::move(job->response);
+        result.elapsed_ms = job->elapsed_ms;
+    }
     if (!response) {
         result.error = "调用失败（网络/超时/DNS）：" + httplib::to_string(response.error());
         log::error("[官方 API] " + result.error);

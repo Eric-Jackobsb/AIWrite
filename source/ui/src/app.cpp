@@ -482,12 +482,14 @@ int run(const AppOptions& options)
         log::info("[配置] 以下字段尚未生效（归口补丁见使用说明）：" + unwired);
     }
 
-    // PB-06：凭据库启动惰性清理（TTL 默认 30 天；[credentials] 配置项见设计附录 B）
+    // PB-06 / M_patchAB §2.3（`PB-06` 剩余）：凭据库启动惰性清理（TTL 取自 `[credentials].ttl_days`）
     {
+        const int   ttl_days = aiwrite::app_config().credentials.ttl_days;
         std::string purge_error;
-        const int   removed = utils::purge_expired_credentials(30, &purge_error);
+        const int   removed = utils::purge_expired_credentials(ttl_days, &purge_error);
         if (removed > 0) {
-            log::info("[凭据] 启动清理：已移除 " + std::to_string(removed) + " 个过期条目");
+            log::info("[凭据] 启动清理：已移除 " + std::to_string(removed) + " 个过期条目（TTL " +
+                      std::to_string(ttl_days) + " 天）");
         }
     }
 
@@ -754,6 +756,13 @@ int run(const AppOptions& options)
         // ---- PC-01：自动保存节流（1 Hz 探测 + 静默 3 秒后写快照；暂停/无变更时零写盘）----
         editor().tick_autosave();
 
+        // ---- M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：后台诊断结论 → 状态栏 ----
+        //  * 工作线程只**投递**结论（post_background_status）；此处（主线程）才写 UI 状态
+        std::string background_status;
+        if (editor().take_background_status(&background_status)) {
+            editor().set_status(background_status);
+        }
+
         // ---- 诊断（限流输出）：放在"最小化检查"之前，保证窗口不可见时也能采样 ----
         //  · 首异常累计（有变化才输出，限流）
         //  · 心跳（每 300 帧）：确认渲染循环真的在跑
@@ -826,21 +835,41 @@ int run(const AppOptions& options)
                     save_workflow_dialog();
                 }
                 if (ImGui::BeginMenu("最近打开")) {
-                    const std::vector<engine::RecentEntry> recent = state.recent_workflows();
+                    // M_patchAB §4（PC-03 / FEA-M2-02）：打开前**校验存在性** ——
+                    // 失效项灰显（不可点）+ 悬停解释 + 底部一键「清理失效条目」
+                    const std::vector<engine::RecentStatus> recent =
+                        engine::recent_with_status();
                     if (recent.empty()) {
                         ImGui::MenuItem("（暂无记录）", nullptr, false, false);
                     }
-                    for (const engine::RecentEntry& entry : recent) {
+                    for (const engine::RecentStatus& status : recent) {
+                        const engine::RecentEntry& entry = status.entry;
                         const std::string label = entry.name + "##" + entry.path; // ## 保证 id 唯一
-                        if (ImGui::MenuItem(label.c_str())) {
+                        if (ImGui::MenuItem(label.c_str(), nullptr, /*selected=*/false,
+                                            /*enabled=*/status.exists)) {
                             std::string error;
                             if (!state.open_workflow_from(entry.path, &error)) {
                                 state.set_status("打开失败：" + error);
                             }
                         }
                         if (ImGui::IsItemHovered()) {
-                            ImGui::SetTooltip("%s\n最后打开：%s", entry.path.c_str(),
-                                              entry.opened_at.c_str());
+                            if (status.exists) {
+                                ImGui::SetTooltip("%s\n最后打开：%s", entry.path.c_str(),
+                                                  entry.opened_at.c_str());
+                            }
+                            else {
+                                ImGui::SetTooltip("%s\n**文件已不存在**（灰显不可点）——\n"
+                                                  "可用下方「清理失效条目」把它从列表移除",
+                                                  entry.path.c_str());
+                            }
+                        }
+                    }
+                    const std::size_t missing = engine::count_missing_recent();
+                    if (missing > 0) {
+                        ImGui::Separator();
+                        if (ImGui::MenuItem(("清理失效条目（" + std::to_string(missing) + "）").c_str())) {
+                            const std::size_t removed = engine::prune_missing_recent();
+                            state.set_status("已清理 " + std::to_string(removed) + " 条失效的最近记录");
                         }
                     }
                     ImGui::Separator();

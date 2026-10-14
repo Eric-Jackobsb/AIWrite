@@ -84,6 +84,32 @@ struct Config {
         int  log_ttl_days       = 30;
     };
 
+    // ---- M_patchAB §2.3（`PB-06` 剩余）：**网络（代理 / 自签证书）** ----
+    //  * `proxy`：HTTP(S) 代理地址（例 `http://127.0.0.1:7890`）；**空 ⇒ 不显式代理**
+    //  * `proxy_from_env`：为真时**读环境变量**（`HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`，
+    //    按目标 scheme 选；`NO_PROXY` 命中 ⇒ 该项**直达**不代理）
+    //    —— 两者同时存在时 **`proxy` 显式值优先**（企业网络里手填一次即可，避免环境串味）
+    //  * `no_proxy`：显式排除清单（逗号分隔；`*` = 全部排除）；空 ⇒ 只读环境变量 `NO_PROXY`
+    //  * `insecure_tls`：**自签证书开关**，默认 **false = 严格校验**（打开会让站点证书不再被校验，
+    //    仅用于企业内网自签证书；界面按**危险项**红字提示）
+    struct Network {
+        std::string proxy;
+        bool        proxy_from_env = true;
+        std::string no_proxy;
+        bool        insecure_tls   = false;
+    };
+
+    // ---- M_patchAB §2.3（`PB-06` 剩余）：**凭据库**（`[credentials]`）----
+    //  * 此前这三项**写死在代码里**（`~/.brain-ai/credentials` / TTL 30 天 / backend `dpapi`）
+    //  * `backend`：本版本**只支持** `dpapi`（Windows DPAPI，当前用户作用域）；其它值 ⇒ 明确报错
+    //  * `ttl_days`：凭据「即将过期」提示与 `purge_expired_credentials()` 的阈值（0 = 不清理）
+    //  * `dir`：空 ⇒ 用默认目录（`~/.brain-ai/credentials`）
+    struct Credentials {
+        std::string backend  = "dpapi";
+        std::string dir      = "~/.brain-ai/credentials";
+        int         ttl_days = 30;
+    };
+
     struct Provider {
         std::string provider    = "deepseek";
         std::string mode        = "official";
@@ -97,6 +123,9 @@ struct Config {
     Timeout  timeout;
     Error    error;
     Advanced advanced;
+    // M_patchAB §2.3（`PB-06` 剩余）：网络（代理 / 自签证书）与凭据库（`[network]` / `[credentials]`）
+    Network     network;
+    Credentials credentials;
     // 旧成员（兼容）：与 `providers["deepseek"]` 互为镜像（加载时同步；保存时作为 deepseek 条的权威）
     Provider deepseek;
 
@@ -106,10 +135,32 @@ struct Config {
     //  * 旧文件只有 `[providers.deepseek]` 一节 → 加载时自动迁移为映射里的一条（幂等）
     //  * 保存前自动备份 `config.toml.bak`（写失败不覆盖原文件）
     std::map<std::string, Provider> providers;
+    // ---- M_patchAB §4（`PC-04` / `DBG-M6-02`）：版本迁移 ----
+    //  * 由 `engine::migrate_config()` 在**加载后**设置：true = 磁盘上的 `config.toml`
+    //    版本比本程序新 ⇒ `save_config()` **拒绝覆盖写回**（避免把新版配置降级写坏，`I21`）
+    bool version_newer_than_supported = false;
 };
 
 // 读取配置；文件不存在时生成默认配置并落盘。返回是否成功。
 bool load_config(const std::filesystem::path& file, Config& out);
+
+// ---- M_patchAB §4（`PC-04` / `DBG-M6-02`）：配置文件**版本迁移**（纯逻辑，可离线断言）----
+//  * 版本缺失（老文件）⇒ 补为当前支持版本（`migrated=true` + 说明）
+//  * 版本比程序新 ⇒ `future=true` 且置 `Config::version_newer_than_supported`
+//    ⇒ `save_config()` **拒绝覆盖写回**（不把新版配置降级写坏）
+struct ConfigMigrationOutcome {
+    bool                     ok       = true;
+    bool                     migrated = false;
+    int                      from     = 0; // 0 = 文件里没有版本号（老文件）
+    int                      to       = 1;
+    bool                     future   = false;
+    std::vector<std::string> notes;
+    std::string              error;
+};
+
+ConfigMigrationOutcome migrate_config(Config& config);
+// 当前支持的配置版本（`Config::config_version` 上限的单一来源）
+int                     current_config_version();
 
 // 写入配置（自动创建父目录）
 bool save_config(const std::filesystem::path& file, const Config& config);
@@ -125,7 +176,9 @@ void          set_app_config(Config config);
 //  * 已接线：ui.show_grid / ui.console_height / ui.running_animation /
 //    ui.show_node_library / ui.show_property_panel / ui.show_console / ui.show_output_window /
 //    ui.window_*（F3 窗口几何）/ output.archive_dir / output.keep_history / output.max_history /
-//    output.ttl_days（PC-05 归档）/ ui.autosave_*（PC-01/02 自动保存与恢复）
+//    output.ttl_days（PC-05 归档）/ ui.autosave_*（PC-01/02 自动保存与恢复）/
+//    timeout.* / error.*（M_patchAB 批 4：官方 API 的默认超时与重试）/
+//    **network.* / credentials.***（M_patchAB 批 7 · `PB-06` 剩余：代理 / 自签证书 / 凭据库三参数）
 //  * ui.grid_size：设计上属"网格间距"，但 vendored imgui-node-editor 的 Style 没有该字段，
 //    当前无法生效（如实登记，归口 PD-03 处理：升级库或自绘背景网格）
 //  * 已移除（`PQ-18②` · 2026-10-09）：general.language / general.startup —— 界面语言 / 启动行为不做

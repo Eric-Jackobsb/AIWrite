@@ -55,12 +55,12 @@
 > 完整台账（含每站 `history[]` 跨轮轨迹）：`build/loop/SITE_STATUS.json`（机器读）· `build/loop/SITE_STATUS.md`（人读，随 `build/` 易失）。
 > **长期保留的人读位** = [AI_Status.md](AI_Status.md) §二（总览）+ [AI_Status_web.md](AI_Status_web.md) §二 / [AI_Status_api.md](AI_Status_api.md) §二（**两份分通道台账**）—— 都在 `docs/` 里、随版本库走，不会被清 `build/` 带走。
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-11 · 覆盖轮次 0：
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-14 · 覆盖轮次 0：
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > **判据**：**文字理解** = 「文本 → 取回文本」S3 三口径通过（``rc=0`` + ``n3=done`` + 正文非站侧错误串）；**图片理解** = 「图片 → 取回文本」链路（站点上传双证据 + 取回正文）。
 > 两列是**链路**、不是模型强弱；来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。
 
-**汇总**：共 20 站（web 11 / official 9）· 文字理解 ✅ 实测 **9** · 图片理解 ✅ 实测 **3** · 🟡 就绪/声明 6 · ⬜ 未接/未声明 9 · ⚠ 声明不一致 1
+**汇总**：共 20 站（web 11 / official 9）· 文字理解 ✅ 实测 **9** · 图片理解 ✅ 实测 **3** · 🟡 就绪/声明 6 · ⬜ 未接/未声明 9 · ⚠ 声明不一致 0
 
 **主表（状态 · 跨轮）**
 
@@ -83,7 +83,7 @@
 | 15 | `ollama` | official·openai | — | — | — | — | — | — | — | 🟡 声明·未实测 | 有 Key / 环境就绪时真机一次 |
 | 16 | `gemini` | official·gemini | — | — | — | — | — | — | — | ⚠ 协议未实现 | 协议实现后重测 |
 | 17 | `custom-official` | official·openai | — | — | — | — | — | — | — | ⚠ 未填 api_base | 填 providers.json api_base + Key 后真机一次 |
-| 18 | `deepseek` | official·openai | — | — | — | — | — | — | — | ✅ 已实测 | 回填 providers.json capabilities.vision（M7-10） |
+| 18 | `deepseek` | official·openai | — | — | — | — | — | — | — | ✅ 已实测 | — |
 | 19 | `anthropic` | official·anthropic | — | — | — | — | — | — | — | ⚠ 协议未实现 | 协议实现后重测 |
 | 20 | `siliconflow` | official·openai | — | — | — | — | — | — | — | 🟡 声明·未实测 | 有 Key / 环境就绪时真机一次 |
 
@@ -108,7 +108,7 @@
 | `ollama` | 🟡 声明·未实测 | 🟡 声明·未实测 | capabilities.vision=true（无真机物证） |
 | `gemini` | ⚠ 协议未实现 | ⚠ 协议未实现 | 协议实现前该链路不可用 |
 | `custom-official` | ⚠ 未填 api_base | 🟡 待 base+Key | 未填 api_base |
-| `deepseek` | ✅ 实测 | ✅ 实测 ⚠声明未回填 | app.log 2026-09-29 01:03 · 模型 deepseek-flash · HTTP 200（759 字节）· 官方 API 真视觉（M7-10 剩声明回填） |
+| `deepseek` | ✅ 实测 | ✅ 实测 | app.log 2026-09-29 01:03 · 模型 deepseek-flash · HTTP 200（759 字节）· 官方 API 真视觉；声明已回填 capabilities.vision=true + vision_model_default=deepseek-flash（M8-21 · 2026-10-11） |
 | `anthropic` | ⚠ 协议未实现 | ⚠ 协议未实现 | 协议实现前该链路不可用 |
 | `siliconflow` | 🟡 声明·未实测 | 🟡 声明·未实测 | capabilities.vision=true（无真机物证） |
 
@@ -206,12 +206,12 @@ Start-Process -FilePath .\build\bin\aiwrite.exe -ArgumentList '--web-dom-dump','
 | 检查 | 命令 | 期望 |
 |---|---|---|
 | 构建 | `cd source; .\build.ps1` | **0 error / 0 warning** |
-| 工具 / 契约自检 | `api_probe.exe --selftest` | 七组全 PASS · exit **0**（含 **DOM 探测 27 / 0** · 执行器 **490 / 0** —— 2026-10-11 实测；2026-10-10 曾为 464，**+26 = M_patchC 批 1**：窗口表 / 复位计划 / 归属准入 / 三类归因文案） |
-| 图模型 / 执行器自检 | `--graph-selftest` / `--exec-selftest` | **110 / 0** · **490 / 0** |
-| 提供商标记 | `aiwrite.exe --provider-selftest` / `--provider-dump` | **50 / 0** · **20 条**（official 9 / web 11）（`TST-L01` 门禁已把 `--provider-dump` 作为「条数快照」自动跑，见 `gate/dump.txt`） |
+| 工具 / 契约自检 | `api_probe.exe --selftest` | **十三组全 PASS · exit 0**（含 **配置表 52 / 0** · **DOM 探测 27 / 0** · 执行器 **546 / 0** · **V-11 无 Key 请求构造 6 / 0** · **V-12 取消与超时 17 / 0** · **V-13 Anthropic / Gemini 请求构造与解析 23 / 0** · **V-14 工厂分派 / 能力门控 13 / 0** · **V-15 Anthropic / Gemini 回环端到端 11 / 0** · **V-16 代理 / 证书 / 凭据配置 16 / 0** —— 2026-10-11 实测；同日链：2026-10-10 = 464 → **+26 = `M_patchC` 批 1**（窗口表 / 复位 / 归因）→ **+34 = `M_patchAB` 批 2**（会话诊断）→ **+20 = 批 4**（版本迁移）→ **+2 = 批 6**（配置表嵌套 schema）；**七组 → 九组** = 批 3（V-11 / V-12）· **九组 → 十二组** = 批 6（V-13 / V-14 / V-15）· **十二组 → 十三组** = 批 7（V-16）） |
+| 图模型 / 执行器自检 | `--graph-selftest` / `--exec-selftest` | **110 / 0** · **546 / 0** |
+| 提供商标记 | `aiwrite.exe --provider-selftest` / `--provider-dump` | **52 / 0** · **20 条**（official 9 / web 11）（`TST-L01` 门禁已把 `--provider-dump` 作为「条数快照」自动跑，见 `gate/dump.txt`） |
 | **站点上传模板**（离线 · 不起浏览器） | `aiwrite.exe --upload-selftest` | **72 / 0** · exit **0**（2026-10-10 实测；`M8-24`~`M8-27` 上传模板契约，站点侧接线出问题时先跑这条；门禁 `gate/upload.txt`） |
 | 离线夹具 | `node source\tools\poll_answer_gate_test.js` · `send_chain_test.js` · **`dom_gate_test.js`** | **44 / 0** · **17 / 0** · **15 / 0**（各自 `--old` 负向必 FAIL：**18 / 26** · **13 / 4** · **9 / 6** · exit 1） |
-| 文档断链 | `python vcpkg-cache\check_links.py` | **全库 0** —— **2026-10-11 实测 = 检查 1097 / broken 0**（同日四批：批 0 文档落盘 = `M4`/`M5`/`M7` 归档 + 链接重算 = **995** → `M8` Phase 3 改判批 = **1022** → 待拍板项清零批 = **1077** → **`M_patchC` 批 1（`PW-02`/`04`/`05`/`08` 落地 + 新批次条目）= 1097（+17）** · 判据**已升级为「全库 0」**；历史：2026-10-10 = 818 / 0 · 批 3 = 610 / 8 · `R1` 收轮 = 669 / 8 · `TST-L05` 落地 = 683 / 8 —— 数字涨 = 文档批量新增、broken 集合不变。8 条存量已于 2026-10-10 清零 = **7 条真断链**（`actionPlan/M7B.md` 未指向 `Archive/`）+ **1 条检查器跨反引号误判**，见 `DBG-L01`） |
+| 文档断链 | `python source\tools\check_links.py` | **全库 0** —— **2026-10-13 实测 = 检查 1349 / broken 0**（**脚本已入库** = `source/tools/check_links.py`，**已作为 `check_all.ps1` 第 ⑥ 项入闸**；口径：仓库根由脚本位置推导 + 剔除代码块 / 行内代码 + 目标须同行无空白 ⇒ **修掉跨行 / 跨反引号误判**，含仓库根 `*.md`。历史：批 0 = 995 → `M8` Phase 3 改判 = 1022 → 待拍板清零 = 1077 → `M_patchC` 批 1 = 1097 → **批 5（`DBG-L01` 收口）= 1161** → 批 6 = 1175 → 批 7 = 1184 → **批 8（口径收口）= 1197** → **批 9-0（节点扩展 L1 文档归位 + 索引同步）= 1246**（**批 7 入闸当场抓到 1 条真断链**并修掉；批 8 新增的链接**全部当场复检**；批 9-0 **归位前 = 1219 / broken 100** ⇒ 归位后 **1219 / 0** ⇒ 索引同步 **+26** 链接 ⇒ **1246 / 0** —— 修法是文档归位而非删链接）→ **批 9-1（四层定向文档收口 + 登记面同步）= 1283**（新增链接 **+37**）→ **批 9-2（四层定向用户拍板落盘 · 零代码）= 1283**（无新增链接）→ **批 9-3（创作流程依据文档落盘 + 归位 `docs/actionPlan/` + 五处登记）= 1341**（新文档 **+20** + 登记面同步 **+38**；**归位前 = 1303 / broken 16** ⇒ 归位后 **1303 / 0** —— 同样修法是文档归位而非删链接）→ **批 9-4（看板归档 · 零代码）= 1349**（序号文档同步 **+8**）） |
 
 > 上表是 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §0.4 回归基线的**循环化用法**（原表的数字以该处与 [../AI_README.md](../AI_README.md) §2 为准；数字变动时先改那两处，再同步本文）。
 > **门禁的意义**：站点循环的数字只在"起点是绿的"前提下才有可比性；起点不绿 ⇒ **先停下汇报，不进循环**。
@@ -410,6 +410,10 @@ build/loop/<轮次>-<时间戳>/         例：build/loop/R1-20261009-2055/
 | 8 | **门禁正则与真实输出不符 ⇒ 假 `FAIL`**（判据层缺陷：假绿会放过坏数据，假红会腐蚀「门禁全绿」的信任） | `SMOKE11-20261010-0943`：`provider-selftest` **`rc=0`** 却判 `FAIL` —— 旧正则 `(?m)^.*\d+\s*/\s*\d+.*$` 要求「数字–斜杠–数字」**紧邻**，而真实末行是 **`[配置表自检] 50 项通过 / 0 项失败`**（数字与 `/` 之间夹汉字）⇒ **永不匹配**。**复现命令**：`powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\loop_verify.ps1 -Round X -SkipProbe -Providers ernie-web`（物证 `build\loop\X-*\gate\provider.txt` 末行 + `report.json` 的 `gates[]`） | 判据逐字取自真实输出：`(?m)^\[配置表自检\]\s*\d+\s*项通过\s*/\s*\d+\s*项失败\s*$`（源码 `loop_verify.ps1` ① 门禁段）；**同一物证**上「旧正则 0 命中 / 新正则命中 `[配置表自检] 50 项通过 / 0 项失败`」= 反向可打假；夹具三行（`12 / 0` 形态）不受影响 |
 | 9 | **构建偶发 `error MSB4018` + `FileTracker.FileIsUnderNormalizedPath`（任务 `GetOutOfDateItems` / `SetModuleDependencies`）—— 看着像代码坏了，其实是 `build\` 生成态陈旧**（环境问题，不是判据问题） | 2026-10-10 `PB2-24` 收尾连续 **8 次** `cmake --build` 全崩（`System.IndexOutOfRangeException` at `Microsoft.Build.Utilities.FileTracker.FileIsUnderNormalizedPath`，`vcxproj` = `ZERO_CHECK`）且**重跑无效**；`-p:TrackFileAccess=false` / `-nodeReuse:false -m:1` / 改 `%TEMP%` 到非 8.3 路径 **均无效**；`source\build.ps1 -Reconfigure`（清空 `build\`、保留 `logs\`、重新 configure）后 **exit=0**，紧接着 `check_all.ps1` **13/13 PASS**。**复现命令**：改任一源文件 → `cd source; .\build.ps1`（工具链 = VS 18 Insiders / MSBuild v180）。**物证**：崩 `build\logs\pb224_build6.txt` · `check_all_20261010_194555.log`（构建 FAIL 行）；愈 `build\logs\pb224_build_reconf.txt` · `check_all_20261010_194909.log` / `..._195059.log`（清空重建后连续两次 13/13 全绿） | ① 先分辨：`error MSB4018` + `FileTracker` 且**无 `error C`** ⇒ **代码没坏**，别去改代码 ② 对症 = `source\build.ps1 -Reconfigure`（**不是重跑**）③ `check_all.ps1` ① 构建段已加固：`$ErrorActionPreference` 临时降级 ⇒ 构建失败也**照常打印 13 项汇总表**（此前会被终止性错误打断、只剩一行「① 构建」），并在命中该特征时直接在 `FAIL` 行给上面的处置命令。⚠ **连带代价（实测）**：`-Reconfigure` 会清掉 `build\loop\**`（轮次物证）⇒ 此后 `loop_verify.ps1 -StatusOnly` 重建出的台账会**降级**（本次实测：`覆盖轮次 39 → 0`、`AI_Status_web.md` 文字理解 `8 → 7`、`AI_Status.md` 汇总 `10 → 9`）⇒ **重建前先备份 `build\loop\`**，或事后 `git checkout -- docs/AI_Status_web.md docs/AI_Status_api.md` + 手还原 `AI_Status.md` 哨兵块（本批已如此还原，未提交） |
 | 10 | **`Param::value` 是 `nlohmann::json` ⇒ `value += "文本"` 不是字符串拼接**（是**数组追加** `push_back`）—— 看着编译通过，运行时抛异常、进程直接死 | 2026-10-10 `PC-01/02` 自检第 14 项起崩：`exit=-2147483645`（`0x80000003` · Debug 下 `terminate`→`abort` 的断点），`build\logs\pc01_autosave2.txt` 只留到第 13 项 `PASS`（**stdout 全缓冲 ⇒ 缓冲丢失，看不出是崩了还是没跑**）；`vcpkg-installed/.../nlohmann/json.hpp` 的 `reference operator+=(basic_json&&)` 正文 = `push_back(std::move(val))`。**复现命令**：`.\build\bin\api_probe.exe --autosave-assert`（改回 `+=` 即崩）；**愈后物证** `build\logs\pc01_autosave3.txt`（28/28 PASS · exit 0） | ① 写 `Param::value` 一律**显式赋值**（`param->value = std::string(...)` / `= it.value()`），**不要**用 `+=` / `+`；② 自检类输出**逐项 `std::fflush(stdout)`**（否则崩溃时缓冲丢失，会被误判成「没跑」）；③ 见到 `0x80000003` / `退出码 3` 先按「未捕获异常」查（`type_error` / `filesystem_error`），别按「逻辑没跑到」查 |
+| 11 | **`httplib::Client::stop()` 不能唤醒另一线程中阻塞的读**（`PB-02` 真取消的设计依据） | 2026-10-11 批 3：`api_probe --selftest` V-12 首跑 —— 取消令牌在 **300 ms** 置位、`Client::stop()` **已调用并立即返回**（物证：`stderr` 两行 `[official_chat] abort -> client.stop()` / `stop() returned`），但 `Post` **仍等满服务端 4 s**（实测 **4016 ms**）⇒ 仅靠 `shutdown(SD_BOTH)` 无法满足「点停止 1 秒内生效」。**复现命令**：`.\build\bin\api_probe.exe --selftest`（看 V-12「取消（请求中）」一行的时间）。**源码依据**：`vcpkg-installed/x64-windows/include/httplib.h` L8037 `ClientImpl::stop()` → L6880 `detail::shutdown_socket(socket.sock)` | 取消主路径改用 **`ai::run_cancellable()`**（工作线程执行 + 调用方每 50 ms 轮询令牌 ⇒ **取消立即返回**，工作线程自行收尾；`work` 必须自持全部对象）；socket 层 `stop()` 只作**尽力而为**；离线判据 = `--selftest` V-12（**369 ms** < 1.5 s · 11 / 0）；批 6 的 `ai/http_json.cpp` 复用同一模式（V-15 实测取消 **309 ms**） |
+| 12 | **跨行拼接 `raw string` 漏写 delimiter ⇒ 编译器当成「一个」超长 raw string：编译 0 error，运行时 JSON 非法**（判据层缺陷 —— 只有「真的发一次 / 解析一次」才抓得住） | 2026-10-11 批 6：V-15 首跑 Anthropic / Gemini 两条端到端**同时**红 —— `Anthropic 响应解析失败：… parse error at line 1, column 41 … last read: '"claude-selftest",)'`，`raw_head` 里赫然出现 **`)"  R"JSON(`** 字面量。**根因**：夹具写成 `R"JSON({…",)"`（**漏了结尾的 `JSON`**）⇒ 该 raw string 一直续到**最后**一个 `)JSON"`，中间那些「拼接片段」全变成正文内容，而 C++ 侧**一个警告都没有**。**复现命令**：`.\\build\\bin\\api_probe.exe --selftest`（看 V-15 两行的 `错误：`） | ① 跨行夹具**一律单行写完** raw string（或每段都写全 `)JSON"`）—— 本批已改为单行；② 断言里**必须打印 `error` / `raw_head`**（本次正是靠 `raw_head` 一眼看到 `)"  R"JSON(`）；③ 回环夹具是**唯一**能抓住这类缺陷的手段（纯函数断言只校验我们自己的构造结果；只有**服务器侧回读**才能发现「发出去的正文根本不是 JSON」） |
+| 13 | **同一批工具**（`api_probe` / `aiwrite`）**不能并行跑两个实例** —— 共享 `~/.brain-ai/assets/**` 与同名临时目录，互相删文件 ⇒ **假红** | 2026-10-11 批 6：把「构建」与「`api_probe --selftest`」放在**同一条并行命令批次**里跑，随后又把 `--selftest` / `--exec-selftest` 并行跑 ⇒ ① 构建末段 `copy_runtime_dlls` 报 **Permission denied**（目标 DLL 被运行中的 exe 占用）；② `--selftest` 出现 **`P7a-04 幂等：重新归档同一内容 → 令牌不变`** / **`P7a-07 自愈：资源重新归档后校验恢复通过`** 两条红、`--exec-selftest` 出现 **`M7-04 解码：真 PNG …`** 四条红（`图片文件不存在：…\\aiwrite-selftest-vlm\\样例图.PNG`）—— **单独重跑全部 0 失败**。**复现命令**：把 `& .\\build\\bin\\api_probe.exe --selftest` 与 `& .\\build\\bin\\api_probe.exe --exec-selftest` 放在同一批次并行执行 | ① 门禁类命令**串行**跑（同一命令串里的 `;` 是顺序执行，**可以**；并行工具调用**不行**）；② 见到「资源目录 / 临时图片文件不存在」类失败，先查**是不是有另一个实例在跑**，别急着改代码；③ 构建与「跑产物」不要并发（DLL 会被占用） |
+
 
 
 

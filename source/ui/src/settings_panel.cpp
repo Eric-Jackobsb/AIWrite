@@ -433,9 +433,10 @@ SettingsPanelResult draw_settings_panel(Config& config)
         ImGui::SliderInt("归档清理阈值（天，0 = 不清理）", &g_edit.output.ttl_days, 0, 3650);
     }
 
-    // ---- ③ 网络超时（暂不生效：归口 PB-08）----
-    if (ImGui::CollapsingHeader("网络超时（暂不生效）")) {
-        ImGui::TextDisabled("这些值已写入 config.toml，但当前版本的超时实际取自站点配置表（归口 PB-08）。");
+    // ---- ③ 网络超时（**已接线**：官方 API 的默认超时；站点表未声明 limits.* 时生效）----
+    if (ImGui::CollapsingHeader("网络超时")) {
+        ImGui::TextDisabled("官方 API 的**默认**连接 / 读超时（M_patchAB 批 4 起生效）；\n"
+                            "站点表里声明了 limits.* 时**以表为准**（表优先）。");
         ImGui::SetNextItemWidth(180.0f);
         ImGui::InputInt("连接超时（毫秒）", &g_edit.timeout.connect_ms, 500, 5000);
         ImGui::SetNextItemWidth(180.0f);
@@ -444,13 +445,55 @@ SettingsPanelResult draw_settings_panel(Config& config)
         ImGui::InputInt("流空闲超时（毫秒）", &g_edit.timeout.stream_idle_ms, 5000, 30000);
     }
 
-    // ---- ④ 错误与重试（暂不生效：归口 PB-08）----
-    if (ImGui::CollapsingHeader("错误与重试（暂不生效）")) {
+    // ---- ③′ 网络与证书（M_patchAB §2.3 · `PB-06` 剩余）----
+    if (ImGui::CollapsingHeader("网络与证书（代理 / 自签）")) {
+        ImGui::TextDisabled("出不去（企业网络）：填代理，或让程序读环境变量 HTTPS_PROXY / HTTP_PROXY；\n"
+                            "证书不受信（内网自签）：打开下面的「自签证书兼容」（默认**严格校验**）。");
+        ImGui::SetNextItemWidth(380.0f);
+        input_text_string("##proxy", g_edit.network.proxy, 300);
+        ImGui::TextDisabled("代理地址（例 http://127.0.0.1:7890；留空 = 不显式使用代理）");
+        ImGui::Checkbox("自动读取环境变量（HTTPS_PROXY / HTTP_PROXY / ALL_PROXY）",
+                        &g_edit.network.proxy_from_env);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("优先顺序：NO_PROXY 命中 ⇒ 直达；否则「上面手填的代理」优先，\n"
+                              "再退回环境变量（按目标 https / http 各取其一）");
+        }
+        ImGui::SetNextItemWidth(380.0f);
+        input_text_string("##no_proxy", g_edit.network.no_proxy, 400);
+        ImGui::TextDisabled("不走代理的地址（逗号分隔；支持 .corp.com 后缀与 host:port；空 = 读 NO_PROXY）");
+        ImGui::Checkbox("自签证书兼容（关闭证书校验）", &g_edit.network.insecure_tls);
+        if (g_edit.network.insecure_tls) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f),
+                               "⚠ 危险：仅建议内网/离线环境使用");
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("关闭后不再校验站点证书链 ⇒ 会被中间人替换；\n"
+                              "普通外网请保持关闭状态（默认严格校验）");
+        }
+    }
+
+    // ---- ④ 失败重试（**已接线**：官方 API 节点）----
+    if (ImGui::CollapsingHeader("错误与重试")) {
+        ImGui::TextDisabled("只对**可重试**失败重试：429 / 5xx / 网络超时；\n"
+                            "凭证 / 余额 / 请求不合法**不重试**（避免加剧风控）。");
         ImGui::Checkbox("自动重试失败节点", &g_edit.error.retry_enabled);
         ImGui::SetNextItemWidth(180.0f);
         ImGui::InputInt("重试次数", &g_edit.error.retry_count, 1, 1);
         ImGui::SetNextItemWidth(180.0f);
         ImGui::InputInt("重试间隔（毫秒）", &g_edit.error.retry_interval_ms, 500, 1000);
+    }
+
+    // ---- ④′ 凭据库（M_patchAB §2.3 · `PB-06` 剩余）----
+    if (ImGui::CollapsingHeader("凭据库（保存位置 / 保留天数）")) {
+        ImGui::TextDisabled("API Key 以 Windows DPAPI 加密保存（**不落明文**）；\n"
+                            "「保留天数」只影响「即将过期」提示与启动惰性清理（0 = 不清理）。");
+        ImGui::SetNextItemWidth(300.0f);
+        input_text_string("##cred_dir", g_edit.credentials.dir, 400);
+        ImGui::TextDisabled("保存目录（空 = ~/.brain-ai/credentials）");
+        ImGui::SetNextItemWidth(180.0f);
+        ImGui::InputInt("保留天数（0 = 不清理）", &g_edit.credentials.ttl_days, 1, 10);
+        ImGui::TextDisabled("后端：%s（本版本只支持 dpapi）", g_edit.credentials.backend.c_str());
     }
 
     // ---- ⑤ 高级 ----

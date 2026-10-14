@@ -31,6 +31,7 @@
 #include "validate.h"
 #include "provider_resolve.h" // M5-02：生效提供商 / 模型名断言
 #include "workflow_io.h"
+#include "migration.h"       // M_patchAB §4（PC-04）：版本迁移（workflow + config）离线断言
 #include "nodes.h"
 #include "config.h"
 #include "output_archive.h"
@@ -39,8 +40,11 @@
 #include "web_owner.h"     // M_patchC（PW-01）：归属（纯函数断言）
 #include "ready_level.h"   // M_patchC（PW-03）：就绪三级（纯函数断言）
 #include "web_error.h"     // M_patchC（PW-05）：三类归因文案（纯函数断言）
+#include "probe_verdict.h" // M_patchAB §2.2/§3.3（PB-07 / PB2-25）：会话诊断（判据收紧 + 错误串反查）
 #include "window_table.h"  // M_patchC（PW-02 / PW-06 / PW-08）：窗口表 + 复位计划（纯函数断言）
 #include "webview_host.h" // plan_session_boot / interactive_login_request（纯逻辑断言用）
+#include "cancel_token.h"        // M_patchAB §2.4（PB-09 V-12）：取消令牌 / 取消监视断言
+#include "retry_policy.h"        // M_patchAB §2.6（PB-08 残项）：重试策略断言
 #include "deepseek_official_provider.h" // M5-02：多模态请求体断言
 #include "provider_spec.h"              // M_patchB L1：Provider 配置表断言
 #include "dom_web_client.h"             // L3（PB2-13/15）：DOM 适配器纯函数断言（VB2-22）
@@ -59,6 +63,13 @@
 #include "settings_validation.h" // M6（M6-01）：设置面板校验纯函数断言
 #include "webview2_runtime.h"    // M6（PM-01）：依赖自检（WebView2 运行时）
 #include "site_template.h"        // PB2-24：自建网页版站点模板 + 落盘断言
+#include "inference_provider.h"   // L2（B2-b · PB2-08/12）：统一推理接口 + 能力门控断言
+#include "provider_factory.h"     // L2（B2-b · PB2-09）：按表 protocol 分派断言（R9）
+#include "anthropic_provider.h"   // L2（B2-b · PB2-10）：Anthropic Messages 请求构造断言
+#include "gemini_provider.h"      // L2（B2-b · PB2-11）：Gemini generateContent 请求构造断言
+#include "http_json.h"            // L2（B2-b）：通用 JSON POST / query 拼接断言
+#include "http_net.h"             // M_patchAB §2.3（PB-06 剩余）：代理 / 自签证书策略断言
+#include "credential.h"           // M_patchAB §2.3（PB-06 剩余）：凭据库配置（目录 / 后端）
 
 #include <fstream>
 #include <sstream>
@@ -67,14 +78,19 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
-#include <ctime>
-#include <iomanip>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
+#include <iomanip>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 // 引擎层位于 namespace aiwrite::engine，这里起别名便于书写
@@ -107,6 +123,1079 @@ struct Options {
 constexpr const char* kSha3Abc   = "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532";
 constexpr const char* kSha3Empty = "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a";
 
+// ============================================================================
+//  M_patchAB §2.4（PB-09）：V-11 无 Key 请求构造 / V-12 取消与超时语义
+//
+//  * 全部**离线**：只连本机回环（`127.0.0.1` 上临时起 httplib::Server）
+//  * 动机：`PB-02`（真取消）与「无 Key 时不构造凭证头」这两条此前**没有自动化证据**
+//  * V-12 判据（把 `AB-01` 离线化）：取消后 **1.5 秒内**返回且 `result.cancelled == true`
+// ============================================================================
+
+namespace {
+
+bool has_header_named(const std::vector<std::pair<std::string, std::string>>& headers,
+                      const std::string& name)
+{
+    for (const std::pair<std::string, std::string>& header : headers) {
+        if (header.first == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string chat_completion_body(const std::string& text)
+{
+    nlohmann::json body;
+    body["choices"] = nlohmann::json::array();
+    body["choices"].push_back(nlohmann::json{{"message", nlohmann::json{{"content", text}}}});
+    return body.dump();
+}
+
+// 回环请求构造：端点 = `/slow` 或 `/fast`
+aiwrite::ai::OfficialChatRequest loopback_request(int port, const std::string& path)
+{
+    aiwrite::ai::OfficialChatRequest request;
+    request.api_base          = "http://127.0.0.1:" + std::to_string(port);
+    request.options.api_base  = request.api_base;
+    request.options.chat_path = path;
+    request.api_key           = "sk-selftest-local";
+    request.model             = "deepseek-chat";
+    request.prompt            = "请只回复 pong";
+    return request;
+}
+
+} // namespace
+
+// ---- V-11：无 Key 请求构造（纯函数，不联网）----
+bool test_nokey_request_shape()
+{
+    std::printf("\n===== V-11 无 Key 请求构造（离线）=====\n");
+    int        passed = 0;
+    int        failed = 0;
+    const auto check  = [&passed, &failed](bool ok, const std::string& what) {
+        if (ok) {
+            ++passed;
+            std::printf("  ✓ %s\n", what.c_str());
+        }
+        else {
+            ++failed;
+            std::printf("  ✗ %s\n", what.c_str());
+        }
+    };
+
+    aiwrite::ai::ProviderOptions options; // 默认 = 改造前行为
+    const auto no_key = aiwrite::ai::build_auth_headers(options, std::string());
+    check(!has_header_named(no_key, "Authorization"),
+          "无 Key ⇒ **不**构造 Authorization 头（不会出现空 Bearer）");
+    bool all_non_empty = true;
+    for (const std::pair<std::string, std::string>& header : no_key) {
+        all_non_empty = all_non_empty && !header.second.empty();
+    }
+    check(all_non_empty, "无 Key ⇒ 不产生任何空值请求头");
+
+    const auto with_key = aiwrite::ai::build_auth_headers(options, "sk-selftest");
+    bool       bearer_ok = false;
+    for (const std::pair<std::string, std::string>& header : with_key) {
+        if (header.first == "Authorization" && header.second == "Bearer sk-selftest") {
+            bearer_ok = true;
+        }
+    }
+    check(bearer_ok, "有 Key ⇒ Authorization: Bearer <key>（形状正确）");
+
+    aiwrite::ai::ProviderOptions api_key_style;
+    api_key_style.auth_style  = "api-key";
+    api_key_style.auth_header = "api-key";
+    check(has_header_named(aiwrite::ai::build_auth_headers(api_key_style, "sk-x"), "api-key"),
+          "auth_style=api-key（Anthropic 口径）⇒ 按表生成 api-key 头（PB2-04 复核）");
+
+    check(aiwrite::ai::resolve_chat_path("/v1/messages", "claude") == "/v1/messages" &&
+              aiwrite::ai::resolve_chat_path("/v1beta/models/{model}:generateContent", "gemini-pro") ==
+                  "/v1beta/models/gemini-pro:generateContent",
+          "{model} 占位替换可用（Anthropic / Gemini 路径参数化）");
+
+    aiwrite::ai::OfficialChatRequest request;
+    request.model  = "deepseek-chat";
+    request.prompt = "ping";
+    const nlohmann::json body = aiwrite::ai::build_request_body(request);
+    check(body.contains("model") && body.contains("messages") &&
+              body.dump().find("sk-") == std::string::npos,
+          "请求体：model / messages 就位，且**不含**任何 Key 片段");
+
+    std::printf("  V-11 小计：%d 通过 / %d 失败\n", passed, failed);
+    return failed == 0;
+}
+
+// ---- V-12：取消与超时语义（本机回环；不开浏览器、不出网）----
+bool test_cancel_and_timeout()
+{
+    std::printf("\n===== V-12 取消与超时语义（回环）=====\n");
+    int        passed = 0;
+    int        failed = 0;
+    const auto check  = [&passed, &failed](bool ok, const std::string& what) {
+        if (ok) {
+            ++passed;
+            std::printf("  ✓ %s\n", what.c_str());
+        }
+        else {
+            ++failed;
+            std::printf("  ✗ %s\n", what.c_str());
+        }
+    };
+
+    // ---- ① 令牌本身（不联网）----
+    aiwrite::ai::CancelTokenPtr token = std::make_shared<aiwrite::ai::CancelToken>();
+    check(!token->cancelled(), "令牌：初始未取消");
+    token->request_cancel();
+    check(token->cancelled(), "令牌：request_cancel() 后置位（跨线程可见）");
+    token->request_cancel();
+    check(token->cancelled(), "令牌：重复置位幂等（不抛、不翻转）");
+
+    // ---- ② CancelWatch：置位才调用中断动作，且只调一次 ----
+    std::atomic<int> abort_calls{0};
+    {
+        aiwrite::ai::CancelTokenPtr watch_token = std::make_shared<aiwrite::ai::CancelToken>();
+        aiwrite::ai::CancelWatch    quiet(watch_token.get(), [&abort_calls] { ++abort_calls; }, 10);
+        std::this_thread::sleep_for(std::chrono::milliseconds(120));
+        check(abort_calls.load() == 0, "监视：未取消 ⇒ **不**触发中断动作");
+        watch_token->request_cancel();
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        check(abort_calls.load() == 1 && quiet.aborted(), "监视：置位后触发一次中断动作并置 aborted()");
+    }
+    check(abort_calls.load() == 1, "监视：析构后不再触发（线程已收尾）");
+
+    // ---- ③ 回环服务器（/slow 4 秒、/fast 立即）----
+    httplib::Server  server;
+    std::atomic<int> slow_hits{0};
+    std::atomic<int> fast_hits{0};
+    server.Post("/slow", [&slow_hits](const httplib::Request&, httplib::Response& res) {
+        slow_hits.fetch_add(1);
+        std::this_thread::sleep_for(std::chrono::seconds(4));
+        res.set_content(chat_completion_body("pong"), "application/json");
+    });
+    server.Post("/fast", [&fast_hits](const httplib::Request&, httplib::Response& res) {
+        fast_hits.fetch_add(1);
+        res.set_content(chat_completion_body("pong"), "application/json");
+    });
+    const int port = server.bind_to_any_port("127.0.0.1");
+    if (port <= 0) {
+        std::printf("  ✗ 回环服务器未起（端口不可用）—— V-12 无法继续\n");
+        return false;
+    }
+    std::thread server_thread([&server] { server.listen_after_bind(); });
+    server.wait_until_ready();
+
+    // ---- ④ 正常路径不受影响（无令牌）----
+    {
+        const aiwrite::ai::OfficialChatResult result =
+            aiwrite::ai::official_chat(loopback_request(port, "/fast"));
+        check(result.ok && !result.cancelled && result.text == "pong",
+              "正常路径：无令牌 ⇒ 请求成功且 cancelled=false（HTTP " +
+                  std::to_string(result.http_status) + " / " +
+                  std::to_string(static_cast<long long>(result.elapsed_ms)) + " ms）");
+    }
+
+    // ---- ⑤ 发起前已取消 ⇒ 不发请求 ----
+    {
+        const int hits_before                    = slow_hits.load();
+        aiwrite::ai::OfficialChatRequest request = loopback_request(port, "/slow");
+        request.cancel                           = token; // 已置位
+        const auto started = std::chrono::steady_clock::now();
+        const aiwrite::ai::OfficialChatResult result = aiwrite::ai::official_chat(request);
+        const double ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
+                .count();
+        check(result.cancelled && ms < 300.0 && slow_hits.load() == hits_before,
+              "取消（发起前）：立即返回且 **服务器未收到请求**（" +
+                  std::to_string(static_cast<long long>(ms)) + " ms）");
+    }
+
+    // ---- ⑥ 请求进行中取消 ⇒ 主动关 socket，< 1.5 s 返回 ----
+    {
+        aiwrite::ai::CancelTokenPtr      live    = std::make_shared<aiwrite::ai::CancelToken>();
+        aiwrite::ai::OfficialChatRequest request = loopback_request(port, "/slow");
+        request.cancel                           = live;
+        std::thread canceller([live] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            live->request_cancel();
+        });
+        const auto started = std::chrono::steady_clock::now();
+        const aiwrite::ai::OfficialChatResult result = aiwrite::ai::official_chat(request);
+        const double ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
+                .count();
+        canceller.join();
+        check(result.cancelled && !result.ok && ms < 1500.0,
+              "取消（请求中）：**可取消执行** ⇒ 1.5 s 内返回且 cancelled=true（" +
+                  std::to_string(static_cast<long long>(ms)) + " ms）");
+    }
+
+    // ---- ⑦ 读超时语义（`timeout.*` 生效的直接证据）----
+    {
+        aiwrite::ai::OfficialChatRequest request = loopback_request(port, "/slow");
+        request.options.read_timeout_s           = 1;
+        const auto started = std::chrono::steady_clock::now();
+        const aiwrite::ai::OfficialChatResult result = aiwrite::ai::official_chat(request);
+        const double ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
+                .count();
+        check(!result.ok && !result.cancelled && result.error.find("超时") != std::string::npos &&
+                  ms < 3000.0,
+              "读超时：1 秒读超时对 4 秒响应 ⇒ 可操作错误（含「超时」，" +
+                  std::to_string(static_cast<long long>(ms)) + " ms）");
+    }
+
+    // ---- ⑧ 取消不污染后续调用（新令牌路径仍通）----
+    {
+        const aiwrite::ai::OfficialChatResult result =
+            aiwrite::ai::official_chat(loopback_request(port, "/fast"));
+        check(result.ok && !result.cancelled && fast_hits.load() >= 1,
+              "取消后新调用：**新令牌**路径不受上一轮取消影响");
+    }
+
+    // ---- ⑨ `PB-08` 残项：重试策略（可重试状态 / 退避 / 次数钳制 / 可中断等待）----
+    check(aiwrite::ai::http_status_retryable(429) && aiwrite::ai::http_status_retryable(500) &&
+              aiwrite::ai::http_status_retryable(503) && aiwrite::ai::http_status_retryable(0),
+          "重试策略：429 / 5xx / 网络超时（0）⇒ **可重试**");
+    check(!aiwrite::ai::http_status_retryable(400) && !aiwrite::ai::http_status_retryable(401) &&
+              !aiwrite::ai::http_status_retryable(402) && !aiwrite::ai::http_status_retryable(403) &&
+              !aiwrite::ai::http_status_retryable(404) && !aiwrite::ai::http_status_retryable(200),
+          "重试策略：请求不合法 / 凭证 / 余额 / 风控 / 成功 ⇒ **不重试**（避免加剧风控）");
+    check(aiwrite::ai::retry_delay_ms(2000, 0) == 2000 &&
+              aiwrite::ai::retry_delay_ms(2000, 1) == 4000 &&
+              aiwrite::ai::retry_delay_ms(2000, 99) == 30000 &&
+              aiwrite::ai::retry_delay_ms(0, 0) == 2000,
+          "重试策略：线性退避 + 上限 30 s（base<=0 ⇒ 2000）");
+    check(aiwrite::ai::clamp_retry_count(false, 3) == 0 &&
+              aiwrite::ai::clamp_retry_count(true, -1) == 0 &&
+              aiwrite::ai::clamp_retry_count(true, 2) == 2 &&
+              aiwrite::ai::clamp_retry_count(true, 99) == 5,
+          "重试策略：`error.retry_enabled=false` ⇒ 0；负数 ⇒ 0；上限 5（钳制）");
+    {
+        aiwrite::ai::CancelTokenPtr sleep_token = std::make_shared<aiwrite::ai::CancelToken>();
+        std::thread                 trigger([sleep_token] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            sleep_token->request_cancel();
+        });
+        const auto started = std::chrono::steady_clock::now();
+        const bool interrupted = aiwrite::ai::sleep_interruptible(sleep_token.get(), 2000, 20);
+        const double ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
+                .count();
+        trigger.join();
+        check(interrupted && ms < 800.0,
+              "可中断等待：2 s 等待在取消后 < 0.8 s 返回（重试间隔不被取消拖住，实测 " +
+                  std::to_string(static_cast<long long>(ms)) + " ms）");
+        check(!aiwrite::ai::sleep_interruptible(nullptr, 60),
+              "可中断等待：无令牌 ⇒ 普通睡眠且不报中断");
+    }
+
+    std::printf("  V-12 小计：%d 通过 / %d 失败\n", passed, failed);
+    server.stop();
+    server_thread.join();
+    return failed == 0;
+}
+
+// ============================================================================
+//  L2 底座（`B2-b`）离线断言 —— V-13 / V-14 / V-15
+//
+//  * V-13 Anthropic（Messages）/ Gemini（generateContent）**请求构造与响应解析**（纯函数）
+//  * V-14 工厂分派（按表 protocol）+ 能力门控（`PB2-09` / `PB2-12` / `R9`）
+//  * V-15 两条新协议的**回环端到端**（本机 httplib 服务器；不出网、不碰真实站点）
+// ============================================================================
+
+// ---- V-13：两条新协议的请求构造 / 响应解析（纯函数，不联网）----
+bool test_protocol_requests()
+{
+    std::printf("\n===== V-13 Anthropic / Gemini 请求构造与解析（离线）=====\n");
+    int        passed = 0;
+    int        failed = 0;
+    const auto check  = [&passed, &failed](bool ok, const std::string& what) {
+        if (ok) {
+            ++passed;
+            std::printf("  ✓ %s\n", what.c_str());
+        }
+        else {
+            ++failed;
+            std::printf("  ✗ %s\n", what.c_str());
+        }
+    };
+    const auto has = [](const std::string& text, const std::string& needle) {
+        return text.find(needle) != std::string::npos;
+    };
+
+    // ---- ① 端点拼接（含 `{model}` 占位 / 尾斜杠 / query）----
+    check(aiwrite::ai::anthropic_build_endpoint("https://api.anthropic.com/", "", "claude-x") ==
+              "https://api.anthropic.com/v1/messages",
+          "Anthropic 端点：尾部斜杠归一 + 默认 /v1/messages");
+    check(aiwrite::ai::anthropic_build_endpoint("https://api.anthropic.com", "/v1/messages",
+                                                "claude-3-5") ==
+              "https://api.anthropic.com/v1/messages",
+          "Anthropic 端点：显式路径（无 {model} 占位）原样拼接");
+    check(aiwrite::ai::gemini_build_endpoint("https://generativelanguage.googleapis.com", "",
+                                             "gemini-2.0-flash", "key", "sk-g") ==
+              "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:"
+              "generateContent?key=sk-g",
+          "Gemini 端点：`{model}` 替换 + `?key=` 查询参数（auth_style=query）");
+    check(aiwrite::ai::gemini_build_endpoint("https://x.example.com", "", "m", "key", "") ==
+              "https://x.example.com/v1beta/models/m:generateContent",
+          "Gemini 端点：无 Key ⇒ 不拼 query（不会出现空 `key=`）");
+    check(aiwrite::ai::append_query_param("https://x.example.com/a?api-version=1", "key", "k") ==
+              "https://x.example.com/a?api-version=1&key=k" &&
+              aiwrite::ai::append_query_param("https://x.example.com/a", "key", "") ==
+                  "https://x.example.com/a",
+          "query 拼接：已有 `?` ⇒ 用 `&`；空值 ⇒ 原样返回");
+
+    // ---- ② 能力参数（seed 支持 / 不支持两种口径）----
+    aiwrite::ai::GenerateParams params;
+    params.prompt        = "请只回复 pong";
+    params.system_prompt = "你是测试助手";
+    params.temperature   = 2.0; // Anthropic 取值域 0…1 ⇒ 期望钳制到 1
+    params.max_tokens    = 0;   // 缺省 ⇒ 期望兜底 2048（Anthropic 必填）
+    params.top_p         = 0.3;
+    params.seed          = 42;
+
+    const nlohmann::json anthropic_body =
+        aiwrite::ai::anthropic_build_body(params, "claude-sonnet-4-5", false, {});
+    check(anthropic_body.value("model", std::string()) == "claude-sonnet-4-5" &&
+              anthropic_body.value("max_tokens", 0) == 2048,
+          "Anthropic 请求体：model + `max_tokens` 必填（缺省兜底 2048）");
+    check(anthropic_body.contains("temperature") &&
+              anthropic_body["temperature"].get<double>() == 1.0,
+          "Anthropic 请求体：temperature 越界（2.0）**钳制**到 1.0");
+    check(anthropic_body.value("system", std::string()) == "你是测试助手" &&
+              !anthropic_body["messages"][0].contains("system"),
+          "Anthropic 请求体：system 是**顶层字段**（不在 messages 里）");
+    check(anthropic_body["messages"][0]["role"].get<std::string>() == "user" &&
+              anthropic_body["messages"][0]["content"].is_string(),
+          "Anthropic 请求体：纯文本路径 content = 字符串（与官方示例一致）");
+    check(!anthropic_body.contains("seed") && anthropic_body["top_p"].get<double>() == 0.3,
+          "Anthropic 请求体：**无 seed 字段**（capabilities.seed=false）+ top_p 透传");
+
+    // ---- ③ 图片块形状（两条协议各不相同）----
+    const std::string    data_url = "data:image/png;base64,QUJD";
+    const nlohmann::json anthropic_vision =
+        aiwrite::ai::anthropic_build_body(params, "claude-sonnet-4-5", false, {data_url});
+    const nlohmann::json& blocks = anthropic_vision["messages"][0]["content"];
+    check(blocks.is_array() && blocks.size() == 2 &&
+              blocks[0]["type"].get<std::string>() == "image" &&
+              blocks[0]["source"]["type"].get<std::string>() == "base64" &&
+              blocks[0]["source"]["media_type"].get<std::string>() == "image/png" &&
+              blocks[0]["source"]["data"].get<std::string>() == "QUJD",
+          "Anthropic 视觉：`content[0] = {type:image, source:{type:base64, media_type, data}}`"
+          "（data **不带** data URL 前缀）");
+    check(blocks[1]["type"].get<std::string>() == "text" &&
+              blocks[1]["text"].get<std::string>() == params.prompt,
+          "Anthropic 视觉：文本块在图片之后（顺序稳定）");
+
+    const nlohmann::json gemini_body = aiwrite::ai::gemini_build_body(params, true, {data_url});
+    check(gemini_body["contents"][0]["role"].get<std::string>() == "user" &&
+              gemini_body["contents"][0]["parts"][0]["text"].get<std::string>() == params.prompt &&
+              gemini_body["contents"][0]["parts"][1]["inline_data"]["mime_type"]
+                      .get<std::string>() == "image/png" &&
+              gemini_body["contents"][0]["parts"][1]["inline_data"]["data"].get<std::string>() ==
+                  "QUJD",
+          "Gemini 请求体：`parts[0].text` + `parts[1].inline_data{mime_type,data}`");
+    check(gemini_body["systemInstruction"]["parts"][0]["text"].get<std::string>() == "你是测试助手" &&
+              gemini_body["generationConfig"].value("maxOutputTokens", 0) == 2048 &&
+              gemini_body["generationConfig"].value("seed", 0) == 42,
+          "Gemini 请求体：systemInstruction + generationConfig（maxOutputTokens / seed）");
+    const nlohmann::json gemini_no_seed = aiwrite::ai::gemini_build_body(params, false, {});
+    check(!gemini_no_seed["generationConfig"].contains("seed") &&
+              gemini_no_seed["contents"][0]["parts"].size() == 1,
+          "Gemini 请求体：能力表不允许 seed / 无图片时不产生多余字段");
+
+    // ---- ④ 响应解析（多块拼接 / 忽略非文本块 / 候选路径）----
+    const nlohmann::json anthropic_resp = nlohmann::json::parse(R"JSON({
+      "id": "msg_1", "model": "claude-sonnet-4-5",
+      "content": [ {"type":"text","text":"po"}, {"type":"tool_use","name":"x"},
+                   {"type":"text","text":"ng"} ],
+      "stop_reason": "end_turn"
+    })JSON");
+    check(aiwrite::ai::anthropic_extract_text(anthropic_resp) == "pong",
+          "Anthropic 响应解析：`content[]` 的 text 块**逐块拼接**且忽略非文本块");
+
+    const nlohmann::json gemini_resp = nlohmann::json::parse(R"JSON({
+      "candidates": [ { "content": { "role":"model", "parts": [ {"text":"po"}, {"text":"ng"} ] },
+                        "finishReason": "STOP" } ]
+    })JSON");
+    check(aiwrite::ai::gemini_extract_text(gemini_resp) == "pong",
+          "Gemini 响应解析：`candidates[0].content.parts[*].text` 逐块拼接");
+
+    // ---- ⑤ 错误 / 拦截原因（可操作，不吞掉原因）----
+    const nlohmann::json anthropic_error = nlohmann::json::parse(
+        R"JSON({"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}})JSON");
+    const std::string anthropic_error_message =
+        aiwrite::ai::anthropic_error_text(401, anthropic_error);
+    check(has(anthropic_error_message, "invalid x-api-key") &&
+              has(anthropic_error_message, "authentication_error") &&
+              has(anthropic_error_message, "401"),
+          "Anthropic 错误：HTTP 状态 + 错误类型 + 消息都带出来（可操作）");
+    const nlohmann::json gemini_blocked = nlohmann::json::parse(
+        R"JSON({"promptFeedback":{"blockReason":"SAFETY"},"candidates":[]})JSON");
+    check(has(aiwrite::ai::gemini_block_reason(gemini_blocked), "SAFETY"),
+          "Gemini 拦截：`promptFeedback.blockReason` ⇒ 明确指出被站点安全策略拦截");
+    const nlohmann::json gemini_finish = nlohmann::json::parse(
+        R"JSON({"candidates":[{"content":{"parts":[]},"finishReason":"MAX_TOKENS"}]})JSON");
+    check(has(aiwrite::ai::gemini_block_reason(gemini_finish), "MAX_TOKENS"),
+          "Gemini 未出文本：`finishReason != STOP` ⇒ 给出原因而不是「无内容」");
+    check(aiwrite::ai::json_error_message(nlohmann::json::parse(
+              R"JSON({"error":{"code":400,"message":"API key not valid"}})JSON")) ==
+              "API key not valid",
+          "错误提取：兼容三种形状（OpenAI 兼容 / Anthropic / Gemini）");
+
+    // ---- ⑥ data URL 拆分（两种协议共用）----
+    std::string mime;
+    std::string base64;
+    check(aiwrite::ai::split_data_url("data:image/jpeg;base64,AAA", &mime, &base64) &&
+              mime == "image/jpeg" && base64 == "AAA",
+          "data URL 拆分：`data:image/jpeg;base64,AAA` → (image/jpeg, AAA)");
+    check(!aiwrite::ai::split_data_url("data:image/png,AAA", &mime, &base64) &&
+              !aiwrite::ai::split_data_url("/tmp/a.png", &mime, &base64),
+          "data URL 拆分：缺 base64 声明 / 非 data URL ⇒ false（不静默冒充图片）");
+
+    std::printf("  V-13 小计：%d 通过 / %d 失败\n", passed, failed);
+    return failed == 0;
+}
+
+// ---- V-14：工厂分派 + 能力门控（纯离线；含对**随程序发布**的 providers.json 的 R9 核对）----
+bool test_factory_and_capability()
+{
+    std::printf("\n===== V-14 工厂分派 / 能力门控（离线）=====\n");
+    int        passed = 0;
+    int        failed = 0;
+    const auto check  = [&passed, &failed](bool ok, const std::string& what) {
+        if (ok) {
+            ++passed;
+            std::printf("  ✓ %s\n", what.c_str());
+        }
+        else {
+            ++failed;
+            std::printf("  ✗ %s\n", what.c_str());
+        }
+    };
+    const auto has = [](const std::string& text, const std::string& needle) {
+        return text.find(needle) != std::string::npos;
+    };
+
+    // ---- ① 工厂清单与实现清单一致（单体真值 = 工厂；`R9`）----
+    bool factory_subset = true;
+    for (const std::string& protocol : aiwrite::ai::factory_protocols()) {
+        bool found = false;
+        for (const std::string& item : aiwrite::ai::implemented_protocols()) {
+            found = found || (item == protocol);
+        }
+        factory_subset = factory_subset && found;
+    }
+    check(factory_subset && aiwrite::ai::factory_implements("openai") &&
+              aiwrite::ai::factory_implements("anthropic") &&
+              aiwrite::ai::factory_implements("gemini") &&
+              aiwrite::ai::factory_implements("deepseek-web") &&
+              !aiwrite::ai::factory_implements("acme-v2"),
+          "工厂：实现清单 ⊂ 展示清单，且 openai/anthropic/gemini/deepseek-web 均实现（`acme-v2` 否）");
+
+    // ---- ② 随程序发布的表：每条 protocol 都必须有实现（R9 的真闸门）----
+    const aiwrite::ai::ProviderSpecs table = aiwrite::ai::load_provider_specs();
+    check(!table.items.empty(), "表加载：条目不空（实际 " + std::to_string(table.items.size()) + " 条）");
+    std::string unimplemented;
+    for (const aiwrite::ai::ProviderSpec& spec : table.items) {
+        bool found = false;
+        for (const std::string& item : aiwrite::ai::implemented_protocols()) {
+            found = found || (item == spec.protocol);
+        }
+        if (!found) {
+            unimplemented += (unimplemented.empty() ? "" : "、") + spec.id + "(" + spec.protocol + ")";
+        }
+    }
+    check(unimplemented.empty(),
+          "R9 核对：表里每条 protocol 都有实现（未实现的条目：" +
+              (unimplemented.empty() ? std::string("无") : unimplemented) + "）");
+
+    // ---- ③ 分派：按表 protocol 建对象（能力快照取自**本条**）----
+    bool dispatch_ok = true;
+    for (const aiwrite::ai::ProviderSpec& spec : table.items) {
+        if (spec.kind == "web") {
+            continue; // 网页版见 ④
+        }
+        aiwrite::ai::ProviderRuntimeConfig config;
+        config.api_key = "sk-selftest-dispatch"; // 只建对象、不发请求
+        const aiwrite::ai::ProviderCreation created = aiwrite::ai::create_provider(spec, config);
+        dispatch_ok = dispatch_ok && created.provider != nullptr &&
+                      created.provider->protocol() == spec.protocol &&
+                      !created.provider->name().empty() && created.error.empty();
+        if (created.provider != nullptr) {
+            // 能力快照必须等于**表里本条**的 capabilities（`PB2-12`：能力来自表）
+            const aiwrite::ai::ProviderCaps caps = created.provider->caps();
+            dispatch_ok = dispatch_ok && caps.vision == spec.caps.vision &&
+                          caps.seed == spec.caps.seed &&
+                          caps.system_role == spec.caps.system_role;
+        }
+    }
+    check(dispatch_ok, "分派：official 条目全部建出对象，protocol() / caps() 与表一致");
+
+    // ---- ④ 网页版 / dom / 未知 protocol 的**明确报错**（不静默回落）----
+    const aiwrite::ai::ProviderSpec* web_spec = table.find("deepseek-web");
+    if (web_spec != nullptr) {
+        aiwrite::ai::ProviderRuntimeConfig no_session;
+        const aiwrite::ai::ProviderCreation created =
+            aiwrite::ai::create_provider(*web_spec, no_session);
+        check(created.provider == nullptr && has(created.error, "网页版会话"),
+              "分派：deepseek-web 无会话来源 ⇒ 明确报错（说明缺什么）");
+        aiwrite::ai::ProviderRuntimeConfig with_session;
+        with_session.session_supplier = [] { return aiwrite::web::Session{}; };
+        const aiwrite::ai::ProviderCreation ready =
+            aiwrite::ai::create_provider(*web_spec, with_session);
+        check(ready.provider != nullptr && ready.provider->protocol() == "deepseek-web",
+              "分派：deepseek-web 有会话来源 ⇒ 建出内置网页版实现");
+    }
+    const aiwrite::ai::ProviderSpec* dom_spec = table.find("kimi-web");
+    if (dom_spec != nullptr) {
+        aiwrite::ai::ProviderRuntimeConfig config;
+        const aiwrite::ai::ProviderCreation created =
+            aiwrite::ai::create_provider(*dom_spec, config);
+        check(created.provider == nullptr && !created.unsupported_protocol &&
+                  has(created.error, "DOM"),
+              "分派：dom ⇒ 明确说明由 DOM 适配器承载（**不算**未实现协议）");
+    }
+    aiwrite::ai::ProviderSpec unknown = {};
+    unknown.id       = "acme";
+    unknown.display  = "Acme";
+    unknown.kind     = "official";
+    unknown.protocol = "acme-v2";
+    const aiwrite::ai::ProviderCreation unknown_created =
+        aiwrite::ai::create_provider(unknown, aiwrite::ai::ProviderRuntimeConfig{});
+    check(unknown_created.provider == nullptr && unknown_created.unsupported_protocol &&
+              has(unknown_created.error, "acme-v2") && has(unknown_created.error, "已实现"),
+          "分派：未知 protocol ⇒ 明确报错 + `unsupported_protocol=true` + 列出已实现（R9）");
+
+    // ---- ⑤ 能力门控（`PB2-12`）：纯函数，节点 / 界面 / 自检共用同一判据 ----
+    const aiwrite::ai::ProviderCaps no_vision = aiwrite::ai::caps_from_spec(table.find("deepseek-web"));
+    aiwrite::ai::GenerateParams   vision_params;
+    vision_params.prompt       = "看图";
+    vision_params.system_prompt = "你是助手";
+    vision_params.seed          = 7;
+    const aiwrite::ai::CapabilityGate blocked =
+        aiwrite::ai::capability_gate(no_vision, vision_params, true);
+    check(blocked.blocking.size() == 1 && has(blocked.blocking[0], "不支持图片输入") &&
+              blocked.warnings.size() == 2 && blocked.system_prompt_inlined,
+          "门控：vision=false + 图片 ⇒ **拦路**；seed / system_role 同轮给出提示（不拦路）");
+
+    const aiwrite::ai::ProviderCaps permissive = aiwrite::ai::caps_from_spec(nullptr);
+    const aiwrite::ai::CapabilityGate open =
+        aiwrite::ai::capability_gate(permissive, vision_params, true);
+    check(open.blocking.empty() && open.warnings.empty() && !open.system_prompt_inlined &&
+              permissive.vision && permissive.seed && permissive.system_role,
+          "门控：**无表条目**（spec=nullptr）⇒ 宽松默认，不拦任何能力（老工作流不受影响，I19）");
+
+    const aiwrite::ai::ProviderCaps no_seed_only = [] {
+        aiwrite::ai::ProviderCaps caps;
+        caps.seed = false;
+        return caps;
+    }();
+    const aiwrite::ai::CapabilityGate seed_gate =
+        aiwrite::ai::capability_gate(no_seed_only, vision_params, false);
+    check(seed_gate.blocking.empty() && seed_gate.warnings.size() == 1 &&
+              has(seed_gate.warnings[0], "已忽略 seed") && !seed_gate.system_prompt_inlined,
+          "门控：seed 不支持 ⇒ 只提示「已忽略」（**不拦路**，与既有网页版口径一致）");
+
+    const aiwrite::ai::ProviderCaps no_system_role = [] {
+        aiwrite::ai::ProviderCaps caps;
+        caps.system_role = false;
+        return caps;
+    }();
+    const aiwrite::ai::CapabilityGate system_gate =
+        aiwrite::ai::capability_gate(no_system_role, vision_params, false);
+    check(system_gate.system_prompt_inlined && has(system_gate.warnings[0], "前置拼接"),
+          "门控：system_role=false ⇒ 指示调用方**前置拼接**系统提示词并提示");
+
+    check(aiwrite::ai::protocol_needs_key(aiwrite::ai::ProviderOptions{}) &&
+              !aiwrite::ai::protocol_needs_key([] {
+                  aiwrite::ai::ProviderOptions options;
+                  options.auth_style = "none";
+                  return options;
+              }()),
+          "凭证：bearer 类协议需要 Key；`auth_style=none`（Ollama）不需要");
+
+    std::printf("  V-14 小计：%d 通过 / %d 失败\n", passed, failed);
+    return failed == 0;
+}
+// ---- V-16：网络（代理 / 自签证书）与凭据库配置（M_patchAB §2.3 · `PB-06` 剩余）----
+//  * 纯函数：`host_of_url` / `no_proxy_matches` / `resolve_proxy` 优先级 / `describe_http_net` 打码
+//  * **回环证明**：把代理指到本机 `httplib::Server` ⇒ 服务器侧回读**绝对 URI**
+//    （只有真走了代理才会这样）＋ `NO_PROXY` 命中 ⇒ 代理**一个请求都收不到**
+//  * 凭据：`[credentials].dir` / `backend` 真的生效（目录可改；未实现后端**明确报错**）
+bool test_network_and_credentials()
+{
+    std::printf("\n===== V-16 代理 / 证书 / 凭据配置（离线）=====\n");
+    int        passed = 0;
+    int        failed = 0;
+    const auto check  = [&passed, &failed](bool ok, const std::string& what) {
+        if (ok) {
+            ++passed;
+            std::printf("  ✓ %s\n", what.c_str());
+        }
+        else {
+            ++failed;
+            std::printf("  ✗ %s\n", what.c_str());
+        }
+    };
+    const auto has = [](const std::string& text, const std::string& needle) {
+        return text.find(needle) != std::string::npos;
+    };
+
+    // ---- ① 主机名提取（去 scheme / userinfo / 端口 / 路径；小写）----
+    check(aiwrite::ai::host_of_url("https://API.DeepSeek.com/v1/chat?x=1") == "api.deepseek.com" &&
+              aiwrite::ai::host_of_url("http://user:pass@127.0.0.1:8080/x") == "127.0.0.1" &&
+              aiwrite::ai::host_of_url("http://127.0.0.1:11434/v1/chat/completions") == "127.0.0.1",
+          "host_of_url：scheme / userinfo / 端口 / 路径全部剥掉并小写");
+
+    // ---- ② NO_PROXY 判据（`*` / 精确 / 后缀 / host:port / 逗号分隔）----
+    const std::string loopback_url = "http://127.0.0.1:8080/v1/messages";
+    check(aiwrite::ai::no_proxy_matches(loopback_url, "*") &&
+              aiwrite::ai::no_proxy_matches(loopback_url, "localhost, 127.0.0.1") &&
+              !aiwrite::ai::no_proxy_matches(loopback_url, "example.com"),
+          "NO_PROXY：`*` 与逗号清单（含空格）都命中；无关域名不命中");
+    check(aiwrite::ai::no_proxy_matches("https://a.corp.com/x", ".corp.com") &&
+              aiwrite::ai::no_proxy_matches("https://a.corp.com/x", "corp.com") &&
+              !aiwrite::ai::no_proxy_matches("https://corp.com.evil.com/x", "corp.com"),
+          "NO_PROXY：`.corp.com` 匹配子域且**不**被 `corp.com.evil.com` 骗过（后缀按域名边界）");
+    check(aiwrite::ai::no_proxy_matches("http://127.0.0.1:9/v1", "127.0.0.1:9") &&
+              !aiwrite::ai::no_proxy_matches("http://127.0.0.1:8080/v1", "127.0.0.1:9"),
+          "NO_PROXY：`host:port` 必须**连端口一起**匹配（端口不同 ⇒ 不命中）");
+
+    // ---- ③ 代理优先级（配置 > 环境；无 `NO_PROXY` 命中时才看）----
+    const auto fake_env = [](const std::string& https_proxy, const std::string& http_proxy,
+                             const std::string& all_proxy, const std::string& no_proxy) {
+        return [https_proxy, http_proxy, all_proxy, no_proxy](const char* name) -> std::string {
+            const std::string key = (name != nullptr) ? std::string(name) : std::string();
+            if (key == "HTTPS_PROXY") {
+                return https_proxy;
+            }
+            if (key == "HTTP_PROXY") {
+                return http_proxy;
+            }
+            if (key == "ALL_PROXY") {
+                return all_proxy;
+            }
+            if (key == "NO_PROXY") {
+                return no_proxy;
+            }
+            return {};
+        };
+    };
+    std::string source;
+    const auto  env = fake_env("http://env-https:1", "http://env-http:2", "http://env-all:3", "");
+    check(aiwrite::ai::resolve_proxy("https://api.deepseek.com/x", "http://cfg:9", true, "", env,
+                                     &source) == "http://cfg:9" &&
+              source == "配置",
+          "代理优先级：显式配置值**优先于**环境变量（来源标为「配置」）");
+    check(aiwrite::ai::resolve_proxy("https://api.deepseek.com/x", "", true, "", env, &source) ==
+              "http://env-https:1" &&
+              source == "HTTPS_PROXY" &&
+              aiwrite::ai::resolve_proxy("http://api.deepseek.com/x", "", true, "", env, &source) ==
+                  "http://env-http:2" &&
+              source == "HTTP_PROXY",
+          "代理优先级：按目标 scheme 取 `HTTPS_PROXY` / `HTTP_PROXY`（https / http 各一条）");
+    check(aiwrite::ai::resolve_proxy("https://a.example.com/x", "", true, "",
+                                     fake_env("", "", "http://env-all:3", ""), &source) ==
+              "http://env-all:3" &&
+              source == "ALL_PROXY" &&
+              aiwrite::ai::resolve_proxy("https://a.example.com/x", "http://cfg:9", true,
+                                         "a.example.com", env, &source)
+                      .empty() &&
+              source == "NO_PROXY",
+          "代理优先级：兜底 `ALL_PROXY`；**`NO_PROXY` 命中 ⇒ 直达**（连配置值也不用）");
+    check(aiwrite::ai::resolve_proxy("https://a.example.com/x", "http://cfg:9", true,
+                                     "other.example.com",
+                                     fake_env("", "", "", "*.example.com"), &source) == "http://cfg:9",
+          "代理优先级：`[network].no_proxy` 非空 ⇒ **覆盖**环境变量 `NO_PROXY`");
+    check(aiwrite::ai::resolve_proxy("https://a.example.com/x", "", false, "", env, &source).empty() &&
+              source == "无",
+          "代理：`proxy_from_env=false` 且未手填 ⇒ 不代理（企业里可强制直连）");
+
+    // ---- ④ 证书校验：默认**严格**；只有显式打开自签兼容才关 ----
+    aiwrite::Config net_config;
+    const aiwrite::ai::HttpNetOptions strict_net =
+        aiwrite::ai::resolve_http_net("https://api.deepseek.com", net_config,
+                                      fake_env("", "", "", ""));
+    net_config.network.insecure_tls = true;
+    const aiwrite::ai::HttpNetOptions loose_net =
+        aiwrite::ai::resolve_http_net("https://api.deepseek.com", net_config,
+                                      fake_env("", "", "", ""));
+    check(strict_net.verify_tls && !loose_net.verify_tls,
+          "证书：默认**严格校验**；`[network].insecure_tls=true` ⇒ 关闭校验（唯一开关）");
+    const aiwrite::ai::HttpNetOptions masked_net = aiwrite::ai::resolve_http_net(
+        "https://api.deepseek.com", net_config, fake_env("http://user:secret@proxy:8080", "", "", ""));
+    const std::string masked_text = aiwrite::ai::describe_http_net(masked_net);
+    check(has(masked_text, "***") && !has(masked_text, "secret") && has(masked_text, "已关闭"),
+          "诊断文案：代理口令**打码**（`user:***@`），且如实说明证书校验已关");
+
+    // ---- ⑤ 回环证明：代理**真的生效**（服务器侧回读绝对 URI）----
+    struct ProxySeen {
+        std::mutex  mutex;
+        int         count = 0;
+        std::string target;
+    };
+    const auto proxy_seen = std::make_shared<ProxySeen>();
+    httplib::Server  proxy_server;
+    const auto       proxy_body =
+        std::string(R"JSON({"choices":[{"message":{"content":"pong"}}]})JSON");
+    const auto proxy_handler = [proxy_seen, proxy_body](const httplib::Request& req,
+                                                        httplib::Response&       res) {
+        std::lock_guard<std::mutex> lock(proxy_seen->mutex);
+        ++proxy_seen->count;
+        proxy_seen->target = req.target;
+        res.set_content(proxy_body, "application/json");
+    };
+    proxy_server.Post("/v1/messages", proxy_handler);
+    proxy_server.Post(R"(.*)", proxy_handler); // 代理形态 = 绝对 URI 目标，走 catch-all
+    const int proxy_port = proxy_server.bind_to_any_port("127.0.0.1");
+    if (proxy_port <= 0) {
+        std::printf("  ✗ 回环代理未起（端口不可用）—— V-16 回环部分跳过\n");
+        return failed == 0;
+    }
+    std::thread proxy_thread([&proxy_server] { proxy_server.listen_after_bind(); });
+    proxy_server.wait_until_ready();
+
+    // 目标用**不存在的地址**（`api.example.invalid`）：若真经代理，请求根本不会到那儿
+    const std::string target_url = "http://api.example.invalid/v1/messages";
+    {
+        aiwrite::ai::HttpJsonRequest request;
+        request.url = target_url;
+        request.body = R"JSON({"prompt":"ping"})JSON";
+        // 显式注入网络策略（确定性：不受开发机 `HTTPS_PROXY` / `NO_PROXY` 干扰）
+        request.net = aiwrite::ai::HttpNetOptions{
+            "http://127.0.0.1:" + std::to_string(proxy_port), "自检", true};
+        const aiwrite::ai::HttpJsonResult via_proxy = aiwrite::ai::http_post_json(request);
+        std::string                      seen_target;
+        int                              seen_count = 0;
+        {
+            std::lock_guard<std::mutex> lock(proxy_seen->mutex);
+            seen_target = proxy_seen->target;
+            seen_count  = proxy_seen->count;
+        }
+        check(via_proxy.ok && via_proxy.http_status == 200 && seen_count == 1 &&
+                  has(seen_target, "http://api.example.invalid") &&
+                  has(seen_target, "/v1/messages"),
+              "回环证明：配置的代理**真的生效** —— 目标是不存在的域名，请求仍成功；"
+              "代理服务器侧回读绝对 URI「" + seen_target + "」");
+    }
+    {
+        // 反面：`NO_PROXY` 命中 ⇒ **直达**（代理收不到请求；因目标不存在 ⇒ 调用失败）
+        aiwrite::ai::HttpJsonRequest request;
+        request.url  = target_url;
+        request.body = R"JSON({"prompt":"ping"})JSON";
+        request.net  = aiwrite::ai::HttpNetOptions{"", "NO_PROXY", true};
+        const aiwrite::ai::HttpJsonResult direct = aiwrite::ai::http_post_json(request);
+        int seen_count = 0;
+        {
+            std::lock_guard<std::mutex> lock(proxy_seen->mutex);
+            seen_count = proxy_seen->count;
+        }
+        check(!direct.ok && !direct.cancelled && seen_count == 1,
+              "回环反面：网络策略为「直达」时**代理不再收到请求**（直接连目标，失败如实返回）");
+    }
+    proxy_server.stop();
+    proxy_thread.join();
+
+    // ---- ⑥ 凭据库配置（`[credentials].dir` / `backend` **真的生效**）----
+    const aiwrite::Config before_credentials = aiwrite::app_config();
+    {
+        const std::filesystem::path temp_dir =
+            std::filesystem::temp_directory_path() / "aiwrite-v16-credentials";
+        std::error_code ec;
+        std::filesystem::remove_all(temp_dir, ec);
+
+        aiwrite::Config cred_config    = before_credentials;
+        cred_config.credentials.dir    = temp_dir.string();
+        cred_config.credentials.backend = "kms"; // 故意写一个**未实现**的后端
+        aiwrite::set_app_config(cred_config);
+        check(aiwrite::utils::credentials_dir() == temp_dir.string(),
+              "凭据目录：`[credentials].dir` 真的生效（" + aiwrite::utils::credentials_dir() + "）");
+
+        const std::string backend_error = aiwrite::utils::credentials_backend_error();
+        std::string       save_error;
+        const bool        saved = aiwrite::utils::save_credential(
+            "aiwrite/selftest-v16", "sk-should-never-be-written", &save_error);
+        bool any_file = false;
+        if (std::filesystem::exists(temp_dir, ec)) {
+            for (const std::filesystem::directory_entry& entry :
+                 std::filesystem::directory_iterator(temp_dir, ec)) {
+                (void)entry;
+                any_file = true;
+            }
+        }
+        check(!backend_error.empty() && has(backend_error, "kms") && !saved &&
+                  has(save_error, "尚未实现") && !any_file,
+              "凭据后端：未实现的 backend ⇒ **明确报错**、拒绝保存、**零文件留痕**（不静默降级）");
+        std::string load_error;
+        const std::string loaded =
+            aiwrite::utils::load_credential("aiwrite/selftest-v16", &load_error);
+        check(loaded.empty() && has(load_error, "尚未实现"),
+              "凭据后端：读取同一后端也给出**同一条**可操作原因（不是「凭据不存在」）");
+        std::filesystem::remove_all(temp_dir, ec);
+    }
+    aiwrite::set_app_config(before_credentials); // 还原进程配置缓存（不影响其它组）
+
+    std::printf("  V-16 小计：%d 通过 / %d 失败\n", passed, failed);
+    return failed == 0;
+}
+
+// ---- V-15：两条新协议的**回环端到端**（本机 httplib 服务器；不出网、不碰真实站点）----
+//  * 断言「表驱动的端点 / 认证头 / extra_headers / 请求体」**真的上了线**（服务器侧回读）
+//  * 同时覆盖：HTTP 错误分类（401 形状）、读超时、取消语义（`PB-02` 口径）
+bool test_protocol_loopback()
+{
+    std::printf("\n===== V-15 Anthropic / Gemini 回环端到端（离线）=====\n");
+    int        passed = 0;
+    int        failed = 0;
+    const auto check  = [&passed, &failed](bool ok, const std::string& what) {
+        if (ok) {
+            ++passed;
+            std::printf("  ✓ %s\n", what.c_str());
+        }
+        else {
+            ++failed;
+            std::printf("  ✗ %s\n", what.c_str());
+        }
+    };
+    const auto has = [](const std::string& text, const std::string& needle) {
+        return text.find(needle) != std::string::npos;
+    };
+
+    // 服务器侧「收到了什么」（证明请求真的照表构造出来）
+    struct Seen {
+        std::mutex                         mutex;
+        int                                count = 0;
+        std::string                        target; // 原始 target（含 query）
+        std::string                        body;
+        std::map<std::string, std::string> headers;
+    };
+    const auto anthropic_seen = std::make_shared<Seen>();
+    const auto gemini_seen    = std::make_shared<Seen>();
+    const auto slow_hits      = std::make_shared<std::atomic<int>>(0);
+    const auto anthropic_body =
+        std::string(R"JSON({"id":"msg_1","model":"claude-selftest","content":[{"type":"text","text":"pong"}],"stop_reason":"end_turn"})JSON");
+    const auto gemini_body =
+        std::string(R"JSON({"candidates":[{"content":{"role":"model","parts":[{"text":"pong"}]},"finishReason":"STOP"}]})JSON");
+    const auto anthropic_error_body =
+        std::string(R"JSON({"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}})JSON");
+    const auto slow_body =
+        std::string(R"JSON({"content":[{"type":"text","text":"late"}]})JSON");
+
+    httplib::Server server;
+    server.Post("/v1/messages",
+                [anthropic_seen, anthropic_body](const httplib::Request& req,
+                                                 httplib::Response&       res) {
+                    std::lock_guard<std::mutex> lock(anthropic_seen->mutex);
+                    ++anthropic_seen->count;
+                    anthropic_seen->target                       = req.target;
+                    anthropic_seen->body                         = req.body;
+                    anthropic_seen->headers["x-api-key"]         = req.get_header_value("x-api-key");
+                    anthropic_seen->headers["anthropic-version"] =
+                        req.get_header_value("anthropic-version");
+                    anthropic_seen->headers["authorization"] = req.get_header_value("Authorization");
+                    res.set_content(anthropic_body, "application/json");
+                });
+    server.Post(R"(/v1beta/models/([^:]+):generateContent)",
+                [gemini_seen, gemini_body](const httplib::Request& req, httplib::Response& res) {
+                    std::lock_guard<std::mutex> lock(gemini_seen->mutex);
+                    ++gemini_seen->count;
+                    gemini_seen->target                   = req.target;
+                    gemini_seen->body                     = req.body;
+                    gemini_seen->headers["authorization"] = req.get_header_value("Authorization");
+                    res.set_content(gemini_body, "application/json");
+                });
+    server.Post("/v1/messages-unauthorized",
+                [anthropic_error_body](const httplib::Request&, httplib::Response& res) {
+                    res.status = 401;
+                    res.set_content(anthropic_error_body, "application/json");
+                });
+    server.Post("/v1/messages-slow",
+                [slow_hits, slow_body](const httplib::Request&, httplib::Response& res) {
+                    slow_hits->fetch_add(1);
+                    std::this_thread::sleep_for(std::chrono::seconds(4));
+                    res.set_content(slow_body, "application/json");
+                });
+
+    const int port = server.bind_to_any_port("127.0.0.1");
+    if (port <= 0) {
+        std::printf("  ✗ 回环服务器未起（端口不可用）—— V-15 无法继续\n");
+        return false;
+    }
+    std::thread server_thread([&server] { server.listen_after_bind(); });
+    server.wait_until_ready();
+
+    // 表条目 → 本机地址（其余字段**全部照表**：这是「表驱动」的证明）
+    const aiwrite::ai::ProviderSpecs table          = aiwrite::ai::load_provider_specs();
+    const aiwrite::ai::ProviderSpec* anthropic_spec = table.find("anthropic");
+    const aiwrite::ai::ProviderSpec* gemini_spec    = table.find("gemini");
+    if (anthropic_spec == nullptr || gemini_spec == nullptr) {
+        std::printf("  ✗ 表里缺少 anthropic / gemini 条目 —— V-15 无法继续\n");
+        server.stop();
+        server_thread.join();
+        return false;
+    }
+
+    // ================= Anthropic =================
+    aiwrite::ai::ProviderSpec local_anthropic = *anthropic_spec;
+    local_anthropic.api_base                  = "http://127.0.0.1:" + std::to_string(port);
+
+    aiwrite::ai::ProviderRuntimeConfig anthropic_config;
+    anthropic_config.api_base = local_anthropic.api_base;
+    anthropic_config.model    = "claude-selftest";
+    anthropic_config.api_key  = "sk-selftest-anthropic";
+    anthropic_config.options  = aiwrite::ai::provider_options_from(local_anthropic);
+
+    const aiwrite::ai::ProviderCreation anthropic_provider =
+        aiwrite::ai::create_provider(local_anthropic, anthropic_config);
+    check(anthropic_provider.provider != nullptr, "Anthropic：工厂按表建出实现");
+
+    aiwrite::ai::GenerateParams anthropic_params;
+    anthropic_params.prompt        = "请只回复 pong";
+    anthropic_params.system_prompt = "你是测试助手";
+    anthropic_params.max_tokens    = 64;
+
+    if (anthropic_provider.provider != nullptr) {
+        const aiwrite::ai::GenerateResult result =
+            anthropic_provider.provider->generate(anthropic_params);
+        check(result.ok && result.text == "pong" && result.http_status == 200 &&
+                  result.protocol == "anthropic",
+              "Anthropic 端到端：整链路成功（HTTP " + std::to_string(result.http_status) + " / " +
+                  result.provider_name + " / " +
+                  std::to_string(static_cast<long long>(result.elapsed_ms)) + " ms / 文本 " +
+                  std::to_string(result.text.size()) + " 字节" +
+                  (result.error.empty() ? "" : (" / 错误：" + result.error)) + "）");
+        std::string api_key_header;
+        std::string version_header;
+        std::string auth_header;
+        std::string request_body;
+        int         count = 0;
+        {
+            std::lock_guard<std::mutex> lock(anthropic_seen->mutex);
+            api_key_header = anthropic_seen->headers["x-api-key"];
+            version_header = anthropic_seen->headers["anthropic-version"];
+            auth_header    = anthropic_seen->headers["authorization"];
+            request_body   = anthropic_seen->body;
+            count          = anthropic_seen->count;
+        }
+        check(count == 1 && api_key_header == "sk-selftest-anthropic" &&
+                  version_header == "2023-06-01" && auth_header.empty(),
+              "Anthropic 上线校验：`x-api-key` + 表里的 `anthropic-version` 都到了，"
+              "且**未**发 `Authorization`（口径正确）");
+        check(has(request_body, "\"system\"") && has(request_body, "\"max_tokens\":64") &&
+                  has(request_body, "请只回复 pong"),
+              "Anthropic 上线校验：正文里 system 是顶层字段 + max_tokens 生效");
+
+        // ---- HTTP 错误（401 + Anthropic 错误形状）----
+        aiwrite::ai::ProviderSpec bad_spec            = local_anthropic;
+        bad_spec.chat_path                            = "/v1/messages-unauthorized";
+        aiwrite::ai::ProviderRuntimeConfig bad_config = anthropic_config;
+        bad_config.options                            = aiwrite::ai::provider_options_from(bad_spec);
+        const aiwrite::ai::ProviderCreation bad_provider =
+            aiwrite::ai::create_provider(bad_spec, bad_config);
+        const aiwrite::ai::GenerateResult bad_result =
+            bad_provider.provider->generate(anthropic_params);
+        check(!bad_result.ok && bad_result.http_status == 401 &&
+                  has(bad_result.error, "invalid x-api-key"),
+              "Anthropic 端到端：401 ⇒ 失败但**原因可操作**（带出站点原话）");
+
+        // ---- 读超时（表驱动超时被本次调用覆盖为 1 s）----
+        aiwrite::ai::ProviderSpec slow_spec = local_anthropic;
+        slow_spec.chat_path                 = "/v1/messages-slow";
+        aiwrite::ai::ProviderRuntimeConfig slow_config = anthropic_config;
+        slow_config.options = aiwrite::ai::provider_options_from(slow_spec);
+        const aiwrite::ai::ProviderCreation slow_provider =
+            aiwrite::ai::create_provider(slow_spec, slow_config);
+        aiwrite::ai::GenerateParams slow_params = anthropic_params;
+        slow_params.read_timeout_s              = 1;
+        const auto slow_started                 = std::chrono::steady_clock::now();
+        const aiwrite::ai::GenerateResult slow_result =
+            slow_provider.provider->generate(slow_params);
+        const double slow_ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - slow_started)
+                .count();
+        check(!slow_result.ok && !slow_result.cancelled && slow_ms < 3000.0,
+              "Anthropic 端到端：1 秒读超时对 4 秒响应 ⇒ 按时失败（" +
+                  std::to_string(static_cast<long long>(slow_ms)) + " ms / 错误：" +
+                  slow_result.error + "）");
+
+        // ---- 取消（`PB-02`：取消 ≠ 站点错误，1.5 s 内返回）----
+        aiwrite::ai::CancelTokenPtr cancel = std::make_shared<aiwrite::ai::CancelToken>();
+        std::thread                 canceller([cancel] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            cancel->request_cancel();
+        });
+        aiwrite::ai::GenerateParams cancel_params = anthropic_params;
+        cancel_params.cancel                      = cancel;
+        const auto cancel_started                 = std::chrono::steady_clock::now();
+        const aiwrite::ai::GenerateResult cancel_result =
+            slow_provider.provider->generate(cancel_params);
+        const double cancel_ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
+                                                     cancel_started)
+                .count();
+        canceller.join();
+        check(cancel_result.cancelled && !cancel_result.ok && cancel_ms < 1500.0,
+              "Anthropic 端到端：请求中取消 ⇒ 1.5 s 内返回且 `cancelled=true`（" +
+                  std::to_string(static_cast<long long>(cancel_ms)) + " ms）");
+    }
+
+    // ================= Gemini =================
+    aiwrite::ai::ProviderSpec local_gemini = *gemini_spec;
+    local_gemini.api_base                  = "http://127.0.0.1:" + std::to_string(port);
+
+    aiwrite::ai::ProviderRuntimeConfig gemini_config;
+    gemini_config.api_base = local_gemini.api_base;
+    gemini_config.model    = "gemini-selftest";
+    gemini_config.api_key  = "sk-selftest-gemini";
+    gemini_config.options  = aiwrite::ai::provider_options_from(local_gemini);
+
+    const aiwrite::ai::ProviderCreation gemini_provider =
+        aiwrite::ai::create_provider(local_gemini, gemini_config);
+    check(gemini_provider.provider != nullptr, "Gemini：工厂按表建出实现");
+
+    aiwrite::ai::GenerateParams gemini_params;
+    gemini_params.prompt        = "请只回复 pong";
+    gemini_params.system_prompt = "你是测试助手";
+    gemini_params.max_tokens    = 64;
+    gemini_params.seed          = 7;
+
+    if (gemini_provider.provider != nullptr) {
+        const aiwrite::ai::GenerateResult result = gemini_provider.provider->generate(gemini_params);
+        check(result.ok && result.text == "pong" && result.http_status == 200 &&
+                  result.protocol == "gemini",
+              "Gemini 端到端：整链路成功（HTTP " + std::to_string(result.http_status) + " / " +
+                  result.provider_name + " / " +
+                  std::to_string(static_cast<long long>(result.elapsed_ms)) + " ms / 文本 " +
+                  std::to_string(result.text.size()) + " 字节" +
+                  (result.error.empty() ? "" : (" / 错误：" + result.error)) + "）");
+        std::string target;
+        std::string request_body;
+        std::string auth_header;
+        {
+            std::lock_guard<std::mutex> lock(gemini_seen->mutex);
+            target       = gemini_seen->target;
+            request_body = gemini_seen->body;
+            auth_header  = gemini_seen->headers["authorization"];
+        }
+        check(has(target, "/v1beta/models/gemini-selftest:generateContent") &&
+                  has(target, "key=sk-selftest-gemini") && auth_header.empty(),
+              "Gemini 上线校验：路径含 `{model}` 替换结果 + `?key=` 查询参数，"
+              "且**未**发凭证头（auth_style=query）");
+        check(has(request_body, "\"systemInstruction\"") &&
+                  has(request_body, "\"maxOutputTokens\":64") &&
+                  has(request_body, "\"seed\":7"),
+              "Gemini 上线校验：systemInstruction / generationConfig（含 seed）都在正文里");
+    }
+
+    std::printf("  V-15 小计：%d 通过 / %d 失败\n", passed, failed);
+    server.stop();
+    server_thread.join();
+    return failed == 0;
+}
+
+
 void print_usage()
 {
     std::printf("api_probe - AIwrite M1 技术验证工具\n");
@@ -120,6 +1209,9 @@ void print_usage()
     std::printf("  api_probe --chat \"<prompt>\" [--model <name>] [--api-base <url>] [--insecure]\n");
     std::printf("     --dry-run   只打印请求（URL / Authorization 脱敏 / body）并做结构断言，不发起网络请求\n");
     std::printf("  自检 --selftest 覆盖: V-05 SHA3 / V-04 HTTP / V-06 请求构造 / V-08 配置往返 / V-09 会话与可见性\n");
+    std::printf("                        + V-11 无 Key 请求构造 / V-12 取消与超时（回环）/ V-13 L2 协议请求构造\n");
+    std::printf("                        + V-14 工厂分派与能力门控 / V-15 Anthropic·Gemini 回环端到端\n");
+    std::printf("                        + V-16 代理 / 自签证书 / 凭据库配置（回环证明）\n");
     std::printf("  api_probe --diag-dump               # 打印诊断报告（版本/系统/依赖/路径/配置/站点表；不含密钥）\n");
     std::printf("  api_probe --diag-assert             # 诊断报告离线断言（单行 PASS/FAIL；exit 0/1）\n");
     std::printf("  api_probe --dep-check               # 依赖自检：WebView2 运行时（缺失时打印安装指引；exit 0/1）\n");
@@ -396,9 +1488,12 @@ bool test_config_roundtrip()
     //  * 本行是**单行 PASS/FAIL**（非逐项计数）⇒ 不影响 `--selftest` / `--exec-selftest` 的断言数字
     // 口径变更（2026-10-10 · M6）：`output.auto_open_on_complete` / `advanced.log_ttl_days`
     //  **已接线** ⇒ 断言从「在清单里」改为「**不在**清单里」（接线点见 config.cpp 注释与 CHANGELOG）
-    const bool unwired_ok = !has_unwired("general.") && has_unwired("timeout.") &&
-                            has_unwired("ui.grid_size") && !has_unwired("console_height") &&
-                            !has_unwired("running_animation") && !has_unwired("window_width") &&
+    // 口径变更（2026-10-11 · M_patchAB 批 4）：`timeout.*` / `error.*` **已接线**（官方 API
+    //  默认超时 + 可重试失败重试）⇒ 断言改为「**不在**清单里」（接线点见 config.cpp 注释）
+    const bool unwired_ok = !has_unwired("general.") && !has_unwired("timeout.") &&
+                            !has_unwired("error.") && has_unwired("ui.grid_size") &&
+                            !has_unwired("console_height") && !has_unwired("running_animation") &&
+                            !has_unwired("window_width") &&
                             !has_unwired("output.auto_open_on_complete") &&
                             !has_unwired("advanced.log_ttl_days");
     std::printf("   %-6s PA-08 未接配置字段清单：%zu 项；不含 general.*=%s；"
@@ -587,10 +1682,46 @@ bool test_workflow_files()
         aiwrite::engine::clear_recent_files();
         const bool cleared = aiwrite::engine::load_recent_files().empty();
 
-        const bool pass = empty_ok && order_ok && cap_ok && cleared;
-        std::printf("   %-6s 初始空列表=%s / 去重置顶=%s / 上限 10 条=%s / 清空=%s\n",
+        // M_patchAB §4（PC-03 / FEA-M2-02）：存在性校验 + 失效条目清理
+        //  * 造一个**真实存在**的临时工作流 + 一个**不存在**的路径
+        const std::filesystem::path real_recent_file =
+            std::filesystem::temp_directory_path() / "aiwrite_recent_real.json";
+        {
+            std::ofstream out(real_recent_file, std::ios::binary | std::ios::trunc);
+            out << "{\"version\":\"1.0\",\"nodes\":[]}\n";
+        }
+        aiwrite::engine::push_recent_file(real_recent_file.string(), "真实工作流");
+        aiwrite::engine::push_recent_file("Z:/not-exists/aiwrite-recent-missing.json", "失效工作流");
+        const std::vector<aiwrite::engine::RecentStatus> statuses =
+            aiwrite::engine::recent_with_status();
+        bool real_exists    = false;
+        bool missing_exists = true;
+        for (const aiwrite::engine::RecentStatus& status : statuses) {
+            if (status.entry.path == real_recent_file.string()) {
+                real_exists = status.exists;
+            }
+            else {
+                missing_exists = status.exists;
+            }
+        }
+        const bool status_ok = statuses.size() == 2 && real_exists && !missing_exists &&
+                               aiwrite::engine::count_missing_recent() == 1;
+        // 清理前先复核：**只读查询不写盘**（列表仍 2 条）
+        const bool query_readonly = aiwrite::engine::load_recent_files().size() == 2;
+        const std::size_t removed = aiwrite::engine::prune_missing_recent();
+        const bool prune_ok = removed == 1 &&
+                              aiwrite::engine::load_recent_files().size() == 1 &&
+                              aiwrite::engine::count_missing_recent() == 0;
+        std::filesystem::remove(real_recent_file, ec);
+        aiwrite::engine::clear_recent_files();
+
+        const bool pass = empty_ok && order_ok && cap_ok && cleared && status_ok &&
+                          query_readonly && prune_ok;
+        std::printf("   %-6s 初始空列表=%s / 去重置顶=%s / 上限 10 条=%s / 清空=%s / "
+                    "存在性校验=%s / 失效清理=%s\n",
                     pass ? "PASS" : "FAIL", empty_ok ? "OK" : "异常", order_ok ? "OK" : "异常",
-                    cap_ok ? "OK" : "异常", cleared ? "OK" : "异常");
+                    cap_ok ? "OK" : "异常", cleared ? "OK" : "异常", status_ok ? "OK" : "异常",
+                    prune_ok ? "OK" : "异常");
         ok = ok && pass;
     }
 
@@ -4192,6 +5323,24 @@ int execution_selftest()
                                web::web_error_kind_name(web::WebErrorKind::Preempted),
                "PW-05 类别名两两不同（归因必须可分辨）");
 
+        // ---- ⑨ `PB2-25` / `PB-07`（M_patchAB §2.2 / §3.3）：会话诊断（判据收紧 + 错误串反查）----
+        //  * 动机（v9 实测）：端点 `code=40003` 时旧判据 `ok && has_user_token` **假 PASS**
+        //  * 纯函数：`judge_probe_result()` 四分类 + `classify_session_failure_text()`
+        std::printf("   -- 会话诊断（M_patchAB PB2-25 / PB-07）--\n");
+        int       verdict_passed = 0;
+        const int verdict_failed = web::probe_verdict_selftest(&verdict_passed);
+        check.passed += verdict_passed;
+        check.failed += verdict_failed;
+
+        // ---- ⑩ `PC-04` / `DBG-M6-02`（M_patchAB §4）：版本迁移框架 ----
+        //  * 工作流：缺版本 ⇒ 按当前处理；未来主版本 ⇒ **拒绝**；迁移机制（夹具表）可跑
+        //  * 配置：版本补齐 + 未来版本 ⇒ **拒绝降级写回**（临时目录端到端）
+        std::printf("   -- 版本迁移（M_patchAB PC-04 / DBG-M6-02）--\n");
+        int       migration_passed = 0;
+        const int migration_failed = engine::migration_selftest(&migration_passed);
+        check.passed += migration_passed;
+        check.failed += migration_failed;
+
         // ---- ④ Loop Dev 批 3（`FEA-L01`）：DOM 探测**报告链路**的离线断言 ----
         //  * 报告解析 / 状态映射 / diff（含旧报告按事实回推）—— 不开窗口、不联网
         //  * 真机批量探测另有 `aiwrite.exe --provider all`（退出码 §6.3）
@@ -4382,6 +5531,27 @@ bool test_settings_assert()
         c.ui.autosave_keep = 99; // 上限 50
         bad_cases.push_back({"自动保存历史份数 99（>50）", c});
     }
+    // M_patchAB §2.3（PB-06 剩余）：网络与凭据配置
+    {
+        aiwrite::Config c = good;
+        c.network.proxy = "127.0.0.1:7890"; // 缺 scheme
+        bad_cases.push_back({"代理缺 http:// 前缀", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.network.proxy = "http://"; // 有 scheme 无主机
+        bad_cases.push_back({"代理只有 scheme 没有主机", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.credentials.ttl_days = -1; // 0 = 不清理，负数非法
+        bad_cases.push_back({"凭据保留天数 -1", c});
+    }
+    {
+        aiwrite::Config c = good;
+        c.credentials.backend = "kms"; // 本版本只支持 dpapi
+        bad_cases.push_back({"凭据后端 kms（未实现）", c});
+    }
 
     const std::string default_error = aiwrite::utils::validate_settings(good);
     bool              bad_ok        = true;
@@ -4401,6 +5571,9 @@ bool test_settings_assert()
     edge.output.max_history = 1;
     edge.ui.autosave_idle_sec = 1;  // PC-01：边界值（下限）
     edge.ui.autosave_keep     = 50; // PC-01：边界值（上限）
+    edge.network.proxy        = "http://127.0.0.1:7890"; // PB-06：合法代理形态
+    edge.network.insecure_tls = true;                     // PB-06：自签兼容开关**合法**（不拦）
+    edge.credentials.ttl_days = 0;                        // PB-06：0 = 不清理
     const bool edge_ok = aiwrite::utils::validate_settings(edge).empty();
 
     const bool ok = default_error.empty() && bad_ok && edge_ok;
@@ -4682,16 +5855,31 @@ int main(int argc, char** argv)
         const bool exec_ok =
             (executor_selftest() == 0) && (execution_selftest() == 0); // P3-1 + P3-2（离线）
         const bool files_ok = test_workflow_files();                   // M2-05（离线）
+        // M_patchAB §2.4（PB-09）：V-11 无 Key 请求构造 / V-12 取消与超时语义（七组 → 九组）
+        const bool nokey_ok  = test_nokey_request_shape();
+        const bool cancel_ok = test_cancel_and_timeout();
+        // M_patchAB §3.1（`B2-b` L2 底座）：V-13 两协议请求构造 / V-14 工厂分派与能力门控 /
+        //   V-15 回环端到端（九组 → 十二组）
+        const bool protocol_ok = test_protocol_requests();
+        const bool factory_ok  = test_factory_and_capability();
+        const bool loopback_ok = test_protocol_loopback();
+        // M_patchAB §2.3（`PB-06` 剩余）：V-16 代理 / 证书 / 凭据配置（十二组 → 十三组）
+        const bool net_ok = test_network_and_credentials();
 
         const char* http_text =
             (http_code == 0) ? "PASS" : (http_code == 2 ? "SKIP(网络不可达)" : "FAIL");
         std::printf("=== 结果: SHA3 %s / HTTP %s / 请求构造 %s / 配置往返 %s / 会话与可见性 %s / "
-                    "执行器 %s / 工作流文件 %s ===\n",
+                    "执行器 %s / 工作流文件 %s / 无 Key 请求构造 %s / 取消与超时 %s / "
+                    "L2 请求构造 %s / L2 工厂分派 %s / L2 回环 %s / 网络与凭据 %s ===\n",
                     sha3_ok ? "PASS" : "FAIL", http_text, request_ok ? "PASS" : "FAIL",
                     config_ok ? "PASS" : "FAIL", web_ok ? "PASS" : "FAIL", exec_ok ? "PASS" : "FAIL",
-                    files_ok ? "PASS" : "FAIL");
+                    files_ok ? "PASS" : "FAIL", nokey_ok ? "PASS" : "FAIL",
+                    cancel_ok ? "PASS" : "FAIL", protocol_ok ? "PASS" : "FAIL",
+                    factory_ok ? "PASS" : "FAIL", loopback_ok ? "PASS" : "FAIL",
+                    net_ok ? "PASS" : "FAIL");
         if (!sha3_ok || http_code == 1 || !request_ok || !config_ok || !web_ok || !exec_ok ||
-            !files_ok) {
+            !files_ok || !nokey_ok || !cancel_ok || !protocol_ok || !factory_ok || !loopback_ok ||
+            !net_ok) {
             exit_code = 1;
         }
     }

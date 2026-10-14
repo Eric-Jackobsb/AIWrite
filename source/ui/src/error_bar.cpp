@@ -1,5 +1,6 @@
 #include "error_bar.h"
 
+#include "connection_test.h" // M_patchAB（PB-07）：错误条「重新登录」动作
 #include "log.h"
 
 #include <imgui.h>
@@ -51,6 +52,34 @@ void draw_error_bar(EditorState& state)
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("关闭错误条（下次运行失败时会再次出现）");
+    }
+
+    // ---- M_patchAB §2.2（`PB-07`）：会话失效 → 一键「重新登录」 ----
+    //  * 判据来自 `EditorState::refresh_last_error()` 的错误串反查（纯函数；只有命中才显示本按钮）
+    //  * 按钮打开**该失败节点生效条目**的登录窗口（严格解析、不回落内置默认站点）
+    if (state.last_error.relogin_available) {
+        ImGui::SameLine();
+        const std::string label =
+            state.last_error.relogin_needed ? std::string("会话已失效，点此重新登录")
+                                            : std::string("站点拒绝请求，点此处理");
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.62f, 0.42f, 0.10f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.74f, 0.52f, 0.14f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.68f, 0.47f, 0.12f, 1.0f));
+        if (ImGui::Button((label + "##error_bar_relogin").c_str())) {
+            log::info("[错误条] 重新登录（条目 " +
+                      (state.last_error.relogin_provider_id.empty()
+                           ? std::string("(未指定)")
+                           : state.last_error.relogin_provider_id) +
+                      "）：" + state.last_error.relogin_text);
+            open_web_login_window(state.last_error.relogin_provider_id);
+        }
+        ImGui::PopStyleColor(3);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s",
+                              state.last_error.relogin_text.empty()
+                                  ? "打开该站点的登录窗口（重新登录）"
+                                  : state.last_error.relogin_text.c_str());
+        }
     }
 }
 

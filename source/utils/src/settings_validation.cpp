@@ -74,6 +74,30 @@ std::string validate_settings(const Config& config)
         !error.empty()) {
         return error;
     }
+    // ---- M_patchAB §2.3（`PB-06` 剩余）：网络（代理 / 自签证书）与凭据库 ----
+    //  * 代理地址必须带 scheme（否则 httplib 无法解析 ⇒ 报错要**说清怎么写**）
+    //  * `insecure_tls` **合法**（是兼容开关）⇒ 不拦，只在界面上按危险项提示
+    if (!config.network.proxy.empty()) {
+        const std::string& proxy = config.network.proxy;
+        const bool has_scheme = proxy.rfind("http://", 0) == 0 || proxy.rfind("https://", 0) == 0 ||
+                                proxy.rfind("socks5://", 0) == 0;
+        if (!has_scheme) {
+            return "代理地址需以 http:// 或 https:// 开头（当前：" + proxy +
+                   "；例 http://127.0.0.1:7890；不需要代理就把该项留空）";
+        }
+        if (proxy.size() <= proxy.find("://") + 3) {
+            return "代理地址缺少主机名（当前：" + proxy + "；例 http://127.0.0.1:7890）";
+        }
+    }
+    if (const std::string error = range_error("凭据保留天数（0 = 不清理）", config.credentials.ttl_days,
+                                              0, 3650);
+        !error.empty()) {
+        return error;
+    }
+    if (config.credentials.backend != "dpapi") {
+        return "凭据后端暂只支持 dpapi（当前：" + config.credentials.backend +
+               "；换后端要先实现对应的加解密，见 utils/credential.cpp）";
+    }
     return std::string();
 }
 

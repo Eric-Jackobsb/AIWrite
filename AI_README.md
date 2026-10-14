@@ -24,11 +24,11 @@
 
 ## 2. 命令表（都在仓库根执行；产物在 `build\bin\`）
 
-| 目的 | 命令 | 基线（**2026-10-10 本机实测** · 每个数字的唯一权威位见 §10.1） |
+| 目的 | 命令 | 基线（**2026-10-11 本机实测** · 每个数字的唯一权威位见 §10.1） |
 |---|---|---|
 | 构建（Debug） | `cd source; .\build.ps1`（= `cmake --preset default` + `cmake --build --preset debug`）｜**日志自动落 `build\logs\build_debug_<yyyyMMdd_HHmmss>.log`**（`-LogName` 改名 / `-NoLog` 关闭） | **0 error / 0 warning**。⚠ 若报 `error MSB4018` + `FileTracker`（`GetOutOfDateItems` / `SetModuleDependencies`）⇒ **不是代码问题**、**重跑无效**：`.\build.ps1 -Reconfigure` 清空重建（陷阱 9 = [docs/loop_dev.md](docs/loop_dev.md) §10.1） |
-| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===` · exit **0**；含 配置表 **50/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **DOM 探测 27/0** · **执行器 490/0**（2026-10-11 实测；2026-10-10 曾为 464，**+26 = M_patchC 批 1**（`PW-02` / `PW-04` / `PW-05` / `PW-08` 的纯函数断言）） |
-| 执行器自检 | `api_probe.exe --exec-selftest` | **490 / 0** · exit 0（2026-10-11 实测；2026-10-10 曾为 **464**，**+26 = M_patchC 批 1**：窗口表 / 复位计划 / 归属准入 / 三类归因文案 —— 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]`） |
+| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===`（**十三组**）· exit **0**；含 配置表 **52/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **DOM 探测 27/0** · **执行器 546/0**（**2026-10-11 实测**；同日链：2026-10-10 = 464 → **+26 = `M_patchC` 批 1**（`PW-02` / `PW-04` / `PW-05` / `PW-08`）→ **+34 = `M_patchAB` 批 2**（会话诊断）→ **+20 = 批 4**（版本迁移）→ **+2 = 批 6**（配置表嵌套 schema）；**组数：七组 → 九组** = 批 3（V-11 / V-12）· **九组 → 十二组** = 批 6（V-13 / V-14 / V-15）· **十二组 → 十三组** = 批 7（V-16）） |
+| 执行器自检 | `api_probe.exe --exec-selftest` | **546 / 0** · exit 0（**2026-10-11 实测**；同日链 **464 → 490**（`M_patchC` 批 1）**→ 524**（批 2）**→ 544**（批 4）**→ 546**（批 6）：窗口表 / 复位计划 / 归属准入 / 三类归因文案 / 版本迁移 / L2 工厂与回环 —— 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]`） |
 | 图模型自检 | `api_probe.exe --graph-selftest` | **110 / 0** · exit 0 |
 | 上传链路自检（离线三组；真机加 `--provider <id> --image <图>`） | `aiwrite.exe --upload-selftest` | **72 / 0** · exit 0（⚠️ 见 §3「GUI 子系统 stdout」；**不要并发跑**，共用 `%TEMP%\aiwrite-upload\selftest`） |
 | 运行时（真实工作流） | `aiwrite.exe --run-selftest` / `--run-selftest --web` | **PASS · exit 0**（**2026-10-09 复跑**：完成 3/5、失败 1、跳过 1 —— official 占位分支缺 Key 属预期；`official` 需 `~/.brain-ai/config.toml` 凭据；`--web` 需已登录一次） |
@@ -41,8 +41,8 @@
 | 夹具（抽真实源码脚本，迷你 DOM 真跑） | `node source\tools\poll_answer_gate_test.js` · `send_chain_test.js` · **`dom_gate_test.js`** | **44 / 0** · **17 / 0** · **15 / 0** |
 | 夹具**负向**打假（必须 FAIL） | 上三条加 `--old` | 门夹具 **18 / 26** · 链路 **13 / 4** · **DOM 判据 9 / 6** · **exit 1**（失败项 = 预期） |
 | 日志 | `%USERPROFILE%\.brain-ai\logs\app.log`（每 2 秒落盘，可直接 tail） | `[诊断]` 行限流输出 |
-| **一键自检（`PM-03`）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1 [-SkipBuild] [-SkipGui] [-SkipLoop]` | 构建 + 8 项自检/夹具 + `--upload-selftest` + 台账重建 ⇒ **14/14 PASS · exit 0**（**2026-10-10 实测** · 物证 `build\logs\check_all_<时间戳>.log`；12 → 13 = 同批新增 `--site-assert`，13 → 14 = 同批新增 `--autosave-assert`） |
-| **诊断 / 依赖（`PM-01`·`PM-04`）** | `api_probe.exe --diag-dump` ｜ `--diag-assert` ｜ `--dep-check` ｜ `--settings-assert` | 前两者 = 诊断报告（**8 分节 39 行**）打印/断言；`--dep-check` = `WebView2 运行时 152.0.4191.66（api）`（**2026-10-10 实测**）；`--settings-assert` = 默认通过 + 越界 **11 例全拦** + 边界值通过。均为**单行 PASS/FAIL**（不进 §2 分组数字） |
+| **一键自检（`PM-03`）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1 [-SkipBuild] [-SkipGui] [-SkipLoop]` | 构建 + **8 项 `api_probe` 自检** + **3 个 node 夹具** + `--upload-selftest` + 台账重建 + **文档断链（`check_links`）** ⇒ **15/15 PASS · exit 0**（**2026-10-11 实测** · 物证 `build\logs\check_all_<时间戳>.log`；12 → 13 = 新增 `--site-assert`，13 → 14 = 新增 `--autosave-assert`，**14 → 15 = 批 5 新增第 ⑥ 项文档断链**（`source/tools/check_links.py` 入库）） |
+| **诊断 / 依赖（`PM-01`·`PM-04`）** | `api_probe.exe --diag-dump` ｜ `--diag-assert` ｜ `--dep-check` ｜ `--settings-assert` | 前两者 = 诊断报告（**8 分节 40 行**）打印/断言；`--dep-check` = `WebView2 运行时 152.0.4191.66（api）`（**2026-10-11 实测**）；`--settings-assert` = 默认通过 + 越界 **15 例全拦** + 边界值 **3 项**通过（`[network]` / `[credentials]` 两节新增越界例）。均为**单行 PASS/FAIL**（不进 §2 分组数字） |
 | **自建站点闭环（`PB2-24` · `RM-D4`）** | `api_probe.exe --site-assert` | **PASS · exit 0**（**2026-10-10 实测**：纯函数 **47 / 0** + 真实写盘 → 重载 → 进表 / 进网页版下拉 / 进 provider 枚举 **20→21** / 新建节点运行前校验 / **旧实例刷新回归** / 清理零残留）。⚠ 会**临时**写并删除 `~/.brain-ai/providers.d/aiwrite-selftest-site.json`（自清理）；**界面点选回路未人工实测**，见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]` |
 | **自动保存 / 崩溃恢复（`PC-01` / `PC-02`）** | `api_probe.exe --autosave-assert` | **PASS · exit 0**（**2026-10-10 实测**：场景 **28 / 0** + 默认落点 = `snapshots/autosave.json`；含 **`VC-01` 原子写**（半截 `.tmp` 不参与恢复 / 可清理）+ **`VC-02` 恢复判定 4 场景** + 恢复后内容**指纹逐字相同**）。⚠ 场景全在**系统临时目录**内构造，**不碰**用户快照；**GUI「改图 → 静默 3 秒 → 写快照」与点「恢复」未人工实测**，见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]` |
 | **安装包（`M6-08`）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [-Version 0.2.0] [-SkipBuild] [-SkipInstaller]` | ①构建 ②payload `build\dist\payload`（**18 文件 / 28.7 MB** · **Python 摘钩** `*.py=0` · `.iss ↔ payload` 一致性锁 PASS）③`ISCC` 编译。exit **0 / 2（未装 ISCC：已打印获取方式）/ 1**。⚠ **本机未编译验证**（无 ISCC + winget 无网络 `0x80072efd`）⇒ 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]` |
@@ -82,9 +82,9 @@
 
 ## 5. 编号与登记约定
 
-- **编号空间**：`Ixx`（不变量）/ `D-xx` / `W-Dx`（修正）/ `PW-xx`（补丁 C 任务）/ `M*-xx`（里程碑任务）/ `B*-xx`（批次）/ `AB*-xx`（验收）/ `VB*-xx` / `VB2-xx` / `A*-xx`（验证）/ `PB2-xx` / `R*-xx`（风险）/ `RM-D*`（路线决策）/ **`CS-xx`**（画布快照任务 · [docs/actionPlan/M_canvas_snapshot.md](docs/actionPlan/M_canvas_snapshot.md)）/ **`VC-xx`**（画布快照验证项）/ **`AC-xx`**（画布快照验收项）· **`NE-Qx`**（**节点扩展**待讨论问题）/ **`NE-Dx`**（**节点扩展**决议 —— 见 [docs/actionPlan/M_node_expansion.md](docs/actionPlan/M_node_expansion.md)；任务号 **`NE-01…`** 于**拍板后**启用）。
+- **编号空间**：`Ixx`（不变量）/ `D-xx` / `W-Dx`（修正）/ `PW-xx`（补丁 C 任务）/ `M*-xx`（里程碑任务）/ `B*-xx`（批次）/ `AB*-xx`（验收）/ `VB*-xx` / `VB2-xx` / `A*-xx`（验证）/ `PB2-xx` / `R*-xx`（风险）/ `RM-D*`（路线决策）/ **`CS-xx`**（画布快照任务 · [docs/actionPlan/M_canvas_snapshot.md](docs/actionPlan/M_canvas_snapshot.md)）/ **`VC-xx`**（画布快照验证项）/ **`AC-xx`**（画布快照验收项）· **`NE-Qx`**（**节点扩展**待讨论问题）/ **`NE-Dx`**（**节点扩展**决议 —— 见 [docs/actionPlan/M_node_expansion.md](docs/actionPlan/M_node_expansion.md)；任务号 **`NE-01…`** 于**拍板后**启用）/ **`L1-*`**（**节点扩展 L1 深化**任务号）/ **`VL1-*`**（L1 离线验证项）/ **`AL1-*`**（L1 人工验收项）—— 三项见 [docs/actionPlan/M_8nodes_extension.md](docs/actionPlan/M_8nodes_extension.md)（🆕 2026-10-12 批 9-0 登记）· **`L1-R1`~`L1-R3`**（**L1 收尾决议** —— ⚠️ **不是**任务号 `L1-*`）/ **`L2-1`~`L2-5`**（L2 定向议题）/ **`L3-1`~`L3-4`**（L3 定向议题）/ **`G-1`~`G-5`**（全局口径）—— 四项见 [docs/actionPlan/M_node_expansion.md](docs/actionPlan/M_node_expansion.md) §7 / §11（🆕 2026-10-12 批 9-1 登记）· **`L2-01…`** / **`L3-01…`**（**L2 / L3 任务号** —— 🆕 2026-10-12 **批 9-2 先立** · `NE-D39`；⚠️ 与上列 `L2-1`~`L2-5` / `L3-1`~`L3-4`（**定向议题号**）**同形不同物**）· **`CR-*`**（**创作流程**阶段）/ **`CR-OPS-*`**（原子操作）/ **`CR-GAP-*`**（缺口）—— 三项见 [docs/actionPlan/Creation_Roadmap_Guideline.md](docs/actionPlan/Creation_Roadmap_Guideline.md)（🆕 2026-10-12 批 9-3 登记 · 同批归位 `docs/actionPlan/`）。⚠️ **两处「同形不同物」警示**（引用前先看）：① **`NE-D*` 分两段** —— 上游 `M_node_expansion.md` §7 的 `NE-D1`~`NE-D7` + `NE-D15`~`NE-D29` = **全局/四层决策**，其 `NE-D30`~`NE-D37` = **L1 细节别名**；姊妹文档 `M_8nodes_extension.md` §2 的 `NE-D1`~`NE-D13` = **L1 细节** ⇒ **引用 L1 细节一律引姊妹文档的号**；② **`L1`/`L2`/`L3` 既是 PatchB 的层名**（配置表 / 接线 / 站点适配）**又是节点扩展的层名**（深化 / 新节点 / 库·画布 UX）。
 - **状态词白名单**（只用这几个，别自创）：**已拍板 / 已落地 / 部分落地 / 计划中 / 已归档 / 已退场 / 待真机**。
-- **文档三态标记**（全库统一 · 定义见 [docs/DocMAP.md](docs/DocMAP.md) §五）：✅ **已固定**（已落地视为契约）/ 📦 **已失效**（⛔ **只标记不删除**，必须给「现行指向」）/ ⬜ **待定**（未拍板 ⇒ **必须**在 `DevPlan.todo` 的「**待定 · 未拍板**」分类里有同名 `PQ-xx` 项；拍板后同批置 done）。
+- **文档三态标记**（全库统一 · 定义见 [docs/DocMAP.md](docs/DocMAP.md) §五）：✅ **已固定**（已落地视为契约）/ 📦 **已失效**（⛔ **只标记不删除**，必须给「现行指向」）/ ⬜ **待定**（未拍板 ⇒ **必须**在 `DevPlan.todo` 的「**待定 · 未拍板**」分类里有同名 `PQ-xx` 项；拍板后同批置 done）。⚠️ **2026-10-13 批 9-4**：该分类为**空落点分支**（只承载**新** ⬜ 项）；**已拍板历史 20 项**已整组移入 `Archive > ARC-ORG-01`。
 - 新事项先**登记**（计划文档 + `DevPlan.todo`），再开工；收口时回填**实测数字**，不写「应该没问题」。
 - 归档动作遵循 [docs/Archive/README.md](docs/Archive/README.md) §三（`git mv` + 顶部 📦 + 索引 7 处同步 + 相对链接层级修正）。
 
@@ -155,7 +155,7 @@
    - 裸数值必须写清它是什么，例：`退出码 3`（`0x80000003`，CRT 断言中断）、`464 / 0`（执行器断言通过数 / 失败数）。
    - 生僻符号同样要写清，例：`335 → 397`（断言数由 335 增到 397，即 **+62**）；`≥2`（至少 2 个）。
 3. **链接与代号一律紧随括号注明内容**（**就地可读**，不必回查定义）：
-   - 代号：`D-26`（网页版站点条目的**字段级回落**是否收紧）、`VB2-22⑧`（`format_answer_text` 排版纯函数的 **8 例**断言）、`PQ-09`（看板「待定 · 未拍板」分类里的编号，拍板后同批置 done）。
+   - 代号：`D-26`（网页版站点条目的**字段级回落**是否收紧）、`VB2-22⑧`（`format_answer_text` 排版纯函数的 **8 例**断言）、`PQ-09`（看板「待定 · 未拍板」分类里的编号 · 已拍板 ⇒ **2026-10-13 随历史整组移入 `Archive`**）。
    - 链接：[docs/DocMAP.md](docs/DocMAP.md)（文档地图：什么改动读哪份文档）、[docs/CHANGELOG.md](docs/CHANGELOG.md)（变更日志：最近改了什么、上一轮验证数字）。
    - 首次出现必须注明；同一段落里已定义过的，其后可简写。
 4. **问题描述要准确且简洁**：一句话写清「**现象 + 触发场景 + 后果**」；不夸大、不省略前提、不写「应该没问题」这类**无物证**结论（与 §3 取证纪律一致）。

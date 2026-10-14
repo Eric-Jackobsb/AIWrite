@@ -187,6 +187,23 @@ if (-not $SkipLoop) {
     Add-Result 'loop_verify -StatusOnly' ($code -eq 0) "exit=$code（台账重建见 $outFile）"
 }
 
+# ---- ⑥ 文档断链自检（DBG-L01 收口：判据 = **全库 0**） ----
+#  * 脚本 = `source/tools/check_links.py`（仓库根由脚本位置推导；剔除代码块 / 行内代码）
+#  * 只读、零副作用；退出码 1 = 有断链（逐条 `文件:行 -> 目标` 打印在自检输出里）
+Write-Both "`n== ⑥ 文档断链（check_links.py · 全库 0 判据） =="
+$linksScript = Join-Path $sourceDir 'tools\check_links.py'
+if (Test-Path $linksScript) {
+    Push-Location $repoRoot
+    $linksOut = & python $linksScript 2>&1
+    $linksCode = $LASTEXITCODE
+    Pop-Location
+    $linksLine = ($linksOut | Where-Object { $_ -match 'checked links' } | Select-Object -Last 1)
+    Add-Result 'check_links（文档断链）' ($linksCode -eq 0) ($linksLine -replace '^\s+', '')
+}
+else {
+    Add-Result 'check_links（文档断链）' $false "脚本缺失：$linksScript"
+}
+
 # ---- 汇总 ----
 $failed = @($results | Where-Object { -not $_.Ok })
 Write-Both "`n=== check_all 汇总：共 $($results.Count) 项 · 失败 $($failed.Count) 项 ==="

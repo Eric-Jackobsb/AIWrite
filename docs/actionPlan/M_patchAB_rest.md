@@ -42,11 +42,11 @@
 | 命令 | 期望（当前实测） |
 |---|---|
 | 构建（MSVC /W4，4 目标） | **0 error / 0 warning** |
-| `api_probe.exe --selftest` | 七组全 PASS · exit 0（含 **DOM 探测 27 / 0** · 执行器 **490 / 0**） |
+| `api_probe.exe --selftest` | **十三组全 PASS · exit 0**（含 **DOM 探测 27 / 0** · 执行器 **546 / 0**）—— **2026-10-11 批 3：七组 → 九组**（新增 **无 Key 请求构造 6 / 0**（V-11）与 **取消与超时 17 / 0**（V-12 · 本机回环））→ **批 6：九组 → 十二组**（新增 **L2 请求构造 23 / 0**（V-13）· **L2 工厂分派 13 / 0**（V-14）· **L2 回环端到端 11 / 0**（V-15））→ **批 7：十二组 → 十三组**（新增 **网络与凭据 16 / 0**（V-16 · 代理 / 自签证书 / 凭据库；含**代理回环证明**）） |
 | `api_probe.exe --graph-selftest` | **110 通过 / 0 失败** |
-| `api_probe.exe --exec-selftest` | **490 通过 / 0 失败**（**2026-10-11 复测**；2026-10-10 曾为 **464**，**+26 = M_patchC 批 1**：窗口表 / 复位计划 / 归属准入 / 三类归因文案的纯函数断言） |
-| `aiwrite.exe --provider-selftest` | **50 通过 / 0 失败** |
-| `aiwrite.exe --provider-dump` | **20 条**（official 9 / web 11） |
+| `api_probe.exe --exec-selftest` | **546 通过 / 0 失败**（**2026-10-11 复测**；同日四批：2026-10-10 曾为 **464** → **+26 = `M_patchC` 批 1**（窗口表 / 复位计划 / 归属准入 / 三类归因文案）→ **+34 = `M_patchAB` 批 2**（端点报告解析 10 + 探测判据 15 + 会话失效错误串反查 9）→ **+20 = `M_patchAB` 批 4**（版本迁移自检：工作流 8 + 机制夹具 4 + 配置 4 + 端到端 4）→ **+2 = 批 6**（配置表 `R18` 嵌套 schema 两条）；其中**配置表自检 52 / 0**） |
+| `aiwrite.exe --provider-selftest` | **52 通过 / 0 失败**（**2026-10-11 批 6**：50 → 52 = `R18` 嵌套 schema 两条；API 侧的 ping 已改走**工厂 → `generate()`** 同一入口 ⇒ 有 Key 时 `anthropic` / `gemini` 也可直接真机出结果） |
+| `aiwrite.exe --provider-dump` | **20 条**（official 9 / web 11）；末行「**已实现协议：openai、anthropic、gemini、deepseek-web、dom**」（批 6 新增两条） |
 | `aiwrite.exe --cred-selftest` | **8/8 PASS**（本轮未复跑） |
 | `aiwrite.exe --export-selftest` | **7/7 PASS**（本轮未复跑） |
 | `aiwrite.exe --web-session-selftest` | PASS（会话自动引导：窗口已开 → 补探测） |
@@ -56,9 +56,9 @@
 | `aiwrite.exe --web-dom-dump --provider <id>` | 只读枚举候选元素（v15 新增；**11/11 条目直连各自站点**） |
 | `aiwrite.exe --run-selftest` | PASS（离线无 Key：**3/5 为预期**） |
 | `aiwrite.exe --run-selftest --web --provider <id>` | **exit 0 = 生成成功**（需该条目选择器就绪 + 会话有效） |
-| `aiwrite.exe --run-selftest --web`（内置 DeepSeek 路径） | 5/5 —— ⚠️ 受官网侧会话失效（`R19`）影响时需先解决 `PB2-25`/重登 |
+| `aiwrite.exe --run-selftest --web`（内置 DeepSeek 路径） | 5/5 —— ⚠️ 官网侧会话失效（`R19`）需先重登；**判据收紧与重登入口已落地（`PB2-25` / `PB-07` · 2026-10-11 批 2）** |
 | 离线夹具 `node source/tools/*_test.js` | `poll_answer_gate_test` **44 / 0** · `send_chain_test` **17 / 0** · `dom_gate_test` **15 / 0**（各加 `--old` 负向**必须 FAIL**：**18 / 26** · **13 / 4** · **9 / 6** · 退出码 1） |
-| 文档断链自检 `python vcpkg-cache/check_links.py` | **全库 0** —— **2026-10-11 实测 checked 1097 / broken 0**（同日四批：批 0 = 995 → `M8` Phase 3 改判批 = 1022 → 待拍板项清零批 = 1077 → **`M_patchC` 批 1 = 1097**（+17）；存量 8 条已清零：7 条真断链 = `actionPlan/M7B.md` 未指向 `Archive/`，1 条 = 检查器跨反引号误判；判据由「本轮不得新增」**升级为「全库 0」**） |
+| 文档断链自检 `python source/tools/check_links.py` | **全库 0** —— **2026-10-11 实测 checked 1184 / broken 0**（当日七批：批 0 = 995 → `M8` Phase 3 改判批 = 1022 → 待拍板项清零批 = 1077 → **`M_patchC` 批 1 = 1097**（+17）→ **批 5（`DBG-L01` 收口）= 1161**（**脚本入库** `source/tools/check_links.py`：仓库根由脚本位置推导 + 剔除代码块 / 行内代码 + 目标须同行无空白 ⇒ **修掉跨行 / 跨反引号误判**；口径含仓库根 `*.md`；**已作为 `check_all.ps1` 第 ⑥ 项入闸**）→ **批 6（L2 底座）= 1175**（+14）→ **批 7（代理 / 凭据）= 1184**（+9；**入闸当场抓到 1 条真断链** —— `docs/CHANGELOG.md` 里把 `节点编辑器使用说明.md` 误写成 `../节点编辑器使用说明.md` ⇒ 已修，这正是批 5 把断链入闸的价值））；存量 8 条已清零：7 条真断链 = `actionPlan/M7B.md` 未指向 `Archive/`，1 条 = 检查器误判（**现已修**）；判据 = 「全库 0」） |
 
 ### 0.5 旧路径映射（归档后如何查历史）
 
@@ -86,27 +86,27 @@
 
 | # | 组 | 条目 | 批次 | 验证 / 验收 | 归口（DevPlan） | 人工关卡 |
 |---|---|---|---|---|---|---|
-| 1 | B 残 | `PB-02` 真取消（HTTP 可中断 + 协作检查点） | `B3-a` | `VB-02` / `AB-01` | `FEA-M4-02`、`DBG-M4-02` | — |
-| 2 | B 残 | `PB-07` 会话失效引导（**并入** `PB2-25`） | `B3-a` | `VB-06` / `AB-05` | `FEA-M4-07`、`DBG-M4-05` | 需一次真实失效响应 |
-| 3 | B 残 | `PB-06` 剩余：代理 + 自签证书 + `[credentials]` 配置项 | `B3-b` | `VB-05` | `FEA-M4-13` | 企业网络环境下手测 |
-| 4 | B 残 | `PB-09` 自检扩展（V-11 / V-12 + `--run-selftest --official`） | `B3-b` | `VB-04` | `FEA-M4-12` | 有 Key 才能跑 official |
+| 1 | B 残 | `PB-02` 真取消（HTTP 可中断 + 协作检查点） | `B3-a` | `VB-02` / `AB-01` | `FEA-M4-02`、`DBG-M4-02` | ✅ **已落地（2026-10-11 · 批 3）**：`run_cancellable` + 令牌贯穿（见 §2.1）；⏳ GUI 点选待真人 |
+| 2 | B 残 | `PB-07` 会话失效引导（**并入** `PB2-25`） | `B3-a` | `VB-06` / `AB-05` | `FEA-M4-07`、`DBG-M4-05` | ✅ **离线已落地（2026-10-11 · 批 2）**：错误串反查 + 错误条「重新登录」按钮（见 §2.2）；⏳ 需一次真实失效响应做端到端 |
+| 3 | B 残 | `PB-06` 剩余：代理 + 自签证书 + `[credentials]` 配置项 | `B3-b` | `VB-05` | `FEA-M4-13` | ✅ **已落地（2026-10-11 · 批 7）**：`ai/http_net.*` + 两条 HTTP 路径接线 + `[network]`/`[credentials]` 读写 + 面板两节（V-16 **16 / 0**）；⏳ 企业网络实测 |
+| 4 | B 残 | `PB-09` 自检扩展（V-11 / V-12 + `--run-selftest --official`） | `B3-b` | `VB-04` | `FEA-M4-12` | ✅ **已落地（2026-10-11 · 批 3）**：V-11 **6/0** · V-12 **11/0**（见 §2.4）；⏳ 有 Key 才能跑 official |
 | 5 | B 残 | 流式**数据源**（`PB-03`/`PB-08` 暂停项）+ `VB-03` 离线「假增量」断言 | `B3-c` | `VB-03` | `FEA-M4-03`、`FEA-M4-08` | — |
 | 6 | B 残 | `PD-06①` 通用重跑（该节点 / 该节点及下游） | `B3-c` | `VD-05` | `FEA-M4-11` | — |
-| 7 | L2 | `PB2-04` API 请求参数化（端点 / 认证 / 超时按表） | `B2-b` | `VB2-04` | `FEA-M_patchB-04` | — |
-| 8 | L2 | `PB2-05` 残余（按归档 §3「落地情况」表逐行核对，只收非 ✅ 行） | `B2-b` | `VB2-05` | `FEA-M_patchB-05` | — |
-| 9 | L2 | `PB2-08` `ai/inference_provider.h`（接口 + 值类型 + 能力表） | `B2-b` | `VB2-08` | `FEA-M_patchB-08` | — |
-| 10 | L2 | `PB2-09` `ai/provider_factory` + 收编 `DeepSeekWebProvider` | `B2-b` | `VB2-09` | `FEA-M_patchB-09` | — |
-| 11 | L2 | `PB2-10` `AnthropicProvider`（Messages API） | `B2-b` | `VB2-10` | `FEA-M_patchB-10` | 需 Anthropic Key |
-| 12 | L2 | `PB2-11` `GeminiProvider`（generateContent） | `B2-b` | `VB2-11` | `FEA-M_patchB-11` | 需 Gemini Key |
-| 13 | L2 | `PB2-12` 节点接线改**能力驱动** + 校验/提示同步 | `B2-b` | `VB2-12` | `FEA-M_patchB-12` | — |
-| 14 | L1 尾 | `PB2-07` 界面「测试连接」按钮（异步、结果进 Console + 状态栏） | `B2-f` | `VB2-07` | `FEA-M_patchB-07` | — |
-| 15 | L4 | `PB2-25` 网页版会话失效**可诊断**（`--web-probe` 判据加「端点 `code=0`」+ 面板/校验「重新登录」入口 + `token_expr` 表驱动容错） | `B2-e2` | `AB2-17` / `VB2-20` | `FEA-M_patchB-25` | 需真实失效响应 |
+| 7 | L2 | `PB2-04` API 请求参数化（端点 / 认证 / 超时按表） | `B2-b` | `VB2-04` | `FEA-M_patchB-04` | ✅ **已落地（2026-10-11 · 批 6）**：见 §3.1「✅ 已落地」 |
+| 8 | L2 | `PB2-05` 残余（按归档 §3「落地情况」表逐行核对，只收非 ✅ 行） | `B2-b` | `VB2-05` | `FEA-M_patchB-05` | ✅ **已落地（2026-10-11 · 批 6）**：头注释改**嵌套** schema 名（`R18`）+ 两条新断言；面板按钮并入 §3.5（`PB2-24` ✅） |
+| 9 | L2 | `PB2-08` `ai/inference_provider.h`（接口 + 值类型 + 能力表） | `B2-b` | `VB2-08` | `FEA-M_patchB-08` | ✅ **已落地（2026-10-11 · 批 6）**：`V-08` 组断言见 §3.1 |
+| 10 | L2 | `PB2-09` `ai/provider_factory` + 收编 `DeepSeekWebProvider` | `B2-b` | `VB2-09` | `FEA-M_patchB-09` | ✅ **已落地（2026-10-11 · 批 6）**：未知 `protocol` 明确报错（`R9`） |
+| 11 | L2 | `PB2-10` `AnthropicProvider`（Messages API） | `B2-b` | `VB2-10` | `FEA-M_patchB-10` | ✅ **已落地（2026-10-11 · 批 6）**：离线全绿；⏳ 真实生成**需 Anthropic Key** |
+| 12 | L2 | `PB2-11` `GeminiProvider`（generateContent） | `B2-b` | `VB2-11` | `FEA-M_patchB-11` | ✅ **已落地（2026-10-11 · 批 6）**：离线全绿；⏳ 真实生成**需 Gemini Key** |
+| 13 | L2 | `PB2-12` 节点接线改**能力驱动** + 校验/提示同步 | `B2-b` | `VB2-12` | `FEA-M_patchB-12` | ✅ **已落地（2026-10-11 · 批 6）**：`capability_gate()` / `caps_for_call()` 成为节点唯一能力入口 |
+| 14 | L1 尾 | `PB2-07` 界面「测试连接」按钮（异步、结果进 Console + 状态栏） | `B2-f` | `VB2-07` | `FEA-M_patchB-07` | ✅ **已落地（2026-10-11 · 批 2）**：见 §3.2「✅ 已落地」（离线部分与 CLI 同实现；ping / 点选待真机） |
+| 15 | L4 | `PB2-25` 网页版会话失效**可诊断**（`--web-probe` 判据加「端点 `code=0`」+ 面板/校验「重新登录」入口 + `token_expr` 表驱动容错） | `B2-e2` | `AB2-17` / `VB2-20` | `FEA-M_patchB-25` | ✅ **判据收紧 + 重登入口已落地（2026-10-11 · 批 2）**：见 §3.3「✅ 已落地」；⏳ 需真实失效响应复核 |
 | 16 | L4 | `PB2-29` 内置站点 **`answer_selector` 逐站实测回填**（+ `verified:true` + §8 附录 E 两列） | `B2-e2` | `AB2-21` | `FEA-M_patchB-29…30` | **必须人工登录 + 手动发一条消息** |
-| 17 | L4 | `PB2-30②` 面板「测试选择器」按钮（复用只读探测，把命中数/建议显示在界面） | `B2-e2` | `AB2-22` | `FEA-M_patchB-29…30` | — |
+| 17 | L4 | `PB2-30②` 面板「测试选择器」按钮（复用只读探测，把命中数/建议显示在界面） | `B2-e2` | `AB2-22` | `FEA-M_patchB-29…30` | ✅ **已落地（2026-10-11 · 批 2）**：见 §3.4「✅ 已落地」（命中数 / 建议进面板结果区 + Console；点选待真人） |
 | 18 | L4 | `PB2-24` 自助闭环：新建站点条目 UI + **重新加载配置表**（下拉即时刷新）+ 配置表错误/警告界面可见（下拉「合并显示」＝ `PB2-31` **已 ✅ v16**） | `B2-e2` | `AB2-22` | `FEA-M_patchB-29…30` | ✅ **已落地（2026-10-10）** —— 代码 + 离线断言（`api_probe --site-assert`）见 §3.5「✅ 已落地」；**界面点选回路待真人点一次**；新建后需一次真实运行 |
 | 19 | C | `PC-01` autosave（节流 + 原子写）· `PC-02` 恢复流程 —— ✅ **已落地（2026-10-10）**：纯逻辑落 `engine/autosave.*`（**落点调整**：原写 `ui/editor_state.*`，因 GUI 目标不可离线断言而改）+ `ui/editor_state.*` 节流编排 + `ui/app.cpp` 恢复询问；`api_probe --autosave-assert` **28 / 0** · `check_all.ps1` **14 / 14**；⛔ 真人点选（改图 → 写快照 → 点「恢复」）未做 | `C1` | `VC-01` / `VC-02` | `FEA-M2-01` | — |
-| 20 | C | `PC-03` 最近列表治理（存在性校验 + 灰显 + 清理失效） | `C1` | `VC-03` | `FEA-M2-02` | — |
-| 21 | C | `PC-04` 版本迁移框架（workflow `version` + `config_version` + 迁移自检） | `C1` | `VC-03` | `FEA-M2-03`、`DBG-M6-02` | — |
+| 20 | C | `PC-03` 最近列表治理（存在性校验 + 灰显 + 清理失效） | `C1` | `VC-03` | `FEA-M2-02` | ✅ **已落地（2026-10-11 · 批 4）**：纯函数 + 菜单灰显 / 一键清理 + 离线断言（见 §4） |
+| 21 | C | `PC-04` 版本迁移框架（workflow `version` + `config_version` + 迁移自检） | `C1` | `VC-03` | `FEA-M2-03`、`DBG-M6-02` | ✅ **已落地（2026-10-11 · 批 4）**：表驱动迁移 + 未来版本**明确拒绝** + 20 条断言（见 §4） |
 | 22 | D | `PD-03` 设置面板（`ui/settings_panel`；全量配置接线 + 落盘 + 范围/路径校验） | `D1` | `VD-03` | `FEA-M6-01` | — |
 | 23 | D | `PD-07` 输出面板进阶（历史运行列表 / 节点内搜索 / 复制为 MD·JSON） | `D1` | `VD-06` | `FEA-M5-03` | ✅ **已拍板（2026-10-09 · `PQ-17`）：留后 · 不排期**（原文保留：范围 ⬜ 待定） |
 | 24 | D | `PD-08` i18n 决策（最小字符串表 **或** 从 config 移除并记入 M6） | `D1` | `VD-07` | `FEA-M6-05` | ✅ **已拍板（2026-10-09 · `PQ-18`）= ② 从 `config.toml` 移除并记入 M6**；**代码已落地（2026-10-09）**（原文保留：需你选方案（`D-04`）） |
@@ -114,7 +114,7 @@
 | 26 | PM | `PM-01` WebView2 Runtime 检测与安装引导（清零 M1 唯一遗留） | `PM1` | `VM-01` | `FEA-M6-02`、`DBG-M1-01` | 需模拟缺失环境 |
 | 27 | PM | `PM-03` 构建脚本一键化（构建 + 全部自检摘要，失败给文件+行号） | `PM1` | `VM-03` | `FEA-M6-03` | — |
 | 28 | PM | `PM-04` 诊断信息一键复制（版本/依赖/数据目录/日志路径/GPU/DPI） | `PM1` | `VM-04` | `FEA-M6-04` | — |
-| 29 | C 类配置残项 | `advanced.log_ttl_days` / `log_dir` 语义实现 + `timeout.*` / `error.*` 接线（`grid_size` 归口 `PD-03`；`general.*` 已按 `PQ-18②` **移除**、不再接线） | `D1` | `VD-03` | `FEA-M6-07`、`DBG-M6-01` | — |
+| 29 | C 类配置残项 | `advanced.log_ttl_days` / `log_dir` 语义实现 + `timeout.*` / `error.*` 接线（`grid_size` 归口 `PD-03`；`general.*` 已按 `PQ-18②` **移除**、不再接线） | `D1` | `VD-03` | `FEA-M6-07`、`DBG-M6-01` | ✅ **已全部接线（2026-10-11 · 批 4）**：`log_ttl_days`（M6 已落地）+ `timeout.*` / `error.*`（本批；见 §5）⇒ `unwired_config_fields()` 仅余 `ui.grid_size` 与 `providers.deepseek.*` |
 | 30 | 任务看板 | `FEA-M3-07` 工作流变体保存（**延后 · 由你后续设计**） | — | — | `FEA-M3-07` | ✅ **已拍板（2026-10-09 · `PQ-19`）：维持「延后 · 待设计」· 不排期** |
 
 **顺序建议**：`B2-e2`（L4 尾项，含**唯一人工关卡** `PB2-29`）→ `B2-f` + `B3-a`（会话失效引导与 `PB2-25` 同批，一次真实失效响应可同时验两条）→ `B2-b`（L2 工厂，纯离线自检）→ `C1` → `D1` → `PM1`。
@@ -133,6 +133,13 @@
 - **验证 / 验收**：`VB-02`（运行中点「■ 停止」**1 秒内**进入 Cancelled，日志有取消记录）/ `AB-01`。
 - **风险对策**（归档 §4.3）：取消语义不彻底（阻塞在读）→ 缩短读超时并分块读；取消时主动关闭 socket。
 - **决策依据**：`D-02 ①`（接受线程化）；`D-06 ①`（当时延后，现回到待办）。
+- **✅ 已落地（2026-10-11 · 批 3 · 代码 + 离线断言）**：🆕 [../../source/ai/include/cancel_token.h](../../source/ai/include/cancel_token.h) + `ai/src/cancel_token.cpp` ——
+  1. **HTTP 可中断（主路径）**：`ai::run_cancellable(token, work)` = 工作线程执行 + 调用方每 50 ms 轮询令牌 ⇒ **取消立即返回**（工作线程自行收尾；`work` 必须自持全部对象，契约在头注释）；官方 API 路径（`deepseek_official_provider.cpp`）整段请求改用它；
+  2. **协作检查点**：发起前（已取消 ⇒ 不发请求、不耗额度）、阶段之间（网页版挑战/求解/生成）、执行器节点边界（既有）；
+  3. **⚠️ 实测结论（改设计的依据）**：**httplib 0.15.3 `Client::stop()` 不唤醒另一线程中阻塞的读**（离线复现 4 s 响应 ⇒ 仍 4016 ms）⇒ socket 层中断只作**尽力而为**；
+  4. **执行器归因**：取消导致的节点异常记 `Skipped`（不是 `Error`）+「[取消] nX 已中断（N ms）」；每次 `start()` 换新令牌（`cancel_token`）；`is_cancelled()` 同时看令牌。
+- **验证**：`AB-01` 的离线化 = `api_probe --selftest` **V-12 取消与超时语义 11 / 0**（取消（请求中）实测 **369 ms** < 1.5 s 判据 · 读超时 1027 ms · 发起前取消 0 ms 且**服务器未收到请求**）；`--run-selftest` 离线预期不变（PASS）。
+- **⛔ 未人工实测**：GUI 点「■ 停止」的 1 秒内生效（状态栏 + 日志取消记录）需真人点一次；网页版「请求进行中取消的实际延迟」需真机（当前尽力而为，上限 = 读超时）。
 
 ### 2.2 `PB-07` 会话失效引导（`B3-a`；**与 §3.3 `PB2-25` 合并**）
 
@@ -141,6 +148,10 @@
 - **落点**：`ai/deepseek_web_client.cpp`、`ui/editor_state.*`、`ui/error_bar.*`、`ui/property_panel.cpp`、`source/src/main.cpp`（`--web-probe`）。
 - **验证 / 验收**：`VB-06`（伪造失效 Token → 出现「重新登录」入口且按钮可打开登录窗口）/ `AB-05`。
 - **实测背景**：归档 `M_patchB.md` §9.4（v9：`userToken` 形状变化 + 全端点 `40003`）、§9.10（v15 `PB2-28④`）。
+- **✅ 已落地（2026-10-11 · 批 2 · 代码 + 离线断言）**：🆕 [../../source/web/include/probe_verdict.h](../../source/web/include/probe_verdict.h)（纯函数）+ `ui/editor_state.cpp` / `ui/error_bar.cpp` / `ui/connection_test.cpp` ——
+  1. **错误串反查**：`web::classify_session_failure_text()` 容错识别 `HTTP 401/403` · `code=40002/40003` · `biz_code=…` ·「会话已失效」· `invalid token`（**独立数字边界**：`40010` 不误判成 401），输出只有分类与码（`R20` 脱敏）；
+  2. **入口**：`EditorState::refresh_last_error()` 命中判据 ⇒ `last_error.relogin_available/needed/provider_id/text`（条目 id 由 `resolve_effective_provider()` 解析）；错误条新增「**会话已失效，点此重新登录**」（会话被拒时 =「站点拒绝请求，点此处理」）→ `ui::open_web_login_window()` 打开**该条目**的登录窗口（严格解析、不回落；只碰 `界面#登录窗口` 归属 —— `I24`）；**判据不命中绝不显示按钮**（普通超时 / 解析失败不误报）。
+- **⛔ 未人工实测（如实登记）**：`VB-06` / `AB-05` 需**一次真实失效响应**（伪造失效 Token 或等站点把会话判失效）+ 真人点一次按钮 —— 归真机批（本机无 GUI 自动化）。
 
 ### 2.3 `PB-06` 剩余：代理 + 自签证书 + `[credentials]`（`B3-b`）
 
@@ -149,11 +160,27 @@
 - **验证**：`VB-05`；归口 `FEA-M4-13`。
 - **风险对策**：凭据/代理失败要**回退到「输入框 + 说明」**，不阻断主流程。
 
+**✅ 已落地（2026-10-11 · 批 7 · 代码 + 离线断言 · ⛔ 未提交）**：
+- 🆕 `ai/http_net.{h,cpp}`（**网络策略一处收敛**）：`host_of_url()` / `no_proxy_matches()` / `resolve_proxy()`（优先级 = `NO_PROXY` 命中 ⇒ 直达 → `[network].proxy` → `HTTPS_PROXY`/`HTTP_PROXY`（按目标 scheme）→ `ALL_PROXY`；`[network].no_proxy` 非空**覆盖**环境变量）/ `resolve_http_net()`（含 `verify_tls`）/ `apply_http_net()`（唯一副作用点：`set_proxy` + `set_proxy_basic_auth` + 证书校验开关）/ `describe_http_net()`（**口令打码**）；环境变量读取为**可注入** `EnvLookup`（断言不受开发机环境干扰）。
+- **接线**：`ai/http_json.cpp`（三协议共用传输）与 `ai/deepseek/deepseek_official_provider.cpp`（openai 兼容官方 API）在主线程解析、以**值语义**进工作线程作业对象（守 `run_cancellable` 契约）；`HttpJsonRequest.net`（`std::optional<HttpNetOptions>`）= 显式覆盖（自检 / 工具确定性）。
+- **配置**：新增 `[network]{proxy, proxy_from_env, no_proxy, insecure_tls}` 与 `[credentials]{backend, dir, ttl_days}` 读写；`insecure_tls` 默认 **false = 严格校验**；`unwired_config_fields()` 注释同步为「已接」。
+- **凭据**：`credentials_dir()` 读 `[credentials].dir`（空 ⇒ 默认目录）；新增 `credentials_backend_error()` 在 `save_credential()` / `load_credential()` 入口拦下未实现后端（**明确报错 + 零文件留痕**，不静默降级）；启动惰性清理 / `--cred-list` / `--cred-purge` / 诊断报告全部改取 `[credentials].ttl_days`。
+- **界面**：设置面板新增「网络与证书（代理 / 自签）」「凭据库（保存位置 / 保留天数）」两节；`insecure_tls` 打开时红字「⚠ 危险」；并**修掉两处过期标签**（「网络超时」「错误与重试」不再写「暂不生效」—— 批 4 已接线）。
+- **校验**：代理须带 scheme 且有主机名；`credentials.ttl_days` ∈ 0…3650；`backend` 只接受 `dpapi`。
+- **自检**：`--selftest` **十二组 → 十三组**（**V-16 · 16 / 0**：NO_PROXY 四态（含 `corp.com.evil.com` 不被后缀骗过、`host:port` 连端口匹配）/ 代理优先级五态 / 证书默认严格 + 唯一开关 / 口令打码 / **回环证明**（代理指到本机 `httplib::Server`：目标域名不存在仍经代理成功、服务器侧回读**绝对 URI**）+ **回环反面**（直达时代理收不到请求） / 凭据三态）；`--settings-assert` **越界 11 → 15 例** + 边界值新增三项（合法代理 / 自签开关 / TTL 0）。
+- **实测**：构建 **0 / 0** · `--selftest` **十三组全 PASS** · `--exec-selftest` **546 / 0** · `--graph-selftest` **110 / 0** · `--diag-assert` **40 行** · `check_all.ps1` **15 / 15** · 断链 **1184 / 0**。
+- **⛔ 需真机**：企业网络下真实 `HTTPS_PROXY` / 自签证书站点实测（面板两节点选同批）。
+
 ### 2.4 `PB-09` 自检扩展（`B3-b`）
 
 - **要点**：`api_probe --selftest` 增 **V-11 无 Key 请求构造**、**V-12 取消/超时语义**（七组 → 九组）；新增 `aiwrite.exe --run-selftest --official`（有 Key 时真实生成）；`--run-selftest --web` 保持 5/5。
 - **落点**：`source/tools/api_probe.cpp`、`source/src/main.cpp`。
 - **验证 / 验收**：`VB-04` / `AB-03`；**依赖 §2.1**（V-12 需取消语义落地）。
+- **✅ 已落地（2026-10-11 · 批 3 · 代码 + 离线断言）**：`api_probe --selftest` **七组 → 九组**（`api_probe.cpp`）——
+  * **V-11 无 Key 请求构造**（**6 / 0**）：无 Key ⇒ **不构造** `Authorization` 头 / 不产生空值头；有 Key ⇒ `Bearer <key>` 形状正确；`auth_style=api-key`（Anthropic 口径）按表生成 `api-key` 头；`{model}` 路径占位替换（Anthropic / Gemini 参数化）；请求体不含任何 Key 片段。**并修掉一个真缺陷**：`build_auth_headers()` 原来在无 Key 时发出 `Authorization: Bearer `（空值）。
+  * **V-12 取消与超时语义**（**11 / 0** · **本机回环** `httplib::Server`，不开浏览器、不出网）：令牌语义（置位 / 幂等 / 跨线程）· `CancelWatch`（未取消不触发 / 置位触发一次 / 析构收尾）· 正常路径不回归（HTTP 200 / 32 ms）· 发起前取消（0 ms 且**服务器未收到请求**）· 请求中取消（**369 ms** < 1.5 s）· 读超时语义（1 s 对 4 s ⇒ 含「超时」的可操作错误，1027 ms）· 取消不污染后续调用。
+  * `aiwrite.exe --run-selftest --official`（新入口）：有 Key 时**真实生成一次**（「请只回复 pong」，打印 HTTP / 耗时 / 回复前 120 字，**不打印 Key**）；缺 Key ⇒ 可操作提示 + 退出码 **2**。
+- **⛔ 需有 Key / 真机**：`AB-03` 的真实生成与 V-12 的真机侧（网页版请求中取消延迟）归真机批；离线断言已覆盖全部纯逻辑。
 
 ### 2.5 流式**数据源**（`B3-c` · 暂停项，需你定方案）· ✅ **已拍板（2026-10-09 · `PQ-11` = 决策 `D-31` 结案 = 选 ③）**：**明确不做**（网页版文案改「分段落定」）+ 补 `VB-03` 离线断言 —— 原文（拍板依据）保留：⬜ **待定（`PQ-11` = 决策 `D-31`）**
 
@@ -179,6 +206,30 @@
 
 > 整批**未开工** → ✅ **2026-10-11 拍板：整批保留「做」**（可插拔底座）。提交信息约定（沿用归档 §4.1）：`feat(ai): M_patchB L2 InferenceProvider 接口与工厂（openai/anthropic/gemini/deepseek-web 按表分派）+ 能力驱动接线`
 
+**✅ 已落地（2026-10-11 · 批 6 · 代码 + 离线断言 · ⛔ 未提交）**：七个条目全部完成 ——
+`ai/http_json.{h,cpp}`（通用 JSON POST：`run_cancellable` 取消 / 表驱动超时 / 4 MB 响应上限 / `raw_head` 诊断；
+纯函数 `append_query_param` · `parse_json_text` · `json_error_message`）·
+`ai/inference_provider.{h,cpp}`（`PB2-08` + `PB2-12`：`GenerateParams` / `GenerateResult` /
+`InferenceProvider` / `capability_gate()` / `caps_for_call()` / `caps_from_spec()` /
+`common_json_headers()` / `split_data_url()` / `OpenAiCompatProvider` / `DeepSeekWebProvider`）·
+`ai/anthropic_provider.{h,cpp}`（`PB2-10`）· `ai/gemini_provider.{h,cpp}`（`PB2-11`）·
+`ai/provider_factory.{h,cpp}`（`PB2-09`：按表 `protocol` 分派，`dom` 明确说明由 DOM 适配器承载，
+**未知 `protocol` ⇒ 明确报错 + `unsupported_protocol`**）· `nodes/local_nodes.cpp` 能力驱动接线（`PB2-12`：
+删掉 `mode == "web"` 硬编码分流；系统提示词是否前置拼接 = `caps.system_role`，视觉拦路 = `caps.vision`，
+`seed` 提示 = 门控统一给出）· `app/src/main.cpp`（`--provider-selftest` 的协议检查与 ping 改走工厂）·
+`ai/provider_spec.h` 头注释改**嵌套** schema 名（`PB2-05` / `R18`）。
+**自检**：`api_probe --selftest` **九组 → 十二组** —— V-13（**23/0** 两协议请求构造与解析）·
+V-14（**13/0** 工厂分派 + 能力门控 + **对随程序发布的表做 `R9` 全量核对**）·
+V-15（**11/0** 本机回环端到端：表驱动的头 / 路径 / 正文**服务器侧回读** + 401 原因 + 读超时 + 取消 ≤1.5 s）；
+`provider_spec_selftest()` **50 → 52**（`R18` 两条：嵌套写法逐字生效 / 扁平写法降级并告警）；
+原「未实现协议 → 警告」用例的示例 `protocol` 由 `anthropic` 改为 `cohere-v2`（**该协议本批已实现** ⇒ 旧断言失去意义）。
+**实测**：构建 **0 error / 0 warning**；`--exec-selftest` **546 / 0**；`--selftest` **十二组全 PASS · exit 0**；
+`--graph-selftest` **110 / 0**；`--provider-dump` 末行「已实现协议：openai、anthropic、gemini、deepseek-web、dom」；
+`check_all.ps1` **15 / 15**。**⛔ 真机**：`anthropic` / `gemini` 真实生成需 Key（`--provider-selftest --provider <id>`）；
+流式仍归 `PB-03` 暂停项（`on_delta` 槽位保留）。**同批**：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]` ·
+[../loop_dev.md](../loop_dev.md) §10.1（陷阱 12 / 13）· [../AI_Status.md](../AI_Status.md) §一 / §四 ·
+[../../source/README.md](../../source/README.md) §4。
+
 | 编号 | 要点 | 验证 |
 |---|---|---|
 | `PB2-04` 🟢 **要做（L2 底座 · 2026-10-11 保留）** | 抽出 `ProviderOptions{api_base, chat_path, auth_style, auth_header, extra_headers, env_names, limits}`；`build_endpoint(base,path)` / `build_auth_headers(spec,key)` / `resolve_api_key(param_key, env_names)`（env 名**按序尝试**，默认仍含 `DEEPSEEK_API_KEY`）；**旧签名保留为重载**（默认值 = 今天 DeepSeek 行为 → `I1` 自动成立） | `VB2-04`（端点拼接 5 例 / 认证头 5 例 / env 顺序命中） |
@@ -200,6 +251,10 @@
   - 退出码语义与 CLI 一致：`0` 全通过 / `1` 失败 / `2` 无 Key 或未登录。
 - **落点**：`ui/property_panel.cpp`（按钮 + 结果区）、复用 `ai::provider_spec_selftest()` 的实现（**不要再写一套**）。
 - **验证**：`VB2-07`；日志/Console 输出守脱敏（`R20`）。
+- **✅ 已落地（2026-10-11 · 批 2 · 代码）**：🆕 [../../source/ui/include/connection_test.h](../../source/ui/include/connection_test.h) + `ui/src/connection_test.cpp`（工作线程；界面不阻塞）与参数面板「诊断（只读 · 异步）」区（`ui/src/property_panel.cpp`）——
+  * ① 离线 = `ai::provider_spec_selftest()`（**与 CLI 同一实现**，不写第二套）；② API 条目 = 协议实现检查 → `resolve_api_base/model/key_ref` → Key（env → 凭据库，同 CLI 顺序）→ 有 Key 时一条 ping（「请只回复 pong」，打印 HTTP / 耗时 / 回复前 60 字，**不打印 Key 本体**）；③ 网页版条目 = 站点可用性 + 登录态（`web_session_state` · `I15`）+ 端点一致性，**不发送任何提示词**；
+  * 码语义与 CLI 一致（`0` 通过 / `1` 失败 / `2` 无 Key 或未登录）；明细 → Console + 面板「诊断明细」折叠区，一行结论 → **状态栏**（`post_background_status` → 主线程 `take_background_status`）；退出前 `ui::stop_diagnostics()` 于 `log::shutdown()` **之前**收尾（超时则分离并如实记日志）。
+- **⛔ 未人工实测（如实登记）**：「点按钮 → 状态栏出结论」与有 Key 时的真实 ping 需真人点一次（本机无 GUI 自动化 / 未配 Key）。
 
 ### 3.3 `PB2-25` 网页版会话失效**可诊断**（`B2-e2`；与 §2.2 合并）
 
@@ -210,6 +265,11 @@
 - **已有基础**（v15，`PB2-28④`）：`ai::web_session_failure_hint()` / `web_session_failure_needs_relogin()`（容错匹配 `code=40002` / `code= 40002` / `biz_code=40003` 与 HTTP `401`/`403`；`401`/`40002` → 追加「请重新登录该站点」并**作废该站点内存会话**，`40003` → 只给可操作提示、**不**作废）。
 - **落点**：`source/src/main.cpp`（`--web-probe` 判据）、`ui/property_panel.cpp`、`engine/validate.cpp`、`ui/app.cpp`（状态栏）。
 - **验证 / 验收**：建议 `AB2-17` / `VB2-20` —— 会话失效时 `--web-probe` 退出码 **1**（不再 PASS）、面板给「会话失效」+ 重登入口、运行前提示明确；**重新登录后** `--run-selftest --web` **5/5**。
+- **✅ 已落地（2026-10-11 · 批 2 · 代码 + 离线断言）**：
+  * **判据收紧**：`web::parse_endpoints_report()` 解析端点报告（`<path> -> <HTTP 状态> <响应体>`，` || ` 连接；容错取 `code` / `biz_code`）+ `web::judge_probe_result()` **七分类**（`Pass` 需「脚本通 + 有凭证 + 判据端点 200 且 `code=0`」/ `NotLoggedIn` / `SessionInvalid`（401·40002 ⇒ 需重登）/ `RequestRejected`（403·40003）/ `EndpointUnknown`（端点缺失 / 传输失败 / 无 `code`）/ `ScriptFailed` / `NotApplicable`），每类带判据与下一步；
+  * `web/webview_host.cpp` 的 `--web-probe` 改用该判据（**端点 `40003` 不再假 PASS**）并新增「结论 / 判据 / 下一步」输出；`required_path` 默认 `/api/v0/users/current`，有 `web.probe_paths` 时用它（换端点即换判据）；
+  * **`token_expr` 表驱动容错**已在 `webview_host.cpp`（`replace_all_token` 注入）与只读诊断（`token_len` / `token_json` 形状）覆盖 ⇒ 本项**无新增代码**（复核结论：形状变化时 `--web-dom-dump` 与「测试选择器」都能看出来）。
+- **⛔ 未人工实测（如实登记）**：`VB2-20` 需真实失效响应（本机无样本）；判据本身的 15 条断言已离线覆盖。
 
 ### 3.4 `PB2-29` / `PB2-30②` 逐站选择器（`B2-e2`）
 
@@ -219,6 +279,10 @@
 - **`PB2-30②`（面板「测试选择器」）**：复用 `ai::dom_adapter_selftest()`（**只读**），把**命中数 + 建议**显示在界面（不必再看 Console）→ 这是 `PB2-29` 的**配套工具**，建议先做它再逐站取选择器。
 - **原则**：**不实测不填值**（沿用 `PB2-26`）；站点改版 → 用户改 JSON 自助修复（`R21`）。
 - **验收**：`AB2-21`（逐站独立验收）/ `AB2-22`。
+- **✅ 已落地（2026-10-11 · 批 2 · 代码）**：**`PB2-30②` 面板「测试选择器」**并入 §3.2 的「诊断（只读 · 异步）」区（`ui/connection_test.h` + `ui/src/connection_test.cpp`）——
+  * 复用**只读**探测 `ai::dom_site_probe()`（不写入页面、不发送内容、不读任何值），把 **命中数**（输入 / 发送 / 答案 + 末条字数）· **登录判据**（`needs_login` + `login_evidence`）· **修复建议**（`--web-dom-dump` 取候选 / 回填 `verified`）同时写进 **Console** 与**面板结果区**（「诊断明细」折叠）；
+  * 码语义与 CLI `--web-adapter-selftest` 一致：`0` 全命中 / `1` 有缺项或页面异常 / `2` 条目不可用 / `3` 需人工登录；按钮仅对 `adapter=dom` 条目可用（其余禁用并给原因）。
+- **⛔ 未人工实测（如实登记）**：真人点一次按钮 + 逐站取 `answer_selector` 仍是唯一人工关卡（`PB2-29`）。
 
 ### 3.5 `PB2-24` 自建站点闭环（`B2-e2`）
 
@@ -251,8 +315,8 @@
 |---|---|---|---|
 | `PC-01` | **autosave**：工作流变更后**节流**（≥3 秒且空闲）写 `~/.brain-ai/snapshots/autosave.json`；**原子写**（临时文件 + rename）；保留最近 N 份（`autosave_1..N`）　✅ **已落地（2026-10-10）· 落点调整**：纯逻辑 = `source/engine/{include,src}/autosave.*`（**原计划 `ui/editor_state.*`** —— 但 `ui/**` 属 GUI 可执行目标、`api_probe` 链接不到，放那里**无法离线断言** `VC-01`），`ui/editor_state.*` 只做**时机编排**（1 Hz 内容指纹探测 + 静默 `ui.autosave_idle_sec` 秒 + 无变更不写 + 失败退避 10 秒）；默认目录仍复用 `paths::snapshots_dir()`。历史轮转 = **先复制旧最新成 `autosave_1` 再原子替换最新** ⇒ 不存在「`autosave.json` 缺失窗口」 | `engine/autosave.{h,cpp}`（新）、`ui/editor_state.{h,cpp}`、`utils/paths`（复用 `snapshots_dir()`） | `VC-01`（✅ `--autosave-assert`：半截 `.tmp` 不参与恢复 / 可清理 / 清理后仍可加载 + 写后无 `.tmp` 残留 + `keep=2/0` 轮转） |
 | `PC-02` | **恢复流程**：启动时若 autosave 比最近打开的工作流新 → 弹一次「恢复未保存的更改？」（可禁用该提示）；恢复后**不覆盖原文件**，另存需确认　✅ **已落地（2026-10-10）**：判定 = 快照比工作流 mtime 新 / 原文件不存在 / 未命名 ⇒ 问一次；模态三按钮「恢复 / 忽略（保留当前内容）/ 忽略，且不再提示（写 `ui.autosave_restore_prompt=false`）」；**恢复后 `current_workflow_path` 留空 ⇒ 保存必走另存**（原路径记 `restored_from_autosave_path`） | `ui/app.cpp`、`ui/editor_state.*` | `VC-02`（✅ `--autosave-assert` 4 场景 + 恢复后**内容指纹逐字相同**；GUI 实测：启动判定日志 + 12 秒后快照哈希不变 = 启动不冲掉真快照；⛔ 真人点「恢复」未做） |
-| `PC-03` 🟢 **要做** | **最近列表治理**：打开前校验存在性；失效条目**灰显**并标注「（文件不存在）」；提供「清理失效条目」 | `engine/recent_files.{h,cpp}`、`ui/app.cpp` | `VC-03` |
-| `PC-04` 🟢 **要做（与 `DBG-M6-02` 同批）** | **版本迁移框架**：`workflow_io` 的 `version` 与 `config_version` 建迁移表（当前只 warn）；**未知高版本明确拒绝**并提示；新增迁移自检 | `engine/workflow_io.cpp`、`utils/config.cpp` | `VC-03`（构造 v1.0 旧文件 → 加载并写回当前版本；未来版本 → 明确拒绝） |
+| `PC-03` ✅ **已落地（2026-10-11 · 批 4）** | **最近列表治理**：打开前校验存在性；失效条目**灰显**并标注「（文件不存在）」；提供「清理失效条目」　✅ 落地：`engine/recent_files.{h,cpp}` 新增 `RecentStatus` / `recent_with_status()`（**只读**校验，不写盘）/ `count_missing_recent()` / `prune_missing_recent()`（一键清理 + 逐条 `log::info`）；`ui/app.cpp`「文件 → 最近打开」失效项 **`MenuItem(enabled=false)` 灰显** + 悬停说明 + 动态「清理失效条目（N）」+ 状态栏回执 | `engine/recent_files.{h,cpp}`、`ui/app.cpp` | `VC-03`（✅ `--selftest` V-10 组新增「存在性校验 / 失效清理」两列：真实临时文件 + 不存在路径 ⇒ 逐条判定正确、只读查询不写盘、清理后回落 1 条） |
+| `PC-04` ✅ **已落地（2026-10-11 · 批 4）** | **版本迁移框架**：`workflow_io` 的 `version` 与 `config_version` 建迁移表（当前只 warn）；**未知高版本明确拒绝**并提示；新增迁移自检　✅ 落地：🆕 `engine/migration.{h,cpp}`（**表驱动** + 未来主版本**明确拒绝** + 迁移机制夹具）；`engine/workflow_io.cpp`（在副本上迁移 → 未来版本拒绝载入）；`utils/config.{h,cpp}`（`migrate_config()` + `save_config()` **拒绝降级写回**护栏） | `engine/migration.{h,cpp}`（新）、`engine/workflow_io.cpp`、`utils/config.{h,cpp}` | `VC-03`（✅ `api_probe --exec-selftest` 新增 **20 条**：工作流 8 + 机制夹具 4 + 配置 4 + **端到端 4**（临时目录：`config_version=99` ⇒ 加载成功 + 保存被拒 + **原文件一字未改**）） |
 
 **风险对策**：误删用户输出 → TTL 清理**先列出再删 + 写日志 + 默认保守**；autosave 频繁写盘 → 节流 + 仅变更时写 + 原子写；恢复提示打扰 → 仅当 autosave 更新时提示且可「不再提示」（归档 §5.3）。
 
@@ -268,7 +332,19 @@
 | `PD-03` | **设置面板**（`ui/settings_panel.{h,cpp}`）：分区编辑 `ui/output/timeout/error/advanced`（**「通用」分区已无字段** —— `general.language` / `general.startup` 已按 `PQ-18②` 移除）；含**校验**（范围 / 路径存在性）+ 落盘 + 「需重启生效」标注；`deepseek` 段说明「**节点参数为准**」；本项同时承接 C 类配置残项接线（`timeout.*` / `error.*` / `advanced.*`，`grid_size` 受库限制归口于此） | `ui/settings_panel.{h,cpp}`、`ui/app.cpp`、`utils/config.*` | `VD-03`（面板 ↔ `config.toml` 双向一致；非法值被拒绝并提示） |
 | `PD-07` ⏸ **不执行（2026-10-11）** | **输出面板进阶**：历史运行列表（内存 + 最近 N 次）、节点内搜索、复制为 Markdown / JSON | `ui/output_panel.cpp` | `VD-06` |
 | `PD-08` ✅ **已落地（`PQ-18②` 结案 + 代码已落地）** | **i18n 决策**：二选一 —— ① 最小 i18n（字符串表 + `general.language` 切换，重启生效）② 从 `config.toml` 移除 `general.language/startup` 并记入 M6（`D-04` 默认 ②）　✅ **已拍板（2026-10-09 · `PQ-18` 结案）= 选 ②（从 `config.toml` 移除 `general.language` / `general.startup` 并记入 M6）**：与 [../roadmap.md](../roadmap.md) §十「i18n …**不做**」口径**一致** ⇒ 触发 §十「显式推翻」条款、**记入 M6**；✅ **代码已落地（2026-10-09）** = `utils/config.{h,cpp}` 删除 `General`（`language` / `startup`）+ `source/tools/api_probe.cpp` 的 `PA-08` 断言改判「**不含** `general.*`」；**实测数字无变动**（`--exec-selftest` 仍 **425 / 0**、`--graph-selftest` **110 / 0**、`--selftest` 七组全 PASS）—— 该断言是**单行 PASS/FAIL**、不进数字计数 ⇒ 原写的「425 → 424」是**误判**（订正见 §10 v4）。原文（拍板依据）：⬜ **待定（`PQ-18`）** —— 与 [../roadmap.md](../roadmap.md) §十「i18n **不做**」并列时**需一次显式确认** | `utils/config.*`、文档 | `VD-07` |
-| 归档完整化 | `output.auto_open_on_complete` 接线 + 历史/预览（`FEA-M5-04`） | `ui/output_panel.cpp`、`utils/output_archive.*` | `VC-04` |
+| 归档完整化 | `output.auto_open_on_complete` 接线 + 历史/预览（`FEA-M5-04`）—— ✅ **`auto_open_on_complete` 已接线（M6 · 2026-10-10）**；历史/预览见 `PD-07`（⏸ 不执行） | `ui/output_panel.cpp`、`utils/output_archive.*` | `VC-04` |
+
+**C 类配置残项接线（`DBG-M6-01` / `FEA-M6-07` · ✅ 2026-10-11 批 4 收口）**：
+
+| 字段 | 现状（接线点） | 验证 |
+|---|---|---|
+| `output.auto_open_on_complete` | ✅ 已接线（M6）：归档成功后打开该目录 | `--diag-assert` / PA-08 断言（**不在**未接清单） |
+| `advanced.log_ttl_days` | ✅ 已接线（M6）：启动清理超期旧日志（`log::purge_old_files`，不含 `app.log` / `workflow.log`） | 同上 |
+| `timeout.connect_ms` / `first_byte_ms` | ✅ **本批接线**：官方 API 的**默认**连接 / 读超时（**表未声明 `limits.*` 时生效** —— 表优先口径不变） | PA-08 断言（**不在**未接清单）+ 代码落点 `nodes/local_nodes.cpp` |
+| `error.retry_enabled / retry_count / retry_interval_ms` | ✅ **本批接线**：官方 API 节点重试 —— **只对可重试失败**（429 / 5xx / 网络超时）重试；凭证 / 余额 / 请求不合法**不重试**；重试等待可被「停止」打断 | `--selftest` V-12 组新增 **6 条**（可重试状态 / 退避上限 / 次数钳制 / 可中断等待） |
+| `ui.grid_size` | ⛔ **仍不生效**（vendored `imgui-node-editor` 的 Style 无网格间距字段）⇒ 留在未接清单，归口 `PD-03` | PA-08 断言（**在**未接清单） |
+| `providers.deepseek.*` | 🔵 仅作默认值来源（实际以 `ProviderConfig` 节点参数为准） | 同上 |
+
 
 **明确不做**（归档 §6.1 / §1.8）：`PD-01` 快捷键表（设计 §6.7 定为**纯鼠标**，`⛔ 决定不做`）；`PD-08` i18n 界面语言（`PQ-18` = ② ⇒ **不做**；`config` 侧 `[general]` 已移除 · 2026-10-09）；多工作流标签页 / 协同编辑 / 云同步 / 自动更新 / 插件系统（超出 MVP 定位）。
 
@@ -284,7 +360,7 @@
 | 编号 | 要点 | 落点 | 验证 |
 |---|---|---|---|
 | `PM-01` 🔵 **只勾账（已落地 2026-10-10）** | **WebView2 Runtime 检测与安装引导**（清零 M1 唯一遗留 → 落地 M6-02）：启动自检 Runtime 版本；缺失时给**官方 Evergreen Bootstrapper** 链接与说明；**不阻塞主界面**（仅网页版相关功能提示） | `web/webview_host.*`、`ui/app.cpp`、文档 | `VM-01`（模拟缺失 → 出现引导且非网页版功能可正常使用） |
-| `PM-03` 🔁 **合并（不新建实施项）** | **构建脚本一键化**：`build.ps1` 增加「跑全部自检并输出摘要」（失败给**文件名 + 行号**） | `source/build.ps1`、`source/README.md` | `VM-03`（干净环境一条命令完成 + 可读摘要） |
+| `PM-03` ✅ **已落地（2026-10-11 · 批 5）** | **构建脚本一键化**：`build.ps1` 增加「跑全部自检并输出摘要」（失败给**日志路径 + 失败项**）　✅ 落地：`source/build.ps1` 新增 **`-SelfCheck`** 开关（编译成功后调用 `tools/check_all.ps1`；失败抛错并指向 `build\logs\check_all_*.log`；默认关 ⇒ 不拖慢日常构建） | `source/build.ps1`、`source/README.md` | `VM-03`（✅ 实测：`.\build.ps1 -SelfCheck` ⇒ 编译成功 + **一键自检 15/15 PASS**；干净环境一条命令完成） |
 | `PM-04` 🔵 **只勾账（已落地）** | **诊断信息一键复制**：版本 / 依赖版本 / 数据目录 / 日志路径 / GPU / DPI 缩放 | `ui/app.cpp`（关于 / 诊断区） | `VM-04`（复制内容可直接用于问题反馈） |
 
 ---
@@ -552,6 +628,8 @@
 | 2026-10-09 | **v5** | **批 3 · 网页站批量探测报告链路落地（代码 + 测试 + 文档）· 本文只动 §0.4 基线**：刷新为 2026-10-09 实测 —— `--exec-selftest` **425 → 452**（新增 27 项 DOM 探测报告自检）· `--graph-selftest` **110 / 0**（未变）· 新增三行（批量探测 `--provider all`（`FEA-L01`/`FEA-L03`：11 站 = 可用 8 / 需登录 2 / 失败 1 · exit 1）· 会话清单 `--web-session-list`（`FEA-L02`）· 离线夹具含 `dom_gate_test`（15/0；`--old` 6/15））；断链口径由「broken 0」改为「**本轮不得新增**」（实测 checked 610 / broken 8，8 条全部为存量）。逐项背景 / 物证见 [../CHANGELOG.md](../CHANGELOG.md) 批 3 条目与 [../loop_dev.md](../loop_dev.md) §3.1 · §4 · §6.2 · §6.3 · §10。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。
 | 2026-10-10 | **v6** | **`PB2-24` 自建站点闭环落地（代码 + 离线断言 · 本文 §1 第 18 行 / §3.5 / 附录 D 就地改 ✅）**：① 新增 `source/ai/{include,src}/site_template.*`（模板纯函数 + **原子写** + 默认拒覆盖；**强制信封 / `adapter=dom` / `verify=false`**）；② `source/engine/{include,src}/node_registry.*` 新增 `provider_option_ids()` / `findMutable()` / `provider_param_options()` / `refresh_provider_options()`（2 重载，带 `Graph&` 时**保留已选值**）/ `reload_provider_specs_and_refresh()`（单入口）；③ 设置面板 §⑥ 新增「**新建网页版站点…**」模态 + 「**重新加载配置表**」+ 错误/警告明细 + 打开站点目录，`SettingsPanelResult.provider_table_reloaded` ⇒ `app.cpp` 刷新画布内已有节点实例枚举；④ 新开关 `api_probe --site-assert`（纯函数 **47 / 0** + 端到端：写盘 → 进表 → 进下拉 → 进枚举 **20 → 21** → 新节点校验 → **旧实例刷新回归** → 清理零残留；**模拟应用启动次序**）并接入 `check_all.ps1`（**12 → 13 项**）。**验证（2026-10-10 本机）**：构建 **0 / 0**；`--site-assert` **PASS · exit 0**；`check_all.ps1` **13/13 PASS**；`--selftest` / `--exec-selftest` **464 / 0** / `--graph-selftest` **110 / 0** 无回归；GUI 冒烟无崩溃。**⛔ 界面点选回路未人工实测**（需真人点一次）· **`PB2-30②` 仍未做**。同批：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]` · [../变量术语对照表.md](../变量术语对照表.md)（§10.2 · §14 附表 · §15）· [../roadmap.md](../roadmap.md) §十二 第 2 条 · [../DevPlan.todo](../DevPlan.todo) `FEA-M_patchB-29…30` · [../AI_Status.md](../AI_Status.md) §一/§四 · [M6.md](M6.md) `M6-10`。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
 | 2026-10-10 | **v7** | **`PC-01` / `PC-02` 自动保存 + 崩溃恢复落地（代码 + 离线断言 · 本文 §1 第 19 行 / §4 两行就地改 ✅）**：① 新增 `source/engine/{include,src}/autosave.*`（`autosave_paths` / `autosave_probe` / `graph_content_signature`（不含 viewport）/ `autosave_write`（**原子写 + 先复制旧最新成 `autosave_1` ⇒ 无缺失窗口**）/ `autosave_load` / `autosave_clear` / `autosave_cleanup_temp` / `autosave_should_offer_restore` / `autosave_selftest`）；**落点调整（如实登记）**：原计划 `ui/editor_state.*`，因 `ui/**` 属 GUI 可执行目标、`api_probe` 链接不到 ⇒ 纯逻辑下沉 `engine/` 才能离线断言 `VC-01`/`VC-02`，`ui/` 只保留**时机编排**（`tick_autosave` 1 Hz 指纹探测 + 静默 `ui.autosave_idle_sec` 秒 + 无变更不写 + 失败退避 10 秒 + `flush_autosave_on_exit`）与**启动闸门** `autosave_paused`（防启动示例工作流冲掉真快照）；② `ui/app.cpp` 启动序 = 清残留 `.tmp` → 判定 → 模态（恢复 / 忽略 / 忽略且不再提示），**恢复后 `current_workflow_path` 留空 ⇒ 保存必走另存（不覆盖原文件）**；③ 配置新增 `ui.autosave_enabled` / `autosave_idle_sec` / `autosave_keep` / `autosave_restore_prompt`（设置面板 **§⑦ 数据安全（自动保存）**；`--settings-assert` 越界例 **8 → 11**）；④ 新开关 `api_probe --autosave-assert`（**28 / 0**）并接入 `check_all.ps1`（**13 → 14 项**）。**验证（2026-10-10 本机）**：构建 **0 / 0**；`--autosave-assert` **PASS · exit 0**（28/28）；`check_all.ps1` **14 / 14 PASS · exit 0**（`check_all_20261010_202628.log`）；GUI 实测（真机）：启动判定日志出现 + **12 秒后快照哈希不变**（种子事后删除，零残留）。**⚠ 同批踩坑 → 陷阱 10**：`Param::value` 是 `nlohmann::json`，**`value += "文本"` 语义 = `push_back`**（对字符串抛 `type_error` → `terminate` → `0x80000003`，stdout 缓冲丢失 ⇒ 看不出跑了），已改显式赋值 + 自检逐项 `fflush`。**⛔ 未验证（如实登记）**：GUI「改图 → 静默 3 秒 → 写快照」与「点『恢复』」需真人点一次鼠标（同一代码路径已由 `--autosave-assert` 覆盖）。同批：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]` · [../DevPlan.todo](../DevPlan.todo) `FEA-M2-01` / `TST-M2-03` · [../AI_Status.md](../AI_Status.md) §一/§四 · [../变量术语对照表.md](../变量术语对照表.md) §6/§9/§10/§14/§15 · [../节点编辑器使用说明.md](../节点编辑器使用说明.md) §10.13 · [../loop_dev.md](../loop_dev.md) §10.1 陷阱 10 · [../../source/README.md](../../source/README.md) · [../../AI_README.md](../../AI_README.md) §2。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
+| 2026-10-11 | **v10** | **代理 / 自签证书 / 凭据库配置落地（`PB-06` 剩余 · 代码 + 离线断言）**：🆕 `ai/http_net.{h,cpp}`（网络策略一处收敛：`host_of_url` / `no_proxy_matches`（`*` · 精确 · `.corp.com` 后缀 · `host:port` · 逗号 · 大小写不敏感）/ `resolve_proxy`（`NO_PROXY` 命中 ⇒ 直达 → `[network].proxy` → `HTTPS_PROXY`/`HTTP_PROXY` 按 scheme → `ALL_PROXY`；`[network].no_proxy` 非空覆盖环境变量）/ `resolve_http_net`（含 `verify_tls`）/ `apply_http_net`（唯一副作用点）/ `describe_http_net`（**口令打码**）；`EnvLookup` 可注入 ⇒ 断言不受开发机环境干扰）+ **接线两条 HTTP 路径**（`ai/http_json.cpp` · `ai/deepseek/deepseek_official_provider.cpp`：主线程解析、值语义进工作线程作业对象；`HttpJsonRequest.net` 可显式覆盖）+ `utils/config.*` 新增 `[network]{proxy, proxy_from_env, no_proxy, insecure_tls}` 与 `[credentials]{backend, dir, ttl_days}`（`insecure_tls` **默认严格校验**）+ `utils/credential.*`（`credentials_dir()` 读配置；`credentials_backend_error()` 拦未实现后端 ⇒ **明确报错 + 零文件留痕**；TTL 全链路改取配置）+ `ui/settings_panel.cpp` 两节（网络与证书 / 凭据库）+ **修掉「暂不生效」过期标签** + `utils/settings_validation.cpp`（代理须带 scheme 且有主机 / TTL 0…3650 / backend 只接受 dpapi）。**自检**：`--selftest` **十二组 → 十三组**（**V-16 · 16 / 0**：NO_PROXY 四态 · 代理优先级五态 · 证书默认严格 + 唯一开关 · 口令打码 · **代理回环证明**（目标域名不存在仍经代理成功且服务器侧回读**绝对 URI**）+ **回环反面**（直达时代理收不到请求）· 凭据三态）；`--settings-assert` **越界 11 → 15 例** + 边界值新增三项。**实测（2026-10-11 本机）**：构建 **0 error / 0 warning** · `--selftest` **十三组全 PASS · exit 0** · `--exec-selftest` **546 / 0** · `--graph-selftest` **110 / 0** · `--diag-assert` **40 行** · `check_all.ps1` **15 / 15** · 断链 **1184 / 0**。**⛔ 真机**：企业网络（真实代理 / 自签站点）与面板点选。同批：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]`（批 7）· §0.4 基线两行 · §1 第 3 行 · §2.3「✅ 已落地」· [../AI_Status.md](../AI_Status.md) §一 / §四 · [../../source/README.md](../../source/README.md) §4.5。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
+| 2026-10-11 | **v9** | **L2 底座落地（批次 `B2-b` · `PB2-04`…`PB2-12` · 代码 + 离线断言）**：🆕 `ai/http_json.{h,cpp}`（通用 JSON POST：`run_cancellable` 取消 → **立即返回**、表驱动连接 / 读超时、4 MB 响应上限、`raw_head` 诊断；纯函数 `append_query_param`（Gemini `?key=`）/ `parse_json_text` / `json_error_message`（**兼容 OpenAI 兼容 / Anthropic / Gemini 三种错误形状**））+ 🆕 `ai/inference_provider.{h,cpp}`（`PB2-08`：`GenerateParams` / `GenerateResult` / `class InferenceProvider{name,protocol,caps,generate}`；**不新开** `generateStream` / `generateWithImage`（决策 `D-09`）；能力门控 `capability_gate()` 为纯函数 —— `vision=false + 图片` **拦路**、`seed` 不支持仅提示、`system_role=false` 指示**前置拼接**；`caps_for_call(spec, web_mode)` 守住「无表条目的 `web` 调用 = 内置网页版能力」⇒ 老工作流行为不变）+ 🆕 `ai/anthropic_provider.{h,cpp}`（`PB2-10`：`/v1/messages` + `x-api-key` + `anthropic-version`；`max_tokens` 必填兜底 2048、`temperature` 钳制 0…1、`system` 顶层、图片 `source{type:base64,media_type,data}`、响应 `content[].text` 逐块拼接）+ 🆕 `ai/gemini_provider.{h,cpp}`（`PB2-11`：`/v1beta/models/{model}:generateContent` + `?key=`、`contents[].parts[].inline_data`、`systemInstruction`、`generationConfig{temperature,topP,maxOutputTokens,seed}`、`promptFeedback.blockReason` / `finishReason != STOP` 给**可操作原因**）+ 🆕 `ai/provider_factory.{h,cpp}`（`PB2-09`：按表 `protocol` 分派 `openai` / `anthropic` / `gemini` / `deepseek-web`（收编 `web_chat()` ⇒ `I2`）；`dom` **明确说明**由 DOM 适配器承载；未知 `protocol` **明确报错**（`R9`））+ `nodes/local_nodes.cpp` **能力驱动接线**（`PB2-12`：删掉 `mode == "web"` 硬编码分流；删除 DeepSeek 专有的视觉提示，改由逐模型声明 + provider 级 `caps` 生成）+ `app/src/main.cpp`（`--provider-selftest` 协议检查改问工厂，ping 走**工厂 → `generate()`**）+ `ai/provider_spec.h` 头注释改**嵌套** schema 名（`PB2-05` / `R18`）+ `provider_spec.cpp` 新增 `R18` 两条断言（嵌套逐字生效 / 扁平降级并告警），原「未实现协议 → 警告」示例改为 `cohere-v2`。**自检**：`api_probe --selftest` **九组 → 十二组**（V-13 **23/0** · V-14 **13/0**（含**对随程序发布的表做 `R9` 全量核对**）· V-15 **11/0**（回环端到端：表驱动的头 / 路径 / 正文**服务器侧回读** + 401 原因 + 1 s 读超时 + 取消））；`--exec-selftest` **544 → 546**；`provider_spec_selftest` **50 → 52**。**实测（2026-10-11 本机）**：构建 **0 error / 0 warning** · `--selftest` **十二组全 PASS · exit 0** · `--graph-selftest` **110 / 0** · `--provider-dump`「已实现协议：openai、anthropic、gemini、deepseek-web、dom」· `check_all.ps1` **15 / 15** · 断链 **1184 / 0**。**⛔ 真机 / 有 Key**：`anthropic` / `gemini` 真实生成；流式仍归 `PB-03` 暂停项。同批：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]`（批 6）· §0.4 基线四行 · §1 第 7~13 行 · §3.1「✅ 已落地」· [../loop_dev.md](../loop_dev.md) §10.1（陷阱 12 / 13）· [../AI_Status.md](../AI_Status.md) §一 / §四 · [../../source/README.md](../../source/README.md) §4。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
 | 2026-10-11 | **v8** | **待拍板项清零（`PQ-09` / `PQ-12` · 只改文档 · ⛔ 零代码改动）**：`D-26`（`PQ-09`）✅ **= ②**：`login_url` 缺失 = **明确报错（不回落内置默认站点）**，`window_title` / `probe_paths` / `token_expr` 可回落 + 警告 —— **复核结论 = 与现行实现一致**（`source/ai/src/provider_spec.cpp:346 web_site_error()` 已报「**不会**回落到内置默认站点」；`web_site_field_warnings()` 对其余字段给警告；`source/ai/src/dom_web_client.cpp:944` 侧同判）⇒ **拍板 + 勾账 · 无代码项**；`D-32`（`PQ-12`）✅ **= ① 只做国内站点（6 站）**：名单 = `Kimi` / `Qwen` / `豆包` / `元宝` / `文心` / `星火`（看板原文「国内 7 站」= `T-L26` 去重前口径 ⇒ **本批订正为 6 站**），境外 3 站（`ChatGPT` / `Claude` / `Gemini`）**不在本批**；`M8-Q4`（`PQ-06`）✅ **= 沿用 `v0.5.4`**（见 [M8.md](M8.md) §7）。同批：[../roadmap.md](../roadmap.md)（`RM-D6` · §六注 · §十改判 · `RQ-1`/`RQ-4`/`RQ-5` · 头部 2 行）· [M8.md](M8.md) §7 · [../ai_writer_nodes.md](../ai_writer_nodes.md)（§4.4 标题 · P7-b 行）· [M_node_expansion.md](M_node_expansion.md)（v2：`NE-D1` + `NE-Q2` 已答）· [../DocMAP.md](../DocMAP.md) §5.3 · [../DevPlan.todo](../DevPlan.todo)（六项置 done + 分组计数 + 待定组清零）· [../CHANGELOG.md](../CHANGELOG.md)。**验证**：文档断链 **0**（见 §0.4）；**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
 
 

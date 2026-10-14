@@ -1,5 +1,6 @@
 #include "workflow_io.h"
 
+#include "migration.h"     // M_patchAB §4（PC-04）：版本迁移（未来版本明确拒绝）
 #include "node_registry.h"
 #include "log.h"
 
@@ -101,23 +102,30 @@ bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* erro
         return fail("缺少 nodes 数组");
     }
 
-    if (json.contains("version") && json["version"].is_string()) {
-        const std::string version = json["version"].get<std::string>();
-        if (!version.empty() && version.rfind("1.", 0) != 0) {
-            log::warn("[工作流] 文件版本 " + version + " 与当前 " + kWorkflowVersion +
-                      " 不同，尝试按 1.x 规则读取");
-        }
+    // ---- M_patchAB §4（PC-04 / DBG-M6-02）：**版本迁移** ----
+    //  * 旧版本 ⇒ 按迁移表处理（生产表当前为空 ⇒ 记「无需迁移」说明）
+    //  * **未来版本 ⇒ 明确拒绝**（旧实现只 warn 后硬读，可能把新格式读坏）
+    nlohmann::json document = json; // 迁移就地改的是**副本**，不动调用方的 JSON
+    const WorkflowMigrationOutcome outcome = migrate_workflow(&document);
+    for (const std::string& note : outcome.notes) {
+        log::info("[工作流迁移] " + note);
+    }
+    if (!outcome.ok) {
+        return fail(outcome.error);
+    }
+    if (outcome.migrated) {
+        log::info("[工作流迁移] 已从 " + outcome.from + " 迁移到 " + outcome.to + "（内存中）");
     }
 
     registerAllNodes();
     const NodeRegistry& registry = NodeRegistry::instance();
 
     Graph parsed;
-    parsed.name        = json.value("name", std::string("未命名工作流"));
-    parsed.description = json.value("description", std::string());
+    parsed.name        = document.value("name", std::string("未命名工作流"));
+    parsed.description = document.value("description", std::string());
 
     // ---- 节点：端口与参数定义一律以注册表为准，参数值取自文件 ----
-    for (const auto& node_json : json["nodes"]) {
+    for (const auto& node_json : document["nodes"]) {
         if (!node_json.is_object()) {
             continue;
         }
@@ -169,8 +177,8 @@ bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* erro
     }
 
     // ---- 连线：统一走 addEdge（类型/端口/重复/自连校验），非法则跳过并告警 ----
-    const auto edges = json.find("edges");
-    if (edges != json.end() && edges->is_array()) {
+    const auto edges = document.find("edges");
+    if (edges != document.end() && edges->is_array()) {
         for (const auto& edge_json : *edges) {
             if (!edge_json.is_object()) {
                 continue;
@@ -206,8 +214,8 @@ bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* erro
     }
 
     // ---- 视口 ----
-    const auto viewport = json.find("viewport");
-    if (viewport != json.end() && viewport->is_object()) {
+    const auto viewport = document.find("viewport");
+    if (viewport != document.end() && viewport->is_object()) {
         parsed.viewport_x    = static_cast<float>(sane_position(viewport->value("x", 0.0)));
         parsed.viewport_y    = static_cast<float>(sane_position(viewport->value("y", 0.0)));
         parsed.viewport_zoom = static_cast<float>(sane_zoom(viewport->value("zoom", 1.0)));

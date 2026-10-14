@@ -26,4 +26,17 @@ std::vector<RecentEntry> load_recent_files();
 void                     push_recent_file(const std::string& path, const std::string& name);
 void                     clear_recent_files();
 
+// ---- M_patchAB §4（`PC-03` / `FEA-M2-02`）：最近列表**治理** ----
+//  * 打开前**校验存在性**：失效项在菜单里灰显（不可点）
+//  * `count_missing_recent()` / `prune_missing_recent()`：一键「清理失效条目」
+//  * 校验是**只读**查询（不写盘）；清理才写盘（写失败如实记日志、返回 0 条）
+struct RecentStatus {
+    RecentEntry entry;
+    bool        exists = false; // 文件当前是否存在（目录不算）
+};
+
+std::vector<RecentStatus> recent_with_status();
+std::size_t               count_missing_recent();
+std::size_t               prune_missing_recent();
+
 } // namespace aiwrite::engine
