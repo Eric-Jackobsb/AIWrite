@@ -638,8 +638,8 @@ void draw_node_body(const Node& node)
 
     // 宽度（**唯一**的宽度来源）：这一行占位把内容区宽度钉死为 g_content_width（全画布共用值），
     // 配合节点内所有文本的收口（elide / wrap）→ 画布上**所有节点等宽**。
+    // 2026-10-15 确认：标题下方的 Separator 被用户视为「每个节点上面自带的长灰线」→ 移除（网格保留）。
     ImGui::Dummy(ImVec2(g_content_width, 1.0f));
-    ImGui::Separator();
 
     // ---- 输入端口（左列）----
     int index = 0;
@@ -819,6 +819,49 @@ void handle_create_link()
         }
     }
 
+    // ---- M_node_expansion L3-09：连线交互提示（鼠标旁显示端口类型与兼容性）----
+    //  * QueryNewLink 已在上面调用过（end_pin 可能为 0 = 还没拖到目标端口）
+    //  * 「类型不兼容变红」由 RejectNewItem 已提供（既有），这里补充文字提示
+    if (creating && start_pin.Get() != 0) {
+        const PinRef from = resolve_pin(start_pin, state.graph);
+        const PinRef to   = resolve_pin(end_pin, state.graph);
+        const Node*  fnode = from.valid ? state.graph.findNode(from.node_id) : nullptr;
+        const Node*  tnode = to.valid ? state.graph.findNode(to.node_id) : nullptr;
+        const Port*  fport = (fnode != nullptr) ? fnode->findPort(from.port_id, from.direction) : nullptr;
+        const Port*  tport = (tnode != nullptr) ? tnode->findPort(to.port_id, to.direction) : nullptr;
+
+        std::string tip;
+        ImU32       color = IM_COL32(215, 215, 225, 255);
+        if (fport != nullptr && tport != nullptr) {
+            std::string reason;
+            bool        would_replace = false;
+            const bool  ok = state.graph.canConnect(from.node_id, from.port_id, to.node_id,
+                                                    to.port_id, &reason, &would_replace);
+            tip = std::string(engine::portTypeName(fport->type)) + " → " +
+                  engine::portTypeName(tport->type);
+            if (ok) {
+                tip += "  ✓ 可连接";
+                color = IM_COL32(130, 220, 140, 255);
+            }
+            else {
+                tip += "  ✗ " + (reason.empty() ? std::string("类型不兼容") : reason);
+                color = IM_COL32(235, 110, 110, 255);
+            }
+        }
+        else if (fport != nullptr) {
+            tip = std::string("从 ") + engine::portTypeName(fport->type) + " 端口连线（拖向目标端口）";
+        }
+        if (!tip.empty()) {
+            ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+            const ImVec2 mouse = ImGui::GetMousePos();
+            const ImVec2 size  = ImGui::CalcTextSize(tip.c_str());
+            draw_list->AddRectFilled(mouse + ImVec2(12.0f, 10.0f),
+                                     mouse + ImVec2(14.0f + size.x, 12.0f + size.y),
+                                     IM_COL32(16, 18, 24, 232), 3.0f);
+            draw_list->AddText(mouse + ImVec2(14.0f, 12.0f), color, tip.c_str());
+        }
+    }
+
     ed::EndCreate();
 }
 
@@ -949,7 +992,7 @@ void show_add_node_menu(EditorState& state, const ImVec2& spawn)
 
     const NodeCategory categories[] = {NodeCategory::Input,  NodeCategory::Process,
                                        NodeCategory::Config, NodeCategory::Inference,
-                                       NodeCategory::Output};
+                                       NodeCategory::Output, NodeCategory::Auxiliary};
     for (NodeCategory category : categories) {
         if (!ImGui::BeginMenu(engine::categoryName(category))) {
             continue;
@@ -1218,6 +1261,315 @@ void log_canvas_diagnostic(const EditorState& state, float zoom, double width_ms
 
 } // namespace
 
+// ============================================================================
+//  M_node_expansion L3（v5 定稿 §4.4.3）：小地图 ④ / 对齐辅助系统 ⑤+⑥ / 辅助开关
+//  会话级开关（不进 config：避免动 settings_validation 断言面）
+// ============================================================================
+bool  g_show_minimap  = true;
+bool  g_snap_enabled  = true;
+float g_snap_distance = 8.0f; // 吸附距离（**屏幕像素**，换算画布坐标用当前缩放）
+
+// ----------------------------------------------------------------------------
+//  小地图 = 纯导航工具（M_node_expansion L3 · 2026-10-15 修正）：
+//  · 只做「查看缩略 + 点击/拖动 → 视口中心平移到对应画布位置」（快速挪动 / 查询）；
+//  · 严禁在小地图区域触发任何画布编辑（选中 / 拖节点 / 框选 / 右键 / 平移）。
+//  实现：ed::Begin 之前把该区域的鼠标事件从 io 中摘除（ed 完全感知不到），
+//       小地图交互由 draw_minimap 用「屏蔽前的快照」自行驱动。
+//  废弃：旧版用 ed::CenterNodeOnScreen —— 它在 NodeBuilder::Begin 里会**平移节点
+//       世界坐标**（m_Bounds.Translate + MakeDirty(User)），等于在小地图里改布局。
+// ----------------------------------------------------------------------------
+bool    g_minimap_blocking = false;                 // 本帧鼠标位于小地图区域（已对 ed 屏蔽输入）
+bool    g_minimap_clicked  = false;                 // 屏蔽前快照：左键本帧点击
+bool    g_minimap_down     = false;                 // 屏蔽前快照：左键按住中
+ImVec2  g_minimap_mouse    = ImVec2(0.0f, 0.0f);    // 屏蔽前快照：鼠标屏幕坐标
+
+// 小地图矩形（与 draw_minimap 共用同一套几何，单一来源）
+void minimap_rect(ImVec2& out_min, ImVec2& out_max)
+{
+    const ImVec2 window_pos  = ImGui::GetWindowPos();
+    const ImVec2 window_size = ImGui::GetWindowSize();
+    const float  margin      = 10.0f;
+    out_min = ImVec2(window_pos.x + window_size.x - 190.0f - margin,
+                     window_pos.y + window_size.y - 130.0f - margin);
+    out_max = ImVec2(out_min.x + 190.0f, out_min.y + 130.0f);
+}
+
+bool minimap_hit(const ImVec2& mouse, const ImVec2& min, const ImVec2& max)
+{
+    return mouse.x >= min.x && mouse.x <= max.x && mouse.y >= min.y && mouse.y <= max.y;
+}
+
+// 在 ed::Begin 之前调用：小地图区域的鼠标事件只属于小地图，画布不得参与。
+void block_minimap_input()
+{
+    g_minimap_blocking = false;
+    g_minimap_clicked  = false;
+    g_minimap_down     = false;
+    if (!g_show_minimap) {
+        return;
+    }
+
+    ImVec2 map_min, map_max;
+    minimap_rect(map_min, map_max);
+
+    ImGuiIO&    io    = ImGui::GetIO();
+    const ImVec2 mouse = io.MousePos;
+    if (!minimap_hit(mouse, map_min, map_max)) {
+        return;
+    }
+
+    // 快照原始输入（draw_minimap 用；io 随后被清空，画布拿不到这些事件）
+    g_minimap_blocking = true;
+    g_minimap_mouse    = mouse;
+    g_minimap_clicked  = io.MouseClicked[0];
+    g_minimap_down     = io.MouseDown[0];
+
+    for (int i = 0; i < 5; ++i) {
+        io.MouseClicked[i]  = false;
+        io.MouseDown[i]     = false;
+        io.MouseReleased[i] = false;
+    }
+    io.MouseWheel  = 0.0f;
+    io.MouseWheelH = 0.0f;
+    io.MouseDelta  = ImVec2(0.0f, 0.0f);
+}
+
+// 上一帧节点位置（对齐辅助判断「谁在拖动」：imgui-node-editor 无公开拖动查询 API）
+std::unordered_map<std::string, ImVec2> g_prev_positions;
+
+// 拖拽中的节点 id：左键按住 + 位置相对上一帧移动 → 判定为拖动中
+std::string find_dragged_node(const Graph& graph)
+{
+    if (g_alt_pan_active || !ImGui::IsMouseDown(kNodeEditorDragButton)) {
+        g_prev_positions.clear();
+        return {};
+    }
+    for (const Node& node : graph.nodes) {
+        const ImVec2 current = ed::GetNodePosition(node_handle(node.id));
+        const auto   it      = g_prev_positions.find(node.id);
+        if (it == g_prev_positions.end()) {
+            g_prev_positions[node.id] = current;
+            continue;
+        }
+        if (std::fabs(current.x - it->second.x) > 0.5f ||
+            std::fabs(current.y - it->second.y) > 0.5f) {
+            return node.id;
+        }
+    }
+    return {};
+}
+
+// 对齐辅助：拖动中把节点吸附到其它节点的左/右/中心X、上/下/中心Y
+//  * 对齐线以屏幕坐标输出（紫色实线，仅拖动中显示）
+struct SnapResult {
+    bool   applied    = false;
+    bool   line_v     = false; // 垂直对齐线
+    bool   line_h     = false; // 水平对齐线
+    ImVec2 v_a = ImVec2(0.0f, 0.0f);
+    ImVec2 v_b = ImVec2(0.0f, 0.0f);
+    ImVec2 h_a = ImVec2(0.0f, 0.0f);
+    ImVec2 h_b = ImVec2(0.0f, 0.0f);
+};
+SnapResult apply_alignment_snap(const Graph& graph)
+{
+    SnapResult result;
+    if (!g_snap_enabled || g_alt_pan_active) {
+        g_prev_positions.clear();
+        return result;
+    }
+    const std::string dragged = find_dragged_node(graph);
+    if (dragged.empty()) {
+        return result;
+    }
+    if (graph.findNode(dragged) == nullptr) {
+        return result;
+    }
+
+    const float zoom        = ed::GetCurrentZoom();
+    const float snap_canvas = (zoom > 1e-6f) ? g_snap_distance / zoom : g_snap_distance;
+
+    const ImVec2 dpos  = ed::GetNodePosition(node_handle(dragged));
+    const ImVec2 dsize = ed::GetNodeSize(node_handle(dragged));
+    const float  dw    = dsize.x > 1.0f ? dsize.x : 80.0f;
+    const float  dh    = dsize.y > 1.0f ? dsize.y : 40.0f;
+    const float  dleft  = dpos.x;
+    const float  dright = dpos.x + dw;
+    const float  dcx    = dpos.x + dw * 0.5f;
+    const float  dtop    = dpos.y;
+    const float  dbottom = dpos.y + dh;
+    const float  dcy     = dpos.y + dh * 0.5f;
+
+    float       dx = 0.0f;
+    float       dy = 0.0f;
+    bool        have_x = false;
+    bool        have_y = false;
+    ImVec2      v_a, v_b, h_a, h_b;
+
+    for (const Node& node : graph.nodes) {
+        if (node.id == dragged) {
+            continue;
+        }
+        const ImVec2 pos  = ed::GetNodePosition(node_handle(node.id));
+        const ImVec2 size = ed::GetNodeSize(node_handle(node.id));
+        const float  w    = size.x > 1.0f ? size.x : 80.0f;
+        const float  h    = size.y > 1.0f ? size.y : 40.0f;
+        const float  left   = pos.x;
+        const float  right  = pos.x + w;
+        const float  cx     = pos.x + w * 0.5f;
+        const float  top    = pos.y;
+        const float  bottom = pos.y + h;
+        const float  cy     = pos.y + h * 0.5f;
+
+        // X 方向：取 |delta| 最小的那对「拖拽边 ↔ 目标边」
+        const float dx_left  = left - dleft;
+        const float dx_right = right - dright;
+        const float dx_cx    = cx - dcx;
+        float       dx_best  = dx_left;
+        if (std::fabs(dx_right) < std::fabs(dx_best)) {
+            dx_best = dx_right;
+        }
+        if (std::fabs(dx_cx) < std::fabs(dx_best)) {
+            dx_best = dx_cx;
+        }
+        if (std::fabs(dx_best) <= snap_canvas && (!have_x || std::fabs(dx_best) < std::fabs(dx))) {
+            dx     = dx_best;
+            have_x = true;
+            const float align_x = dleft + dx_best;
+            v_a = ed::CanvasToScreen(ImVec2(align_x, std::min(dtop, top)));
+            v_b = ed::CanvasToScreen(ImVec2(align_x, std::max(dbottom, bottom)));
+        }
+
+        // Y 方向
+        const float dy_top    = top - dtop;
+        const float dy_bottom = bottom - dbottom;
+        const float dy_cy     = cy - dcy;
+        float       dy_best   = dy_top;
+        if (std::fabs(dy_bottom) < std::fabs(dy_best)) {
+            dy_best = dy_bottom;
+        }
+        if (std::fabs(dy_cy) < std::fabs(dy_best)) {
+            dy_best = dy_cy;
+        }
+        if (std::fabs(dy_best) <= snap_canvas && (!have_y || std::fabs(dy_best) < std::fabs(dy))) {
+            dy     = dy_best;
+            have_y = true;
+            const float align_y = dtop + dy_best;
+            h_a = ed::CanvasToScreen(ImVec2(std::min(dleft, left), align_y));
+            h_b = ed::CanvasToScreen(ImVec2(std::max(dright, right), align_y));
+        }
+    }
+
+    if (have_x || have_y) {
+        ImVec2 new_pos = dpos;
+        if (have_x) {
+            new_pos.x = dpos.x + dx;
+            result.line_v = true;
+            result.v_a = v_a;
+            result.v_b = v_b;
+        }
+        if (have_y) {
+            new_pos.y = dpos.y + dy;
+            result.line_h = true;
+            result.h_a = h_a;
+            result.h_b = h_b;
+        }
+        ed::SetNodePosition(node_handle(dragged), new_pos);
+        result.applied = true;
+    }
+
+    for (const Node& node : graph.nodes) {
+        g_prev_positions[node.id] = ed::GetNodePosition(node_handle(node.id));
+    }
+    return result;
+}
+// 小地图（左下角缩略图；点击 / 按住拖动 → 视口中心平移到对应画布位置；右上角 ✕ 关闭）
+// 纯导航：绝不选中 / 移动 / 框选节点 —— 输入已在 block_minimap_input 中与画布彻底隔离。
+void draw_minimap(const Graph& graph)
+{
+    if (!g_show_minimap) {
+        return;
+    }
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+    ImVec2 map_min, map_max;
+    minimap_rect(map_min, map_max);
+
+    draw_list->AddRectFilled(map_min, map_max, IM_COL32(18, 20, 26, 215), 4.0f);
+    draw_list->AddRect(map_min, map_max, IM_COL32(130, 130, 145, 210), 4.0f, 0, 1.0f);
+    draw_list->AddText(map_min + ImVec2(6.0f, 3.0f), IM_COL32(200, 200, 210, 235), "小地图");
+
+    const ImVec2 close_pos(map_max.x - 18.0f, map_min.y + 2.0f);
+    if (g_minimap_blocking && g_minimap_clicked && g_minimap_mouse.x >= close_pos.x &&
+        g_minimap_mouse.x <= close_pos.x + 14.0f && g_minimap_mouse.y >= close_pos.y &&
+        g_minimap_mouse.y <= close_pos.y + 14.0f) {
+        g_show_minimap = false;
+        return;
+    }
+    draw_list->AddText(close_pos, IM_COL32(225, 90, 90, 235), "✕");
+
+    const ImVec2 area_min(map_min.x + 6.0f, map_min.y + 20.0f);
+    const ImVec2 area_max(map_max.x - 6.0f, map_max.y - 6.0f);
+    if (graph.nodes.empty()) {
+        draw_list->AddText(area_min, IM_COL32(120, 120, 135, 200), "空画布");
+        return;
+    }
+
+    ImVec2 bbox_min(FLT_MAX, FLT_MAX);
+    ImVec2 bbox_max(-FLT_MAX, -FLT_MAX);
+    for (const Node& node : graph.nodes) {
+        const ImVec2 sz = ed::GetNodeSize(node_handle(node.id));
+        const float  w  = (sz.x > 1.0f) ? sz.x : 80.0f;
+        const float  h  = (sz.y > 1.0f) ? sz.y : 40.0f;
+        bbox_min.x = std::min(bbox_min.x, node.x);
+        bbox_min.y = std::min(bbox_min.y, node.y);
+        bbox_max.x = std::max(bbox_max.x, node.x + w);
+        bbox_max.y = std::max(bbox_max.y, node.y + h);
+    }
+    const ImVec2 bbox_size(std::max(bbox_max.x - bbox_min.x, 1.0f),
+                           std::max(bbox_max.y - bbox_min.y, 1.0f));
+    const ImVec2 area_size(area_max.x - area_min.x, area_max.y - area_min.y);
+    const float  scale = std::min(area_size.x / bbox_size.x, area_size.y / bbox_size.y);
+
+    for (const Node& node : graph.nodes) {
+        const ImVec2 sz = ed::GetNodeSize(node_handle(node.id));
+        const float  w  = std::max((sz.x > 1.0f ? sz.x : 80.0f) * scale, 3.0f);
+        const float  h  = std::max((sz.y > 1.0f ? sz.y : 40.0f) * scale, 3.0f);
+        const ImVec2 p(area_min.x + (node.x - bbox_min.x) * scale,
+                       area_min.y + (node.y - bbox_min.y) * scale);
+        draw_list->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + w, p.y + h),
+                                 state_color(node.state), 1.0f);
+        draw_list->AddRect(ImVec2(p.x, p.y), ImVec2(p.x + w, p.y + h),
+                           IM_COL32(0, 0, 0, 190), 1.0f);
+    }
+
+    // 点击 / 按住拖动 → 视口中心平移到鼠标对应的世界坐标（保持当前缩放，快速挪动）。
+    // 只用屏蔽前的快照；ed::NavigateToCenter 只动视口、不移动任何节点（旧版 CenterNodeOnScreen 已废弃）。
+    if (g_minimap_blocking && (g_minimap_clicked || g_minimap_down) &&
+        minimap_hit(g_minimap_mouse, area_min, area_max)) {
+        const float cx = (g_minimap_mouse.x - area_min.x) / scale + bbox_min.x;
+        const float cy = (g_minimap_mouse.y - area_min.y) / scale + bbox_min.y;
+        ed::NavigateToCenter(ImVec2(cx, cy), 0.0f);
+    }
+}
+
+// 画布辅助开关弹窗（小地图 / 对齐吸附 / 吸附距离）
+void draw_canvas_assist_popup()
+{
+    if (ImGui::Button("画布辅助")) {
+        ImGui::OpenPopup("##canvas_assist");
+    }
+    if (ImGui::BeginPopup("##canvas_assist")) {
+        ImGui::TextDisabled("画布辅助（会话级设置）");
+        ImGui::Separator();
+        ImGui::Checkbox("小地图（左下角）", &g_show_minimap);
+        ImGui::Checkbox("对齐吸附（拖动时）", &g_snap_enabled);
+        ImGui::SliderFloat("吸附距离", &g_snap_distance, 2.0f, 30.0f, "%.0f px");
+        ImGui::EndPopup();
+    }
+}
+
+
+
 void draw_node_canvas(const char* title, CanvasOptions& options)
 {
     ensure_context();
@@ -1246,9 +1598,14 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         ImGui::TextDisabled(
             "Alt + 左键拖拽：平移画布（无中键鼠标 / 笔记本也可用）｜ 滚轮：以鼠标为中心缩放 0.1x~4.0x");
     }
+    ImGui::SameLine();
+    draw_canvas_assist_popup(); // M_node_expansion L3：小地图 / 对齐吸附开关
     ImGui::Separator();
 
     ed::SetCurrentEditor(g_context);
+    // 小地图 = 纯导航：该区域鼠标事件只属于小地图（查看 / 跳转），画布不得选中或编辑节点。
+    // 必须放在 ed::Begin 之前（ed 在 Begin 内处理鼠标）。
+    block_minimap_input();
     // CS-01：诊断用的缩放值（必须在 ed::Begin 内取；ed::End() 之后打印整行）
     float diag_zoom = 1.0f;
     ed::Begin("##NodeCanvas", ImVec2(0.0f, 0.0f));
@@ -1403,6 +1760,22 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
     }
 
     ed::End();
+
+    // ---- M_node_expansion L3（§4.4.3）：对齐辅助 ⑤+⑥ + 小地图 ④（ed::End 之后、画布上下文失效前）----
+    {
+        const SnapResult snap = apply_alignment_snap(state.graph);
+        if (snap.applied) {
+            // 紫色实线（仅拖动中显示；state_color 之外的专属色）
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            if (snap.line_v) {
+                dl->AddLine(snap.v_a, snap.v_b, IM_COL32(0x9C, 0x6C, 0xFF, 230), 1.6f);
+            }
+            if (snap.line_h) {
+                dl->AddLine(snap.h_a, snap.h_b, IM_COL32(0x9C, 0x6C, 0xFF, 230), 1.6f);
+            }
+        }
+        draw_minimap(state.graph);
+    }
 
     // CS-01：画布诊断（每 2 秒一行；把「帧预算归因 + 纹理请求/解码」写进 app.log）
     // 参数顺序必须与签名一致：(宽度重算 t0→t1, 节点循环 t1→t2, 连线+自检 t2→t3)

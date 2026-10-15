@@ -57,6 +57,15 @@ struct OfficialChatRequest {
     int         max_tokens  = 2048;
     double      top_p       = 1.0;
     int         seed        = 0; // M_rerun：>0 时随请求发送（0 = 不指定）
+    // M_8nodes_extension L1-b：公共参数面采样项随请求发送（非零 / 非空才写进 body，
+    //  保证既有请求体断言与线上行为不因新增字段而变）
+    int         top_k               = 0;   // 0 = 不指定（后端默认）
+    std::vector<std::string> stop    = {}; // 空 = 不指定（后端默认）
+    double      frequency_penalty   = 0.0; // 0.0 = 不指定（后端默认）
+    double      presence_penalty    = 0.0; // 0.0 = 不指定（后端默认）
+    // M_8nodes_extension L1-e（§4.6）：JSON 输出 + 多候选（非默认才写进 body，既有断言不变）
+    std::string response_format = {}; // "" / "json_object"（OpenAI 兼容 response_format）
+    int         n               = 1;   // 候选数（>1 时请求体带 n；text 端口取第一个）
     // M_patchB L1：请求参数（端点 / 认证 / env / 超时）；默认值 = 改造前行为
     ProviderOptions options;
     // ---- M_patchAB §2.1（PB-02 真取消）：本次调用的取消令牌（空 = 不可取消）----

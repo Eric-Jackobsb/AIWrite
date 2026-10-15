@@ -54,6 +54,8 @@ const char* paramTypeName(ParamType type)
     case ParamType::File:      return "file";
     case ParamType::Directory: return "directory";
     case ParamType::Color:     return "color";
+    // M_8nodes_extension L1-a：StringList（JSON 字符串数组，如 `stop` 序列）
+    case ParamType::StringList: return "stringlist";
     }
     return "string";
 }
@@ -609,6 +611,18 @@ bool Graph::validateParam(const Param& param, std::string* error)
         if (!std::filesystem::exists(dir_path, ec) ||
             !std::filesystem::is_directory(dir_path, ec)) {
             return fail("目录不存在: " + param.text());
+        }
+        break;
+    }
+    // M_8nodes_extension L1-a：StringList —— 值必须是 JSON 字符串数组（空数组 = 空值已在上方放行）
+    case ParamType::StringList: {
+        if (!param.value.is_array()) {
+            return fail("应为字符串列表");
+        }
+        for (const auto& item : param.value) {
+            if (!item.is_string()) {
+                return fail("列表项应为字符串");
+            }
         }
         break;
     }

@@ -23,7 +23,7 @@ struct Config {
         bool show_console        = true;
         bool show_output_window  = false;
         int  console_height      = 120;
-        bool show_grid           = true;
+        bool show_grid           = true; // 画布网格显隐（默认开；2026-10-15 确认保留，要删的是节点上的灰色分隔线）
         int  grid_size           = 20;
         bool running_animation   = true;
 

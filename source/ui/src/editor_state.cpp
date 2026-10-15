@@ -551,7 +551,7 @@ void EditorState::finish_run_session()
     // PA-06：刷新错误条
     refresh_last_error();
 
-    // M_textio P5：TextOutput 的「运行后自动导出」
+    // M_textio P5 + M_8nodes_extension L1-b（§4.8）：TextOutput 的「运行后自动导出」
     for (const engine::Node& node : graph.nodes) {
         if (node.type != "TextOutput") {
             continue;
@@ -560,9 +560,25 @@ void EditorState::finish_run_session()
         if (auto_param == nullptr || !auto_param->flag()) {
             continue;
         }
-        const engine::RunNodeView* view = run_snapshot.find(node.id);
-        if (view == nullptr || view->text.empty()) {
-            continue;
+        // L1-b：批量导出 —— 导出当前工作流**所有有输出的节点**到同一目录
+        //  * 文件名 = file_name 模板 + "-" + 节点 id（文档 §4.8「file_name 模板 + 节点 id」）
+        const bool batch = [&node]() {
+            const engine::Param* param = node.findParam("batch_export");
+            return param != nullptr && param->flag();
+        }();
+        std::vector<const engine::RunNodeView*> targets;
+        if (batch) {
+            for (const auto& view : run_snapshot.nodes) {
+                if (view.state == engine::NodeState::Done && !view.text.empty()) {
+                    targets.push_back(&view);
+                }
+            }
+        }
+        else {
+            const engine::RunNodeView* view = run_snapshot.find(node.id);
+            if (view != nullptr && !view->text.empty()) {
+                targets.push_back(view);
+            }
         }
         std::string label = "输出";
         if (const engine::Param* label_param = node.findParam("label")) {
@@ -582,25 +598,37 @@ void EditorState::finish_run_session()
         if (const engine::Param* dir_param = node.findParam("export_dir")) {
             dir = dir_param->text();
         }
-        utils::ExportRequest request;
-        request.text             = view->text;
-        request.label            = label;
-        request.include_meta     = true;
-        request.overwrite        = false; // 自动导出不覆盖同名（自动 -1/-2）
-        request.ext              = "md";
-        request.dir              = dir;
-        request.meta.workflow    = workflow_display_name();
-        request.meta.node_id     = view->node_id;
-        request.meta.state       = engine::nodeStateName(view->state);
-        request.meta.duration_ms = view->duration_ms;
-        request.meta.stamp       = utils::document_time_text();
-        const utils::ExportResult result = utils::export_text_document(request);
-        if (result.ok) {
-            log::info("[自动导出] " + node.id + " → " + result.path);
-            set_status("已自动导出文档：" + result.path);
+        std::string header_template;
+        if (const engine::Param* tpl_param = node.findParam("export_template")) {
+            header_template = tpl_param->text();
         }
-        else {
-            log::warn("[自动导出] 失败：" + result.error);
+
+        for (const engine::RunNodeView* view : targets) {
+            // 批量导出：非本节点的目标加节点 id 后缀（避免互相覆盖）
+            const std::string this_stem =
+                (batch && view->node_id != node.id) ? (stem + "-" + view->node_id) : stem;
+            utils::ExportRequest request;
+            request.text             = view->text;
+            request.label            = label;
+            request.include_meta     = true;
+            request.overwrite        = false; // 自动导出不覆盖同名（自动 -1/-2）
+            request.ext              = "md";
+            request.dir              = dir;
+            request.header_template  = header_template;
+            request.file_stem        = this_stem;
+            request.meta.workflow    = workflow_display_name();
+            request.meta.node_id     = view->node_id;
+            request.meta.state       = engine::nodeStateName(view->state);
+            request.meta.duration_ms = view->duration_ms;
+            request.meta.stamp       = utils::document_time_text();
+            const utils::ExportResult result = utils::export_text_document(request);
+            if (result.ok) {
+                log::info("[自动导出] " + view->node_id + " → " + result.path);
+                set_status("已自动导出文档：" + result.path);
+            }
+            else {
+                log::warn("[自动导出] 失败：" + result.error);
+            }
         }
     }
 }

@@ -645,15 +645,17 @@ bool Executor::executeNode(Graph& graph, const std::string& node_id)
         nlohmann::json output = (*executor)(inputs, params, ctx_);
 
         // 约定：单输出节点 → 返回值即该端口的值；多输出节点 → {"端口id": 值}
+        //  * M_node_expansion L2（TextStats / TextExtract 为**双输出**）：修复分支顺序 ——
+        //    原先「非 null ⇒ 存 __result」会截胡多输出节点（现有多输出节点首次出现才暴露）
         if (node->outputs.size() == 1) {
             outputs_.set(node_id, node->outputs[0].id, std::move(output));
         }
-        else if (!output.is_null()) {
+        else if (node->outputs.empty()) {
             // M_textio P5：汇点节点（TextOutput，无输出端口）也要把返回值
             // 存入运行态值（虚拟端口 __result）—— 否则面板 / 归档 / 预览都读不到正文
             outputs_.set(node_id, "__result", std::move(output));
         }
-        else if (!node->outputs.empty()) {
+        else {
             if (!output.is_object()) {
                 throw NodeError("多输出节点的执行结果必须是 {\"端口id\": 值} 对象");
             }

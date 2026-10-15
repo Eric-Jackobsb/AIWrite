@@ -576,6 +576,17 @@ void ax::NodeEditor::NavigateToSelection(bool zoomIn, float duration)
     s_Editor->NavigateTo(s_Editor->GetSelectionBounds(), zoomIn, duration);
 }
 
+void ax::NodeEditor::NavigateToCenter(const ImVec2& canvasPoint, float duration)
+{
+    if (s_Editor == nullptr)
+        return;
+
+    // ZoomMode::None → 只平移视口（保持当前缩放），把目标点中心对准视口中心。
+    // 与 CenterNodeOnScreen 不同：绝不平移节点世界坐标，纯导航。
+    const ImRect bounds(canvasPoint - ImVec2(1.0f, 1.0f), canvasPoint + ImVec2(1.0f, 1.0f));
+    s_Editor->NavigateTo(bounds, false, duration);
+}
+
 bool ax::NodeEditor::ShowNodeContextMenu(NodeId* nodeId)
 {
     return s_Editor->GetContextMenu().ShowNodeContextMenu(nodeId);

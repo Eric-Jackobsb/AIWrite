@@ -32,6 +32,7 @@
 #include "pydoll_channel.h"   // M7B 批 2：新通道（--pydoll-login / --pydoll-selftest）
 #include "session_store.h"   // M_patchB：--provider-selftest 的网页版登录态检查
 #include "connection_test.h" // M_patchAB（PB2-07 / PB2-30②）：退出前收尾后台诊断线程
+#include "prompt_generator.h" // M_8nodes_extension L1-d（§4.3）：退出前收尾「生成提示词」线程
 #include "session_snapshot.h" // 批 3（FEA-L02）：--web-session-list 的 L2 快照只读元数据
 
 #include <cstdio>
@@ -2340,9 +2341,10 @@ int main(int argc, char** argv)
 
     const int exit_code = aiwrite::ui::run(options);
 
-    // 退出前收尾：后台诊断线程（`PB2-07` / `PB2-30②`）→ 再关网页版窗口 → 最后关日志
-    //  * 顺序理由：诊断可能正在用站点窗口 / 写日志 ⇒ 先等它结束（超时则分离并如实记日志）
+    // 退出前收尾：后台诊断线程（`PB2-07` / `PB2-30②`）→「生成提示词」（L1-d）→ 再关网页版窗口 → 最后关日志
+    //  * 顺序理由：诊断 / 生成可能正在用站点窗口 / 写日志 ⇒ 先等它结束（超时则分离并如实记日志）
     aiwrite::ui::stop_diagnostics();
+    aiwrite::ui::stop_prompt_generation();
 
     // 若用户留着网页版登录窗口就退出了程序：先收尾（关窗口、等线程结束），再关日志
     aiwrite::web::stop_login_window();

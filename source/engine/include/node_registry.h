@@ -16,7 +16,9 @@
 namespace aiwrite::engine {
 
 // 设计 §4.3 节点分类
-enum class NodeCategory { Input, Process, Config, Inference, Output };
+//  * M_node_expansion L2（v5 定稿 §4.3.2）：新增顶层「辅助功能」—— 6 个文本处理节点
+//    落进 Auxiliary；子分类「文本处理（TextProcess）」为**伪两层，只改 UI 渲染**，不进本枚举
+enum class NodeCategory { Input, Process, Config, Inference, Output, Auxiliary };
 
 const char* categoryName(NodeCategory category);        // "输入" / "处理" / ...
 const char* categoryKey(NodeCategory category);         // "input" / "process" / ...（供序列化）

@@ -263,6 +263,7 @@ add_library(aiwrite_core STATIC
     ai/src/dom_web_client.cpp        # L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
     ai/src/upload_supply_probe.cpp  # M8 Phase 2：C++ 供料探针（WebView2 会话供料 + 站点只读 GET）
     ai/src/upload/image_convert.cpp        # M8-14：图片准备（站点白名单 / 限额 → 缩放 + 转码）
+    ai/src/upload/image_preprocess.cpp     # M_8nodes_extension L1-c（§4.2）：图片预处理（用户参数 → 裁剪/缩放）
     ai/src/upload/upload_evidence.cpp      # M8-14：上传双证据（页面 + 网络；I18）纯函数
     ai/src/upload/upload_registry.cpp      # M8-14：站点上传注册表 + 唯一执行入口 upload_images
     ai/src/doubao/site_upload_doubao.cpp # M8-14：豆包站点上传单元（B1/B2 实测）
@@ -278,6 +279,12 @@ add_library(aiwrite_core STATIC
     ai/src/site_template.cpp          # M_patchAB §3.5（PB2-24）：自建网页版站点模板 + 落盘
     nodes/src/local_nodes.cpp
     nodes/src/register_executors.cpp
+    nodes/src/text_split.cpp          # M_node_expansion L2（§4.3.5.1）：文本分块
+    nodes/src/text_extract.cpp        # M_node_expansion L2（§4.3.5.2）：文本提取
+    nodes/src/text_clean.cpp          # M_node_expansion L2（§4.3.5.3）：文本清理
+    nodes/src/text_replace.cpp        # M_node_expansion L2（§4.3.5.4）：文本替换
+    nodes/src/text_stats.cpp          # M_node_expansion L2（§4.3.5.5）：文本统计
+    nodes/src/text_diff.cpp           # M_node_expansion L2（§4.3.5.6）：文本对比
     web/src/channel_frames.cpp   # M7B 批 1：管道协议 v1 帧（纯函数；VB2-29 / VB2-32）
     web/src/pipe_client.cpp      # M7B 批 1 step 2：命名管道客户端（M7B-02；读线程 + id 配对）
     web/src/pydoll_channel.cpp   # M7B 批 2：新通道（Pydoll 守护进程）—— 本批**不接线**（只 --pydoll-login / --pydoll-selftest）
@@ -350,8 +357,12 @@ add_executable(aiwrite WIN32
     ui/src/text_view.cpp
     ui/src/texture_cache.cpp
     ui/src/settings_panel.cpp)  # M6（M6-01）：设置面板（config.toml 可调项）
+
 # M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：面板诊断按钮 + 错误条「重新登录」（PT-07）
-target_sources(aiwrite PRIVATE ui/src/connection_test.cpp)
+# M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」异步后端
+target_sources(aiwrite PRIVATE
+    ui/src/connection_test.cpp
+    ui/src/prompt_generator.cpp)
 target_link_libraries(aiwrite PRIVATE
     aiwrite_core
     imgui_node_editor

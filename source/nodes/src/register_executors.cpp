@@ -17,6 +17,13 @@ void registerAllExecutors()
     registry.registerExecutor("LLMGenerate", &execute_llm_generate);
     registry.registerExecutor("VLMGenerate", &execute_vlm_generate);
     registry.registerExecutor("TextOutput", &execute_text_output);
+    // M_node_expansion L2（v5 定稿 §4.3.5）：6 个文本处理节点
+    registry.registerExecutor("TextSplit", &execute_text_split);
+    registry.registerExecutor("TextExtract", &execute_text_extract);
+    registry.registerExecutor("TextClean", &execute_text_clean);
+    registry.registerExecutor("TextReplace", &execute_text_replace);
+    registry.registerExecutor("TextStats", &execute_text_stats);
+    registry.registerExecutor("TextDiff", &execute_text_diff);
 }
 
 } // namespace aiwrite::nodes

@@ -1,4 +1,10 @@
 {
+  "board_rules": [
+    "看板书写规则（2026-10-14）：",
+    "① 新建计划必须精简语言、写人类易读的格式（少堆术语、少长句）。",
+    "② 复合型任务必须拆分为多个子任务模块（每个模块 = 一条子任务，逐条登记）。",
+    "③ 一条任务只能有一个目的 + 一个行为（一事一干；拆不开的写为前置依赖）。"
+  ],
   "todotree": {
     "tree": [
       {
@@ -173,17 +179,6 @@
                 }
               },
               {
-                "key": 31,
-                "children": [],
-                "todo": {
-                  "id": 31,
-                  "content": "FEA-M4-03 流式回调（PB-03）：**已暂停（用户决议 2026-09-24）** —— 链路已打通（on_delta → RunEvent::Delta → 读模型逐段追加），但 httplib v0.15.3 无 POST 响应流式重载，需先解决数据源（A′ 端点探测或 WinHTTP）；详见 docs/Archive/网页版协议实测记录.md 附录 A ｜ §4.1 PB-03",
-                  "done": false,
-                  "level": "warning",
-                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
-                }
-              },
-              {
                 "key": 35,
                 "children": [],
                 "todo": {
@@ -191,17 +186,6 @@
                   "content": "FEA-M4-07 会话失效引导：识别 40002/401 → 状态栏提示并可一键打开登录窗口 ｜ §4.1 PB-07 ｜ 进度（2026-09-28 核对）：识别层已落地（v15，见 FEA-M_patchB-25）；剩余 = 状态栏 / 错误条「会话已失效，点此重新登录」入口（并入 PB2-25，见 M_patchAB_rest.md §2.2）",
                   "done": false,
                   "level": "default",
-                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
-                }
-              },
-              {
-                "key": 36,
-                "children": [],
-                "todo": {
-                  "id": 36,
-                  "content": "FEA-M4-08 流式呈现（PB-08）：**已暂停（用户决议 2026-09-24）** —— UI 侧已就位（节点摘要 / 输出面板标题 / 状态栏「生成中…（N 字）」+ 按段追加渲染），待数据源接入即可逐字 ｜ §4.1 PB-08",
-                  "done": false,
-                  "level": "warning",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
               },
@@ -241,7 +225,7 @@
             ],
             "todo": {
               "id": 28,
-              "content": "M4（7 项）",
+              "content": "M4（5 项）",
               "done": false,
               "level": "secondary"
             }
@@ -264,39 +248,6 @@
             "todo": {
               "id": 46,
               "content": "M6（1 项）",
-              "done": false,
-              "level": "secondary"
-            }
-          },
-          {
-            "key": 165,
-            "children": [
-              {
-                "key": 198,
-                "children": [],
-                "todo": {
-                  "id": 198,
-                  "content": "FEA-M7-09 DeepSeek 官方 API 视觉能力跟进（外部事实已变）：`deepseek` 条目补 `deepseek-flash`（V4.1-Flash 原生多模态，2026-09-10）+ `capabilities.vision` / `vision_model_default` + 改掉过时 notes「官方 API 无视觉模型」 ｜ §3 M7-10 ｜ 🟡 部分：✅ 2026-09-29 用户实测通过（DeepSeek 官方 API 视觉）；余能力表声明（本次未改 providers.json） ｜ 🟢 移入 M8-21（2026-10-11 合并）",
-                  "done": false,
-                  "level": "default",
-                  "fileLink": "docs/Archive/actionPlan/M7.md"
-                }
-              },
-              {
-                "key": 200,
-                "children": [],
-                "todo": {
-                  "id": 200,
-                  "content": "FEA-M7-10 网页版图片理解解禁与分派（P7b-16 · 2026-10-02 新增）：VLMGenerate + 生效 mode=web 不再一律 throw，改按 P7b-10~12 链路走网页通道；三处落点必须同批（nodes/local_nodes.cpp:639-645 的 throw → 分派 / engine/provider_resolve.h:91 注释口径 / ui/property_panel.cpp:1082 「网页版已接线」提示扩到图片理解）｜ §12.2 P7b-16 ｜ ⬜ 未开工：前置 = P7b-05b 全段（B0/B2/B3）+ 方案 A 通道（M7B-02/04）+ D11 契约（web.attach / vision 未声明显式确认） ｜ 🟢 移入 M8-21（2026-10-11 合并）",
-                  "done": false,
-                  "level": "default",
-                  "fileLink": "docs/Archive/actionPlan/M7.md"
-                }
-              }
-            ],
-            "todo": {
-              "id": 165,
-              "content": "M7（2 项）",
               "done": false,
               "level": "secondary"
             }
@@ -348,7 +299,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（14 项）",
+          "content": "Feature（10 项）",
           "done": false,
           "level": "default"
         }
@@ -701,6 +652,215 @@
         "todo": {
           "id": 74,
           "content": "Docs（4 项）",
+          "done": false,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 341,
+        "children": [
+          {
+            "key": 342,
+            "children": [
+              {
+                "key": 189,
+                "children": [
+                  {
+                    "key": 190,
+                    "children": [],
+                    "todo": {
+                      "id": 190,
+                      "content": "FEA-M7B-01 网页通道唯一化：WebView2 退场 + 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态 ｜ M7B.md §3 / §6 M7B-10~M7B-25",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/M7B.md"
+                    }
+                  },
+                  {
+                    "key": 191,
+                    "children": [],
+                    "todo": {
+                      "id": 191,
+                      "content": "TST-M7B-01 前置技术验证（已过 5/9 · 2026-09-28：M7B-01/03/05/08/09；余 M7B-02/04 命名管道双向 IPC（C++ 工具链冒烟已通）、M7B-06/07 需真站点人工登录；另增 M7B-06b）：Pydoll 起真实浏览器 + CDP 读 Cookie / 命名管道双向 / **CDP 增量三路线实测** / asyncio 共存 / 页面驱动与 DataTransfer 注入 / **DeepSeek 网页版选择器实测** / 会话失效证据来源 / 单 profile 多站点 + 按 origin 注销 / **关闭时序与会话持久化（M7B-09 · MB-D0-8）** ｜ M7B.md §5 M7B-01~09 + M7B-06b（未全过则停留）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/M7B.md"
+                    }
+                  },
+                  {
+                    "key": 192,
+                    "children": [],
+                    "todo": {
+                      "id": 192,
+                      "content": "FEA-M7B-02 撤除 WebView2：删 webview_host / webview2_login / vcpkg+CMake 依赖 / paths::webview2_profile（17 文件 ≈184 处）+ 死码清理（保留 delta_text_of / web_session_failure_hint 复用）｜ M7B.md §6 批 5–6（先建后拆，批 5 才删）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/M7B.md"
+                    }
+                  },
+                  {
+                    "key": 197,
+                    "children": [],
+                    "todo": {
+                      "id": 197,
+                      "content": "FEA-M7B-03 登录态持久化四层（MB-D0-8 · 由 M7B-09 四轮实测支撑）：L1 干净退出（Browser.close → 等进程退出，默认 5s，禁用 stop()）/ L2 DPAPI 加密 Cookie 快照（刷新间隔 < 10s + 登录成功即写 + 优雅退出前再写，启动回灌）/ L3 启动自愈（profile 被占 → 善意 attach connect(ws) 或如实告知，禁止强杀）/ L4 异常退出可见（埋点 + 一键重登/恢复）｜ M7B.md §5 M7B-09 / §9.1 I23 / §13",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/M7B.md"
+                    }
+                  },
+                  {
+                    "key": 193,
+                    "children": [],
+                    "todo": {
+                      "id": 193,
+                      "content": "TST-M7B-02 不变量换代：作废 I2 → 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2）/ I21（不静默降级）/ I22（流式降级显式）；I15 → I15′；I16 升级为全局；断言 VB2-28~VB2-36（含删 VB2-17 前半、VB2-25①③④）｜ M7B.md §8–§9（基线先降后升）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/M7B.md"
+                    }
+                  },
+                  {
+                    "key": 194,
+                    "children": [],
+                    "todo": {
+                      "id": 194,
+                      "content": "DOC-M7B-01 文档同步 11 项 + I2 解冻登记（source/README.md §4.3）+ 12 条站点选择器回填记录（在 Pydoll 通道一次测完，不在 WebView2 重复测）｜ M7B.md §10–§11 / M7B-29 / M7B-40",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/M7B.md"
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 189,
+                  "content": "M7B 📦 已退场 2026-10-05 · 未完成（6 项）",
+                  "done": false,
+                  "level": "secondary"
+                }
+              }
+            ],
+            "todo": {
+              "id": 342,
+              "content": "来自 · M7B（6 项 · 📦 已退场 2026-10-05）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 343,
+            "children": [
+              {
+                "key": 31,
+                "children": [],
+                "todo": {
+                  "id": 31,
+                  "content": "FEA-M4-03 流式回调（PB-03）：**已暂停（用户决议 2026-09-24）** —— 链路已打通（on_delta → RunEvent::Delta → 读模型逐段追加），但 httplib v0.15.3 无 POST 响应流式重载，需先解决数据源（A′ 端点探测或 WinHTTP）；详见 docs/Archive/网页版协议实测记录.md 附录 A ｜ §4.1 PB-03",
+                  "done": false,
+                  "level": "warning",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 36,
+                "children": [],
+                "todo": {
+                  "id": 36,
+                  "content": "FEA-M4-08 流式呈现（PB-08）：**已暂停（用户决议 2026-09-24）** —— UI 侧已就位（节点摘要 / 输出面板标题 / 状态栏「生成中…（N 字）」+ 按段追加渲染），待数据源接入即可逐字 ｜ §4.1 PB-08",
+                  "done": false,
+                  "level": "warning",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 198,
+                "children": [],
+                "todo": {
+                  "id": 198,
+                  "content": "FEA-M7-09 DeepSeek 官方 API 视觉能力跟进（外部事实已变）：`deepseek` 条目补 `deepseek-flash`（V4.1-Flash 原生多模态，2026-09-10）+ `capabilities.vision` / `vision_model_default` + 改掉过时 notes「官方 API 无视觉模型」 ｜ §3 M7-10 ｜ 🟡 部分：✅ 2026-09-29 用户实测通过（DeepSeek 官方 API 视觉）；余能力表声明（本次未改 providers.json） ｜ 🟢 移入 M8-21（2026-10-11 合并）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/Archive/actionPlan/M7.md"
+                }
+              },
+              {
+                "key": 200,
+                "children": [],
+                "todo": {
+                  "id": 200,
+                  "content": "FEA-M7-10 网页版图片理解解禁与分派（P7b-16 · 2026-10-02 新增）：VLMGenerate + 生效 mode=web 不再一律 throw，改按 P7b-10~12 链路走网页通道；三处落点必须同批（nodes/local_nodes.cpp:639-645 的 throw → 分派 / engine/provider_resolve.h:91 注释口径 / ui/property_panel.cpp:1082 「网页版已接线」提示扩到图片理解）｜ §12.2 P7b-16 ｜ ⬜ 未开工：前置 = P7b-05b 全段（B0/B2/B3）+ 方案 A 通道（M7B-02/04）+ D11 契约（web.attach / vision 未声明显式确认） ｜ 🟢 移入 M8-21（2026-10-11 合并）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/Archive/actionPlan/M7.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 343,
+              "content": "来自 · Feature（4 项 · 已暂停 / 已并入 M8-21）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 344,
+            "children": [
+              {
+                "key": 303,
+                "children": [],
+                "todo": {
+                  "id": 303,
+                  "content": "FEA-M8-15~19 原 Phase 3 退场（删 Python 树 / C++ 通道 / CLI / 文档 11 项 / 数字登记）· ⏸ 不排期（✅ 2026-10-11 拍板 · M8-Q7 = ②：Pydoll 栈休眠保留 · 不删（不接线 / 不维护 / 可复启）⇒ 5 项全部关闭 · 不再删）｜ M8.md §0.5 / §7 M8-Q7",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M8.md"
+                }
+              },
+              {
+                "key": 304,
+                "children": [],
+                "todo": {
+                  "id": 304,
+                  "content": "FEA-M8-23 进程内 CDP 可信事件（防识别）· ⏸ 不排期（可选 · 需 1 天预算）｜ M8.md §0.5",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M8.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 344,
+              "content": "来自 · M8 网页通道（2 项 · ⏸ 不排期）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 345,
+            "children": [
+              {
+                "key": 329,
+                "children": [],
+                "todo": {
+                  "id": 329,
+                  "content": "FEA-PW-09 / PW-14 ⏸ 不排期（answer_selector 回填 · 复制按钮取 Markdown 原文）｜ M_patchC §0.6",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 345,
+              "content": "来自 · M_patchC（1 项 · ⏸ 不排期）",
+              "done": false,
+              "level": "secondary"
+            }
+          }
+        ],
+        "todo": {
+          "id": 341,
+          "content": "Deprecate（13 项 · 已放弃 / 已退场 / 不排期 / 已暂停 / 已并入 计划 · 2026-10-14 建 · 按来源分组）",
           "done": false,
           "level": "secondary"
         }
@@ -2451,6 +2611,17 @@
                       "level": "success",
                       "fileLink": "docs/actionPlan/Creation_Roadmap_Guideline.md"
                     }
+                  },
+                  {
+                    "key": 346,
+                    "children": [],
+                    "todo": {
+                      "id": 346,
+                      "content": "节点扩展 L2+L3 实施（代码批 · ✅ 2026-10-15）：L2 六节点（TextSplit/TextExtract/TextClean/TextReplace/TextStats/TextDiff · 新分类 Auxiliary「辅助功能」）+ L3 五 UX（节点搜索 / 小地图 / 自动吸附 / 对齐辅助线 / 连线交互提示）· exec 546→655 · graph 144→151 · check_all 15/15 · 断链 1487/0 ｜ M_node_expansion_part2.md §4.3.5 / §6；同日收尾修正：L3 小地图改为纯导航（查看/跳转 · 区域输入隔离 + ed::NavigateToCenter 视口平移，不编辑节点）",
+                      "done": true,
+                      "level": "success",
+                      "fileLink": "docs/actionPlan/M_node_expansion_part2.md"
+                    }
                   }
                 ],
                 "todo": {
@@ -2851,83 +3022,6 @@
         }
       },
       {
-        "key": 189,
-        "children": [
-          {
-            "key": 190,
-            "children": [],
-            "todo": {
-              "id": 190,
-              "content": "FEA-M7B-01 网页通道唯一化：WebView2 退场 + 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态 ｜ M7B.md §3 / §6 M7B-10~M7B-25",
-              "done": false,
-              "level": "default",
-              "fileLink": "docs/Archive/actionPlan/M7B.md"
-            }
-          },
-          {
-            "key": 191,
-            "children": [],
-            "todo": {
-              "id": 191,
-              "content": "TST-M7B-01 前置技术验证（已过 5/9 · 2026-09-28：M7B-01/03/05/08/09；余 M7B-02/04 命名管道双向 IPC（C++ 工具链冒烟已通）、M7B-06/07 需真站点人工登录；另增 M7B-06b）：Pydoll 起真实浏览器 + CDP 读 Cookie / 命名管道双向 / **CDP 增量三路线实测** / asyncio 共存 / 页面驱动与 DataTransfer 注入 / **DeepSeek 网页版选择器实测** / 会话失效证据来源 / 单 profile 多站点 + 按 origin 注销 / **关闭时序与会话持久化（M7B-09 · MB-D0-8）** ｜ M7B.md §5 M7B-01~09 + M7B-06b（未全过则停留）",
-              "done": false,
-              "level": "default",
-              "fileLink": "docs/Archive/actionPlan/M7B.md"
-            }
-          },
-          {
-            "key": 192,
-            "children": [],
-            "todo": {
-              "id": 192,
-              "content": "FEA-M7B-02 撤除 WebView2：删 webview_host / webview2_login / vcpkg+CMake 依赖 / paths::webview2_profile（17 文件 ≈184 处）+ 死码清理（保留 delta_text_of / web_session_failure_hint 复用）｜ M7B.md §6 批 5–6（先建后拆，批 5 才删）",
-              "done": false,
-              "level": "default",
-              "fileLink": "docs/Archive/actionPlan/M7B.md"
-            }
-          },
-          {
-            "key": 197,
-            "children": [],
-            "todo": {
-              "id": 197,
-              "content": "FEA-M7B-03 登录态持久化四层（MB-D0-8 · 由 M7B-09 四轮实测支撑）：L1 干净退出（Browser.close → 等进程退出，默认 5s，禁用 stop()）/ L2 DPAPI 加密 Cookie 快照（刷新间隔 < 10s + 登录成功即写 + 优雅退出前再写，启动回灌）/ L3 启动自愈（profile 被占 → 善意 attach connect(ws) 或如实告知，禁止强杀）/ L4 异常退出可见（埋点 + 一键重登/恢复）｜ M7B.md §5 M7B-09 / §9.1 I23 / §13",
-              "done": false,
-              "level": "default",
-              "fileLink": "docs/Archive/actionPlan/M7B.md"
-            }
-          },
-          {
-            "key": 193,
-            "children": [],
-            "todo": {
-              "id": 193,
-              "content": "TST-M7B-02 不变量换代：作废 I2 → 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2）/ I21（不静默降级）/ I22（流式降级显式）；I15 → I15′；I16 升级为全局；断言 VB2-28~VB2-36（含删 VB2-17 前半、VB2-25①③④）｜ M7B.md §8–§9（基线先降后升）",
-              "done": false,
-              "level": "default",
-              "fileLink": "docs/Archive/actionPlan/M7B.md"
-            }
-          },
-          {
-            "key": 194,
-            "children": [],
-            "todo": {
-              "id": 194,
-              "content": "DOC-M7B-01 文档同步 11 项 + I2 解冻登记（source/README.md §4.3）+ 12 条站点选择器回填记录（在 Pydoll 通道一次测完，不在 WebView2 重复测）｜ M7B.md §10–§11 / M7B-29 / M7B-40",
-              "done": false,
-              "level": "default",
-              "fileLink": "docs/Archive/actionPlan/M7B.md"
-            }
-          }
-        ],
-        "todo": {
-          "id": 189,
-          "content": "M7B 📦 已退场 2026-10-05 · 未完成（6 项）",
-          "done": false,
-          "level": "secondary"
-        }
-      },
-      {
         "key": 340,
         "children": [],
         "todo": {
@@ -2961,33 +3055,11 @@
               "level": "default",
               "fileLink": "docs/actionPlan/M8.md"
             }
-          },
-          {
-            "key": 303,
-            "children": [],
-            "todo": {
-              "id": 303,
-              "content": "FEA-M8-15~19 原 Phase 3 退场（删 Python 树 / C++ 通道 / CLI / 文档 11 项 / 数字登记）· ⏸ 不排期（✅ 2026-10-11 拍板 · M8-Q7 = ②：Pydoll 栈休眠保留 · 不删（不接线 / 不维护 / 可复启）⇒ 5 项全部关闭 · 不再删）｜ M8.md §0.5 / §7 M8-Q7",
-              "done": false,
-              "level": "default",
-              "fileLink": "docs/actionPlan/M8.md"
-            }
-          },
-          {
-            "key": 304,
-            "children": [],
-            "todo": {
-              "id": 304,
-              "content": "FEA-M8-23 进程内 CDP 可信事件（防识别）· ⏸ 不排期（可选 · 需 1 天预算）｜ M8.md §0.5",
-              "done": false,
-              "level": "default",
-              "fileLink": "docs/actionPlan/M8.md"
-            }
           }
         ],
         "todo": {
           "id": 300,
-          "content": "M8 网页通道（要做 2 项 · ⏸ 不排期 2 项 · 已勾账 2 项已于 2026-10-13 移入 Archive · 2026-10-11 改判）",
+          "content": "M8 网页通道（要做 2 项 · ⏸ 不排期 2 项已于 2026-10-14 移入 Deprecate · 已勾账 2 项已于 2026-10-13 移入 Archive · 2026-10-11 改判）",
           "done": false,
           "level": "secondary"
         }
@@ -3082,22 +3154,11 @@
               "level": "default",
               "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
             }
-          },
-          {
-            "key": 329,
-            "children": [],
-            "todo": {
-              "id": 329,
-              "content": "FEA-PW-09 / PW-14 ⏸ 不排期（answer_selector 回填 · 复制按钮取 Markdown 原文）｜ M_patchC §0.6",
-              "done": false,
-              "level": "default",
-              "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
-            }
           }
         ],
         "todo": {
           "id": 320,
-          "content": "M_patchC 网页节点归属（未完成 9 项 · 已勾账 1 项已于 2026-10-13 移入 Archive · 2026-10-11 核对）",
+          "content": "M_patchC 网页节点归属（未完成 8 项 · ⏸ 不排期 1 项已于 2026-10-14 移入 Deprecate · 已勾账 1 项已于 2026-10-13 移入 Archive · 2026-10-11 核对）",
           "done": false,
           "level": "secondary"
         }
@@ -3136,7 +3197,6 @@
       136,
       157,
       163,
-      165,
       169,
       174,
       202,
@@ -3158,6 +3218,6 @@
     "simpleMode": false,
     "lang": "en",
     "desc": "**当前基线（2026-10-08 本机全量实测）**\n- build: 0 error / 0 warning（MSVC /W4）\n- api_probe --selftest：PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · 执行器 425/0）\n- exec_selftest: 425 / 0 · graph_selftest: 110 / 0\n- aiwrite --upload-selftest: 72 / 0（离线三组；真机加 --provider / --image，且该站点已登录过一次）\n- 夹具: poll_answer_gate 12/0（--old 5/7 · exit 1）· send_chain 17/0\n- 文档: python vcpkg-cache/check_links.py → checked 500 / broken 8（**全为既存**：7 条历史 actionPlan/M7B.md 路径 + 1 条反引号内文误判，非本轮引入）\n\n**文档口径（2026-10-08 全量梳理 · 定义见 docs/DocMAP.md §五）**\n- 标记三态：✅ 已固定 / 📦 已失效（**只标记不删除**）/ ⬜ 待定（必须登记到本分类 PQ-xx）\n- 本分类「待定 · 未拍板」= 全部未拍板项（PQ-01 ~ PQ-19）；拍板后同批：改计划文档 + DocMAP §5.3 + 本项置 done\n- ✅ **2026-10-11 拍板落盘（待定清零）**：`PQ-01`（① 内部滚动 + 每批内部版本号）· `PQ-03`（留用 `v0.5.3` · 不清理）· `PQ-06`（沿用 `v0.5.4`）· `PQ-09`（② `login_url` 缺失 = 报错 · 复核 = 与现行实现一致 ⇒ 勾账）· `PQ-12`（① 只做国内 6 站）· `PQ-20`（**推翻「节点数维持 8」**，范围细谈归 `docs/actionPlan/M_node_expansion.md`）⇒ 六项全部置 done；**「待定 · 未拍板」分类 = 0 项**（分组保留作历史）\n- ✅ **2026-10-09 拍板落盘**：**14 项**已拍板（`PQ-02` / `PQ-04` / `PQ-05` / `PQ-07` / `PQ-08` / `PQ-10` / `PQ-11` / `PQ-13` / `PQ-14` / `PQ-15` / `PQ-16` / `PQ-17` / `PQ-18` / `PQ-19`）⇒ 已置 done；**余 5 项待定**（`PQ-01` / `PQ-03` / `PQ-06` / `PQ-09` / `PQ-12`）\n- 里程碑：M1 / M2 / M4 / M5 与 M7 第一轮 + P7-a ✅ 已固定；**M7B / P7-b（Pydoll 路线）📦 已退场（2026-10-05 · 方案 E）**；现行网页通道 = M8（站点上传模板）\n- 未做（有任务号，**非**待定）：M8 Phase 4~6（**Phase 3 已改判不执行 ⇒ 栈休眠保留**）· M8-21 / M8-23 · PW-02/04/05/06/08~12 · M_patchAB_rest §1–§3 残项 · M6 未开工\n- 待真机：AW-01 / AW-03 / AW-04 / AW-06（网页版多节点与取答案）· 有 Key 的 official 复跑\n\n**历史原文（2026-09-27 基线 · ⛔ 保留不删；其中 Pydoll / M7B 段落已 📦 退场）**\n\n**当前基线（2026-10-08 本机全量实测）**\n- build: 0 error / 0 warning（MSVC /W4）\n- api_probe --selftest：PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · 执行器 425/0）\n- exec_selftest: 425 / 0 · graph_selftest: 110 / 0\n- aiwrite --upload-selftest: 72 / 0（离线三组；真机加 --provider / --image，且该站点已登录过一次）\n- 夹具: poll_answer_gate 12/0（--old 5/7 · exit 1）· send_chain 17/0\n- 文档: python vcpkg-cache/check_links.py → checked 500 / broken 8（**全为既存**：7 条历史 actionPlan/M7B.md 路径 + 1 条反引号内文误判，非本轮引入）\n\n**文档口径（2026-10-08 全量梳理 · 定义见 docs/DocMAP.md §五）**\n- 标记三态：✅ 已固定 / 📦 已失效（**只标记不删除**）/ ⬜ 待定（必须登记到本分类 PQ-xx）\n- 本分类「待定 · 未拍板」= 全部未拍板项（PQ-01 ~ PQ-19）；拍板后同批：改计划文档 + DocMAP §5.3 + 本项置 done\n- 里程碑：M1 / M2 / M4 / M5 与 M7 第一轮 + P7-a ✅ 已固定；**M7B / P7-b（Pydoll 路线）📦 已退场（2026-10-05 · 方案 E）**；现行网页通道 = M8（站点上传模板）\n- 未做（有任务号，**非**待定）：M8 Phase 4~6（**Phase 3 已改判不执行 ⇒ 栈休眠保留**）· M8-21 / M8-23 · PW-02/04/05/06/08~12 · M_patchAB_rest §1–§3 残项 · M6 未开工\n- 待真机：AW-01 / AW-03 / AW-04 / AW-06（网页版多节点与取答案）· 有 Key 的 official 复跑\n\n**历史原文（2026-09-27 基线 · ⛔ 保留不删；其中 Pydoll / M7B 段落已 📦 退场）**\n\n**当前基线（2026-09-27）**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS（V-11/V-12 随 PB-09）\n- graph_selftest: 110 通过 / 0 失败\n- exec_selftest: 251 通过 / 0 失败（执行器 + 运行信息 + 归档 + 配置表 / L4 断言）\n- provider_selftest: 50 通过 / 0 失败（--provider-dump 21 条：official 9 / web 12）\n- run_selftest: PASS（离线 3/5 为预期）· run_selftest_web: PASS（5/5；官网侧会话失效见 PB2-25）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n- docs_links: python vcpkg-cache/check_links.py → broken 0\n\n**M7（2026-09-27 落地）**\\n- 图片格式按内容嗅探（不看扩展名）+ 本地解码 stb/WIC 双后端 + 可操作报错；诊断：`api_probe --image-decode <路径>`\\n- 删图片输出节点（N-09）：节点 9→8\\n- **冻结区（I17）**：不得把合成/截断/未识别格式数据交给 WIC（曾致 CRT 断言崩溃，退出码 3）；见 source/README.md §4.2 / §6.1\\n\\n**M7 第二轮 P7（2026-09-27 会议决议 D1–D9 · 计划中，未开工）**\\n- P7-a（v0.5.2）：图片端口 variadic 多图（I19）+ 统一资源目录 + official 收口（超限拒 / 体积与耗时 / 错误分类）+ UI A 档\\n- P7-b（v0.5.3 待确认）：网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件（先做 P7b-01~05 前置验证，未过则回滚；方案 B′ 2026-09-29：网页版图片理解首个目标站 = 豆包 doubao-web，P7b-05b 只读侦察先行（上传入口 4 类 + 纯图无字视觉判别），审核通过后才动管道 M7B-02/04）\\n- 新增不变量 I18（无上传证据不得自动发送）/ I19（image 端口语义向后兼容）；开口项 Q1–Q8 见 M7.md §17\\n\\n**M7 第三轮 M7B（2026-09-28 立项 · 计划中未开工）**\n- 网页通道整体迁 Pydoll：WebView2 退场（source/ 内 17 文件 ≈184 处）+ 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态（~/.brain-ai/pydoll-profile）\n- 作废不变量 I2（不再承诺无参 CLI 逐字不变）→ 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2 / 保留字 --provider auto）/ I21（不静默降级）/ I22（流式降级标记非流式）；I15 → I15′（证据源改 CDP Cookie）；I16 升级为全局\n- 破坏性变更（计划）：--web-chat / --login-selftest 需 --provider；--web-probe 废弃；老用户需重新登录一次\n- 任务：前置验证 M7B-01~08 + 6 批 M7B-10~M7B-41（先建后拆，批 5 才删 WebView2）；基线 --exec-selftest 先降后升（删 VB2-17 前半 / VB2-25①③④，新增 VB2-28~VB2-36）\n- 计划全文：docs/actionPlan/M7B.md（WebView2 接触面 17 文件 ≈184 处清单见其 §1.3）｜ **阶段 0 已完成（2026-09-28）**：批 0 基线复测（exec 251/0 · graph 110/0 · provider 50/0 · run-selftest(--web) PASS · 断链 265/0）+ Pydoll 2.27.0 环境就绪（.venv 冒烟通过）+ 回滚锚点 pre-m7b 已推送；**仍未开工**\n\n**主要风险 / 待办**\n- 会话失效（40002/401/40003）缺界面引导（PB-07 / PB2-25）\n- 11 条内置站点仍缺 answer_selector（需人工登录一次 + 发一条消息 → PB2-29）\n- 流式数据源受 httplib 限制（PB-03/08 暂停 · D-31 待拍板）\n- 未接配置字段仍无效果（PD-03 / FEA-M6-01）\n- 补丁系列剩余项统一见 docs/actionPlan/M_patchAB_rest.md",
-    "version": "1791903872068"
+    "version": "1792067073417"
   }
 }

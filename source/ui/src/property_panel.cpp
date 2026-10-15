@@ -11,6 +11,7 @@
 #include "file_dialog.h"
 #include "log.h"
 #include "paths.h"
+#include "prompt_generator.h" // M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」异步
 #include "session_store.h"
 #include "webview_host.h"
 
@@ -25,6 +26,8 @@
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <fstream>   // L1-c（§4.1）：N-01 文件导入
+#include <iterator>  // L1-c（§4.1）：istreambuf_iterator
 #include <string>
 #include <vector>
 
@@ -462,6 +465,165 @@ bool write_param(Param& param, const nlohmann::json& value)
 }
 
 // ============================================================================
+//  M_8nodes_extension L1-a（§3.2 / §3.4 / §5.1）：二级分组 + 网页版忽略标注 + StringList 编辑
+// ============================================================================
+
+// StringList 值（JSON 字符串数组）→ 逗号分隔文本（编辑形态）
+std::string string_list_to_text(const Param& param)
+{
+    if (!param.value.is_array()) {
+        return {};
+    }
+    std::string joined;
+    for (const auto& item : param.value) {
+        if (!item.is_string()) {
+            continue;
+        }
+        const std::string entry = item.get<std::string>();
+        if (entry.empty()) {
+            continue;
+        }
+        if (!joined.empty()) {
+            joined += ", ";
+        }
+        joined += entry;
+    }
+    return joined;
+}
+
+// 逗号分隔文本 → StringList 值（trim 每项、去空、保序）
+nlohmann::json string_list_from_text(const std::string& text)
+{
+    nlohmann::json array = nlohmann::json::array();
+    std::string    current;
+    const auto     flush = [&array, &current]() {
+        // 去掉首尾空白（含 \r，兼容 CRLF 粘贴）
+        const auto begin = current.find_first_not_of(" \t\r\n");
+        const auto end   = current.find_last_not_of(" \t\r\n");
+        if (begin != std::string::npos && end != std::string::npos) {
+            array.push_back(current.substr(begin, end - begin + 1));
+        }
+        current.clear();
+    };
+    for (const char ch : text) {
+        if (ch == ',') {
+            flush();
+        }
+        else {
+            current += ch;
+        }
+    }
+    flush();
+    return array;
+}
+
+// M_8nodes_extension L1-a（§3.4）：该参数在网页版（mode=web）模式下被**忽略** ⇒ 灰色标注
+//  * 集合 = 文档 §3.4 表格中标「（网页版忽略）」的新参数 + response_format；
+//  * temperature / max_tokens / top_p 的忽略提示已在 Console 侧（local_nodes.cpp 门控文案），UI 不重复标。
+bool web_ignored_in_web(const std::string& param_id)
+{
+    return param_id == "top_k" || param_id == "stop" || param_id == "frequency_penalty" ||
+           param_id == "presence_penalty" || param_id == "seed" || param_id == "response_format";
+}
+
+// M_8nodes_extension L1-c（§4.1）：N-01 文件导入 —— UTF-8 有效性校验（简单序列检查）
+//  * 非法 UTF-8 序列（GBK / ANSI 编码的文件）**不静默乱码**：返回 false 给可操作提示
+bool valid_utf8(const std::string& text)
+{
+    std::size_t i = 0;
+    while (i < text.size()) {
+        const unsigned char lead = static_cast<unsigned char>(text[i]);
+        if (lead < 0x80) {
+            ++i;
+            continue;
+        }
+        int extra = 0;
+        if ((lead & 0xE0) == 0xC0) {
+            extra = 1;
+        }
+        else if ((lead & 0xF0) == 0xE0) {
+            extra = 2;
+        }
+        else if ((lead & 0xF8) == 0xF0) {
+            extra = 3;
+        }
+        else {
+            return false; // 非法的首字节
+        }
+        if (i + static_cast<std::size_t>(extra) >= text.size()) {
+            return false; // 截断的多字节序列
+        }
+        for (int k = 1; k <= extra; ++k) {
+            const unsigned char cont = static_cast<unsigned char>(text[i + static_cast<std::size_t>(k)]);
+            if ((cont & 0xC0) != 0x80) {
+                return false; // 续字节非法
+            }
+        }
+        i += static_cast<std::size_t>(extra) + 1;
+    }
+    return true;
+}
+
+// M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」按钮（异步）
+//  * 结果写回 `template`（先压撤销快照，可撤销 —— 文档 §4.3 关键约束）
+//  * 失败 → 状态栏 + Console（**不静默回退到 manual**）
+void draw_prompt_generate_button(engine::Node& node, PropertyEditResult& result)
+{
+    engine::Param* template_param = node.findParam("template");
+    ImGui::Separator();
+    const bool busy = prompt_generation_running();
+    ImGui::BeginDisabled(busy || template_param == nullptr);
+    if (ImGui::Button(busy ? "正在生成提示词…" : "生成提示词", ImVec2(-FLT_MIN, 0.0f))) {
+        // 节点参数**快照**（生成线程只读，不碰 UI 线程的 graph）
+        nlohmann::json params = nlohmann::json::object();
+        for (const engine::Param& param : node.params) {
+            params[param.id] = param.value;
+        }
+        request_prompt_generation(node.id, params);
+        log::info("[生成提示词] " + node.id + " 已发起（官方 / 兼容 API）");
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("把「模板」作为给 AI 的指令 → 生成结果**写入模板输入框**（可继续编辑）；\n"
+                          "用节点内「提供商 / API Key」配置（official）；网页版暂不支持（按钮会提示）");
+    }
+
+    // 每帧消费生成结果 → 写回 template（先压撤销快照，可撤销）
+    std::string gen_result;
+    std::string gen_error;
+    if (prompt_generation_consume(node.id, &gen_result, &gen_error)) {
+        if (!gen_result.empty() && template_param != nullptr) {
+            editor().snapshot("AI 生成提示词"); // 先压快照：可撤销（文档 §4.3）
+            template_param->value = gen_result;
+            result.changed        = true;
+            editor().set_status("已把 AI 生成结果写入「模板」（可撤销）");
+            log::info("[生成提示词] 已写入 " + node.id + ".template（" +
+                      std::to_string(gen_result.size()) + " 字节）");
+        }
+        else {
+            editor().set_status("生成提示词失败：" + gen_error);
+            log::warn("[生成提示词] " + gen_error);
+        }
+    }
+}
+bool import_text_file(const std::string& path, std::string* content, std::string* error)
+{
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        *error = "无法读取文件: " + path;
+        return false;
+    }
+    std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+    stream.close();
+    if (!valid_utf8(text)) {
+        *error = "文件不是 UTF-8 编码（可能是 GBK / ANSI）：请先转换为 UTF-8 再导入（避免乱码）";
+        return false;
+    }
+    *content = std::move(text);
+    return true;
+}
+
+// ============================================================================
 //  M_patchB L4 / v16（**仅界面层**）：提供商下拉的「合并显示」
 //
 //  背景：配置表里同一家 AI 常有两条 —— 官方 API 条目（`deepseek`）与网页版条目（`deepseek-web`），
@@ -662,6 +824,74 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
             edited = true;
         }
         note_activation();
+
+        // ---- M_8nodes_extension L1-c（§4.1）：N-01 文本输入「从文件导入…」----
+        //  * 已有内容 → 二次确认（避免误操作丢稿）；空内容 → 直接导入
+        //  * UTF-8 读取；非 UTF-8（GBK/ANSI）→ 可操作提示，不静默乱码
+        if (node.type == "TextInput" && param.id == "text") {
+            // 确认状态机：只对当前节点 / 当前参数生效
+            static std::string confirm_node;
+            static std::string confirm_param;
+            static std::string pending_path;
+            const bool         confirming = (confirm_node == node.id && confirm_param == param.id &&
+                                             !pending_path.empty());
+            ImGui::Spacing();
+            if (ImGui::Button(confirming ? "确认覆盖已有内容" : "从文件导入…", ImVec2(140.0f, 0.0f))) {
+                if (confirming) {
+                    // 第二次点击 = 确认覆盖
+                    confirm_node.clear();
+                    confirm_param.clear();
+                    const std::string path = pending_path;
+                    pending_path.clear();
+                    std::string content;
+                    std::string error;
+                    if (import_text_file(path, &content, &error)) {
+                        changed_now = write_param(param, content);
+                        log::info("[文本输入] 从文件导入（覆盖）：" + path + "（" +
+                                  std::to_string(content.size()) + " 字节）");
+                    }
+                    else {
+                        log::error("[文本输入] 文件导入失败：" + error);
+                        ImGui::OpenPopup("##import_error");
+                    }
+                }
+                else {
+                    const std::string picked =
+                        utils::open_file({{"文本文件", "txt,md"}, {"所有文件", "*"}}, param.text());
+                    if (!picked.empty()) {
+                        if (param.text().empty()) {
+                            // 空内容 → 直接导入
+                            std::string content;
+                            std::string error;
+                            if (import_text_file(picked, &content, &error)) {
+                                changed_now = write_param(param, content);
+                                log::info("[文本输入] 从文件导入：" + picked + "（" +
+                                          std::to_string(content.size()) + " 字节）");
+                            }
+                            else {
+                                log::error("[文本输入] 文件导入失败：" + error);
+                                ImGui::OpenPopup("##import_error");
+                            }
+                        }
+                        else {
+                            // 已有内容 → 进入确认状态（显示确认按钮）
+                            confirm_node    = node.id;
+                            confirm_param   = param.id;
+                            pending_path    = picked;
+                        }
+                    }
+                }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip(confirming
+                                      ? "再次点击将**覆盖**当前「文本」内容（不可恢复）；点其它处取消"
+                                      : "读取 .txt / .md 文件内容到「文本」（UTF-8；已有内容会先询问）");
+            }
+            if (ImGui::BeginPopup("##import_error")) {
+                ImGui::TextWrapped("文件导入失败（详见日志）");
+                ImGui::EndPopup();
+            }
+        }
         break;
     }
     case ParamType::Int: {
@@ -984,6 +1214,20 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
         note_activation();
         break;
     }
+    case ParamType::StringList: {
+        // M_8nodes_extension L1-a（§5.1）：`stop` 序列 —— 逗号分隔编辑 ↔ JSON 字符串数组
+        std::string text = string_list_to_text(param);
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        const bool touched = ImGui::InputText("##value", &text);
+        if (touched) {
+            changed_now = write_param(param, string_list_from_text(text));
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            edited = true;
+        }
+        note_activation();
+        break;
+    }
     }
 
     ImGui::PopID();
@@ -1174,7 +1418,25 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     int hidden_params   = 0;
     int filtered_params = 0;
     int matched_params  = 0;
-    for (Param& param : node->params) {
+    // ---- M_8nodes_extension L1-a（§3.2）：参数**二级分组**渲染 ----
+    //  * 预扫描「可见 + 命中搜索」的参数索引（保持声明顺序），再按分组排序；
+    //  * 分组顺序固定：未分组 → 采样（折叠）→ 输出（展开）→ 高级（折叠）；
+    //  * 同组连续渲染，组间输出二级 CollapsingHeader（折叠状态由 ImGui 持久化到 imgui.ini）。
+    const auto group_rank = [](const std::string& group) {
+        if (group == "sampling") {
+            return 1;
+        }
+        if (group == "output") {
+            return 2;
+        }
+        if (group == "advanced") {
+            return 3;
+        }
+        return 0;
+    };
+    std::vector<std::size_t> render_order;
+    for (std::size_t index = 0; index < node->params.size(); ++index) {
+        const Param& param = node->params[index];
         if (!engine::param_visible(*node, param)) {
             ++hidden_params;
             continue;
@@ -1184,6 +1446,33 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
             continue;
         }
         ++matched_params;
+        render_order.push_back(index);
+    }
+    std::stable_sort(render_order.begin(), render_order.end(),
+                     [&](std::size_t a, std::size_t b) {
+                         return group_rank(node->params[a].group) < group_rank(node->params[b].group);
+                     });
+    std::string active_group;
+    bool        subgroup_open = true;
+    for (std::size_t index : render_order) {
+        Param&             param = node->params[index];
+        const std::string  group = param.group;
+        if (group != active_group) {
+            active_group  = group;
+            subgroup_open = true;
+            if (!group.empty()) {
+                const char* title = group == "sampling" ? "采样"
+                                    : group == "output" ? "输出"
+                                                        : "高级";
+                const ImGuiTreeNodeFlags flags =
+                    group == "output" ? ImGuiTreeNodeFlags_DefaultOpen : 0;
+                subgroup_open = ImGui::CollapsingHeader(
+                    (std::string(title) + "##subgroup_" + group).c_str(), flags);
+            }
+        }
+        if (!group.empty() && !subgroup_open) {
+            continue; // 该二级组折叠：不渲染组内参数控件（计数已在上面统计）
+        }
         ImGui::PushID(param.id.c_str());
         ImGui::TextUnformatted(param_label(param).c_str());
         if (param.is_secret) {
@@ -1193,6 +1482,12 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         if (param.value != param.default_value) {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.30f, 1.0f), "已改");
+        }
+        // M_8nodes_extension L1-a（§3.4）：网页版模式下被忽略的参数 → 灰色「（网页版忽略）」标注
+        //  * 参数**仍可见**（不隐藏、不序列化改动）；temperature/max_tokens/top_p 的提示在 Console 侧
+        if (is_web_mode(*node) && web_ignored_in_web(param.id)) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("（网页版忽略）");
         }
         help_marker(param.description);
         ImGui::PopID();
@@ -1224,6 +1519,44 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                               "（切换提供商带出的建议值，可再改回）");
                 }
             }
+            // ---- M_8nodes_extension L1-f（§4.5）：参数预设带出 + 模型列表刷新 ----
+            //  * 只在切换时**填空项**（不覆盖用户已填的值；D-21 同款「只带出一次」语义）
+            //  * 模型枚举 = 生效条目 `models` 字段（**从配置表读，不从 API 拉**）；
+            //    空数组 = 模型自由填写（保持原枚举不刷新）
+            const ai::ProviderSpec* spec = ai::provider_specs().find(param.text());
+            if (spec != nullptr) {
+                if (engine::Param* base = node->findParam("api_base")) {
+                    if (base->text().empty()) {
+                        base->value = ai::resolve_api_base(*spec, std::string());
+                        result.changed = true;
+                        log::info("参数变更: " + node->id + ".api_base → " + base->text() +
+                                  "（切换提供商带出的默认地址）");
+                    }
+                }
+                if (engine::Param* ref = node->findParam("api_key_ref")) {
+                    if (ref->text().empty()) {
+                        ref->value = ai::resolve_key_ref(*spec, std::string());
+                        result.changed = true;
+                        log::info("参数变更: " + node->id + ".api_key_ref → " + ref->text() +
+                                  "（切换提供商带出的默认引用名）");
+                    }
+                }
+                if (engine::Param* model = node->findParam("model")) {
+                    std::vector<std::string> ids;
+                    for (const ai::ProviderModelSpec& m : spec->models) {
+                        ids.push_back(m.id);
+                    }
+                    if (!ids.empty()) {
+                        model->enum_options = ids; // 模型列表刷新（表驱动）
+                        if (std::find(ids.begin(), ids.end(), model->text()) == ids.end()) {
+                            model->value = ids.front();
+                            result.changed = true;
+                            log::info("参数变更: " + node->id + ".model → " + model->text() +
+                                      "（切换提供商带出的首选模型）");
+                        }
+                    }
+                }
+            }
         }
         if (param_changed_now || param_edit_ended) {
             result.changed = true; // 值已写回模型（编辑过程中即时生效）
@@ -1249,6 +1582,11 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     if (!filter_text.empty()) {
         ImGui::TextDisabled("搜索「%s」：命中 %d 项，已过滤 %d 项（共 %d 项）", param_filter,
                             matched_params, filtered_params, matched_params + filtered_params);
+    }
+
+    // M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」按钮（异步 · 结果写回模板）
+    if (node->type == "PromptTemplate") {
+        draw_prompt_generate_button(*node, result);
     }
 
     // ---- 网页版（web 模式）：会话状态 + 登录入口（PB2-17/18/19）----

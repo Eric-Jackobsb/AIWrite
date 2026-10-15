@@ -29,6 +29,12 @@ struct ExportRequest {
     std::string dir;              // path 为空时使用的目录（默认 outputs/）
     std::string ext      = "md"; // md | txt（归一化后小写）
     bool        overwrite = false;
+    // M_8nodes_extension L1-b（§4.8）：自定义元信息头模板（空 = 默认头）
+    //  占位符：{label} {workflow} {node_id} {state} {duration} {time}；未匹配占位原样保留
+    std::string header_template;
+    // M_8nodes_extension L1-b（§4.8）：自动导出文件名主干（空 = 用 meta.workflow）
+    //  * path 为空时生效：<file_stem>-<时间戳>.<ext>；手动导出（path 非空）不受影响
+    std::string file_stem;
 };
 
 struct ExportResult {
@@ -44,9 +50,10 @@ std::string sanitize_file_stem(const std::string& stem);
 std::string render_document_name(const std::string& workflow, const std::string& stamp,
                                  const std::string& ext);
 
-// 正文拼接（include_meta=true 时加标题与元信息块）
+// 正文拼接（include_meta=true 时加标题与元信息块；header_template 非空 = 自定义头模板）
 std::string build_document_body(const std::string& text, const std::string& label,
-                                const DocumentMeta& meta, bool include_meta);
+                                const DocumentMeta& meta, bool include_meta,
+                                const std::string& header_template = {});
 
 // 原子写（临时文件 + rename）；overwrite=false 且同名存在时自动加 -1/-2…
 bool write_document(const std::string& path, const std::string& body, bool overwrite,

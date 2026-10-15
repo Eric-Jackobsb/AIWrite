@@ -379,6 +379,8 @@ IMGUI_NODE_EDITOR_API int BreakLinks(PinId pinId); // Break all links connected 
 
 IMGUI_NODE_EDITOR_API void NavigateToContent(float duration = -1);
 IMGUI_NODE_EDITOR_API void NavigateToSelection(bool zoomIn = false, float duration = -1);
+// Centers the viewport on the given canvas point (keeps current zoom; moves the view only, never any node).
+IMGUI_NODE_EDITOR_API void NavigateToCenter(const ImVec2& canvasPoint, float duration = -1);
 
 IMGUI_NODE_EDITOR_API bool ShowNodeContextMenu(NodeId* nodeId);
 IMGUI_NODE_EDITOR_API bool ShowPinContextMenu(PinId* pinId);

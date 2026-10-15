@@ -197,6 +197,7 @@ Workflow
 |---|---|---|
 | 输入节点 | 提供数据 | Text Input / Image Input |
 | 处理节点 | 转换数据 | Prompt Template / Text Merge |
+| 辅助功能节点（L2 · 2026-10-15） | 文本处理 | Text Split / Text Extract / Text Clean / Text Replace / Text Stats / Text Diff |
 | 配置节点 | 配置提供商 | Provider Config |
 | 推理节点 | 调用 AI | LLM Generate / VLM Generate |
 | 输出节点 | 展示结果 | Text Output |
@@ -204,7 +205,7 @@ Workflow
 > **M7（2026-09-27）**：原「输出节点 · Image Preview」已删除（N-09）—— 图片结果由 `Image Input` 的
 > `image` 端口在输出面板 / 参数面板渲染缩略图，无需专用汇点节点。见 [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md)（📦 已归档 2026-10-11）。
 
-### 4.4 MVP 节点清单（8 个；M7 起由 9 个精简）· ✅ **已固定（2026-10-08 · 节点数维持 8，不恢复）** —— 📦 **「数量维持 8」半句已被推翻（2026-10-11 · `PQ-20` 拍板 · 见 [roadmap.md](roadmap.md) §十）**：**8 个节点仍是当前实现**，但**不再禁止扩展**；后续新增 / 变形的**方向、范围与准入标准**在 [actionPlan/M_node_expansion.md](actionPlan/M_node_expansion.md) **细致讨论**（**拍板前不动任何代码**）
+### 4.4 MVP 节点清单（8 个；M7 起由 9 个精简）· ✅ **已固定（2026-10-08 · 节点数维持 8，不恢复）** —— 📦 **「数量维持 8」半句已被推翻（2026-10-11 · `PQ-20` 拍板 · 见 [roadmap.md](roadmap.md) §十）**：**8 个节点仍是当前实现**，但**不再禁止扩展**；后续新增 / 变形的**方向、范围与准入标准**在 [actionPlan/M_node_expansion.md](actionPlan/M_node_expansion.md) **细致讨论**（**拍板前不动任何代码**）。**L2 已于 2026-10-15 新增 6 个文本处理节点 ⇒ 现行 14 个**（下表 N-09~N-14 · 新分类「辅助功能」）
 
 | 编号 | 节点 | 分类 | 输入 | 输出 |
 |---|---|---|---|---|
@@ -217,6 +218,12 @@ Workflow
 | N-07 | VLM Generate | 推理 | prompt, image, provider | text |
 | N-08 | Text Output（**最终输出**） | 输出 | text | — |
 | ~~N-09~~ | ~~Image Preview~~（**M7 已移除**） | ~~输出~~ | ~~image~~ | ~~—~~ |
+| **N-09** | **Text Split**（L2 · 2026-10-15） | 辅助功能 | text | texts |
+| **N-10** | **Text Extract**（L2） | 辅助功能 | text | texts, text |
+| **N-11** | **Text Clean**（L2） | 辅助功能 | text | text |
+| **N-12** | **Text Replace**（L2） | 辅助功能 | text | text |
+| **N-13** | **Text Stats**（L2） | 辅助功能 | text | text, number |
+| **N-14** | **Text Diff**（L2） | 辅助功能 | text_a, text_b | text |
 
 ### 4.5 端口类型系统
 
@@ -691,7 +698,9 @@ void Executor::cancel() {
 > 节点执行函数在 `NodeExecutorRegistry` 注册（`nodes::registerAllExecutors()`）；M2 期
 > TextInput / ImageInput / PromptTemplate / TextMerge / ProviderConfig / TextOutput 为本地实现，
 > LLMGenerate / VLMGenerate 为占位（抛 `NodeError`），等待 **M4-05 官方 API / M4-06 网页版**接线。
-> 自检：`api_probe.exe --exec-selftest`（129 项断言，全离线）。
+> **L2（2026-10-15）**：TextSplit / TextExtract / TextClean / TextReplace / TextStats / TextDiff 六个文本处理节点
+> 已加入本地实现（实现散在 `source/nodes/src/text_*.cpp`）。
+> 自检：`api_probe.exe --exec-selftest`（**655** 项断言，全离线）。
 
 ---
 
@@ -1119,7 +1128,7 @@ void Executor::cancel() {
 
 ## 19. 延后与待办
 
-### 19.1 延后功能 · ✅ **已拍板（2026-10-09 · `PQ-16` 结案）**：**14 项**全部「延后 · 不排期」—— 其中 **快捷键 / 多语言界面 / 浅色主题 3 项 = 明确「不做」**（[roadmap.md](roadmap.md) §十 不做清单）· 原文（拍板依据）：⬜ **待定（`PQ-16`：是否有任一项提到滚动发布 / 或转为"不做"）**
+### 19.1 延后功能 · ✅ **已拍板（2026-10-09 · `PQ-16` 结案）**：**14 项**全部「延后 · 不排期」—— 其中 **快捷键 / 多语言界面 / 浅色主题 3 项 = 明确「不做」**；**L3（2026-10-15）已推翻其中 4 项**（节点搜索 / 小地图 / 自动吸附 / 对齐辅助线 → ✅ 已落地 · 见下表）（[roadmap.md](roadmap.md) §十 不做清单）· 原文（拍板依据）：⬜ **待定（`PQ-16`：是否有任一项提到滚动发布 / 或转为"不做"）**
 
 | 功能 | 状态 |
 |---|---|
@@ -1129,12 +1138,13 @@ void Executor::cancel() {
 | 子工作流 | 延后 · 不排期 |
 | 循环节点 | 延后 · 不排期 |
 | 条件分支 | 延后 · 不排期 |
-| 节点搜索 | 延后 · 不排期 |
+| 节点搜索 | ✅ **已落地（2026-10-15 · L3-01）** —— 原「延后 · 不排期」已推翻 |
 | 快捷键 | ⛔ **不做**（纯鼠标交互 · [roadmap.md](roadmap.md) §十 + `PD-01`） |
-| 小地图 | 延后 · 不排期 |
-| 自动吸附 | 延后 · 不排期 |
+| 小地图 | ✅ **已落地（2026-10-15 · L3-02）** —— 原「延后 · 不排期」已推翻；2026-10-15 同日修正为**纯导航**（查看 / 跳转：`ed::NavigateToCenter` 视口平移，区域输入与画布隔离，不触发编辑） |
+| 自动吸附 | ✅ **已落地（2026-10-15 · L3-03）** —— 原「延后 · 不排期」已推翻 |
 | 节点折叠/展开 | 延后 · 不排期 |
-| 对齐辅助线 | 延后 · 不排期 |
+| 对齐辅助线 | ✅ **已落地（2026-10-15 · L3-04）** —— 原「延后 · 不排期」已推翻 |
+| 连线交互提示 | ✅ **已落地（2026-10-15 · L3-05 · 原不在 14 项清单，L3 定向新增）** |
 | 多语言界面 | ⛔ **不做**（= i18n · [roadmap.md](roadmap.md) §十；`config` 侧 `[general]` **已移除** —— 2026-10-09 · `PQ-18②`） |
 | 浅色主题 | ⛔ **不做**（[roadmap.md](roadmap.md) §十） |
 
@@ -1176,10 +1186,10 @@ AIwrite/                              （= F:\GameDao\Tools\AIwrite）
     │   │   └── welcome_window.cpp    (M6) 首次运行引导
     │   ├── engine/                   ✅ 已落地（M2 P1）
     │   │   ├── graph.cpp             数据模型：Node/Port/Param/Edge/Graph + 校验 + 增删
-    │   │   ├── node_registry.cpp     8 个节点的注册表（类型/端口/参数/默认值；M7 起 N-09 已移除）
+    │   │   ├── node_registry.cpp     14 个节点的注册表（类型/端口/参数/默认值；8 MVP + L2 六文本节点）
     │   │   ├── undo_stack.cpp        快照式撤销/重做（深度 50）
     │   │   └── (M4) executor.cpp     工作流执行器
-    │   ├── nodes/                    (M4/M5) 8 个节点实现 + register.cpp（M7 起 N-09 已移除）
+    │   ├── nodes/                    (M4/M5) 14 个节点实现（8 MVP + L2 text_*.cpp）+ register_executors.cpp
     │   ├── ai/                       (M4) inference_provider / deepseek_*_provider
     │   └── utils/
     │       ├── paths.cpp             ✅ ~/.brain-ai 数据目录
@@ -1220,7 +1230,7 @@ show_property_panel = true
 show_console = true
 show_output_window = false
 console_height = 120
-show_grid = true
+show_grid = true  # 画布网格显隐（默认开；设置面板「画布显示网格」可开关）
 grid_size = 20
 running_animation = true
 

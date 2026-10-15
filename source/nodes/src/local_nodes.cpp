@@ -14,12 +14,17 @@
 #include "deepseek_web_client.h"
 #include "dom_web_client.h"         // L3（PB2-13）：通用 DOM 站点适配器
 #include "upload_registry.h" // M8-14：站点上传模板（网页版图片上传 → 再发送）
+#include "image_preprocess.h" // M_8nodes_extension L1-c（§4.2）：图片预处理（裁剪 / 缩放）
+#include "image_decode.h" // L1-c（§4.2）：目录批量 —— 内容嗅探过滤（sniffImage）
 #include "log.h"
 #include "session_store.h"
 #include "webview_host.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -69,6 +74,77 @@ std::vector<std::string> collect_image_paths(const json& value)
         paths.push_back(path);
     }
     return paths;
+}
+
+// ============================================================================
+//  M_8nodes_extension L1-c（§4.2 / §4.7）：目录批量 + 图片预处理（N-02 / N-07 共用）
+// ============================================================================
+
+// 目录批量：扫描目录下**所有**图片（扩展名白名单 + 内容嗅探过滤；文件名排序保证确定性）
+//  * 内容嗅探为 Unknown（扩展名骗人，如 .png 实为文本）**不放行** —— 宁缺毋滥
+std::vector<std::string> collect_directory_images(const std::string& directory)
+{
+    std::vector<std::string>         result;
+    std::error_code                  ec;
+    static const std::vector<std::string> kImageExts = {".png", ".jpg", ".jpeg", ".bmp",
+                                                        ".webp", ".gif"};
+    for (const auto& entry : std::filesystem::directory_iterator(directory, ec)) {
+        if (ec) {
+            break;
+        }
+        if (!entry.is_regular_file(ec)) {
+            continue;
+        }
+        std::string ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        if (std::find(kImageExts.begin(), kImageExts.end(), ext) == kImageExts.end()) {
+            continue;
+        }
+        const utils::ImageMagic magic = utils::sniffImage(entry.path().string());
+        if (magic.format == utils::ImageFormat::Unknown) {
+            continue;
+        }
+        result.push_back(entry.path().string());
+    }
+    std::sort(result.begin(), result.end()); // 确定性顺序（按文件名）
+    return result;
+}
+
+// 预处理参数（N-02 / N-07 共用同名参数；JSON → 结构体）
+ai::ImagePreprocessParams preprocess_params_from(const json& params)
+{
+    ai::ImagePreprocessParams pre;
+    pre.resize_mode       = params.value("resize_mode", std::string("none"));
+    pre.resize_max_width  = params.value("resize_max_width", 0);
+    pre.resize_max_height = params.value("resize_max_height", 0);
+    pre.crop_enabled      = params.value("crop_enabled", false);
+    pre.crop_x            = params.value("crop_x", 0);
+    pre.crop_y            = params.value("crop_y", 0);
+    pre.crop_w            = params.value("crop_w", 0);
+    pre.crop_h            = params.value("crop_h", 0);
+    return pre;
+}
+
+// 对图片列表应用预处理（读取后、编码前；文档 §4.2 执行顺序）；失败返回可操作错误
+//  * 无参数变化时 preprocess_image 零开销（原路径原样返回，不复制）
+std::string apply_image_preprocess(const std::vector<std::string>& in,
+                                   const ai::ImagePreprocessParams& pre,
+                                   engine::ExecutionContext& ctx,
+                                   std::vector<std::string>* out, const std::string& tag)
+{
+    out->clear();
+    for (const std::string& image : in) {
+        const ai::PreprocessOutcome outcome = ai::preprocess_image(image, pre);
+        if (!outcome.ok) {
+            return outcome.error;
+        }
+        if (outcome.changed) {
+            ctx.console(tag + " 预处理：" + image + " → " + outcome.note);
+        }
+        out->push_back(outcome.path);
+    }
+    return {};
 }
 
 // 支持 \n \t \r \\ 转义（分隔符 / 模板参数的习惯写法）
@@ -233,10 +309,28 @@ json execute_image_input(const json& /*inputs*/, const json& params,
                          engine::ExecutionContext& ctx)
 {
     const std::string              raw  = params.value("path", std::string());
-    const std::vector<std::string> list = aiwrite::paths::split_path_list(raw);
+    std::vector<std::string>       list = aiwrite::paths::split_path_list(raw);
+
+    // M_8nodes_extension L1-c（§4.2）：目录批量 —— 扫描目录下全部图片（扩展名 + 内容嗅探）
+    const std::string directory = params.value("directory", std::string());
+    if (!directory.empty()) {
+        std::error_code ec;
+        if (!std::filesystem::exists(std::filesystem::path(directory), ec) ||
+            !std::filesystem::is_directory(std::filesystem::path(directory), ec)) {
+            throw engine::NodeError("图片目录不存在: " + directory);
+        }
+        const std::vector<std::string> collected = collect_directory_images(directory);
+        if (collected.empty()) {
+            throw engine::NodeError("图片目录下没有可用的图片: " + directory +
+                                    "（支持的格式：png / jpg / jpeg / bmp / webp / gif）");
+        }
+        ctx.console("[图片输入] 目录批量：" + directory + " → " +
+                    std::to_string(collected.size()) + " 张");
+        list.insert(list.end(), collected.begin(), collected.end());
+    }
     if (list.empty()) {
-        throw engine::NodeError("图片路径为空：请在参数面板「图片路径」选择图片"
-                                "（可多选，每行一个；P7a-02）");
+        throw engine::NodeError("图片路径为空：请在参数面板「图片路径」选择图片，"
+                                "或「图片目录」选择目录（可多选，每行一个；P7a-02）");
     }
 
     // P7a-04/06/07：令牌 → 资源目录里的真实路径；**旧绝对路径原样放行**（I19）并给迁移提示
@@ -275,6 +369,18 @@ json execute_image_input(const json& /*inputs*/, const json& params,
     }
     if (!legacy.empty()) {
         ctx.console(aiwrite::asset::migration_hint(legacy.front()));
+    }
+
+    // M_8nodes_extension L1-c（§4.2）：图片预处理 —— 读取后、编码前（零参数变化 = 零开销）
+    const ai::ImagePreprocessParams pre = preprocess_params_from(params);
+    if (pre.resize_mode != "none" || pre.crop_enabled) {
+        std::vector<std::string> processed;
+        const std::string        pre_error =
+            apply_image_preprocess(images, pre, ctx, &processed, "[图片输入]");
+        if (!pre_error.empty()) {
+            throw engine::NodeError("图片输入预处理失败：" + pre_error);
+        }
+        images = std::move(processed);
     }
 
     if (images.size() == 1) {
@@ -337,26 +443,100 @@ json execute_prompt_template(const json& inputs, const json& params,
 }
 
 // --- N-04 文本合并 -----------------------------------------------------------
+//  M_8nodes_extension L1-b（§4.4）：排序 / 前缀后缀 / 带源标签 / 去重 / 空行增强
 json execute_text_merge(const json& inputs, const json& params, engine::ExecutionContext& /*ctx*/)
 {
     const std::string separator    = unescape(params.value("separator", std::string("\n")));
     const bool        ignore_empty = params.value("ignore_empty", true);
+    const std::string sort_mode      = params.value("sort_mode", std::string("edge_order"));
+    const std::string prefix         = unescape(params.value("prefix", std::string()));
+    const std::string suffix         = unescape(params.value("suffix", std::string()));
+    const std::string source_label   = params.value("source_label", std::string("none"));
+    const bool        dedup          = params.value("dedup", false);
+    const std::string empty_line_mode = params.value("empty_line_mode", std::string("keep"));
 
-    std::string result;
-    const auto  it = inputs.find("texts");
+    // 1) 收集全部输入段（保序 = 边的插入序）
+    //    M_node_expansion L2：递归展平嵌套数组 —— TextSplit.texts（单边 → 数组）直连
+    //    变长 texts 端口时，数组被收集为 [ [..] ]，这里展平为文本段
+    std::vector<std::string> items;
+    const auto               it = inputs.find("texts");
     if (it != inputs.end() && it->is_array()) {
-        bool first = true;
-        for (const json& item : *it) {
-            const std::string text = text_of(item);
-            if (ignore_empty && text.empty()) {
-                continue;
+        std::function<void(const json&)> flatten = [&](const json& value) {
+            if (value.is_array()) {
+                for (const json& child : value) {
+                    flatten(child);
+                }
+                return;
             }
-            if (!first) {
-                result += separator;
+            items.push_back(text_of(value));
+        };
+        flatten(*it);
+    }
+
+    // 2) 排序：by_name = 内容字典序（stable —— 等值段保持相对顺序）
+    if (sort_mode == "by_name") {
+        std::stable_sort(items.begin(), items.end());
+    }
+
+    // 3) 去重：保序去重（保留首次出现的那一份）
+    if (dedup) {
+        std::vector<std::string> unique;
+        for (const std::string& item : items) {
+            if (std::find(unique.begin(), unique.end(), item) == unique.end()) {
+                unique.push_back(item);
             }
-            result += text;
-            first = false;
         }
+        items = std::move(unique);
+    }
+
+    // 4) 空行增强（在 ignore_empty 之上叠加）：
+    //    remove = 移除全部空段；collapse = 连续空段压缩为一个；keep = 原样（受 ignore_empty 控制）
+    std::vector<std::string> filtered;
+    if (empty_line_mode == "remove") {
+        for (const std::string& item : items) {
+            if (!item.empty()) {
+                filtered.push_back(item);
+            }
+        }
+    }
+    else if (empty_line_mode == "collapse") {
+        bool prev_empty = false;
+        for (const std::string& item : items) {
+            if (item.empty()) {
+                if (prev_empty) {
+                    continue; // 连续空段：只保留第一个
+                }
+                prev_empty = true;
+            }
+            else {
+                prev_empty = false;
+            }
+            filtered.push_back(item);
+        }
+    }
+    else { // keep
+        filtered = items;
+    }
+
+    // 5) 输出：分隔符连接 + 每段前缀 / 后缀 / 带源标签
+    //    * 空段跳过（ignore_empty）仅作用于 keep 模式；collapse / remove 已在上游处理空段
+    std::string result;
+    bool        first = true;
+    for (std::size_t index = 0; index < filtered.size(); ++index) {
+        const std::string& text = filtered[index];
+        if (ignore_empty && text.empty() && empty_line_mode == "keep") {
+            continue;
+        }
+        if (!first) {
+            result += separator;
+        }
+        if (source_label == "[nX]") {
+            result += "[" + std::to_string(index + 1) + "] ";
+        }
+        result += prefix;
+        result += text;
+        result += suffix;
+        first = false;
     }
     return result;
 }
@@ -485,6 +665,18 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         official.max_tokens       = params.value("max_tokens", 2048);
         official.top_p            = params.value("top_p", 1.0);
         official.seed             = params.value("seed", 0); // M_rerun：新 seed 重跑
+        // M_8nodes_extension L1-b：公共参数面采样项随请求发送（非零 / 非空才写进 body）
+        official.top_k             = params.value("top_k", 0);
+        official.stop              = params.value("stop", std::vector<std::string>{});
+        official.frequency_penalty = params.value("frequency_penalty", 0.0);
+        official.presence_penalty  = params.value("presence_penalty", 0.0);
+        // M_8nodes_extension L1-e（§4.6）：JSON 输出 + 多候选（非默认才写；网页版忽略）
+        official.response_format = params.value("response_format", std::string());
+        official.n               = params.value("n", 1);
+        if (official.n > 1) {
+            ctx.console("[文本生成] 提示：候选数 n=" + std::to_string(official.n) +
+                        "，text 端口输出**第一个**候选（多候选端口 texts 待后续）");
+        }
         // PB-06：Key 三级优先级 —— 节点参数 → 环境变量（表内 env 名按序）→ provider 来源节点凭据库
         official.api_key = resolve_official_key(params, inputs, ctx, "[文本生成]", effective).key;
         if (official.api_key.empty()) {
@@ -505,18 +697,46 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         //  * 超时：**表未声明**（`limits.* <= 0`）时才用配置值（表优先，PB2-04 口径不变）
         //  * 重试：`error.retry_enabled / retry_count / retry_interval_ms` —— 只对**可重试**失败
         //    （429 / 5xx / 网络超时）重试；凭证 / 余额 / 请求不合法**不重试**（避免加剧风控）
+        //  * ---- M_8nodes_extension L1-a（§3.3 / §5.3）：**节点级覆盖优先**（0 / 空 = 回落全局）----
         const aiwrite::Config& runtime_config = aiwrite::app_config();
+        const int              override_connect_ms     = params.value("timeout_connect_ms", 0);
+        const int              override_first_byte_ms  = params.value("timeout_first_byte_ms", 0);
+        const int              override_stream_idle_ms = params.value("timeout_stream_idle_ms", 0);
         if (official.options.connect_timeout_s <= 0) {
             official.options.connect_timeout_s =
-                std::max(1, runtime_config.timeout.connect_ms / 1000);
+                std::max(1, (override_connect_ms > 0 ? override_connect_ms
+                                                     : runtime_config.timeout.connect_ms) /
+                                1000);
         }
         if (official.options.read_timeout_s <= 0) {
             official.options.read_timeout_s =
-                std::max(1, runtime_config.timeout.first_byte_ms / 1000);
+                std::max(1, (override_first_byte_ms > 0 ? override_first_byte_ms
+                                                        : runtime_config.timeout.first_byte_ms) /
+                                1000);
         }
-        const int max_retries =
-            ai::clamp_retry_count(runtime_config.error.retry_enabled,
-                                  runtime_config.error.retry_count);
+        if (override_stream_idle_ms > 0) {
+            ctx.console("[文本生成] 提示：流式空闲超时（timeout_stream_idle_ms）当前由全局配置管理，"
+                        "本节点覆盖项保留（官方 API 走连接 / 首字节超时）");
+        }
+        // 重试参数：节点覆盖优先；retry_count=0 → 全部用全局（含开关 / 次数 / 间隔）
+        bool retry_enabled;
+        int  retry_count;
+        int  retry_interval_ms;
+        const int param_retry_count = params.value("retry_count", 0);
+        if (param_retry_count > 0) {
+            retry_enabled     = params.value("retry_enabled", runtime_config.error.retry_enabled);
+            retry_count       = param_retry_count;
+            retry_interval_ms = params.value("retry_interval_ms", 0);
+            if (retry_interval_ms <= 0) {
+                retry_interval_ms = runtime_config.error.retry_interval_ms;
+            }
+        }
+        else {
+            retry_enabled     = runtime_config.error.retry_enabled;
+            retry_count       = runtime_config.error.retry_count;
+            retry_interval_ms = runtime_config.error.retry_interval_ms;
+        }
+        const int max_retries = ai::clamp_retry_count(retry_enabled, retry_count);
         ctx.console("[文本生成] 官方 API 请求：" + official.model + "，提示词 " +
                     std::to_string(official.prompt.size()) + " 字节" +
                     (system_prompt.empty() ? "" : "（含系统提示词）") +
@@ -538,7 +758,7 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
                 !ai::http_status_retryable(official_result.http_status)) {
                 break; // 不可重试 / 已用尽
             }
-            const int delay_ms = ai::retry_delay_ms(runtime_config.error.retry_interval_ms, attempt);
+            const int delay_ms = ai::retry_delay_ms(retry_interval_ms, attempt);
             ctx.console("[文本生成] 第 " + std::to_string(attempt + 1) + " 次重试（HTTP " +
                         std::to_string(official_result.http_status) + "，等 " +
                         std::to_string(delay_ms) + " ms；可重试失败 = 429 / 5xx / 网络超时）");
@@ -590,6 +810,11 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         dom_request.site        = site;
         dom_request.provider_id = site_id;
         dom_request.owner       = web_owner_of(ctx, site, site_id); // M_patchC PW-01：归属
+        // M_8nodes_extension L1-a（§3.3 增量③）：web 线总超时 = 节点覆盖优先
+        //  * 用户显式填了连接 / 首字节超时覆盖时才改变（取较大者，**不缩短**既有 180000 行为）
+        dom_request.timeout_ms = std::max(
+            dom_request.timeout_ms,
+            std::max(params.value("timeout_connect_ms", 0), params.value("timeout_first_byte_ms", 0)));
         const ai::DomChatResult dom = ai::dom_chat(dom_request);
         if (!dom.ok) {
             throw engine::NodeError("文本生成（网页版 · DOM 适配器）失败：" + dom.error);
@@ -720,6 +945,24 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
     if (images.empty()) {
         throw engine::NodeError("图片理解：未连接图片（请把「图片输入」节点的 image 连到本节点 image 端口）");
     }
+    // M_8nodes_extension L1-b（§4.7）：多图顺序 —— by_name = 按文件名排序（稳定，等值保相对序）
+    if (params.value("image_order", std::string("edge_order")) == "by_name") {
+        std::stable_sort(images.begin(), images.end());
+    }
+    // M_8nodes_extension L1-c（§4.7）：图片预处理 —— 与 N-02 同名参数**共用**（发送前应用）
+    //  * 本地变换（读取 → 裁剪 → 缩放 → 编码）发生在**上传 / 编码前**，不改双证据链路（I18）
+    {
+        const ai::ImagePreprocessParams pre = preprocess_params_from(params);
+        if (pre.resize_mode != "none" || pre.crop_enabled) {
+            std::vector<std::string> processed;
+            const std::string        pre_error =
+                apply_image_preprocess(images, pre, ctx, &processed, "[图片理解]");
+            if (!pre_error.empty()) {
+                throw engine::NodeError("图片理解预处理失败：" + pre_error);
+            }
+            images = std::move(processed);
+        }
+    }
 
     // ---- M8-14：网页版图片理解（**先上传，再发送**）----
     //  * 上传走**站点上传模板**（`ai/upload/**`）：每站一个独立上传单元 + 每站格式识别/转换
@@ -766,6 +1009,10 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
         dom_request.image_values    = images; // 上传模板内部再解析令牌 / 校验存在性（I19）
         dom_request.image_max_bytes =
             effective.spec != nullptr ? effective.spec->limits.image_max_bytes : 0;
+        // M_8nodes_extension L1-a（§3.3 增量③）：web 线总超时 = 节点覆盖优先（不缩短既有行为）
+        dom_request.timeout_ms = std::max(
+            dom_request.timeout_ms,
+            std::max(params.value("timeout_connect_ms", 0), params.value("timeout_first_byte_ms", 0)));
         const ai::DomChatResult dom = ai::dom_chat(dom_request);
         for (const std::string& line : dom.conversions) {
             ctx.console("[图片理解] 转换：" + line); // 每张的格式处理都如实记录（可追溯）
@@ -863,11 +1110,77 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
     console_provider_line(ctx, "[图片理解]", effective, "official");
     // PB-02（真取消）：图片理解同样受本运行的取消令牌管（多模态编码完成后即发请求）
     official.cancel = ctx.cancel_token;
+    // M_8nodes_extension L1-a：`seed` 参数面对称（与 N-06 同属公共面 §5.1；>0 随请求发送）
+    official.seed = params.value("seed", 0);
+    // M_8nodes_extension L1-b：公共参数面采样项随请求发送（非零 / 非空才写进 body）
+    official.top_k             = params.value("top_k", 0);
+    official.stop              = params.value("stop", std::vector<std::string>{});
+    official.frequency_penalty = params.value("frequency_penalty", 0.0);
+    official.presence_penalty  = params.value("presence_penalty", 0.0);
+
+    // ---- M_8nodes_extension L1-a（§3.3 增量② / §5.3）：图片理解接入超时 + 重试 ----
+    //  * 现状只有文本生成走重试；本项把**同一份**读取接进 N-07（节点级覆盖优先，0 = 回落全局）
+    const aiwrite::Config& runtime_config = aiwrite::app_config();
+    const int              override_connect_ms    = params.value("timeout_connect_ms", 0);
+    const int              override_first_byte_ms = params.value("timeout_first_byte_ms", 0);
+    if (official.options.connect_timeout_s <= 0) {
+        official.options.connect_timeout_s =
+            std::max(1, (override_connect_ms > 0 ? override_connect_ms
+                                                 : runtime_config.timeout.connect_ms) /
+                            1000);
+    }
+    if (official.options.read_timeout_s <= 0) {
+        official.options.read_timeout_s =
+            std::max(1, (override_first_byte_ms > 0 ? override_first_byte_ms
+                                                    : runtime_config.timeout.first_byte_ms) /
+                            1000);
+    }
+    bool retry_enabled;
+    int  retry_count;
+    int  retry_interval_ms;
+    const int param_retry_count = params.value("retry_count", 0);
+    if (param_retry_count > 0) {
+        retry_enabled     = params.value("retry_enabled", runtime_config.error.retry_enabled);
+        retry_count       = param_retry_count;
+        retry_interval_ms = params.value("retry_interval_ms", 0);
+        if (retry_interval_ms <= 0) {
+            retry_interval_ms = runtime_config.error.retry_interval_ms;
+        }
+    }
+    else {
+        retry_enabled     = runtime_config.error.retry_enabled;
+        retry_count       = runtime_config.error.retry_count;
+        retry_interval_ms = runtime_config.error.retry_interval_ms;
+    }
+    const int max_retries = ai::clamp_retry_count(retry_enabled, retry_count);
 
     ctx.console("[图片理解] 请求：" + official.model + "，图片 " + std::to_string(images.size()) +
                 " 张，提示词 " + std::to_string(prompt.size()) + " 字节" +
-                (system_prompt.empty() ? "" : "（含系统提示词）"));
-    const ai::OfficialChatResult result = ai::official_chat(official);
+                (system_prompt.empty() ? "" : "（含系统提示词）") +
+                (max_retries > 0 ? ("；重试上限 " + std::to_string(max_retries) + " 次") : ""));
+    ai::OfficialChatResult result;
+    for (int attempt = 0;; ++attempt) {
+        result = ai::official_chat(official);
+        if (result.ok && !result.text.empty()) {
+            break;
+        }
+        // 取消优先：取消导致的失败不重试（归因由执行器记「[取消]」）
+        if (result.cancelled || ctx.is_cancelled()) {
+            throw engine::NodeError(
+                result.error.empty() ? std::string("图片理解已取消（用户点了「停止」）")
+                                     : result.error);
+        }
+        if (attempt >= max_retries || !ai::http_status_retryable(result.http_status)) {
+            break; // 不可重试 / 已用尽
+        }
+        const int delay_ms = ai::retry_delay_ms(retry_interval_ms, attempt);
+        ctx.console("[图片理解] 第 " + std::to_string(attempt + 1) + " 次重试（HTTP " +
+                    std::to_string(result.http_status) + "，等 " + std::to_string(delay_ms) +
+                    " ms；可重试失败 = 429 / 5xx / 网络超时）");
+        if (ai::sleep_interruptible(ctx.cancel_token.get(), delay_ms)) {
+            throw engine::NodeError("图片理解已取消（用户点了「停止」）：重试等待被中断");
+        }
+    }
     // P7a-10：编码后体积与耗时（**失败路径也打印** —— 便于判断是否被体积/格式挡住）
     if (result.encoded_bytes > 0) {
         char buffer[256] = {};

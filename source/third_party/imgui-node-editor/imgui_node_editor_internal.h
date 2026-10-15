@@ -1456,6 +1456,7 @@ struct EditorContext
     ImGuiMouseButton GetBackgroundClickButtonIndex()       const { return m_BackgroundClickButtonIndex; }
     ImGuiMouseButton GetBackgroundDoubleClickButtonIndex() const { return m_BackgroundDoubleClickButtonIndex; }
 
+    // 2026-10-15 确认：内置 16px 网格吸附**保留**（用户「网格要保留」；此前误关已恢复）。
     float AlignPointToGrid(float p) const
     {
         if (!ImGui::GetIO().KeyAlt)

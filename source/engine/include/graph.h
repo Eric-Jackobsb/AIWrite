@@ -21,7 +21,8 @@ namespace aiwrite::engine {
 // ------------------------------------------------------------------- 枚举 ----
 enum class PortType { Text, Image, Provider, Number, Any };       // 设计 §5.2
 enum class PortDirection { Input, Output };
-enum class ParamType { String, Text, Int, Float, Bool, Enum, File, Directory, Color }; // §5.3
+// M_8nodes_extension L1-a：新增 StringList（如 `stop` 序列，JSON 数组存储）—— §5.1 公共参数面成员
+enum class ParamType { String, Text, Int, Float, Bool, Enum, File, Directory, Color, StringList }; // §5.3 + L1
 enum class NodeState { Idle, Waiting, Running, Done, Error, Skipped };                 // §4.6
 
 const char* portTypeName(PortType type);     // "text" / "image" / ...
@@ -61,6 +62,13 @@ struct Param {
     // 用途：ProviderConfig 在 mode=web 时隐藏 official 专属参数（API 地址 / 模型 / Key / 引用名）。
     std::string visible_when_param;
     std::string visible_when_value;
+
+    // M_8nodes_extension L1-a（§3.2 / §5.2）：参数**二级分组**（纯 UI 归属标注）
+    //  * "sampling"（采样，折叠）/ "output"（输出，展开）/ "advanced"（高级，折叠）
+    //  * 空 = 不分组（直接渲染在「参数」一级组下，向后兼容）
+    //  * **不影响序列化**：工作流 JSON 只写 params[id]=value（见 workflow_io.cpp），
+    //    本字段只被参数面板渲染与 --graph-selftest 断言读取。
+    std::string group;
 
     void        reset_to_default() { value = default_value; }
     std::string text() const;                       // 取字符串值（非字符串返回 dump）

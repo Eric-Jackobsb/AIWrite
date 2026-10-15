@@ -74,24 +74,43 @@ std::string render_document_name(const std::string& workflow, const std::string&
 }
 
 std::string build_document_body(const std::string& text, const std::string& label,
-                                const DocumentMeta& meta, bool include_meta)
+                                const DocumentMeta& meta, bool include_meta,
+                                const std::string& header_template)
 {
     if (!include_meta) {
         return text;
     }
     std::string body;
-    body += "# " + (label.empty() ? std::string("输出") : label) + "\n\n";
-    if (!meta.workflow.empty()) {
-        body += "> 工作流：" + meta.workflow + "\n";
+    if (header_template.empty()) {
+        body += "# " + (label.empty() ? std::string("输出") : label) + "\n\n";
+        if (!meta.workflow.empty()) {
+            body += "> 工作流：" + meta.workflow + "\n";
+        }
+        if (!meta.node_id.empty()) {
+            body += "> 节点：" + meta.node_id + "（" + (meta.state.empty() ? "done" : meta.state) + "，" +
+                    std::to_string(static_cast<long long>(meta.duration_ms + 0.5)) + " ms）\n";
+        }
+        if (!meta.stamp.empty()) {
+            body += "> 时间：" + meta.stamp + "\n";
+        }
+        body += "\n" + text;
+        return body;
     }
-    if (!meta.node_id.empty()) {
-        body += "> 节点：" + meta.node_id + "（" + (meta.state.empty() ? "done" : meta.state) + "，" +
-                std::to_string(static_cast<long long>(meta.duration_ms + 0.5)) + " ms）\n";
-    }
-    if (!meta.stamp.empty()) {
-        body += "> 时间：" + meta.stamp + "\n";
-    }
-    body += "\n" + text;
+    // M_8nodes_extension L1-b（§4.8）：自定义元信息头模板（占位符替换；未匹配占位原样保留）
+    std::string header = header_template;
+    const auto  replace_placeholder = [&header](const std::string& key, const std::string& value) {
+        for (std::size_t pos = header.find(key); pos != std::string::npos;
+             pos = header.find(key, pos + value.size())) {
+            header.replace(pos, key.size(), value);
+        }
+    };
+    replace_placeholder("{label}", label.empty() ? std::string("输出") : label);
+    replace_placeholder("{workflow}", meta.workflow);
+    replace_placeholder("{node_id}", meta.node_id);
+    replace_placeholder("{state}", meta.state.empty() ? std::string("done") : meta.state);
+    replace_placeholder("{duration}", std::to_string(static_cast<long long>(meta.duration_ms + 0.5)));
+    replace_placeholder("{time}", meta.stamp);
+    body += header + "\n\n" + text;
     return body;
 }
 
@@ -178,11 +197,14 @@ ExportResult export_text_document(const ExportRequest& request)
     std::filesystem::path target(request.path);
     if (target.empty()) {
         const std::string dir = request.dir.empty() ? (paths::data_root() / "outputs").string() : request.dir;
+        // M_8nodes_extension L1-b（§4.8）：自动导出文件名主干可由 file_stem 覆盖（空 = 工作流名）
         target = std::filesystem::path(dir) /
-                 render_document_name(request.meta.workflow, document_stamp_now(), request.ext);
+                 render_document_name(request.file_stem.empty() ? request.meta.workflow
+                                                                : request.file_stem,
+                                      document_stamp_now(), request.ext);
     }
     const std::string body = build_document_body(request.text, request.label, request.meta,
-                                                request.include_meta);
+                                                request.include_meta, request.header_template);
     std::string       final_path;
     std::string       error;
     if (!write_document(target.string(), body, request.overwrite, &final_path, &error)) {

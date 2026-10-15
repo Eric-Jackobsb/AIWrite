@@ -36,6 +36,22 @@ nlohmann::json execute_llm_generate(const nlohmann::json& inputs, const nlohmann
 nlohmann::json execute_vlm_generate(const nlohmann::json& inputs, const nlohmann::json& params,
                                    engine::ExecutionContext& ctx);
 
+// ---- M_node_expansion L2（v5 定稿 §4.3.5）：6 个文本处理节点 ----
+//  * 实现文件：source/nodes/src/text_{split,extract,clean,replace,stats,diff}.cpp
+//  * 共享纯函数见 text_process_common.h（UTF-8 感知；可被 api_probe 离线断言直接调用）
+nlohmann::json execute_text_split(const nlohmann::json& inputs, const nlohmann::json& params,
+                                  engine::ExecutionContext& ctx);
+nlohmann::json execute_text_extract(const nlohmann::json& inputs, const nlohmann::json& params,
+                                    engine::ExecutionContext& ctx);
+nlohmann::json execute_text_clean(const nlohmann::json& inputs, const nlohmann::json& params,
+                                  engine::ExecutionContext& ctx);
+nlohmann::json execute_text_replace(const nlohmann::json& inputs, const nlohmann::json& params,
+                                    engine::ExecutionContext& ctx);
+nlohmann::json execute_text_stats(const nlohmann::json& inputs, const nlohmann::json& params,
+                                  engine::ExecutionContext& ctx);
+nlohmann::json execute_text_diff(const nlohmann::json& inputs, const nlohmann::json& params,
+                                 engine::ExecutionContext& ctx);
+
 // 注册全部节点执行函数（幂等；覆盖同名注册）
 void registerAllExecutors();
 

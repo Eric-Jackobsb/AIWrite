@@ -17,7 +17,7 @@
 | [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) | **补丁系列剩余工作总集**（Patch A/B 残项 + 数据安全 + 交互打磨 + 并行小项 + `B2` 残项）—— **后续唯一执行入口**；含现行规格（附录 B `JSON` 规范 / C 加载顺序 / D 自建站点 / E 站点清单两列）与待拍板决策 |
 | [Archive/actionPlan/M_patchA.md](Archive/actionPlan/M_patchA.md) · [Archive/actionPlan/M_patchB.md](Archive/actionPlan/M_patchB.md) | **已完成部分已归档（2026-09-27）**：Patch A（结果回流与可观测性）· `M_patchB`（Provider 可插拔化：**JSON 配置表** + **API 与网页版同表同机制** + L1 收口 + L3 DOM 站点适配器 + L4 部分落地）—— 历史规格与各批次实测记录 |
 | [actionPlan/M_patchC_web_node_bind.md](actionPlan/M_patchC_web_node_bind.md) | **补丁系列第三期（🆕 2026-10-06 · 拍板 2026-10-07）**：网页版「节点 ↔ 窗口」绑定与页面就绪判据 —— 真机归因（`imgTest` 三次运行）· 缺口 `G1`–`G6` · 修正 `W-D1`–`W-D8` · 不变量 `I24` / `I25` / `I26` · 计划 `PW-01`…`PW-13` · **已拍板 `D-33`…`D-36`**（②独立窗口真并行 / ①`answer_selector`可选 / ③复位首次+失败 / ②`web.attach`诊断字段） | 网页版**多节点 / 多运行**异常时**先读** |
-| [DevPlan.todo](DevPlan.todo) | **开发计划看板**：TodoList 格式（根键 `todotree`），Debug / Feature / Test / Docs / **Archive**（已完成任务归档 · 2026-10-13 起由 `ARC-ORG-01` 承载 124 项，根计数 32→**156**）/ `M7B`（📦 已退场）/ **待定 · 未拍板**（`PQ-xx` · **空落点分支**，已拍板历史 20 项已整组归档）/ `M8 网页通道` / `M_patchC 网页节点归属` 分层，每条含一行描述与 `fileLink` 文档链接 |
+| [DevPlan.todo](DevPlan.todo) | **开发计划看板**：TodoList 格式（根键 `todotree`），Debug / Feature / Test / Docs / **Archive**（已完成任务归档 · 2026-10-13 起由 `ARC-ORG-01` 承载 124 项，根计数 32→**156**）/ **`Deprecate`**（**已放弃 / 已退场 / 暂停 / 并入计划** 收纳 · 2026-10-14 建 · 13 项 · 原 `M7B` 整根已迁入 · 顶部含 `board_rules` 书写规则：精简 / 拆分 / 一事一干）/ **待定 · 未拍板**（`PQ-xx` · **空落点分支**，已拍板历史 20 项已整组归档）/ `M8 网页通道` / `M_patchC 网页节点归属` 分层，每条含一行描述与 `fileLink` 文档链接 |
 | [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) | M1 实测环境、验证结果与问题记录（已归档） |
 | [Archive/README.md](Archive/README.md) | 归档索引与归档规则 |
 | [../source/README.md](../source/README.md) | 源码构建 / 运行 / 调试说明 |
@@ -33,6 +33,12 @@
 
 | 日期 | 批次（新 → 旧） |
 |---|---|
+| 2026-10-15 | 🧩 节点扩展 **L2 六文本节点 + L3 五 UX 实施**：TextSplit/TextExtract/TextClean/TextReplace/TextStats/TextDiff + 节点搜索/小地图/自动吸附/对齐辅助线/连线提示（exec **546→655** · graph **144→151** · 断链 **1487/0**） |
+| 2026-10-14 | 🧩 `M_8nodes_extension` **L1-d/e/f 收尾**：N-03 AI 生成提示词（重项）+ JSON 输出/多候选 + N-05 参数预设收口（`VL1-06/08/09` · exec **546→598**） |
+| 2026-10-14 | 🧩 `M_8nodes_extension` **L1-c 输入侧能力**：N-01 文件导入 + N-02 目录批量/图片预处理（新模块 `image_preprocess`）+ N-07 预处理复用（`VL1-05` · exec **546→592**） |
+| 2026-10-14 | 🧩 `M_8nodes_extension` **L1-b 参数补齐**：N-06/N-07 请求体传递 + N-04 五项 + N-08 导出模板/批量导出/自动命名 + N-07 多图顺序（`VL1-07/09/10/11` · exec **546→585**） |
+| 2026-10-14 | 🧩 `M_8nodes_extension` **L1-a 横向地基**：推理节点公共参数面 + 参数二级分组 + 超时/重试节点级覆盖 + 网页版参数标注（`VL1-01/02/03/12` · graph **110→144** · exec **546→559**） |
+| 2026-10-14 | 🗃️ 看板清理：新建 `Deprecate` 分支收纳放弃计划 + 顶部书写规则（13 项 · 断链 1350/0 · 零代码 · 批 9-5） |
 | 2026-10-13 | 🗃️ 看板归档：`Archive` 启用 + 已完成任务整批移入（124 项 · 组计数重算 16 处 · 零代码 · 批 9-4） |
 | 2026-10-13 | 🧭 创作流程依据文档落盘 + 归位 + 登记：`Creation_Roadmap_Guideline`（`CR-*` · 断链 **1283 → 1341 / 0** · 零代码 · 批 9-3） |
 | 2026-10-12 | 🧭 节点扩展「四层定向」文档收口：`M_node_expansion` v6 用户拍板落盘（`NE-D38`/`NE-D39` · 零代码） |
@@ -75,6 +81,94 @@
 
 ---
 
+**🧩 `M_node_expansion_part2` L3 · 对齐线收口（2026-10-15 · 代码批 · 当日修正）**
+
+- **背景（用户反馈）**：每个节点**上面都自带了一条很长的灰色横线**，观感像「网格对齐线」，希望去掉；**画布网格本身要保留**。
+- **初版误判 → 当日修正**：先误判为「关闭内置 16px 网格吸附 + 默认关网格线」（`AlignPointToGrid` 恒返回原值 + `ui.show_grid` 默认 false），用户澄清后**已全部还原**：网格与 16px 吸附**保留**（`AlignPointToGrid` 恢复原逻辑 + `show_grid` 默认恢复 true）。
+- **真正落地（本轮最终）**：移除 `node_canvas.cpp` `draw_node_body` 中标题下方的 `ImGui::Separator()` —— 即「每个节点上面那条很长的灰色线」。节点内其余**条件**分隔线（参数预览 / 图片卡片 / 提供商提示 / 运行结果前）保持不变。
+- **验证（2026-10-15 本机实测）**：`source/build.ps1` **0 error / 0 warning**；`check_all.ps1` **15 / 15 PASS**；`check_links` **1487 / broken 0**；GUI 冒烟通过。
+- **落点**：`source/ui/src/node_canvas.cpp`（删节点标题下 Separator）· `source/third_party/imgui-node-editor/imgui_node_editor_internal.h`（恢复 16px 网格吸附）· `source/utils/include/config.h` · `source/engine/src/migration.cpp`（`show_grid` 恢复默认 true）· 文档同步（ai_writer_nodes / 节点编辑器使用说明 / M_node_expansion_part2 / AI_Status / 本文）。**⛔ 未提交**（协作契约 §6）。
+
+---
+
+**🧩 `M_node_expansion_part2` L3 · 小地图行为修正：改为纯导航（2026-10-15 · 代码批）**
+
+- **背景（用户反馈）**：小地图不应拥有画布内编辑节点的能力 —— 它只是「查看缩略 + 挪动屏幕到对应画布位置」的快速挪动 / 查询工具。旧实现两处违规：① 叠加层直接读全局鼠标事件且**无输入隔离**，小地图区域的点击 / 拖动会穿透给画布（选中 / 拖节点 / 框选）；② `ed::CenterNodeOnScreen` 在 `NodeBuilder::Begin` 里会**平移节点世界坐标**（`m_Bounds.Translate` + `MakeDirty(User)`），等于在小地图里改布局。
+- **本轮落地（代码）**：小地图改为**纯导航** —— ① 新增 vendored API `ed::NavigateToCenter(canvasPoint, duration)`（`ZoomMode::None`：视口中心平移到指定世界坐标，**只动视口、绝不移动节点**）；② `ed::Begin` 之前 `block_minimap_input()` 把该区域鼠标事件从 io 中摘除（点击 / 按下 / 释放 / 滚轮 / 拖动 delta 全清零），画布完全感知不到；③ `draw_minimap` 用屏蔽前快照驱动交互：点击 / 按住拖动 → 视口中心平移到鼠标对应世界坐标（快速挪动 / 查询），右上角 ✕ 关闭保留；原「跳到最近节点」逻辑删除。
+- **验证（2026-10-15 本机实测）**：`source/build.ps1` **0 error / 0 warning**；`api_probe --exec-selftest` **655 / 0** · `--graph-selftest` **151 / 0** · `--selftest` 十三组 PASS（回归基线只升不降）；`check_all.ps1` **15 / 15 PASS · exit 0**（物证 `build/logs/check_all_20261015_201342.log`）；`check_links` **1487 / broken 0**；GUI 冒烟（`--open` 8 节点工作流 · 10 秒 · 小地图每帧渲染路径无崩溃）。
+- **落点**：`source/third_party/imgui-node-editor/imgui_node_editor.h` / `imgui_node_editor_api.cpp`（新增 `NavigateToCenter`）· `node_canvas.cpp`（`block_minimap_input` / `draw_minimap` 重写 / `ed::Begin` 前挂载）。**⛔ 未提交**（协作契约 §6）。
+
+---
+
+**🧩 节点扩展 `M_node_expansion_part2` L2+L3 实施：6 个文本处理节点 + 5 项 UX（2026-10-15 · 代码批）**
+
+- **背景（本批要解决的 = part2 的 L2 / L3）**：[M_node_expansion_part2.md](actionPlan/M_node_expansion_part2.md) 的 **L2**（6 个文本处理节点：TextSplit / TextExtract / TextClean / TextReplace / TextStats / TextDiff）+ **L3**（5 项 UX：节点搜索 / 小地图 / 自动吸附 / 对齐辅助线 / 连线交互提示）—— L1 批次的姊妹批。
+- **本轮落地（代码 · 回归基线只升不降）**：
+  - **L2 · 六个文本处理节点**（新分类 `Auxiliary`「辅助功能」）：`node_registry.cpp` / `node_registry.h` 注册 N-09~N-14（`NodeCategory` 增 `Auxiliary` · `categoryName()` = "辅助功能"；`node_library.cpp` 分类数组同步加项）；实现散在 `source/nodes/src/text_split.cpp` / `text_clean.cpp` / `text_extract.cpp` / `text_replace.cpp` / `text_stats.cpp` / `text_diff.cpp`；`register_executors.cpp` 接线。
+  - **L2 关键修复**：`executor.cpp` 多输出节点存储分支顺序修复（TextStats / TextExtract 双输出首次暴露：非 null 返回值被截胡到 `__result`）；`text_split` 单输出端口直接返回数组；`text_diff` marker 后加空格 + `split_lines("")` → 空数组；`TextMerge` 递归展平嵌套数组（TextSplit → TextMerge 变长端口互操作闭环）。
+  - **L3 · 五项 UX**（全部**会话级开关**，不碰 config 与 settings_validation 断言面）：节点库搜索（大小写不敏感子串 + 匹配高亮底色）；小地图（左下角缩略 + 点击跳转 + ✕ 关闭 · 已修正为纯导航，见上方「小地图行为修正」批）；拖动自动吸附 + 紫色对齐辅助线（画布辅助开关弹窗）；连线交互提示（端口类型 / 兼容性实时提示）。
+- **验证（2026-10-15 本机实测）**：`source/build.ps1` **0 error / 0 warning**；`api_probe --exec-selftest` **546 → 655 / 0**（VL2-01…VL2-07）；`api_probe --graph-selftest` **144 → 151 / 0**；`api_probe --selftest` 十三组 PASS；`aiwrite --upload-selftest` **72 / 0**；`check_all.ps1` **15 / 15 PASS · exit 0**（物证 `build/logs/check_all_20261015_194826.log`）；`check_links` **1487 / broken 0**；GUI 冒烟（`--open` 8 节点工作流 · 8 秒 · FPS 59~60 · 无崩溃卡死）。
+- **落点**：`executor.cpp` · `local_nodes.cpp` · `text_split.cpp` / `text_clean.cpp` / `text_extract.cpp` / `text_replace.cpp` / `text_stats.cpp` / `text_diff.cpp` · `text_process_common.h` · `api_probe.cpp` · `node_canvas.cpp` · `node_library.cpp` · `node_registry.cpp` · `node_registry.h` · 文档同步（ai_writer_nodes / 变量术语对照表 / 节点编辑器使用说明 / roadmap / DocMAP / source/README / AI_README / AI_Status / loop_dev / DevPlan.todo / 本文）。**⛔ 未提交**（协作契约 §6；工作区另有批 9-5 与 L1 批次未提交改动，均保持不动）。
+- **⏭️ 真机验证**：L3 五项交互走查（搜索 / 小地图跳转 / 吸附对齐 / 连线提示）待真人体验；`docs/audit/L1_checklist.todo` 仍后置。
+
+---
+
+**🧩 `M_8nodes_extension` L1-d/e/f 收尾：N-03 AI 生成提示词 + JSON 输出/多候选 + N-05 参数预设（2026-10-14 · 代码批）**
+
+- **背景（本批要解决的 = L1 最后三批）**：[M_8nodes_extension.md](actionPlan/M_8nodes_extension.md) §6 **L1-d**（N-03 AI 生成提示词 · 重项）→ **L1-e**（JSON 输出 · 先实现再实测）→ **L1-f**（N-05 参数预设收口）。至此 **L1 全部六个批次（a~f）完成**。
+- **本轮落地（代码 · 回归基线只升不降）**：
+  - **L1-d · N-03 AI 生成提示词**（§4.3 · 重项）：`PromptTemplate` 注册 AI 配置参数面（`provider` / `mode` / `api_base` / `model` / `model_custom` / `api_key` / `api_key_ref` + `system_prompt` / `temperature` / `max_tokens` / `top_p` / `top_k` / `stop` / `seed` / `stream`；`mode=web` 隐藏 official 专属 —— 与 N-05 同规则）；参数面板新增「**生成提示词**」按钮（**异步** · 新模块 `ui/src/prompt_generator.cpp`，线程模型同 connection_test）—— 把 `template` 当指令 → 生效 provider（official / 兼容 API）→ 结果**写入模板输入框**（先压撤销快照，可撤销）；失败 → 状态栏 + Console（**不静默回退 manual**）；`mode=web` 按钮提示「暂不支持生成」。
+  - **L1-e · JSON 输出 + 多候选**（§4.6）：N-06 新增 `response_format`（text / json_object）与 `n`（1–8）；`OfficialChatRequest` + `build_request_body` 支持（非默认才写：`response_format:{type:"json_object"}` / `n`）；`n>1` 时 text 端口输出第一个候选 + Console 提示（多候选端口 `texts` **留实施记录待确认**）；网页版忽略标注集已含 `response_format`。
+  - **L1-f · N-05 参数预设收口**（§4.5）：切换 provider 时**带出默认值**（`api_base` / `key_ref` 填空项才带，不覆盖用户已填；D-21「只带出一次」语义）+ **模型列表刷新**（`model` 枚举 = 生效条目 `models` 字段，**从配置表读、不从 API 拉**；空数组保持自由填写）。
+- **验证（2026-10-14 本机实测）**：`source/build.ps1` **0 error / 0 warning**；`api_probe --exec-selftest` **546 → 598 / 0**（VL1-06 ×2 · VL1-08 ×2 · VL1-09 response_format/n ×2 + 既有全部）；`api_probe --graph-selftest` **144 / 0**（VL1-01 更新：N-06 特有 = model/response_format/n）；`api_probe --selftest` 十三组 PASS；`check_all.ps1` **15 / 15 PASS · exit 0**（物证 `build/logs/check_all_20261015_010021.log`）；`check_links` **1375 / broken 0**。
+- **落点**：[prompt_generator.h](../source/ui/include/prompt_generator.h) · [prompt_generator.cpp](../source/ui/src/prompt_generator.cpp) · [node_registry.cpp](../source/engine/src/node_registry.cpp) · [deepseek_official_provider.h](../source/ai/include/deepseek_official_provider.h) · [deepseek_official_provider.cpp](../source/ai/src/deepseek/deepseek_official_provider.cpp) · [local_nodes.cpp](../source/nodes/src/local_nodes.cpp) · [property_panel.cpp](../source/ui/src/property_panel.cpp) · [main.cpp](../source/app/src/main.cpp) · [CMakeLists.txt](../source/CMakeLists.txt) · [api_probe.cpp](../source/tools/api_probe.cpp) · 本文。**⛔ 未提交**（协作契约 §6；工作区另有批 9-5 未提交改动，均保持不动）。
+- **⏭️ 真机验证**：全部 L1 离线断言通过；人工验收项（`AL1-01`~`AL1-06` + 豆包 / DeepSeek `response_format` 支持度实测）已整理到 **`docs/audit/L1_checklist.todo`**（用户指示：真机验证后置，全部开发完成后进行）。
+
+---
+
+**🧩 `M_8nodes_extension` L1-c 输入侧能力：N-01 文件导入 + N-02 目录批量/图片预处理 + N-07 复用（2026-10-14 · 代码批）**
+
+- **背景（本批要解决的 = 输入侧深化）**：[M_8nodes_extension.md](actionPlan/M_8nodes_extension.md) §6 **L1-c** = N-01 文件导入 + N-02 目录批量 / 图片预处理（缩放 / 裁剪）—— 输入侧能力；N-07 复用 N-02 的预处理参数（§4.7）。
+- **本轮落地（代码 · 回归基线只升不降）**：
+  - **新模块 `ai/image_preprocess`**（§4.2）：`preprocess_image()` —— 读取（`utils::decodeImageRgba8`）→ **裁剪（新增，RGBA8 矩形拷贝）** → 缩放（`stbir_resize_uint8` 复用）→ 写临时 PNG；**零参数变化 = 零开销**（原样返回）；`fit` = 等比放入框内 / `fill` = 等比覆盖后居中裁剪（输出 = 目标框）；**不碰 WIC（守 I17）**，与站点上传 `image_convert` 的判定策略**无关**（文档 §4.2 复用注意）。CMakeLists 新增源文件。
+  - **N-02 图片输入**（§4.2）：`path` 降为可选 + 新增 `directory`（**目录批量**：扩展名白名单 + 内容嗅探过滤 · 文件名排序）+ 预处理参数 7 个（`resize_mode` / `resize_max_width` / `resize_max_height` / `crop_enabled` / `crop_x` / `crop_y` / `crop_w` / `crop_h`）；执行器在**读取后、编码前**应用预处理，Console 逐张记录「预处理：路径 → note」。
+  - **N-07 图片理解**（§4.7）：复用 N-02 同名预处理参数（发送前应用 —— 本地变换，**不改双证据链路 I18**）。
+  - **N-01 文本输入**（§4.1）：参数面板「**从文件导入…**」按钮（`.txt` / `.md`）→ UTF-8 读取写入 `text`；**已有内容二次确认**（避免误操作丢稿）；非 UTF-8（GBK/ANSI）→ 可操作提示、**不静默乱码**。
+- **验证（2026-10-14 本机实测）**：`source/build.ps1` **0 error / 0 warning**；`api_probe --exec-selftest` **546 → 592 / 0**（+46 = image_preprocess_selftest **6** 项：零开销 / fit / fill / 裁剪 / 组合 / 失败路径 + VL1-05 参数面 + 既有 VL1-03/07/09/10/11）；`api_probe --graph-selftest` **144 / 0**（VL1-01 更新：N-07 特有集含预处理参数）；`api_probe --selftest` 十三组 PASS；`check_all.ps1` **15 / 15 PASS · exit 0**（物证 `build/logs/check_all_20261015_004052.log`）；`check_links` **1367 / broken 0**。
+- **落点**：[image_preprocess.h](../source/ai/include/image_preprocess.h) · [image_preprocess.cpp](../source/ai/src/upload/image_preprocess.cpp) · [CMakeLists.txt](../source/CMakeLists.txt) · [node_registry.cpp](../source/engine/src/node_registry.cpp) · [local_nodes.cpp](../source/nodes/src/local_nodes.cpp) · [property_panel.cpp](../source/ui/src/property_panel.cpp) · [api_probe.cpp](../source/tools/api_probe.cpp) · 本文。**⛔ 未提交**（协作契约 §6；工作区另有批 9-5 未提交改动，均保持不动）。
+- **后续批次**：L1-d（N-03 AI 生成提示词 · 重项）→ L1-e（JSON 输出实测豆包 / DeepSeek）→ L1-f（N-05 参数预设收口）；人工验收项 `AL1-05`（预处理缩放 / 裁剪各一次）与 `AL1-06`（N-01 文件导入 .txt/.md）待真机确认。
+
+---
+
+**🧩 `M_8nodes_extension` L1-b 参数补齐：请求体传递 + N-04 / N-08 深化（2026-10-14 · 代码批）**
+
+- **背景（本批要解决的 = L1-a 地基之上的参数级补齐）**：[M_8nodes_extension.md](actionPlan/M_8nodes_extension.md) §6 **L1-b** = N-04~N-08 参数补齐（纯参数级，依赖 L1-a）。拆四个子项：① 采样参数**请求体传递**（N-06/N-07）· ② N-04 TextMerge 五项 · ③ N-08 TextOutput 导出模板/批量导出/自动命名/归档策略 · ④ N-07 多图顺序。
+- **本轮落地（代码 · 回归基线只升不降）**：
+  - **① 请求体传递**（§4.6 / §5.1）：`OfficialChatRequest` 新增 `top_k` / `stop`（StringList）/ `frequency_penalty` / `presence_penalty`，`build_request_body` **非零 / 非空才写**（默认请求体不变 ⇒ 既有断言与线上行为零变化）；N-06 / N-07 official 分支从节点参数填充。`n`（多候选）/ `response_format`（JSON 输出）留 **L1-e**（依赖豆包 / DeepSeek 实测）。
+  - **② N-04 文本合并**（§4.4）：`sort_mode`（edge_order / by_name · stable 字典序）· `prefix` / `suffix`（每段前后 · 支持 `\n` 转义）· `source_label`（none / [nX] · 每段 `[序号] `）· `dedup`（保序去重）· `empty_line_mode`（keep / collapse / remove —— **空段跳过仅作用于 keep**，与 ignore_empty 交互口径写入实现）。
+  - **③ N-08 文本输出**（§4.8）：`export_template`（自定义元信息头模板 · 占位符 `{label} {workflow} {node_id} {state} {duration} {time}`）· `batch_export`（自动导出**所有有输出节点** · 文件名 = 主干 + 节点 id）· `file_stem`（自动导出文件名主干覆盖工作流名）· `archive_policy`（inherit · **覆盖字段待实施确认** —— 已写入实施记录，行为零变化）。
+  - **④ N-07 多图顺序**（§4.7）：`image_order`（edge_order / by_name）—— 执行器在收集图片后按文件名稳定排序；VL1-01 对称差集更新为 `{model, image_order}`。
+- **验证（2026-10-14 本机实测）**：`source/build.ps1` **0 error / 0 warning**；`api_probe --exec-selftest` **546 → 585 / 0**（+39 = VL1-07 ×9 · VL1-09 ×5 · VL1-10 ×2 · VL1-11 ×3 + 既有 VL1-03 等）；`api_probe --graph-selftest` **144 / 0**（VL1-01 更新后仍全 PASS）；`api_probe --selftest` 十三组 PASS；`aiwrite --provider-selftest` 52/0；`check_all.ps1` **15 / 15 PASS · exit 0**（物证 `build/logs/check_all_20261015_001447.log`）。
+- **落点**：[deepseek_official_provider.h](../source/ai/include/deepseek_official_provider.h) · [deepseek_official_provider.cpp](../source/ai/src/deepseek/deepseek_official_provider.cpp) · [node_registry.cpp](../source/engine/src/node_registry.cpp) · [local_nodes.cpp](../source/nodes/src/local_nodes.cpp) · [text_export.h](../source/utils/include/text_export.h) · [text_export.cpp](../source/utils/src/text_export.cpp) · [editor_state.cpp](../source/ui/src/editor_state.cpp) · [api_probe.cpp](../source/tools/api_probe.cpp) · 本文。**⛔ 未提交**（协作契约 §6；工作区另有批 9-5 未提交改动，均保持不动）。
+- **后续批次**：L1-c（N-01 文件导入 + N-02 目录批量/预处理 + N-07 图片预处理复用）→ L1-d（N-03 AI 生成提示词）→ L1-e（JSON 输出实测）→ L1-f（N-05 参数预设收口）。
+
+---
+
+**🧩 `M_8nodes_extension` L1-a 横向地基：推理节点公共参数面 + 参数二级分组 + 超时/重试节点级覆盖 + 网页版参数标注（2026-10-14 · 代码批）**
+
+- **背景（本批要解决的 = L1 实施的地基）**：[M_8nodes_extension.md](actionPlan/M_8nodes_extension.md) §6 将 L1 拆为 **L1-a（横向能力）** → L1-b~f（逐节点）。L1-a = ① 推理节点公共参数面抽象（N-06/N-07 同一份）· ② 参数二级分组（采样 / 输出 / 高级）· ③ 超时 + 重试**节点级覆盖**（§3.3）· ④ 网页版参数「忽略」标注（§3.4）。
+- **本轮落地（代码 · 只读 §7.3 回归基线全部达标）**：
+  - **公共参数面**（§3.1 / §5.1）：`engine::inference_common_params(mode_default)` 新增 —— N-06 / N-07 注册**同一份**公共参数（`system_prompt` / `mode` / `max_tokens` / `stop` / `stream` + `temperature` / `top_p` / `top_k` / `frequency_penalty` / `presence_penalty` / `seed` + `timeout_connect_ms` / `timeout_first_byte_ms` / `timeout_stream_idle_ms` / `retry_enabled` / `retry_count` / `retry_interval_ms`），只在各节点特有参数上增量（N-06 特有 `model`；N-07 无特有）。**参数 id / 默认值 / 范围 / 枚举不改**（旧工作流 JSON 兼容）。`mode` 默认值**保持现状**（N-06=web / N-07=official · `NE-D38` 零行为变更）。N-07 新增 `mode` / `seed` / `top_k` / `stop` / 惩罚类参数面（**能力早已存在**：M8-14 网页版图片理解已落地，真实缺口是参数面 · 批 9-0 P1-4 复核结论）。
+  - **`ParamType::StringList`**（`stop` 序列 · JSON 数组存储）：`graph.h` 枚举 + `graph.cpp` `paramTypeName` / `validateParam` + `property_panel.cpp` `draw_param_widget`（逗号分隔编辑 ↔ 数组）+ `node_registry.cpp` `string_list_param()`。
+  - **参数二级分组**（§3.2 / §5.2）：`Param.group` 字段（"sampling"/"output"/"advanced"）—— **不影响序列化**（工作流 JSON 只写 `params[id]=value`）；`property_panel.cpp` 参数循环改「预扫描 + 分组排序 + 组间二级 `CollapsingHeader`」（采样/高级折叠 · 输出展开 · 折叠状态持久化到 imgui.ini）；未分组参数行为不变。
+  - **超时 / 重试节点级覆盖**（§3.3 / §5.3）：N-06 官方线 + **N-07 官方线（新增重试循环 · 现状无）** —— 节点参数非零优先、0 回落全局 `timeout.*` / `error.*`；`timeout_stream_idle_ms` 提示走全局（不改变行为）；web 线（`dom_request`）总超时 = 节点覆盖优先、默认 180000 **不缩短**（文档 §3.3 增量③ · 实施记录注明）。
+  - **网页版参数标注**（§3.4）：`property_panel.cpp` 在 `mode=web` 时对 `top_k` / `stop` / `frequency_penalty` / `presence_penalty` / `seed`（+ `response_format`）渲染灰色「（网页版忽略）」后缀 —— 参数**仍可见**（不隐藏、不序列化改动）；temperature/max_tokens/top_p 的忽略提示沿用 Console 侧既有文案（不重复造）。
+- **验证（2026-10-14 本机实测）**：`source/build.ps1` **0 error / 0 warning**；`api_probe --graph-selftest` **110 → 144 / 0**（+34 = VL1-01 对称差集 {model} · VL1-02 分组归属 17 条 · VL1-12 网页版忽略标注 5 条）；`api_probe --exec-selftest` **546 → 559 / 0**（+13 = VL1-03 覆盖参数声明 12 条 + 覆盖规则 1 条）；`api_probe --selftest` **十三组全 PASS**；`aiwrite --provider-selftest` **52 / 0**；`aiwrite --run-selftest` **PASS**；`check_links` **1350 / broken 0**（未改文档链接面）。
+- **落点**：[node_registry.cpp](../source/engine/src/node_registry.cpp) · [graph.h](../source/engine/include/graph.h) · [graph.cpp](../source/engine/src/graph.cpp) · [property_panel.cpp](../source/ui/src/property_panel.cpp) · [local_nodes.cpp](../source/nodes/src/local_nodes.cpp) · [api_probe.cpp](../source/tools/api_probe.cpp) · 本文。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」；工作区另有批 9-5 未提交改动，均保持不动）。
+- **后续批次**：L1-b（N-04~N-08 参数补齐 · 含 `top_k`/`stop`/惩罚类/n/JSON 输出**请求体传递**）→ L1-c（N-01 文件导入 + N-02 目录批量/预处理）→ L1-d（N-03 AI 生成提示词）→ L1-e（JSON 输出实测）→ L1-f（N-05 收口）。
+
+---
+
 **🗃️ 看板归档：`Archive` 启用 + 已完成任务整批移入（2026-10-13 · 零代码批 · 批 9-4）**
 
 - **背景（本批要解决的 = 看板看不出「还剩什么」）**：`DevPlan.todo` 的 `Debug / Feature / Test / Docs / M7B / M8 / M_patchC` 七个根分支下散布着 **124 个 `done:true` 的叶子任务**（已完成但仍留在原分类里），组计数标签也停在归档前的数字 ⇒ 看板无法一眼看出待办量。
@@ -88,6 +182,18 @@
   * **复核判据**：**`Archive` 之外已完成叶子 = 0**（各根 `done_leaves` 全为 0）。
 - **验证（2026-10-13 本机实测）**：`check_links.py` ⇒ **checked 1349 / broken 0**（批 9-3 终值 1341 ⇒ **本批 +8**）；`DevPlan.todo` **JSON 有效**（无重复 id · **CRLF 完好**）；本批**未改 `source/**`** ⇒ `check_all` 其余数字与批 9-3 一致。
 - **落点**：`docs/DevPlan.todo` · [../AI_README.md](../AI_README.md) §7 · [DocMAP.md](DocMAP.md) §5.1/§5.2 · [变量术语对照表.md](变量术语对照表.md) §11.2 · [AI_Status.md](AI_Status.md) · 本文件。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+---
+
+**🗃️ 看板清理：新建 `Deprecate` 分支收纳放弃计划 + 顶部书写规则（2026-10-14 · 零代码批 · 批 9-5）**
+
+- **背景（本批要解决的 = 放弃项散落原分支 · 看板无书写规则）**：`Feature / M8 / M_patchC` 分支下仍散落 **13 项已放弃 / 已退场 / 暂停 / 并入他项**的叶子任务（含原 `M7B` 整根），看板无法一眼看出「哪些路已死」；且新建计划缺乏统一书写纪律。
+- **本轮落地（纯看板结构 · 零代码）**：
+  * 新增顶层根 **`Deprecate`（key=341 · 已放弃 / 已退场 / 暂停 / 并入计划）**，按来源分 4 组（342–345）：`M7B（6 项）` / `Feature（4 项）` / `M8（2 项）` / `M_patchC（1 项）` ⇒ **13 个叶子**，内容原样保留、`done` 均 false。
+  * 迁空的原 **`M7B` 空壳根移除**（组内 2 项已并入 `M8-21`，`M8-21` 含交叉引用）；受影响根标题更新 `Feature`（10 项）· `M8`（2 项）· `M_patchC`（8 项）。
+  * 文档顶部新增 **`board_rules`** 三条书写规则：① 新建计划必须**精简**语言、人类可读；② **复合型任务必须拆分为多个子任务模块**；③ **一条任务只能有一个目的 + 一个行为**（拆不开的写为前置依赖）。
+- **验证（2026-10-14 本机实测）**：`check_links.py` ⇒ **checked 1350 / broken 0**（批 9-4 基线 1349 ⇒ 本批 **+1** = 本小节新增链接，可解析；节点迁移本身不产生 .md 链接变更）；`DevPlan.todo` **JSON 有效**（9 根 · **286 节点** · key 无重复 · `Archive` 外 `done:true` 仍为 **0**）；保留用户文件原特征（**LF 行尾 · 无尾换行 · `expandKeys` 含 17**）；本批**未改 `source/**`**。
+- **落点**：`docs/DevPlan.todo` · 本文件。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
 
 ---
 

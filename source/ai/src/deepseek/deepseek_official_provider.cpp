@@ -296,6 +296,26 @@ nlohmann::json build_request_body(const OfficialChatRequest& request,
     if (request.seed > 0) {
         body["seed"] = request.seed; // M_rerun：新 seed 重跑（后端若不支持则忽略）
     }
+    // M_8nodes_extension L1-b：采样项非零 / 非空才写（既有请求体断言不因新增字段而变）
+    if (request.top_k > 0) {
+        body["top_k"] = request.top_k;
+    }
+    if (!request.stop.empty()) {
+        body["stop"] = request.stop;
+    }
+    if (request.frequency_penalty != 0.0) {
+        body["frequency_penalty"] = request.frequency_penalty;
+    }
+    if (request.presence_penalty != 0.0) {
+        body["presence_penalty"] = request.presence_penalty;
+    }
+    // M_8nodes_extension L1-e（§4.6）：JSON 输出 + 多候选（非默认才写；后端不支持时由调用方提示）
+    if (request.response_format == "json_object") {
+        body["response_format"] = {{"type", "json_object"}};
+    }
+    if (request.n > 1) {
+        body["n"] = request.n;
+    }
     body["messages"]    = nlohmann::json::array();
     if (!request.system_prompt.empty()) {
         body["messages"].push_back({{"role", "system"}, {"content", request.system_prompt}});

@@ -19,6 +19,7 @@ inline ImU32 category_color(engine::NodeCategory category)
     case engine::NodeCategory::Config:    return IM_COL32(0x7A, 0x5A, 0x9E, 255); // 紫
     case engine::NodeCategory::Inference: return IM_COL32(0x3A, 0x6E, 0xA5, 255); // 深蓝
     case engine::NodeCategory::Output:    return IM_COL32(0xC4, 0x7A, 0x3A, 255); // 橙
+    case engine::NodeCategory::Auxiliary: return IM_COL32(0x6E, 0x8E, 0x4E, 255); // 橄榄绿（M_node_expansion L2）
     }
     return IM_COL32(0x4A, 0x9E, 0x8F, 255);
 }

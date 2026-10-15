@@ -55,6 +55,7 @@
 #include "deepseek_web_client.h"       // L4（PB2-28④）：会话失效识别断言（VB2-27）
 #include "image_decode.h"           // M7-04/05：图片格式嗅探 + 解码 + 失败文案断言
 #include "image_convert.h"      // M8-14：图片准备（白名单 / 限额 → 缩放 + 转码）离线断言
+#include "image_preprocess.h"   // M_8nodes_extension L1-c（§4.2）：图片预处理（用户参数 → 裁剪/缩放）
 #include "upload_evidence.h"    // M8-14：上传双证据（I18）离线断言
 #include "upload_registry.h"    // M8-14：站点上传注册表 + 契约离线断言
 #include "asset_store.h"            // P7a-04：统一资源目录（令牌 / 归档 / 解析）断言
@@ -70,6 +71,7 @@
 #include "http_json.h"            // L2（B2-b）：通用 JSON POST / query 拼接断言
 #include "http_net.h"             // M_patchAB §2.3（PB-06 剩余）：代理 / 自签证书策略断言
 #include "credential.h"           // M_patchAB §2.3（PB-06 剩余）：凭据库配置（目录 / 后端）
+#include "text_export.h"          // M_8nodes_extension L1-b（§4.8）：N-08 导出模板 / 自动命名断言
 
 #include <fstream>
 #include <sstream>
@@ -1933,11 +1935,14 @@ int graph_selftest()
     // ---------------------------------------------------- 1. 节点注册表 -----
     engine::registerAllNodes();
     NodeRegistry& registry = NodeRegistry::instance();
-    expect_eq(check, std::to_string(registry.size()), "8", "注册表包含 8 个节点类型");
+    expect_eq(check, std::to_string(registry.size()), "14",
+              "注册表包含 14 个节点类型"); // M_node_expansion L2：8 + 6 文本处理节点
 
     const char* expected_types[] = {"TextInput",      "ImageInput",    "PromptTemplate",
                                     "TextMerge",      "ProviderConfig", "LLMGenerate",
-                                    "VLMGenerate",    "TextOutput"};
+                                    "VLMGenerate",    "TextOutput",
+                                    "TextSplit",      "TextExtract",  "TextClean",
+                                    "TextReplace",    "TextStats",    "TextDiff"};
     for (const char* type : expected_types) {
         expect(check, registry.find(type) != nullptr, std::string("已注册 ") + type);
     }
@@ -1950,7 +1955,8 @@ int graph_selftest()
     const CategoryCount categories[] = {
         {NodeCategory::Input, 2, "输入"}, {NodeCategory::Process, 2, "处理"},
         {NodeCategory::Config, 1, "配置"}, {NodeCategory::Inference, 2, "推理"},
-        {NodeCategory::Output, 1, "输出"}}; // M7：ImagePreview 移除后「输出」只剩 TextOutput
+        {NodeCategory::Output, 1, "输出"},
+        {NodeCategory::Auxiliary, 6, "辅助功能"}}; // M7：ImagePreview 移除后「输出」只剩 TextOutput
     for (const CategoryCount& item : categories) {
         expect(check, registry.listByCategory(item.category).size() == item.count,
                std::string("分类 ") + item.name + " 节点数 = " + std::to_string(item.count));
@@ -1995,6 +2001,112 @@ int graph_selftest()
                has_mode && provider->outputs.size() == 1 &&
                    provider->outputs[0].type == PortType::Provider,
                "ProviderConfig = provider 输出 + mode 枚举");
+    }
+
+    // ---------------------------------------------------- 1.5 M_8nodes_extension L1-a ----
+    // VL1-01：推理节点公共参数面 —— N-06 / N-07 参数集一致，对称差集 = {model}（N-06 特有）
+    // VL1-02：参数二级分组归属（采样 / 输出 / 高级）
+    // VL1-12：网页版忽略参数（top_k / stop / frequency_penalty / presence_penalty / seed）
+    //         在注册表里的标注存在（UI 灰色「（网页版忽略）」的依据）
+    if (const engine::Definition* llm = registry.find("LLMGenerate")) {
+        if (const engine::Definition* vlm = registry.find("VLMGenerate")) {
+            std::vector<std::string> llm_ids;
+            std::vector<std::string> vlm_ids;
+            for (const engine::Param& param : llm->params) {
+                llm_ids.push_back(param.id);
+            }
+            for (const engine::Param& param : vlm->params) {
+                vlm_ids.push_back(param.id);
+            }
+            std::vector<std::string> diff;
+            for (const std::string& id : llm_ids) {
+                if (std::find(vlm_ids.begin(), vlm_ids.end(), id) == vlm_ids.end()) {
+                    diff.push_back(id);
+                }
+            }
+            for (const std::string& id : vlm_ids) {
+                if (std::find(llm_ids.begin(), llm_ids.end(), id) == llm_ids.end()) {
+                    diff.push_back(id);
+                }
+            }
+            std::string diff_text;
+            for (std::size_t i = 0; i < diff.size(); ++i) {
+                if (i != 0) {
+                    diff_text += ",";
+                }
+                diff_text += diff[i];
+            }
+            // N-06 特有 = {model}；N-07 特有 ⊆ {image_order, 图片预处理参数}（L1-b §4.7 / L1-c §4.7）
+            const std::vector<std::string> vlm_only = {
+                "image_order", "resize_mode", "resize_max_width", "resize_max_height",
+                "crop_enabled", "crop_x", "crop_y", "crop_w", "crop_h"};
+            const auto id_in = [](const std::vector<std::string>& ids, const std::string& id) {
+                return std::find(ids.begin(), ids.end(), id) != ids.end();
+            };
+            bool n06_only_ok = true;
+            for (const std::string& id : llm_ids) {
+                if (id_in(vlm_ids, id)) {
+                    continue;
+                }
+                // N-06 特有 = model / response_format（L1-e §4.6）/ n（候选数）
+                n06_only_ok = n06_only_ok && (id == "model" || id == "response_format" || id == "n");
+            }
+            bool n07_only_ok = true;
+            for (const std::string& id : vlm_ids) {
+                if (id_in(llm_ids, id)) {
+                    continue;
+                }
+                n07_only_ok = n07_only_ok && id_in(vlm_only, id);
+            }
+            expect(check, n06_only_ok && n07_only_ok,
+                   "VL1-01 公共参数面：N-06 特有 = model；N-07 特有 ⊆ 节点专属集（实际差集: " + diff_text + "）");
+        }
+    }
+    const auto group_has = [&check, &registry](const char* node_type, const std::string& group,
+                                               const std::vector<std::string>& ids) {
+        const engine::Definition* def = registry.find(node_type);
+        for (const std::string& id : ids) {
+            bool found = false;
+            if (def != nullptr) {
+                for (const engine::Param& param : def->params) {
+                    if (param.id == id) {
+                        found = param.group == group;
+                        break;
+                    }
+                }
+            }
+            expect(check, found,
+                   std::string("VL1-02 分组归属：") + node_type + "." + id + " ∈ " + group);
+        }
+    };
+    group_has("LLMGenerate", "sampling",
+              {"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "seed"});
+    group_has("LLMGenerate", "output", {"system_prompt", "mode", "max_tokens", "stop", "stream"});
+    group_has("LLMGenerate", "advanced",
+              {"timeout_connect_ms", "timeout_first_byte_ms", "timeout_stream_idle_ms",
+               "retry_enabled", "retry_count", "retry_interval_ms"});
+    group_has("VLMGenerate", "sampling",
+              {"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "seed"});
+    group_has("VLMGenerate", "output", {"system_prompt", "mode", "max_tokens", "stop", "stream"});
+    {
+        // VL1-12：网页版忽略标注依据存在（§3.4 集合 = top_k / stop / frequency_penalty /
+        //   presence_penalty / seed / response_format；UI 据此显示灰色「（网页版忽略）」）
+        const engine::Definition* llm = registry.find("LLMGenerate");
+        const char* ignored_ids[]     = {"top_k", "stop", "frequency_penalty", "presence_penalty",
+                                         "seed"};
+        for (const char* id : ignored_ids) {
+            bool annotated = false;
+            if (llm != nullptr) {
+                for (const engine::Param& param : llm->params) {
+                    if (param.id == id &&
+                        param.description.find("网页版忽略") != std::string::npos) {
+                        annotated = true;
+                        break;
+                    }
+                }
+            }
+            expect(check, annotated, std::string("VL1-12 网页版忽略标注：") + id);
+        }
     }
 
     // ---------------------------------------------------- 2. Graph 增删 -----
@@ -2715,8 +2827,325 @@ int execution_selftest()
 
     engine::registerAllNodes();
     aiwrite::nodes::registerAllExecutors();
-    expect_eq(check, std::to_string(engine::NodeExecutorRegistry::instance().size()), "8",
-              "已注册 8 个节点执行函数");
+    expect_eq(check, std::to_string(engine::NodeExecutorRegistry::instance().size()), "14",
+              "已注册 14 个节点执行函数"); // M_node_expansion L2：8 + 6
+
+    // ---- M_8nodes_extension L1-a（VL1-03 · 离线部分）：timeout.* / error.* 节点级覆盖参数面 ----
+    //  * 行为生效（填参数 ⇒ 超时/重试变）属 AL1-04 人工验收（断网 / 超时场景）；
+    //    离线断言：N-06 / N-07 都声明同名覆盖参数，且默认 0 = 继承全局（§5.3 覆盖规则）。
+    {
+        const char* override_ids[] = {"timeout_connect_ms", "timeout_first_byte_ms",
+                                      "timeout_stream_idle_ms", "retry_enabled", "retry_count",
+                                      "retry_interval_ms"};
+        for (const char* type : {"LLMGenerate", "VLMGenerate"}) {
+            const engine::Definition* def = engine::NodeRegistry::instance().find(type);
+            for (const char* id : override_ids) {
+                bool found = false;
+                if (def != nullptr) {
+                    for (const engine::Param& param : def->params) {
+                        if (param.id == id) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                expect(check, found,
+                       std::string("VL1-03 覆盖参数声明：") + type + "." + id);
+            }
+        }
+        // 覆盖规则：数值覆盖项默认 0 = 继承全局（§5.3）
+        const engine::Definition* llm = engine::NodeRegistry::instance().find("LLMGenerate");
+        const engine::Param*      connect_param = nullptr;
+        const engine::Param*      retry_param   = nullptr;
+        if (llm != nullptr) {
+            for (const engine::Param& param : llm->params) {
+                if (param.id == "timeout_connect_ms") {
+                    connect_param = &param;
+                }
+                if (param.id == "retry_count") {
+                    retry_param = &param;
+                }
+            }
+        }
+        expect(check, connect_param != nullptr && connect_param->number() == 0.0 &&
+                          retry_param != nullptr && retry_param->number() == 0.0,
+               "VL1-03 覆盖规则：timeout_connect_ms / retry_count 默认 0 = 继承全局");
+    }
+
+    // ---- M_8nodes_extension L1-b（VL1-09 · 离线部分）：N-06/N-07 采样参数 → 请求体构造 ----
+    //  * `top_k` / `stop` / `frequency_penalty` / `presence_penalty` 非零 / 非空才写进 body
+    //    （默认请求体不变，既有断言与线上行为零变化）
+    {
+        aiwrite::ai::OfficialChatRequest sample_req;
+        sample_req.model    = "deepseek-chat";
+        sample_req.prompt   = "p";
+        sample_req.top_k    = 5;
+        sample_req.stop     = {"END", "\n"};
+        sample_req.frequency_penalty = 0.5;
+        sample_req.presence_penalty  = -0.2;
+        const nlohmann::json body = aiwrite::ai::build_request_body(sample_req);
+        expect(check, body.contains("top_k") && body["top_k"] == 5, "VL1-09 请求体：top_k 传递");
+        expect(check, body.contains("stop") && body["stop"].is_array() &&
+                          body["stop"].size() == 2 && body["stop"][0] == "END",
+               "VL1-09 请求体：stop 列表传递");
+        expect(check, body.contains("frequency_penalty") && body["frequency_penalty"] == 0.5,
+               "VL1-09 请求体：frequency_penalty 传递");
+        expect(check, body.contains("presence_penalty") && body["presence_penalty"] == -0.2,
+               "VL1-09 请求体：presence_penalty 传递");
+
+        aiwrite::ai::OfficialChatRequest default_req;
+        default_req.model  = "deepseek-chat";
+        default_req.prompt = "p";
+        const nlohmann::json default_body = aiwrite::ai::build_request_body(default_req);
+        expect(check, !default_body.contains("top_k") && !default_body.contains("stop") &&
+                          !default_body.contains("frequency_penalty") &&
+                          !default_body.contains("presence_penalty"),
+               "VL1-09 请求体：默认不写采样项（既有行为不变）");
+
+        // M_8nodes_extension L1-e：JSON 输出 + 多候选（非默认才写）
+        aiwrite::ai::OfficialChatRequest json_req;
+        json_req.model            = "deepseek-chat";
+        json_req.prompt           = "p";
+        json_req.response_format  = "json_object";
+        json_req.n                = 3;
+        const nlohmann::json json_body = aiwrite::ai::build_request_body(json_req);
+        expect(check,
+               json_body.contains("response_format") &&
+                   json_body["response_format"]["type"] == "json_object",
+               "VL1-09 请求体：response_format=json_object 传递");
+        expect(check, json_body.contains("n") && json_body["n"] == 3,
+               "VL1-09 请求体：n（候选数）传递");
+    }
+
+    // ---- M_8nodes_extension L1-b（VL1-07）：N-04 文本合并五项参数行为 ----
+    {
+        Graph             graph;
+        const std::string a = add_node(check, graph, "TextInput", "合并 n1");
+        const std::string b = add_node(check, graph, "TextInput", "合并 n2");
+        const std::string c = add_node(check, graph, "TextInput", "合并 n3");
+        const std::string m = add_node(check, graph, "TextMerge", "合并节点");
+        set_param(graph, a, "text", "banana");
+        set_param(graph, b, "text", "apple");
+        set_param(graph, c, "text", "banana");
+        graph.edges.push_back(make_edge("m1", a, "text", m, "texts"));
+        graph.edges.push_back(make_edge("m2", b, "text", m, "texts"));
+        graph.edges.push_back(make_edge("m3", c, "text", m, "texts"));
+        // 参数：by_name 排序 + 前缀后缀 + 带源标签 + 去重（空行增强见下方直接调用用例）
+        set_param(graph, m, "sort_mode", "by_name");
+        set_param(graph, m, "prefix", "<");
+        set_param(graph, m, "suffix", ">");
+        set_param(graph, m, "source_label", "[nX]");
+        set_param(graph, m, "dedup", true);
+        set_param(graph, m, "empty_line_mode", "remove");
+
+        Executor                 executor;
+        std::vector<std::string> console_lines;
+        executor.setConsoleHandler(
+            [&console_lines](const std::string& text) { console_lines.push_back(text); });
+        std::string error;
+        expect(check, executor.start(graph, &error), "VL1-07：N-04 工作流 start 通过", error);
+        expect(check, executor.runToCompletion(&graph, 32) &&
+                          executor.state() == ExecState::Finished &&
+                          executor.failedCount() == 0,
+               "VL1-07：N-04 工作流 runToCompletion 完成");
+        const nlohmann::json* merged = executor.outputs().find(m, "text");
+        expect_eq(check, merged != nullptr ? merged->dump() : std::string("(无输出)"),
+                  nlohmann::json("[1] <apple>\n[2] <banana>").dump(),
+                  "VL1-07：排序 + 去重 + 前缀后缀 + 带源标签（apple / banana）");
+    }
+    { // VL1-07：空行增强（直接调用执行器 —— 空段经必填校验不可由 TextInput 产生）
+        const auto run_merge = [](const nlohmann::json& params_json,
+                                  const nlohmann::json& texts) {
+            nlohmann::json inputs;
+            inputs["texts"] = texts;
+            engine::ExecutionContext ctx;
+            return aiwrite::nodes::execute_text_merge(inputs, params_json, ctx).dump();
+        };
+        nlohmann::json collapse_params;
+        collapse_params["empty_line_mode"] = "collapse";
+        expect_eq(check, run_merge(collapse_params, {"a", "", "", "b"}),
+                  nlohmann::json("a\n\nb").dump(), "VL1-07：collapse 连续空段合并为一个");
+        nlohmann::json remove_params;
+        remove_params["empty_line_mode"] = "remove";
+        expect_eq(check, run_merge(remove_params, {"a", "", "", "b"}),
+                  nlohmann::json("a\nb").dump(), "VL1-07：remove 全部空段移除");
+        nlohmann::json keep_params;
+        keep_params["empty_line_mode"]  = "keep";
+        keep_params["ignore_empty"]     = false;
+        expect_eq(check, run_merge(keep_params, {"a", "", "", "b"}),
+                  nlohmann::json("a\n\n\nb").dump(), "VL1-07：keep 保留全部空段（ignore_empty=false）");
+    }
+    { // VL1-07：默认行为不变（edge_order / keep / ignore_empty）—— 空段被忽略
+        Graph             graph;
+        const std::string a = add_node(check, graph, "TextInput", "默认 n1");
+        const std::string b = add_node(check, graph, "TextInput", "默认 n2");
+        const std::string m = add_node(check, graph, "TextMerge", "默认合并");
+        set_param(graph, a, "text", "甲");
+        set_param(graph, b, "text", "乙");
+        graph.edges.push_back(make_edge("d1", a, "text", m, "texts"));
+        graph.edges.push_back(make_edge("d2", b, "text", m, "texts"));
+
+        Executor executor;
+        std::string error;
+        expect(check, executor.start(graph, &error), "VL1-07：默认 merge start 通过", error);
+        expect(check, executor.runToCompletion(&graph, 32), "VL1-07：默认 merge 完成");
+        const nlohmann::json* merged = executor.outputs().find(m, "text");
+        expect_eq(check, merged != nullptr ? merged->dump() : std::string("(无输出)"),
+                  nlohmann::json("甲\n乙").dump(), "VL1-07：默认行为 = 边顺序 + 换行分隔");
+    }
+
+    // ---- M_8nodes_extension L1-b（VL1-11）：N-08 导出模板 / 自动命名 ----
+    {
+        aiwrite::utils::DocumentMeta meta;
+        meta.workflow    = "我的工作流";
+        meta.node_id     = "n2";
+        meta.state       = "done";
+        meta.duration_ms = 1234.0;
+        meta.stamp       = "2026-10-14 12:00:00";
+        const std::string body = aiwrite::utils::build_document_body(
+            "正文", "标签", meta, true, "{label}|{workflow}|{node_id}|{state}|{duration}|{time}");
+        expect(check,
+               body.rfind("标签|我的工作流|n2|done|1234|2026-10-14 12:00:00\n\n正文", 0) == 0,
+               "VL1-11：导出模板占位符替换正确");
+        const std::string default_body =
+            aiwrite::utils::build_document_body("正文", "标签", meta, true);
+        expect(check, default_body.rfind("# 标签", 0) == 0 && default_body.find("> 工作流：") != std::string::npos,
+               "VL1-11：空模板 = 默认元信息头不变");
+
+        // 自动命名：file_stem 覆盖工作流名（写临时目录验证后清理）
+        const std::filesystem::path temp_dir = std::filesystem::temp_directory_path();
+        aiwrite::utils::ExportRequest        request;
+        request.text      = "正文";
+        request.dir       = temp_dir.string();
+        request.file_stem = "自定义主干";
+        request.meta.workflow = "工作流名";
+        const aiwrite::utils::ExportResult result = aiwrite::utils::export_text_document(request);
+        expect(check, result.ok && result.path.find("自定义主干-") != std::string::npos,
+               "VL1-11：file_stem 自动命名（覆盖工作流名）");
+        if (result.ok) {
+            std::error_code remove_error;
+            std::filesystem::remove(result.path, remove_error);
+        }
+    }
+
+    // ---- M_8nodes_extension L1-b（VL1-10 · 离线部分）：N-07 参数面（seed/mode 对称 + 多图顺序）----
+    {
+        const engine::Definition* vlm = engine::NodeRegistry::instance().find("VLMGenerate");
+        const engine::Param*      order = nullptr;
+        const engine::Param*      seed  = nullptr;
+        const engine::Param*      mode  = nullptr;
+        if (vlm != nullptr) {
+            for (const engine::Param& param : vlm->params) {
+                if (param.id == "image_order") {
+                    order = &param;
+                }
+                if (param.id == "seed") {
+                    seed = &param;
+                }
+                if (param.id == "mode") {
+                    mode = &param;
+                }
+            }
+        }
+        expect(check,
+               order != nullptr && order->text() == "edge_order" &&
+                   std::find(order->enum_options.begin(), order->enum_options.end(), "by_name") !=
+                       order->enum_options.end(),
+               "VL1-10：image_order 参数存在且默认 edge_order（含 by_name 选项）");
+        expect(check, seed != nullptr && seed->number() == 0.0 && mode != nullptr,
+               "VL1-10：N-07 具备 seed（默认 0）与 mode 参数（与 N-06 对称）");
+    }
+
+    // ---- M_8nodes_extension L1-c（VL1-05 · 离线部分）：N-02 目录批量 / 预处理参数面 ----
+    //  * 「预处理尺寸正确」由 image_preprocess_selftest 覆盖（零开销 / fit / fill / 裁剪 / 组合）；
+    //    目录批量收集行为依赖真实文件系统 → 属 AL1-05 人工验收范围
+    {
+        const engine::Definition* img = engine::NodeRegistry::instance().find("ImageInput");
+        const std::vector<std::string> wanted = {
+            "directory", "resize_mode", "resize_max_width", "resize_max_height", "crop_enabled",
+            "crop_x", "crop_y", "crop_w", "crop_h"};
+        bool all_ok = img != nullptr;
+        for (const std::string& id : wanted) {
+            bool found = false;
+            if (img != nullptr) {
+                for (const engine::Param& param : img->params) {
+                    if (param.id == id) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            all_ok = all_ok && found;
+        }
+        expect(check, all_ok,
+               "VL1-05：N-02 具备 directory + 图片预处理参数面（目录批量 / 预处理）");
+    }
+
+    // ---- M_8nodes_extension L1-d（VL1-06）：N-03 `seed` 只作用于内部 AI 调用，不影响模板替换 ----
+    {
+        const engine::Definition* tpl = engine::NodeRegistry::instance().find("PromptTemplate");
+        const engine::Param*      seed_param = nullptr;
+        const engine::Param*      provider_param = nullptr;
+        if (tpl != nullptr) {
+            for (const engine::Param& param : tpl->params) {
+                if (param.id == "seed") {
+                    seed_param = &param;
+                }
+                if (param.id == "provider") {
+                    provider_param = &param;
+                }
+            }
+        }
+        expect(check, seed_param != nullptr && provider_param != nullptr,
+               "VL1-06：N-03 注册面具备 provider（AI 配置）与 seed（只作用于内部 AI 调用）");
+
+        // 模板替换本身不受 seed 影响（默认 manual 行为不变）
+        nlohmann::json inputs;
+        inputs["vars"] = {"世界"};
+        nlohmann::json params;
+        params["template"] = "你好，{vars}！";
+        params["seed"]     = 999; // 只作用于内部 AI 调用
+        engine::ExecutionContext ctx;
+        const nlohmann::json templated =
+            aiwrite::nodes::execute_prompt_template(inputs, params, ctx);
+        expect_eq(check, templated.dump(), nlohmann::json("你好，世界！").dump(),
+                  "VL1-06：模板替换不受 seed 影响（manual 行为不变）");
+    }
+
+    // ---- M_8nodes_extension L1-f（VL1-08 · 离线部分）：N-05 参数预设 / 模型列表参数面 ----
+    //  * 参数预设带出（选 provider → api_base / key_ref / model 枚举）是 UI 行为（property_panel）；
+    //    离线断言 = N-05 参数面齐全，且 provider 枚举来自配置表（provider_option_ids）
+    {
+        const engine::Definition* cfg = engine::NodeRegistry::instance().find("ProviderConfig");
+        const std::vector<std::string> wanted = {
+            "provider", "mode", "api_base", "model", "model_custom", "api_key", "api_key_ref"};
+        bool all_ok = cfg != nullptr;
+        for (const std::string& id : wanted) {
+            bool found = false;
+            if (cfg != nullptr) {
+                for (const engine::Param& param : cfg->params) {
+                    if (param.id == id) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            all_ok = all_ok && found;
+        }
+        expect(check, all_ok, "VL1-08：N-05 参数面齐全（provider/mode/api_base/model/custom/key/ref）");
+        const engine::Param* provider_param = nullptr;
+        if (cfg != nullptr) {
+            for (const engine::Param& param : cfg->params) {
+                if (param.id == "provider") {
+                    provider_param = &param;
+                }
+            }
+        }
+        expect(check,
+               provider_param != nullptr && !provider_param->enum_options.empty() &&
+                   provider_param->enum_options == engine::provider_option_ids(),
+               "VL1-08：N-05 provider 枚举 = 配置表 provider_option_ids（表驱动）");
+    }
 
     // ------------------------------------------------ 1. 本地链路端到端 ------
     {
@@ -5152,6 +5581,16 @@ int execution_selftest()
     }
 
     {
+        // M_8nodes_extension L1-c（§4.2）：图片预处理（用户参数 → 裁剪 / 缩放）
+        //  * VL1-05 离线部分：零开销 / fit / fill / 裁剪 / 组合 / 失败路径
+        std::printf("   -- 图片预处理（M_8nodes_extension L1-c）--\n");
+        int preprocess_passed = 0;
+        const int preprocess_failed = aiwrite::ai::image_preprocess_selftest(&preprocess_passed);
+        check.passed += preprocess_passed;
+        check.failed += preprocess_failed;
+    }
+
+    {
         // M_patchC（`PW-01` / `PW-03`）：**归属 + 就绪三级**的纯函数断言（离线；不开窗口、不联网）
         //  * 依据：真机 2026-10-06 三次运行（113 ms 假失败 / 41 ms 误归因）—— 见
         //    `docs/actionPlan/M_patchC_web_node_bind.md` §3 / §4.1 / §4.2
@@ -5349,6 +5788,392 @@ int execution_selftest()
         const int dom_failed = aiwrite::ai::dom_probe_selftest(&dom_passed);
         check.passed += dom_passed;
         check.failed += dom_failed;
+    }
+
+    // ---- M_node_expansion L2（VL2 离线部分 · part2 §4.3.5）：6 个文本处理节点 ----
+    {
+        const auto run = [](const std::string& type, const nlohmann::json& inputs,
+                            const nlohmann::json& params) {
+            engine::ExecutionContext      ctx;
+            engine::NodeExecutorRegistry& registry = engine::NodeExecutorRegistry::instance();
+            const engine::NodeExecutor*   fn = registry.find(type);
+            if (fn == nullptr) {
+                return std::string("(未注册)");
+            }
+            try {
+                return (*fn)(inputs, params, ctx).dump();
+            }
+            catch (const engine::NodeError& e) {
+                return std::string("ERR:") + e.what();
+            }
+            catch (const std::exception& e) {
+                return std::string("EXC:") + e.what();
+            }
+        };
+
+        // --- L2-01 TextSplit（VL2-01）---
+        {
+            nlohmann::json inputs;
+            inputs["text"] = "a\n\nb\n\nc";
+            expect_eq(check, run("TextSplit", inputs, nlohmann::json::object()),
+                      nlohmann::json({"a", "b", "c"}).dump(),
+                      "VL2-01：by_separator 默认 \\n\\n 拆 3 段");
+            nlohmann::json sep_param;
+            sep_param["separator"] = ",";
+            nlohmann::json inputs2;
+            inputs2["text"]        = "x,y,z";
+            expect_eq(check, run("TextSplit", inputs2, sep_param),
+                      nlohmann::json({"x", "y", "z"}).dump(),
+                      "VL2-01：自定义分隔符逗号");
+            nlohmann::json keep_param;
+            keep_param["separator"]      = ",";
+            keep_param["keep_separator"] = true;
+            expect_eq(check, run("TextSplit", inputs2, keep_param),
+                      nlohmann::json({"x,", "y,", "z"}).dump(),
+                      "VL2-01：保留分隔符");
+            nlohmann::json len_param;
+            len_param["split_mode"] = "by_length";
+            len_param["max_length"] = 2;
+            nlohmann::json inputs3;
+            inputs3["text"]        = "abcdef";
+            expect_eq(check, run("TextSplit", inputs3, len_param),
+                      nlohmann::json({"ab", "cd", "ef"}).dump(),
+                      "VL2-01：by_length 每 2 字符一块");
+            nlohmann::json ol_param;
+            ol_param["split_mode"] = "by_length";
+            ol_param["max_length"] = 3;
+            ol_param["overlap"]    = 1;
+            expect_eq(check, run("TextSplit", inputs3, ol_param),
+                      nlohmann::json({"abc", "cde", "ef"}).dump(),
+                      "VL2-01：by_length + overlap=1");
+            nlohmann::json para_param;
+            para_param["split_mode"] = "by_paragraph";
+            nlohmann::json inputs4;
+            inputs4["text"]         = "第一段\n\n第二段\n\n第三段";
+            expect_eq(check, run("TextSplit", inputs4, para_param),
+                      nlohmann::json({"第一段", "第二段", "第三段"}).dump(),
+                      "VL2-01：by_paragraph 空行分段落");
+            nlohmann::json re_param;
+            re_param["split_mode"]    = "by_regex";
+            re_param["regex_pattern"] = "\\d+";
+            nlohmann::json inputs5;
+            inputs5["text"]          = "a1b22c";
+            expect_eq(check, run("TextSplit", inputs5, re_param),
+                      nlohmann::json({"a", "b", "c"}).dump(),
+                      "VL2-01：by_regex 按数字拆分");
+            nlohmann::json bad_param;
+            bad_param["split_mode"]    = "by_regex";
+            bad_param["regex_pattern"] = "[";
+            expect(check, run("TextSplit", inputs5, bad_param).rfind("ERR:", 0) == 0,
+                    "VL2-01：非法正则 → 报错");
+            expect_eq(check, run("TextSplit", nlohmann::json::object(),
+                                 nlohmann::json::object()),
+                      nlohmann::json::array().dump(),
+                      "VL2-01：空输入 → 空 texts");
+            nlohmann::json nohit_param;
+            nohit_param["separator"] = "~~~";
+            expect_eq(check, run("TextSplit", inputs3, nohit_param),
+                      nlohmann::json({"abcdef"}).dump(),
+                      "VL2-01：分隔符不存在 → 单段（原文本）");
+        }
+        // --- L2-02 TextExtract（VL2-02）---
+        {
+            nlohmann::json params;
+            params["extract_mode"] = "regex";
+            params["pattern"]      = "name=(\\w+)";
+            nlohmann::json inputs;
+            inputs["text"]         = "id=42 name=John";
+            expect_eq(check, run("TextExtract", inputs, params),
+                      nlohmann::json{{"texts", {"John"}}, {"text", ""}}.dump(),
+                      "VL2-02：regex 捕获组优先");
+            nlohmann::json between;
+            between["extract_mode"] = "between";
+            between["start_marker"] = "<";
+            between["end_marker"]   = ">";
+            nlohmann::json inputs2;
+            inputs2["text"]         = "pre<A>post<B>";
+            expect_eq(check, run("TextExtract", inputs2, between),
+                      nlohmann::json{{"texts", {"A", "B"}}, {"text", ""}}.dump(),
+                      "VL2-02：between 全部非重叠区间");
+            nlohmann::json jp;
+            jp["extract_mode"] = "json_path";
+            jp["json_path"]    = "a.b[1]";
+            nlohmann::json inputs3;
+            inputs3["text"]    = R"({"a":{"b":[10,20]}})";
+            expect_eq(check, run("TextExtract", inputs3, jp),
+                      nlohmann::json{{"texts", nlohmann::json::array()}, {"text", "20"}}.dump(),
+                      "VL2-02：json_path 点分 + 数组下标");
+            nlohmann::json kv;
+            kv["extract_mode"] = "key_value";
+            kv["key_name"]     = "名称";
+            nlohmann::json inputs4;
+            inputs4["text"]    = "名称: 张三\n年龄：30";
+            expect_eq(check, run("TextExtract", inputs4, kv),
+                      nlohmann::json{{"texts", {"张三"}}, {"text", ""}}.dump(),
+                      "VL2-02：key_value 中英文冒号均可");
+            nlohmann::json single;
+            single["extract_mode"] = "regex";
+            single["pattern"]      = "\\d+";
+            single["output_mode"]  = "text";
+            nlohmann::json inputs5;
+            inputs5["text"]        = "abc123";
+            expect_eq(check, run("TextExtract", inputs5, single),
+                      nlohmann::json{{"texts", nlohmann::json::array()}, {"text", "123"}}.dump(),
+                      "VL2-02：output_mode=text 单匹配输出该段");
+            nlohmann::json multi;
+            multi["extract_mode"] = "regex";
+            multi["pattern"]      = "\\d+";
+            multi["output_mode"]  = "text";
+            nlohmann::json inputs6;
+            inputs6["text"]       = "1a2";
+            expect_eq(check, run("TextExtract", inputs6, multi),
+                      nlohmann::json{{"texts", nlohmann::json::array()},
+                                     {"text", nlohmann::json({"1", "2"}).dump()}}
+                          .dump(),
+                      "VL2-02：output_mode=text 多匹配输出 JSON 数组");
+            nlohmann::json bad;
+            bad["extract_mode"] = "regex";
+            bad["pattern"]      = "[";
+            nlohmann::json inputs7;
+            inputs7["text"]     = "x";
+            expect(check, run("TextExtract", inputs7, bad).rfind("ERR:", 0) == 0,
+                    "VL2-02：非法正则 → 报错");
+        }
+
+        // --- L2-03 TextClean（VL2-03）---
+        {
+            nlohmann::json inputs;
+            inputs["text"] = "  a  ";
+            expect_eq(check, run("TextClean", inputs, nlohmann::json::object()),
+                      nlohmann::json("a").dump(), "VL2-03：trim 默认开（去首尾空白）");
+            nlohmann::json collapse;
+            collapse["collapse_whitespace"] = true;
+            nlohmann::json inputs2;
+            inputs2["text"]                 = "a  b\nc";
+            expect_eq(check, run("TextClean", inputs2, collapse),
+                      nlohmann::json("a b c").dump(), "VL2-03：collapse 连续空白压成单空格");
+            nlohmann::json html;
+            html["remove_html"] = true;
+            html["trim"]        = false;
+            nlohmann::json inputs3;
+            inputs3["text"]     = "<p>hi</p>&nbsp;x";
+            expect_eq(check, run("TextClean", inputs3, html),
+                      nlohmann::json("hi x").dump(), "VL2-03：去 HTML 标签 + 实体");
+            nlohmann::json inputs4;
+            inputs4["text"]     = std::string("a\x01") + "b";
+            expect_eq(check, run("TextClean", inputs4, nlohmann::json::object()),
+                      nlohmann::json("ab").dump(), "VL2-03：去控制字符默认开");
+            nlohmann::json dedup;
+            dedup["dedup_lines"] = true;
+            nlohmann::json inputs5;
+            inputs5["text"]      = "a\nb\na\n";
+            expect_eq(check, run("TextClean", inputs5, dedup),
+                      nlohmann::json("a\nb").dump(),
+                      "VL2-03：去重复行（保序；尾部换行被默认 trim 去掉）");
+            nlohmann::json rm_empty;
+            rm_empty["remove_empty_lines"] = true;
+            nlohmann::json inputs6;
+            inputs6["text"]                = "a\n\n\nb";
+            expect_eq(check, run("TextClean", inputs6, rm_empty),
+                      nlohmann::json("a\nb").dump(), "VL2-03：去空行");
+            nlohmann::json prefix;
+            prefix["remove_prefix"] = "xx";
+            nlohmann::json inputs7;
+            inputs7["text"]         = "xxxxabc";
+            expect_eq(check, run("TextClean", inputs7, prefix),
+                      nlohmann::json("xxabc").dump(), "VL2-03：remove_prefix 只去开头一次");
+            nlohmann::json suffix;
+            suffix["remove_suffix"] = "yy";
+            nlohmann::json inputs8;
+            inputs8["text"]         = "abcyyyy";
+            expect_eq(check, run("TextClean", inputs8, suffix),
+                      nlohmann::json("abcyy").dump(), "VL2-03：remove_suffix 只去结尾一次");
+            nlohmann::json ai;
+            ai["remove_ai_prefix"] = true;
+            nlohmann::json inputs9;
+            inputs9["text"]        = "好的，以下是正文内容";
+            expect_eq(check, run("TextClean", inputs9, ai),
+                      nlohmann::json("正文内容").dump(), "VL2-03：去 AI 客套前缀");
+            nlohmann::json all_off;
+            all_off["trim"]                 = false;
+            all_off["remove_control_chars"] = false;
+            nlohmann::json inputs10;
+            inputs10["text"]                = " 保持原样  ";
+            expect_eq(check, run("TextClean", inputs10, all_off),
+                      nlohmann::json(" 保持原样  ").dump(), "VL2-03：全部 false → 原文本不变");
+        }
+
+        // --- L2-04 TextReplace（VL2-04）---
+        {
+            nlohmann::json plain;
+            plain["pattern"]     = "o";
+            plain["replacement"] = "0";
+            nlohmann::json inputs;
+            inputs["text"]       = "hello world";
+            expect_eq(check, run("TextReplace", inputs, plain),
+                      nlohmann::json("hell0 w0rld").dump(), "VL2-04：普通文本全部替换");
+            nlohmann::json ci;
+            ci["pattern"]        = "hello";
+            ci["replacement"]    = "X";
+            ci["case_sensitive"] = false;
+            nlohmann::json inputs2;
+            inputs2["text"]      = "Hello HELLO";
+            expect_eq(check, run("TextReplace", inputs2, ci),
+                      nlohmann::json("X X").dump(), "VL2-04：忽略大小写");
+            nlohmann::json ww;
+            ww["pattern"]     = "is";
+            ww["replacement"] = "X";
+            ww["whole_word"]  = true;
+            nlohmann::json inputs3;
+            inputs3["text"]   = "this is a cat";
+            expect_eq(check, run("TextReplace", inputs3, ww),
+                      nlohmann::json("this X a cat").dump(),
+                      "VL2-04：全词匹配（this 里的 is 不换）");
+            nlohmann::json ww_cn;
+            ww_cn["pattern"]     = "苹果";
+            ww_cn["replacement"] = "梨";
+            ww_cn["whole_word"]  = true;
+            nlohmann::json inputs4;
+            inputs4["text"]      = "a 苹果 b";
+            expect_eq(check, run("TextReplace", inputs4, ww_cn),
+                      nlohmann::json("a 梨 b").dump(), "VL2-04：中文全词匹配（独立成词）");
+            nlohmann::json regex;
+            regex["pattern"]     = "\\d+";
+            regex["replacement"] = "#";
+            regex["use_regex"]   = true;
+            nlohmann::json inputs5;
+            inputs5["text"]      = "a1b22c";
+            expect_eq(check, run("TextReplace", inputs5, regex),
+                      nlohmann::json("a#b#c").dump(), "VL2-04：正则替换");
+            nlohmann::json limited;
+            limited["pattern"]          = "a";
+            limited["replacement"]      = "b";
+            limited["max_replacements"] = 2;
+            nlohmann::json inputs6;
+            inputs6["text"]             = "aaaa";
+            expect_eq(check, run("TextReplace", inputs6, limited),
+                      nlohmann::json("bbaa").dump(), "VL2-04：max_replacements=2 限量");
+            nlohmann::json empty_pattern;
+            empty_pattern["replacement"] = "X";
+            nlohmann::json inputs7;
+            inputs7["text"]              = "abc";
+            expect_eq(check, run("TextReplace", inputs7, empty_pattern),
+                      nlohmann::json("abc").dump(), "VL2-04：空 pattern → 原文本不变");
+            nlohmann::json bad;
+            bad["pattern"]   = "[";
+            bad["use_regex"] = true;
+            nlohmann::json inputs8;
+            inputs8["text"]  = "x";
+            expect(check, run("TextReplace", inputs8, bad).rfind("ERR:", 0) == 0,
+                    "VL2-04：非法正则 → 报错");
+        }
+
+        // --- L2-05 TextStats（VL2-05）---
+        {
+            nlohmann::json inputs;
+            inputs["text"] = "你好 world\n你好";
+            const std::string report = run("TextStats", inputs, nlohmann::json::object());
+            expect(check, report.find("中文字数: 4") != std::string::npos, "VL2-05：basic 中文字数 4",
+                    report);
+            expect(check, report.find("英文单词数: 1") != std::string::npos,
+                    "VL2-05：basic 英文单词数 1", report);
+            expect(check, report.find("行数: 2") != std::string::npos, "VL2-05：basic 行数 2",
+                    report);
+            expect(check, report.find("段落数: 1") != std::string::npos, "VL2-05：basic 段落数 1",
+                    report);
+            nlohmann::json num_mode;
+            num_mode["output_mode"] = "number";
+            expect_eq(check, run("TextStats", inputs, num_mode),
+                      nlohmann::json{{"text", nlohmann::json()}, {"number", 4}}.dump(),
+                      "VL2-05：output_mode=number → number 端口输出中文字数 4");
+            nlohmann::json wf;
+            wf["stats_mode"] = "word_freq";
+            wf["top_n"]      = 2;
+            nlohmann::json inputs2;
+            inputs2["text"]  = "你 好 你";
+            const std::string wf_report = run("TextStats", inputs2, wf);
+            expect(check, wf_report.find("你  2") != std::string::npos, "VL2-05：词频 你=2",
+                    wf_report);
+            expect(check, wf_report.find("好  1") != std::string::npos, "VL2-05：词频 好=1",
+                    wf_report);
+            expect_eq(check, run("TextStats", nlohmann::json::object(),
+                                 nlohmann::json::object()),
+                      nlohmann::json{{"text",
+                                      "字符数（含空白）: 0\n字符数（不含空白）: 0\n中文字数: 0\n"
+                                      "英文单词数: 0\n行数: 0\n段落数: 0\n"},
+                                     {"number", 0}}
+                          .dump(),
+                      "VL2-05：空输入 → 全 0");
+        }
+
+        // --- L2-06 TextDiff（VL2-06）---
+        {
+            nlohmann::json inputs;
+            inputs["text_a"] = "line1\nline2\nline3";
+            inputs["text_b"] = "line1\nCHANGED\nline3";
+            const std::string text = run("TextDiff", inputs, nlohmann::json::object());
+            expect(check, text.find("- line2") != std::string::npos, "VL2-06：行差异含删除行",
+                    text);
+            expect(check, text.find("+ CHANGED") != std::string::npos, "VL2-06：行差异含插入行",
+                    text);
+            nlohmann::json inputs_same;
+            inputs_same["text_a"] = "相同\n内容";
+            inputs_same["text_b"] = "相同\n内容";
+            expect_eq(check, run("TextDiff", inputs_same, nlohmann::json::object()),
+                      nlohmann::json("（无差异）").dump(), "VL2-06：两文本相同 → 「无差异」");
+            nlohmann::json inputs_empty;
+            inputs_empty["text_a"] = "";
+            inputs_empty["text_b"] = "只有B";
+            const std::string only_b = run("TextDiff", inputs_empty, nlohmann::json::object());
+            expect(check, only_b.find("+ 只有B") != std::string::npos,
+                    "VL2-06：一方为空 → 全部为增", only_b);
+            nlohmann::json json_mode;
+            json_mode["output_mode"] = "json";
+            json_mode["diff_mode"]   = "line";
+            const std::string json_out = run("TextDiff", inputs, json_mode);
+            // run() 对「文本型 JSON 串」会再编码一层引号 → 先解析一层取回文本，再解析数组
+            nlohmann::json parsed = nlohmann::json::parse(json_out, nullptr, false);
+            if (parsed.is_string()) {
+                parsed = nlohmann::json::parse(parsed.get<std::string>(), nullptr, false);
+            }
+            expect(check, !parsed.is_discarded() && parsed.is_array() && !parsed.empty() &&
+                             parsed[0].value("op", std::string()) == "equal",
+                    "VL2-06：json 输出 = 操作序列数组", json_out);
+            nlohmann::json char_mode;
+            char_mode["diff_mode"] = "char";
+            nlohmann::json inputs_char;
+            inputs_char["text_a"]  = "abc";
+            inputs_char["text_b"]  = "abd";
+            const std::string char_out = run("TextDiff", inputs_char, char_mode);
+            expect(check, char_out.find("- c") != std::string::npos &&
+                              char_out.find("+ d") != std::string::npos,
+                    "VL2-06：char 粒度差异", char_out);
+        }
+
+        // --- L2 互操作：TextSplit → TextMerge（VL2-07 · part2 L2-D 反向操作闭环）---
+        {
+            Graph             graph;
+            const std::string input = add_node(check, graph, "TextInput", "分块输入");
+            const std::string split = add_node(check, graph, "TextSplit", "分块节点");
+            const std::string merge = add_node(check, graph, "TextMerge", "合并回串");
+            const std::string output = add_node(check, graph, "TextOutput", "最终输出");
+            set_param(graph, input, "text", "甲\n\n乙\n\n丙");
+            set_param(graph, merge, "separator", "\n\n"); // 与 TextSplit 默认分隔符一致，回环相等
+            graph.edges.push_back(make_edge("w1", input, "text", split, "text"));
+            graph.edges.push_back(make_edge("w2", split, "texts", merge, "texts"));
+            graph.edges.push_back(make_edge("w3", merge, "text", output, "text"));
+            Executor    executor;
+            std::string error;
+            expect(check, executor.start(graph, &error), "VL2-07：分块→合并工作流 start", error);
+            expect(check, executor.runToCompletion(&graph, 64), "VL2-07：分块→合并完成");
+            const nlohmann::json* merged = executor.outputs().find(merge, "text");
+            expect_eq(check, merged != nullptr ? merged->dump() : std::string("(无输出)"),
+                      nlohmann::json("甲\n\n乙\n\n丙").dump(),
+                      "VL2-07：TextSplit 数组直连 TextMerge 变长端口被展平");
+            const nlohmann::json* out_text = executor.outputs().find(output, "__result");
+            expect_eq(check, out_text != nullptr ? out_text->dump() : std::string("(无输出)"),
+                      nlohmann::json("甲\n\n乙\n\n丙").dump(), "VL2-07：最终输出透传");
+        }
     }
 
     std::printf("=== 执行器自检结果: %d 通过 / %d 失败 ===\n", check.passed, check.failed);

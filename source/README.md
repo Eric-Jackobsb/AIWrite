@@ -570,7 +570,7 @@ CRT assert / abort：**退出码 3（`-2147483645` / `0x80000003` STATUS_BREAKPO
 | `ui/src/app.cpp` | GLFW + OpenGL3 + ImGui、深色主题、中英文字体、DockSpace 布局、菜单栏、工具栏行、状态栏 |
 | `ui/src/editor_state.cpp` | 编辑器状态：唯一持有 `Graph` + `UndoStack`；创建/删除/复制/粘贴/清空/示例工作流（一律先压快照） |
 | `ui/src/node_canvas.cpp` | 节点画布：渲染 Graph（节点卡片/端口/连线/参数预览）、全部鼠标交互与三个右键菜单、视图导航 |
-| `ui/src/node_library.cpp` | 节点库面板：按分类列出 8 个节点，点击在画布中心创建 |
+| `ui/src/node_library.cpp` | 节点库面板：按分类列出 14 个节点（含搜索高亮），点击在画布中心创建 |
 | `ui/src/toolbar.cpp` | 工具栏：撤销/重做/复制/粘贴/删除选中/新建/示例 + 计数（无快捷键，纯鼠标） |
 | `ui/src/property_panel.cpp` | 参数面板：9 类参数控件 + 校验提示 + 文件/目录选择 + 密码框 |
 | `ui/include/theme.h` | 分类 / 端口类型 / 节点状态配色（设计 14.3 / 4.5 / 4.6） |

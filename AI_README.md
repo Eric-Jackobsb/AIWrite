@@ -10,7 +10,7 @@
 
 1. **[docs/DocMAP.md](docs/DocMAP.md)** —— 文档地图：什么改动读哪份文档。
    > 更名记录：`docs/README.md` → `docs/DocMAP.md`（2026-10-08 · `git mv` 保留历史）。历史条目（含 `docs/Archive/**`）里出现的**旧文件名与旧自链写法**均指本文。
-2. **[docs/actionPlan/](docs/actionPlan/)** 中**现行**的那一份（`M6.md` / `M8.md` / `M_patchAB_rest.md` / `M_patchC_web_node_bind.md` / `M_canvas_snapshot.md` / `M_node_expansion.md` / `milestone_plan.md`；**`M4.md` / `M5.md` / `M7.md` 已归档（2026-10-11）** → [docs/Archive/actionPlan/](docs/Archive/actionPlan/)）—— 不变量 `Ixx`、决策 `D-xx`、计划 `PW-xx`/`M*-xx`、§7 验收标准都在这。
+2. **[docs/actionPlan/](docs/actionPlan/)** 中**现行**的那一份（`M6.md` / `M8.md` / `M_patchAB_rest.md` / `M_patchC_web_node_bind.md` / `M_canvas_snapshot.md` / `M_node_expansion.md` / `milestone_plan.md`；**`M4.md` / `M5.md` / `M7.md` 已归档（2026-10-11）** → [docs/Archive/actionPlan/](docs/Archive/actionPlan/)）—— 不变量 `Ixx`、决策 `D-xx`、计划 `PW-xx`/`M*-xx`、§7 验收标准都在这。**节点扩展 v5 定稿 = [M_node_expansion_part2.md](docs/actionPlan/M_node_expansion_part2.md)**（= `M_node_expansion.md` 的 v5 更新；L1 实施依据 = [M_8nodes_extension.md](docs/actionPlan/M_8nodes_extension.md)，L1 已完成 2026-10-15）。
 3. **[docs/CHANGELOG.md](docs/CHANGELOG.md)** 最近条目 —— 最后一次改了什么、上一轮验证数字是多少。
 4. 搜不到代码里的名字（类 / 函数 / 配置键） ⇒ 先查 **[docs/变量术语对照表.md](docs/变量术语对照表.md)**（§12 已知文档≠代码 · §13 新增功能检索入口）。
 5. **[docs/AI_Status.md](docs/AI_Status.md)** —— **一页状态（总览）**：门禁基线 + 台账汇总 + 循环轮次 + 下一步（接手 / 每轮开始与收尾时先扫一眼；§二 由 `loop_verify.ps1` 回写，勿手改）；**分通道明细** = [docs/AI_Status_web.md](docs/AI_Status_web.md)（网页版 11 站）/ [docs/AI_Status_api.md](docs/AI_Status_api.md)（官方 API 9 条）。
@@ -27,9 +27,9 @@
 | 目的 | 命令 | 基线（**2026-10-11 本机实测** · 每个数字的唯一权威位见 §10.1） |
 |---|---|---|
 | 构建（Debug） | `cd source; .\build.ps1`（= `cmake --preset default` + `cmake --build --preset debug`）｜**日志自动落 `build\logs\build_debug_<yyyyMMdd_HHmmss>.log`**（`-LogName` 改名 / `-NoLog` 关闭） | **0 error / 0 warning**。⚠ 若报 `error MSB4018` + `FileTracker`（`GetOutOfDateItems` / `SetModuleDependencies`）⇒ **不是代码问题**、**重跑无效**：`.\build.ps1 -Reconfigure` 清空重建（陷阱 9 = [docs/loop_dev.md](docs/loop_dev.md) §10.1） |
-| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===`（**十三组**）· exit **0**；含 配置表 **52/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **DOM 探测 27/0** · **执行器 546/0**（**2026-10-11 实测**；同日链：2026-10-10 = 464 → **+26 = `M_patchC` 批 1**（`PW-02` / `PW-04` / `PW-05` / `PW-08`）→ **+34 = `M_patchAB` 批 2**（会话诊断）→ **+20 = 批 4**（版本迁移）→ **+2 = 批 6**（配置表嵌套 schema）；**组数：七组 → 九组** = 批 3（V-11 / V-12）· **九组 → 十二组** = 批 6（V-13 / V-14 / V-15）· **十二组 → 十三组** = 批 7（V-16）） |
-| 执行器自检 | `api_probe.exe --exec-selftest` | **546 / 0** · exit 0（**2026-10-11 实测**；同日链 **464 → 490**（`M_patchC` 批 1）**→ 524**（批 2）**→ 544**（批 4）**→ 546**（批 6）：窗口表 / 复位计划 / 归属准入 / 三类归因文案 / 版本迁移 / L2 工厂与回环 —— 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]`） |
-| 图模型自检 | `api_probe.exe --graph-selftest` | **110 / 0** · exit 0 |
+| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===`（**十三组**）· exit **0**；含 配置表 **52/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **DOM 探测 27/0** · **执行器 655/0**（**2026-10-15 复测** · 原 **546/0** = 2026-10-11 实测；同日链：2026-10-10 = 464 → **+26 = `M_patchC` 批 1**（`PW-02` / `PW-04` / `PW-05` / `PW-08`）→ **+34 = `M_patchAB` 批 2**（会话诊断）→ **+20 = 批 4**（版本迁移）→ **+2 = 批 6**（配置表嵌套 schema）；**组数：七组 → 九组** = 批 3（V-11 / V-12）· **九组 → 十二组** = 批 6（V-13 / V-14 / V-15）· **十二组 → 十三组** = 批 7（V-16）） |
+| 执行器自检 | `api_probe.exe --exec-selftest` | **655 / 0** · exit 0（**2026-10-15 复测** · 原 **546 / 0** = 2026-10-11 实测；同日链 **464 → 490**（`M_patchC` 批 1）**→ 524**（批 2）**→ 544**（批 4）**→ 546**（批 6）：窗口表 / 复位计划 / 归属准入 / 三类归因文案 / 版本迁移 / L2 工厂与回环 —— 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]`） |
+| 图模型自检 | `api_probe.exe --graph-selftest` | **151 / 0** · exit 0（**2026-10-15 复测** · 原 **110 / 0** = 2026-10-11 · L1 批升至 **144 / 0** → L2 批 **151 / 0**） |
 | 上传链路自检（离线三组；真机加 `--provider <id> --image <图>`） | `aiwrite.exe --upload-selftest` | **72 / 0** · exit 0（⚠️ 见 §3「GUI 子系统 stdout」；**不要并发跑**，共用 `%TEMP%\aiwrite-upload\selftest`） |
 | 运行时（真实工作流） | `aiwrite.exe --run-selftest` / `--run-selftest --web` | **PASS · exit 0**（**2026-10-09 复跑**：完成 3/5、失败 1、跳过 1 —— official 占位分支缺 Key 属预期；`official` 需 `~/.brain-ai/config.toml` 凭据；`--web` 需已登录一次） |
 | 画布性能（**GUI** · 读日志判据） | `Start-Process .\build\bin\aiwrite.exe -ArgumentList '--open','<工作流>'` ⇒ 读 `%USERPROFILE%\.brain-ai\logs\app.log` 的 `[诊断] 画布` 行 | 85 节点基准图（**2026-10-09 实测** · 该图 2026-10-10 去重后为 **82 节点**）：`FPS 59~60` · `解码 0.0 次/帧` · `缓存 9/64 条 30.9MB`；修复前同图为 `FPS 5~6` · `解码 9.0 次/帧` |
@@ -41,7 +41,7 @@
 | 夹具（抽真实源码脚本，迷你 DOM 真跑） | `node source\tools\poll_answer_gate_test.js` · `send_chain_test.js` · **`dom_gate_test.js`** | **44 / 0** · **17 / 0** · **15 / 0** |
 | 夹具**负向**打假（必须 FAIL） | 上三条加 `--old` | 门夹具 **18 / 26** · 链路 **13 / 4** · **DOM 判据 9 / 6** · **exit 1**（失败项 = 预期） |
 | 日志 | `%USERPROFILE%\.brain-ai\logs\app.log`（每 2 秒落盘，可直接 tail） | `[诊断]` 行限流输出 |
-| **一键自检（`PM-03`）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1 [-SkipBuild] [-SkipGui] [-SkipLoop]` | 构建 + **8 项 `api_probe` 自检** + **3 个 node 夹具** + `--upload-selftest` + 台账重建 + **文档断链（`check_links`）** ⇒ **15/15 PASS · exit 0**（**2026-10-11 实测** · 物证 `build\logs\check_all_<时间戳>.log`；12 → 13 = 新增 `--site-assert`，13 → 14 = 新增 `--autosave-assert`，**14 → 15 = 批 5 新增第 ⑥ 项文档断链**（`source/tools/check_links.py` 入库）） |
+| **一键自检（`PM-03`）** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1 [-SkipBuild] [-SkipGui] [-SkipLoop]` | 构建 + **8 项 `api_probe` 自检** + **3 个 node 夹具** + `--upload-selftest` + 台账重建 + **文档断链（`check_links`）** ⇒ **15/15 PASS · exit 0**（**2026-10-15 复测** · 物证 `build/logs/check_all_20261015_194826.log`；原 **2026-10-11 实测** · 物证 `build\logs\check_all_<时间戳>.log`；12 → 13 = 新增 `--site-assert`，13 → 14 = 新增 `--autosave-assert`，**14 → 15 = 批 5 新增第 ⑥ 项文档断链**（`source/tools/check_links.py` 入库）） |
 | **诊断 / 依赖（`PM-01`·`PM-04`）** | `api_probe.exe --diag-dump` ｜ `--diag-assert` ｜ `--dep-check` ｜ `--settings-assert` | 前两者 = 诊断报告（**8 分节 40 行**）打印/断言；`--dep-check` = `WebView2 运行时 152.0.4191.66（api）`（**2026-10-11 实测**）；`--settings-assert` = 默认通过 + 越界 **15 例全拦** + 边界值 **3 项**通过（`[network]` / `[credentials]` 两节新增越界例）。均为**单行 PASS/FAIL**（不进 §2 分组数字） |
 | **自建站点闭环（`PB2-24` · `RM-D4`）** | `api_probe.exe --site-assert` | **PASS · exit 0**（**2026-10-10 实测**：纯函数 **47 / 0** + 真实写盘 → 重载 → 进表 / 进网页版下拉 / 进 provider 枚举 **20→21** / 新建节点运行前校验 / **旧实例刷新回归** / 清理零残留）。⚠ 会**临时**写并删除 `~/.brain-ai/providers.d/aiwrite-selftest-site.json`（自清理）；**界面点选回路未人工实测**，见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]` |
 | **自动保存 / 崩溃恢复（`PC-01` / `PC-02`）** | `api_probe.exe --autosave-assert` | **PASS · exit 0**（**2026-10-10 实测**：场景 **28 / 0** + 默认落点 = `snapshots/autosave.json`；含 **`VC-01` 原子写**（半截 `.tmp` 不参与恢复 / 可清理）+ **`VC-02` 恢复判定 4 场景** + 恢复后内容**指纹逐字相同**）。⚠ 场景全在**系统临时目录**内构造，**不碰**用户快照；**GUI「改图 → 静默 3 秒 → 写快照」与点「恢复」未人工实测**，见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]` |
@@ -103,6 +103,7 @@
 | 「建分支 / 切分支 / 合并 / 推」 | 对应分支或远程操作 |
 | 「回滚 / 撤销」 | `revert` / `reset` / `checkout`（**先确认范围与后果**） |
 | 「开始循环开发」（或同义明确指令） | 启动 [docs/loop_dev.md](docs/loop_dev.md) §1 定义的**无人监管循环**（默认上限 **3 轮** / 10 站；只在该文档授权范围内「跑 + 记录」，不夹带产品代码改动） |
+| 「开始循环开发」（**L2/L3** · 实施 [M_node_expansion_part2.md](docs/actionPlan/M_node_expansion_part2.md)） | 启动 **无人监管实施循环**（规则 = 本文 §12）：自行 build / debug / test / 修错推进 L2（6 文本处理节点）+ L3（5 项画布·节点库 UX）；**含产品代码改动**；遇恶性 bug / 卡死按 §12 记录处理 |
 
 **未获指令时禁止**：`git commit`（含 `--amend`）· `git tag` · `git push` · `git merge` · `git reset` · `git checkout`（切分支/回滚）· 改动 `CHANGELOG` 的版本号小节 · 把 `[Unreleased]` 条目版本化。
 
@@ -121,7 +122,7 @@
 5. **删除 / 移动用户数据**：`~/.brain-ai/**`（含登录态、图片资源）只读诊断，禁止清理；`source/python/_probe/out/**` 等未跟踪探针产物不擅自删。
 6. **只改代码不修文档**（违反 §4），或反过来「文档先行但不登记」。
 7. **猜测式结论**：不确定就写「**待真机/待验证**」并登记到对应文档，不许编数字、编路径、编 API 行为。
-8. **未获授权就启动自动循环 / 在循环里夹带代码改动**：不得自行开始 [docs/loop_dev.md](docs/loop_dev.md) 的循环开发（连续多站自动跑、自动回填站点结论）；循环内只允许改站点数据（`providers.json` 的 `verified` / `notes` / 选择器）与文档，**产品代码改动必须出循环**、走正常计划流程。
+8. **未获授权就启动自动循环 / 在循环里夹带代码改动**：不得自行开始 [docs/loop_dev.md](docs/loop_dev.md) 的循环开发（连续多站自动跑、自动回填站点结论）；循环内只允许改站点数据（`providers.json` 的 `verified` / `notes` / 选择器）与文档，**产品代码改动必须出循环**、走正常计划流程。（⚠ 例外：本文 §6 授权表「开始循环开发（L2/L3）」= **实施循环**，含产品代码改动，按 §12 规则运行，不受本条约束。）
 
 ---
 
@@ -132,7 +133,7 @@
 | 行为契约（本文） | `AI_README.md` |
 | 文档地图 / 进度 | `docs/DocMAP.md` |
 | 变更日志 | `docs/CHANGELOG.md` |
-| 现行计划 | `docs/actionPlan/M6.md` · `M8.md` · `M_patchAB_rest.md` · `M_patchC_web_node_bind.md` · `M_canvas_snapshot.md`（画布渲染性能专项 · **计划中**）· `M_node_expansion.md`（节点扩展讨论稿 · **🟡 讨论中（未定向）** · ⬜ `PQ-20` · **零代码**）· `milestone_plan.md` |
+| 现行计划 | `docs/actionPlan/M6.md` · `M8.md` · `M_patchAB_rest.md` · `M_patchC_web_node_bind.md` · `M_canvas_snapshot.md`（画布渲染性能专项 · **计划中**）· `M_node_expansion.md`（节点扩展：L1 已定向·**已实施完成** · **v5 定稿 = [M_node_expansion_part2.md](docs/actionPlan/M_node_expansion_part2.md)**（L2 6 节点 / L3 5 UX 项 🟢 定稿 · L4 不做））· `milestone_plan.md` |
 | 开发看板（JSON） | `docs/DevPlan.todo` |
 | 循环开发规则 | `docs/loop_dev.md`（网页站逐站转可用：启动闸 / 三层结构 / 站级 8 步 / 轮次门禁 / 失败分类 / 退出码 / 记录位 / 停止条件） |
 | 术语对照 | `docs/变量术语对照表.md` |
@@ -222,3 +223,29 @@
 | 第三方源码（**禁止本地改造**） | `source/third_party/**` |
 | Python 运行代码 | `source/python/**`（**不受 §11.1/11.2 约束**） |
 | 站点数据 / 资产 | `source/assets/**`（`providers.json` 是站点数据的**唯一权威位**） |
+
+
+---
+
+## 12. 循环开发规则（无人监管 · L2/L3 实施循环专项）
+
+> **适用**：开发者明确授权「开始循环开发（L2/L3）」实施 [docs/actionPlan/M_node_expansion_part2.md](docs/actionPlan/M_node_expansion_part2.md) 时生效（授权表见 §6）。
+> 授权后 = **无人监管**：不再逐项征询、不再中途停下等确认，自行 **build / debug / test / 修错 / 推进**，直至任务完成或按本节规则暂停。
+> 与 [docs/loop_dev.md](docs/loop_dev.md)（网页站逐站循环）是**两套独立规则**：本文 §12 只适用于 L2/L3 实施循环。
+
+### 12.1 循环内基本纪律
+
+1. **沿用本文全部既有纪律**：§3 取证（重定向 + 物证）、§4 改动伴随义务（每轮 CHANGELOG `[Unreleased]` 登记）、§6 提交纪律（**只改不提交**）、§7 禁止项。
+2. **每轮闭环**：改完 → `.\source\build.ps1`（0 error / 0 warning）→ 相关自检（`--selftest` / `--exec-selftest` / `--graph-selftest` / `check_all.ps1`）→ 数字只升不降。
+3. **每轮登记**：本轮的「改了什么 / 验证数字 / 遗留 / 跳过项」写入 CHANGELOG 与本文 §二 状态（如适用）。
+
+### 12.2 恶性 bug / 无法解决的冲突 → **记录并跳过**
+
+- **触发**：编译无法继续、功能无法实现且无绕过方案、需改动架构级契约（超出 part2 授权范围）、或排错超过合理轮次仍无机理。
+- **动作**：在 CHANGELOG 记「**跳过 + 原因 + 现象物证**」，继续下一项实施，**不阻塞循环**；跳过项列入最终汇报的「遗留待办」。
+
+### 12.3 运行卡死 → **有限重试，超限暂停**
+
+- **第一次卡死**（build 后运行无响应 / 死循环 / 界面冻结）：**记录**（命令、场景、现象、日志物证），随后**再测 2 次**。
+- **同一项累计超过 3 次卡死**：**不再反复运行测试**，在 CHANGELOG 记「**3 次卡死 · 暂停循环开发** + 现象物证」，**暂停循环**，等待开发者指示（不得自行继续改动绕过）。
+- 卡死与「编译错误」分开计数；编译错误按 §12.2 正常排错处理。
