@@ -51,8 +51,8 @@
                 "children": [],
                 "todo": {
                   "id": 11,
-                  "content": "DBG-M4-05 会话失效（40002/401）只呈现为通用错误串，缺少「重新登录」引导 ｜ §4.1 PB-07 ｜ 进度（2026-09-28 核对）：识别层已落地（v15：web_session_failure_hint / web_session_failure_needs_relogin + VB2-27 断言，命中 40002/401 作废该站点会话）；缺界面「重新登录」入口 —— 与 FEA-M4-07 / FEA-M_patchB-25 同批收口",
-                  "done": false,
+                  "content": "DBG-M4-05 会话失效（40002/401）只呈现为通用错误串，缺少「重新登录」引导 ｜ §4.1 PB-07 ｜ 进度（2026-09-28 核对）：识别层已落地（v15：web_session_failure_hint / web_session_failure_needs_relogin + VB2-27 断言，命中 40002/401 作废该站点会话）；缺界面「重新登录」入口 —— 与 FEA-M4-07 / FEA-M_patchB-25 同批收口 ｜ 进度（2026-10-17 勾账）：界面「重新登录」入口已落地（2026-10-11 批 2 · M_patchAB_rest.md §2.2 · 与 FEA-M4-07 / FEA-M_patchB-25 同批收口）—— probe_verdict.h 纯函数 + EditorState::refresh_last_error() 反查 + error_bar「会话已失效，点此重新登录」按钮（open_web_login_window 直达该条目）；api_probe --exec-selftest 681/0（含 VB-06 分类/边界/文案断言）⇒ 勾账 done；⏳ 需一次真实失效响应做端到端（AB-05）",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -60,7 +60,7 @@
             ],
             "todo": {
               "id": 6,
-              "content": "M4（2 项）",
+              "content": "M4（1 项）",
               "done": false,
               "level": "secondary"
             }
@@ -93,7 +93,7 @@
             ],
             "todo": {
               "id": 14,
-              "content": "M6（2 项）",
+              "content": "M6（0 项 · 已全部勾账 2026-10-17）",
               "done": false,
               "level": "secondary"
             }
@@ -123,7 +123,7 @@
         ],
         "todo": {
           "id": 1,
-          "content": "Debug（6 项）",
+          "content": "Debug（3 项）",
           "done": false,
           "level": "danger"
         }
@@ -159,7 +159,7 @@
             ],
             "todo": {
               "id": 18,
-              "content": "M2（2 项）",
+              "content": "M2（0 项 · 已全部勾账 2026-10-17）",
               "done": false,
               "level": "secondary"
             }
@@ -183,8 +183,8 @@
                 "children": [],
                 "todo": {
                   "id": 35,
-                  "content": "FEA-M4-07 会话失效引导：识别 40002/401 → 状态栏提示并可一键打开登录窗口 ｜ §4.1 PB-07 ｜ 进度（2026-09-28 核对）：识别层已落地（v15，见 FEA-M_patchB-25）；剩余 = 状态栏 / 错误条「会话已失效，点此重新登录」入口（并入 PB2-25，见 M_patchAB_rest.md §2.2）",
-                  "done": false,
+                  "content": "FEA-M4-07 会话失效引导：识别 40002/401 → 状态栏提示并可一键打开登录窗口 ｜ §4.1 PB-07 ｜ 进度（2026-09-28 核对）：识别层已落地（v15，见 FEA-M_patchB-25）；剩余 = 状态栏 / 错误条「会话已失效，点此重新登录」入口（并入 PB2-25，见 M_patchAB_rest.md §2.2） ｜ 进度（2026-10-17 勾账）：剩余部分已落地（2026-10-11 批 2 · M_patchAB_rest.md §2.2）—— 错误串反查（classify_session_failure_text：401/40002/403/40003/「会话已失效」/invalid token，40010 独立数字边界不误判）+ 错误条「会话已失效，点此重新登录」入口 + 一键打开该条目登录窗口；api_probe --exec-selftest 681/0（VB-06 全 PASS）⇒ 勾账 done；⏳ 需一次真实失效响应做端到端验收（AB-05）",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -225,7 +225,7 @@
             ],
             "todo": {
               "id": 28,
-              "content": "M4（5 项）",
+              "content": "M4（2 项）",
               "done": false,
               "level": "secondary"
             }
@@ -269,7 +269,7 @@
             ],
             "todo": {
               "id": 132,
-              "content": "Patch B · L1 收口（1 项）",
+              "content": "Patch B · L1 收口（0 项 · 已全部勾账 2026-10-17）",
               "done": false,
               "level": "secondary"
             }
@@ -310,7 +310,7 @@
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（10 项）",
+          "content": "Feature（5 项）",
           "done": false,
           "level": "default"
         }
