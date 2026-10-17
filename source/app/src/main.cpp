@@ -1799,6 +1799,10 @@ int main(int argc, char** argv)
             }
             options.open_workflow = argv[++i];
         }
+        else if (arg == "--auto-open-composite") {
+            // [调试] 程序化走「新建上级节点」路径，复现窗口栈断言（配合看门狗）
+            options.auto_open_composite = true;
+        }
         else if (arg == "--login-selftest") {
             login_selftest = true;
         }

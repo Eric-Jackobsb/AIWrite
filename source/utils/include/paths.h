@@ -18,6 +18,8 @@ const std::filesystem::path& data_root();
 const std::filesystem::path& outputs_dir();       // ~/.brain-ai/outputs
 const std::filesystem::path& workflows_dir();     // ~/.brain-ai/workflows
 const std::filesystem::path& snapshots_dir();     // ~/.brain-ai/snapshots
+// CN-实施（Composition_node）：上级节点独立文件存储目录（每规格一文件，见设计文档 §9.3）
+const std::filesystem::path& composites_dir();    // ~/.brain-ai/composites
 const std::filesystem::path& logs_dir();          // ~/.brain-ai/logs
 const std::filesystem::path& config_file();       // ~/.brain-ai/config.toml
 const std::filesystem::path& app_log_file();      // ~/.brain-ai/logs/app.log

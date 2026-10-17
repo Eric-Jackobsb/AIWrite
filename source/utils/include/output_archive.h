@@ -6,7 +6,7 @@
 //  * 运行结束写出  <archive_dir>/<yyyyMMdd-HHmmss>-<工作流名>/
 //      - <node_id>-<Type>.txt   每个有输出的节点一份（文件头含元信息）
 //      - run.json               统计 + 逐节点明细（含耗时/错误/文件名/字节数）
-//  * 保留策略：keep_history=false → 仅保留最近 1 份；true → 保留 max_history 份
+//  * 保留策略：keep_history=false → 仍保留最近 kHistoryFloor 份；true → 保留 max_history 份
 //  * TTL：ttl_days>0 时清理超期目录（只清理符合命名规则的目录；先统计后删除并写日志）
 //  * 失败（目录不可写等）只返回 error，不抛异常、不影响运行流程
 // ============================================================================
@@ -16,6 +16,11 @@
 #include <vector>
 
 namespace aiwrite::utils {
+
+// PW-11（2026-10-16）：keep_history=false 时也保留的**最少**归档份数。
+//  * 动机：失败复盘时要能看到**上一次**的产物（M_patchC §2.4 实证：归档目录在下次运行时
+//    被清掉 ⇒ 12 字节「假成功」原文不可追）；从「只留 1 份」调大到 3 份。
+inline constexpr int kHistoryFloor = 3;
 
 // 单个节点的归档条目
 struct ArchiveNode {
@@ -30,7 +35,7 @@ struct ArchiveNode {
 struct ArchiveRequest {
     std::string workflow_name;        // 工作流名（空 → "未命名"）
     std::string archive_dir;          // 空 → paths::outputs_dir()；支持 "~/" 前缀
-    bool        keep_history = false; // 保留历史（false → 只留最近 1 份）
+    bool        keep_history = false; // 保留历史（false → 仍保留最近 kHistoryFloor 份，PW-11）
     int         max_history  = 10;    // keep_history=true 时的上限
     int         ttl_days     = 0;     // >0 → 清理超期目录
 };

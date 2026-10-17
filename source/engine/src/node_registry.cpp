@@ -400,7 +400,8 @@ void registerAllNodes()
             std::vector<Param> params;
             params.push_back(text_param("template", "模板", "请根据以下内容续写：\n{vars}",
                                         ParamType::Text, /*required*/ true, false,
-                                        "用 {端口名} 引用输入值；变长输入按顺序可用 {1}/{2}…（单值时也可写 {vars}）"));
+                                        "用 {端口名} 引用输入值；变长输入按顺序可用 {1}/{2}…（单值时也可写 {vars}）；"
+                                        "未被任何输入填充的占位符会报错（PW-10 · PQ-13）"));
             params.push_back(enum_param("provider", "提供商",
                                         {default_provider}, default_provider,
                                         "AI 生成提示词用（来自配置表 assets/providers.json）"));

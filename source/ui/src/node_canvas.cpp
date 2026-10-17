@@ -1,5 +1,7 @@
 #include "node_canvas.h"
 
+#include "composite.h"        // CN：上级节点实例识别 / 创建
+#include "composite_editor.h" // CN：双击/右键打开上级节点编辑器
 #include "node_registry.h"
 #include "provider_resolve.h"
 #include "editor_state.h"
@@ -594,6 +596,21 @@ std::string node_card_image(const Node& node)
     return missing ? std::string() : local;
 }
 
+// 节点内条件分隔线：clamp 到节点内容区宽度（g_content_width），不超出节点边框。
+// 不能直接用 ImGui::Separator() —— 节点内容是「画布窗口里的一个 Group」（NodeBuilder::Begin
+// 只 SetCursorPos + NodePadding + BeginGroup），Separator 会按**画布窗口**的 Pos/Size 横跨
+// 整个画布宽度（远宽于节点），视觉上就是「超出节点框的长灰线」（2026-10-15 修复）。
+// 这里在光标当前 y 自绘一条恰好 g_content_width 宽的线，配色与垂直间距和 Separator 完全一致：
+// 线画在光标处，随后推进一个 ItemSpacing.y（等价 Separator 的 ItemSize(0,0)）。
+void draw_node_separator()
+{
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    const ImVec2 p        = ImGui::GetCursorScreenPos();
+    draw_list->AddLine(p, ImVec2(p.x + g_content_width, p.y),
+                       ImGui::GetColorU32(ImGuiCol_Separator), 1.0f);
+    ImGui::Dummy(ImVec2(g_content_width, 0.0f)); // 占位推进一行；宽度顺带加固内容区宽度锚点
+}
+
 void draw_node_body(const Node& node)
 {
     engine::registerAllNodes();
@@ -607,9 +624,12 @@ void draw_node_body(const Node& node)
     {
         const ImVec2 cursor = ImGui::GetCursorScreenPos();
         const float  height = ImGui::GetTextLineHeight() + 8.0f;
-        // 分类色条 + 状态圆点
+        // 分类色条 + 状态圆点；CN：上级节点用紫色条区分
+        const ImU32 stripe = !node.composite_id.empty()
+                                 ? IM_COL32(150, 110, 220, 255)
+                                 : category_color(category);
         draw_list->AddRectFilled(ImVec2(cursor.x - 4.0f, cursor.y),
-                                 ImVec2(cursor.x, cursor.y + height), category_color(category), 2.0f);
+                                 ImVec2(cursor.x, cursor.y + height), stripe, 2.0f);
         draw_list->AddCircleFilled(ImVec2(cursor.x + 7.0f, cursor.y + height * 0.5f), 4.0f,
                                    state_color(node.state), 12);
         // PA-08：ui.running_animation 开 → 运行中节点状态点加脉冲光环（关闭则静止）
@@ -653,7 +673,7 @@ void draw_node_body(const Node& node)
     }
 
     if (!node.params.empty()) { // 参数预览
-        ImGui::Separator();
+        draw_node_separator();
         int shown = 0;
         for (const engine::Param& param : node.params) {
             if (!engine::param_visible(node, param)) {
@@ -680,7 +700,7 @@ void draw_node_body(const Node& node)
     // ---- P7a-16：图片卡片（缩略图 + 尺寸 + 格式徽标；格式取内容嗅探结果）----
     if (const std::string card_image = node_card_image(node); !card_image.empty()) {
         const TextureInfo texture = texture_for(card_image);
-        ImGui::Separator();
+        draw_node_separator();
         if (texture.texture != 0) {
             float width  = static_cast<float>(texture.width);
             float height = static_cast<float>(texture.height);
@@ -710,7 +730,7 @@ void draw_node_body(const Node& node)
             engine::resolve_effective_provider(editor().graph, node);
         const std::string reason = engine::unwired_reason(editor().graph, node);
 
-        ImGui::Separator();
+        draw_node_separator();
         if (node.type == "LLMGenerate") {
             // 固定宽度约束：来源节点标题长度不可控 → 按像素收口
             const std::string line =
@@ -738,7 +758,7 @@ void draw_node_body(const Node& node)
     // ---- 运行结果摘要（PA-03：只读；与输出面板 / 参数面板同源）----
     const NodeResultView result_view = result_view_of(node);
     if (result_view.has_content) {
-        ImGui::Separator();
+        draw_node_separator();
         if (result_view.is_error) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
         }
@@ -1017,6 +1037,32 @@ void show_add_node_menu(EditorState& state, const ImVec2& spawn)
             }
         }
         ImGui::EndMenu();
+    }
+
+    // ---- CN：上级节点子菜单（组合节点）----
+    const std::vector<const engine::CompositeSpec*> composites =
+        engine::CompositeRegistry::instance().list();
+    if (!composites.empty()) {
+        ImGui::Separator();
+        if (ImGui::BeginMenu("上级节点")) {
+            for (const engine::CompositeSpec* spec : composites) {
+                if (ImGui::MenuItem(spec->name.c_str())) {
+                    state.snapshot("创建上级节点");
+                    std::string error;
+                    const std::string id =
+                        state.graph.addCompositeNode(spec->id, spawn.x, spawn.y, &error);
+                    if (!id.empty()) {
+                        state.selected_nodes = {id};
+                        state.selected_node  = id;
+                        state.set_status("已创建上级节点：" + spec->name);
+                    }
+                    else {
+                        state.set_status("创建上级节点失败：" + error);
+                    }
+                }
+            }
+            ImGui::EndMenu();
+        }
     }
 }
 
@@ -1712,7 +1758,34 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         if (ImGui::MenuItem("改名（右侧参数面板）")) {
             state.request_focus_title = true;
         }
+        // CN：上级节点 → 打开独立编辑器
+        {
+            const engine::Node* ctx_node = state.graph.findNode(context_node);
+            if (ctx_node != nullptr && !ctx_node->composite_id.empty()) {
+                ImGui::Separator();
+                if (ImGui::MenuItem("编辑内部图…")) {
+                    composite_editor_open(ctx_node->composite_id);
+                }
+            }
+        }
         ImGui::Separator();
+        // PD-06①（FEA-M4-11 · 通用重跑）：复用上游结果，受影响节点先清结果与状态
+        {
+            const engine::Node* ctx_node = state.graph.findNode(context_node);
+            const bool ctx_rerun_ok =
+                ctx_node != nullptr && ctx_node->state != engine::NodeState::Waiting &&
+                !state.session_active();
+            if (ImGui::MenuItem("重跑该节点", nullptr, false, ctx_rerun_ok)) {
+                state.start_rerun_async(context_node, engine::RerunScope::NodeOnly);
+            }
+            if (ImGui::MenuItem("重跑该节点及下游", nullptr, false, ctx_rerun_ok)) {
+                state.start_rerun_async(context_node, engine::RerunScope::Downstream);
+            }
+            if (ImGui::IsItemHovered() && ctx_node != nullptr &&
+                ctx_node->state == engine::NodeState::Waiting) {
+                ImGui::SetTooltip("该节点尚未运行过（状态为等待），暂不可重跑");
+            }
+        }
         if (ImGui::MenuItem("删除该节点")) {
             state.delete_selected();
         }
@@ -1720,13 +1793,22 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
     }
 
     ed::Resume();
-    // 双击节点标题 → 参数面板聚焦标题（设计 §6.1 重命名）
+    // 双击节点标题 → 参数面板聚焦标题（设计 §6.1 重命名）；CN：上级节点改为打开编辑器
     const ed::NodeId double_clicked = ed::GetDoubleClickedNode();
     if (double_clicked.Get() != 0) {
-        state.selected_nodes      = {"n" + std::to_string(double_clicked.Get())};
-        state.selected_node       = state.selected_nodes.front();
-        state.request_focus_title = true;
-        state.set_status("可在右侧参数面板修改标题与参数：" + state.selected_node);
+        const std::string node_id = "n" + std::to_string(double_clicked.Get());
+        state.selected_nodes      = {node_id};
+        state.selected_node       = node_id;
+        if (const engine::Node* node = state.graph.findNode(node_id);
+            node != nullptr && !node->composite_id.empty()) {
+            composite_editor_open(node->composite_id);
+            state.set_status("已打开上级节点编辑器：" + node->title + "（" +
+                             node->composite_id + "）");
+        }
+        else {
+            state.request_focus_title = true;
+            state.set_status("可在右侧参数面板修改标题与参数：" + node_id);
+        }
     }
 
     sync_selection(state);
@@ -1826,6 +1908,33 @@ std::string canvas_add_node_at_center(const std::string& type)
     if (!id.empty()) {
         state.selected_nodes = {id};
         state.selected_node  = id;
+    }
+    return id;
+}
+
+// CN（Composition_node）：依据规格在画布可视中心创建上级节点
+std::string canvas_add_composite_at_center(const std::string& composite_id)
+{
+    ensure_context();
+    EditorState& state = editor();
+
+    ed::SetCurrentEditor(g_context);
+    const ImVec2 center_canvas = ed::ScreenToCanvas(ImGui::GetMainViewport()->GetCenter());
+    ed::SetCurrentEditor(nullptr);
+
+    state.snapshot("创建上级节点");
+    std::string error;
+    const std::string id =
+        state.graph.addCompositeNode(composite_id, center_canvas.x, center_canvas.y, &error);
+    if (!id.empty()) {
+        state.selected_nodes = {id};
+        state.selected_node  = id;
+        if (const engine::Node* node = state.graph.findNode(id)) {
+            state.set_status("已创建上级节点：" + node->title + "（双击进入内部图编辑）");
+        }
+    }
+    else {
+        state.set_status("创建上级节点失败：" + error);
     }
     return id;
 }

@@ -1826,6 +1826,26 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         }
     }
 
+    // ---- PD-06①（FEA-M4-11 · 通用重跑）：重跑该节点 / 重跑该节点及下游（复用上游结果）----
+    if (node->state != engine::NodeState::Waiting) {
+        ImGui::Separator();
+        const bool rerunning = editor().executor.running() || editor().session_active();
+        ImGui::BeginDisabled(rerunning);
+        if (ImGui::Button("重跑该节点", ImVec2(-FLT_MIN, 0.0f))) {
+            editor().start_rerun_async(node->id, engine::RerunScope::NodeOnly);
+        }
+        if (ImGui::Button("重跑该节点及下游", ImVec2(-FLT_MIN, 0.0f))) {
+            editor().start_rerun_async(node->id, engine::RerunScope::Downstream);
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("重跑**复用上游结果**（上游不重算）；受影响节点的结果与状态会先清除。\n"
+                              "· 重跑该节点：只重跑当前节点\n"
+                              "· 重跑该节点及下游：重跑当前节点及其全部下游\n"
+                              "（上游值取自上一次运行；若上游尚未成功运行过，本节点会以清晰报错失败）");
+        }
+    }
+
     // ---- 底部操作（F2：批量应用 / 重置 均需二次确认）----
     static std::string confirm_apply_node; // 待确认"应用到同类节点"的节点 id
     static std::string confirm_reset_node; // 待确认"重置为默认值"的节点 id

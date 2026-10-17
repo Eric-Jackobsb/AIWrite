@@ -396,7 +396,35 @@ json execute_image_input(const json& /*inputs*/, const json& params,
 // 变量规则（M2 约定）：
 //   1) 命名输入：{端口id} → 该值
 //   2) 变长输入 vars：按边顺序绑定 {1}、{2}…；恰好 1 个值时额外提供 {vars}
-//   3) 未匹配的 {…} 原样保留（便于用户看出名字写错）
+//   3) 未匹配的 {…}：名字「像占位符」（{1}/{var}/{vars}）⇒ **报错**（PW-10 · PQ-13 已拍板，
+//      不再原样保留）；否则（JSON 字面量 {…} 等）原样保留，避免误伤
+namespace {
+
+// PW-10（PQ-13）：判定 {…} 的名字是否「像占位符」。
+//  * 数字（{1}/{2}…）或标识符（{vars}/{端口id}：字母/下划线开头 + 字母数字/下划线）
+//  * 其余（含 JSON 字面量 {"a": 1}、含空格 / 冒号等）不算占位符 → 原样保留
+bool is_placeholder_name(const std::string& name)
+{
+    if (name.empty()) {
+        return false;
+    }
+    const bool all_digits =
+        std::all_of(name.begin(), name.end(),
+                    [](unsigned char ch) { return std::isdigit(ch) != 0; });
+    if (all_digits) {
+        return true;
+    }
+    const unsigned char first = static_cast<unsigned char>(name.front());
+    if (std::isalpha(first) == 0 && first != '_') {
+        return false;
+    }
+    return std::all_of(name.begin() + 1, name.end(), [](unsigned char ch) {
+        return std::isalnum(ch) != 0 || ch == '_';
+    });
+}
+
+} // namespace
+
 json execute_prompt_template(const json& inputs, const json& params,
                              engine::ExecutionContext& /*ctx*/)
 {
@@ -432,7 +460,14 @@ json execute_prompt_template(const json& inputs, const json& params,
         const std::string name  = template_text.substr(i + 1, end - i - 1);
         const auto        found = variables.find(name);
         if (found == variables.end()) {
-            result += template_text.substr(i, end - i + 1); // 未匹配：原样保留
+            // PW-10（PQ-13）：未被任何输入填充的占位符 ⇒ 报错（Console + 节点失败），
+            // 不再「原样保留」；仅对「像占位符」的名字报错，JSON 字面量 {…} 不误伤
+            if (is_placeholder_name(name)) {
+                throw engine::NodeError("模板存在未填充的占位符 {" + name +
+                                        "}：变量名未匹配任何输入（变长输入多值只有 {1}/{2}…，"
+                                        "单值才提供 {vars}）");
+            }
+            result += template_text.substr(i, end - i + 1); // 非占位符字面量：原样保留
         }
         else {
             result += found->second;

@@ -23,6 +23,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -41,6 +42,7 @@ public:
                                nlohmann::json value);
     const nlohmann::json*  find(const std::string& node_id, const std::string& port_id) const;
     void                   clear();
+    void                   erase(const std::string& node_id); // PD-06①：清除某节点的全部运行态值
     std::size_t            size() const;
 
 private:
@@ -64,6 +66,20 @@ struct NodeRunInfo {
     double      duration_ms = 0.0;
     std::string error;
     std::size_t delta_bytes = 0;
+};
+
+// ------------------------------------------------------ 通用重跑（PD-06①）----
+// FEA-M4-11：重跑范围 —— 只重跑目标节点 / 重跑目标节点及下游。
+//  * 两种范围都**复用上游结果**（上游节点不在执行计划里，运行态值原样保留）；
+//  * 重跑前清除「受影响节点」的运行态结果与状态（运行态值，不进撤销快照 / 工作流 JSON）。
+enum class RerunScope {
+    NodeOnly,   // 「重跑该节点」：只重跑目标节点
+    Downstream, // 「重跑该节点及下游」：重跑目标节点及其全部下游
+};
+
+struct RerunSpec {
+    std::string target_node;                      // 重跑起点节点 id（空 = 全量运行）
+    RerunScope  scope = RerunScope::NodeOnly;
 };
 
 struct ExecutionContext;
@@ -200,6 +216,12 @@ public:
     //  * 主线程每帧 pumpEvents() 取事件：写 Graph 节点状态 + 刷新 UI 读模型
     //  * startAsync 会拦截既有的 console / state 回调（改为事件），调用方应从事件侧处理输出
     bool        startAsync(Graph* graph, std::string* error);
+    // PD-06①（FEA-M4-11 · 通用重跑）：从某节点开始执行（复用上游结果）。
+    //  * 重跑前清除「受影响节点」的运行态结果与状态（运行态值，不进撤销快照 / 工作流 JSON）；
+    //  * 影响范围：NodeOnly = 仅目标节点；Downstream = 目标节点 + 其全部下游；
+    //  * 与 start() 相同的运行前校验（整图），失败返回 false 并写 error。
+    bool        startFrom(Graph& graph, const RerunSpec& rerun, std::string* error);
+    bool        startAsyncFrom(Graph* graph, const RerunSpec& rerun, std::string* error);
     void        pumpEvents(std::vector<RunEvent>* out); // 主线程调用
     void        requestStop();                          // 置位 + 唤醒（真取消见 PB-02）
     void        stopAsync();                            // 请求停止 + join（退出/切图前必调）
@@ -228,6 +250,13 @@ private:
     void                 notifyState(const std::string& node_id, NodeState state) const;
     // PA-01：记录一次节点执行（完成 / 失败 / 跳过）
     void recordRun(const Node& node, NodeState state, double duration_ms, std::string error);
+    // PD-06①：会话级复位（保留 outputs_ 供上游复用；reset() 在它基础上再清 outputs_）
+    void resetSession();
+    // PD-06①：收集 start 节点的全部下游（含目标本身；沿 edges 的 from→to 单向可达）
+    void collectDownstream(const Graph& graph, const std::string& start,
+                           std::unordered_set<std::string>* out) const;
+    // PB-01：startAsync / startAsyncFrom 的公共实现（rerun 为空 = 全量运行）
+    bool startAsyncImpl(Graph* graph, const RerunSpec* rerun, std::string* error);
 
     std::vector<std::string> plan_;
     std::size_t              cursor_ = 0;

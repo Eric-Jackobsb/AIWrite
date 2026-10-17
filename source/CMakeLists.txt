@@ -253,6 +253,7 @@ add_library(aiwrite_core STATIC
     engine/src/validate.cpp
     engine/src/provider_resolve.cpp
     engine/src/executor.cpp
+    engine/src/composite.cpp        # CN：上级节点（模型/注册表/独立文件存储/展开执行）
     engine/src/recent_files.cpp
     engine/src/autosave.cpp          # M_patchAB §4（PC-01/02）：自动保存 + 崩溃恢复（api_probe --autosave-assert）
     engine/src/migration.cpp         # M_patchAB §4（PC-04）：版本迁移框架（workflow + config；未来版本明确拒绝）
@@ -324,6 +325,12 @@ endif()
 # -----------------------------------------------------------------------------
 # imgui-node-editor：第三方源码集成（固定 tag v0.9.3）
 # 与 vcpkg 的 imgui 1.90.7-docking 配对
+#
+# ⚠ ODR 红线（见 third_party/imgui-node-editor/AIWRITE_PATCHES.md）：
+#   本库自带 external/imgui（1.84 WIP），与 vcpkg 的 1.90.7 同名结构体布局不同。
+#   绝不可把 third_party/imgui-node-editor/external 加入任何 target 的
+#   include 路径——否则链接器静默选错实现，运行期才以内存错乱暴露。
+#   imgui_node_editor.h 内已有 IMGUI_VERSION_NUM==19070 静态断言兜底。
 # -----------------------------------------------------------------------------
 add_library(imgui_node_editor STATIC
     third_party/imgui-node-editor/imgui_node_editor.cpp
@@ -356,7 +363,8 @@ add_executable(aiwrite WIN32
     ui/src/error_bar.cpp
     ui/src/text_view.cpp
     ui/src/texture_cache.cpp
-    ui/src/settings_panel.cpp)  # M6（M6-01）：设置面板（config.toml 可调项）
+    ui/src/settings_panel.cpp
+    ui/src/composite_editor.cpp)  # CN：上级节点编辑器 / 打包 / 新建对话框
 
 # M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：面板诊断按钮 + 错误条「重新登录」（PT-07）
 # M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」异步后端
@@ -387,6 +395,8 @@ aiwrite_copy_python(aiwrite)   # M7B 批 2：brain_ai_browser/*.py → <exe>/pyt
 # api_probe：M1 技术验证命令行工具（V-04 HTTP / V-05 SHA3 / V-06 DeepSeek API）
 # -----------------------------------------------------------------------------
 add_executable(api_probe tools/api_probe.cpp)
+target_sources(api_probe PRIVATE
+    tools/composite_selftest.cpp)   # CN：上级节点自检（展开执行/规格/注册表/JSON）
 target_link_libraries(api_probe PRIVATE
     aiwrite_core
     httplib::httplib
@@ -400,6 +410,16 @@ aiwrite_copy_runtime_dlls(api_probe)
 aiwrite_sync_vcpkg_bin(api_probe)
 aiwrite_copy_assets(api_probe) # 自检也要读表（与 aiwrite 同一份资产）
 aiwrite_copy_python(api_probe) # M7B 批 2：同上（自检也要能起新通道守护进程）
+
+# -----------------------------------------------------------------------------
+# ce_repro：临时复现「新建上级节点 → 编辑器首帧」ImGui 窗口栈断言（headless）
+# 验证完即可移除本目标
+# -----------------------------------------------------------------------------
+add_executable(ce_repro tools/ce_repro.cpp)
+target_link_libraries(ce_repro PRIVATE
+    imgui_node_editor
+    imgui::imgui)
+target_compile_definitions(ce_repro PRIVATE IMGUI_DEFINE_MATH_OPERATORS)
 
 # -----------------------------------------------------------------------------
 # webview2_login：M1 技术验证命令行工具（V-03 WebView2 登录 + Cookie 提取）

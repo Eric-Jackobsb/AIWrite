@@ -16,6 +16,17 @@
 
 //------------------------------------------------------------------------------
 # include <imgui.h>
+// [aiwrite 版本锁] 详见 AIWRITE_PATCHES.md：
+//   本目录自带 third_party/imgui-node-editor/external/imgui（1.84 WIP）。
+//   若它被误加入 include 路径，本 TU 会静默换用旧版 imgui.h——同名结构体
+//   （ImGuiContext/ImVec2 等）字段布局与 vcpkg imgui 1.90.7 不同。链接器不会
+//   报错，仅在运行期以「对象内存错乱 → 远端崩溃」暴露（崩溃点≠破坏点）。
+//   此静态断言把任何包含本头的 TU 的 imgui 版本钉死为 vcpkg 1.90.7。
+static_assert(IMGUI_VERSION_NUM == 19070,
+    "[aiwrite] imgui_node_editor 必须与 vcpkg imgui 1.90.7-docking 一起编译"
+    "（IMGUI_VERSION_NUM==19070）。若此断言触发，多半是把"
+    "third_party/imgui-node-editor/external/imgui(1.84 WIP) 误加进了 include 路径。"
+    "升级 vcpkg imgui 时需同步评估本库兼容性并更新此常量。");
 # include <cstdint> // std::uintXX_t
 # include <utility> // std::move
 

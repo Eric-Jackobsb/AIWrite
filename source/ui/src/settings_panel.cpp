@@ -5,6 +5,7 @@
 #include "paths.h"
 #include "provider_spec.h"
 #include "settings_validation.h"
+#include "output_archive.h"   // PW-11：kHistoryFloor（keep_history=false 时的归档保留下限）
 #include "site_template.h"   // PB2-24：自建网页版站点模板（生成 / 校验 / 落盘）
 
 #include <imgui.h>
@@ -427,7 +428,8 @@ SettingsPanelResult draw_settings_panel(Config& config)
             ImGui::SliderInt("保留份数", &g_edit.output.max_history, 1, 100);
         }
         else {
-            ImGui::TextDisabled("不保留多份时：只留最近 1 份归档");
+            ImGui::TextDisabled("不保留多份时：仍保留最近 %d 份归档（PW-11：避免复盘证据被清）",
+                                aiwrite::utils::kHistoryFloor);
         }
         ImGui::SetNextItemWidth(240.0f);
         ImGui::SliderInt("归档清理阈值（天，0 = 不清理）", &g_edit.output.ttl_days, 0, 3650);

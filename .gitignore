@@ -76,6 +76,8 @@ Desktop.ini
 # 程序数据目录默认在 %USERPROFILE%\.brain-ai（不在仓库内）；这里兜底防止误放
 .brain-ai/
 *.brain-ai.json
+# UI 布局状态（程序运行期在仓库根生成的 ImGui 窗口布局，本机私有）
+/imgui.ini
 
 # ------------------------------------------- Python 运行时（Pydoll · M7B）----
 # 说明：`source/python/` 是**源码目录**（守护进程 / 管道 / Pydoll 封装），必须入库；

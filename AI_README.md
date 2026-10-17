@@ -27,8 +27,8 @@
 | 目的 | 命令 | 基线（**2026-10-11 本机实测** · 每个数字的唯一权威位见 §10.1） |
 |---|---|---|
 | 构建（Debug） | `cd source; .\build.ps1`（= `cmake --preset default` + `cmake --build --preset debug`）｜**日志自动落 `build\logs\build_debug_<yyyyMMdd_HHmmss>.log`**（`-LogName` 改名 / `-NoLog` 关闭） | **0 error / 0 warning**。⚠ 若报 `error MSB4018` + `FileTracker`（`GetOutOfDateItems` / `SetModuleDependencies`）⇒ **不是代码问题**、**重跑无效**：`.\build.ps1 -Reconfigure` 清空重建（陷阱 9 = [docs/loop_dev.md](docs/loop_dev.md) §10.1） |
-| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===`（**十三组**）· exit **0**；含 配置表 **52/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **DOM 探测 27/0** · **执行器 655/0**（**2026-10-15 复测** · 原 **546/0** = 2026-10-11 实测；同日链：2026-10-10 = 464 → **+26 = `M_patchC` 批 1**（`PW-02` / `PW-04` / `PW-05` / `PW-08`）→ **+34 = `M_patchAB` 批 2**（会话诊断）→ **+20 = 批 4**（版本迁移）→ **+2 = 批 6**（配置表嵌套 schema）；**组数：七组 → 九组** = 批 3（V-11 / V-12）· **九组 → 十二组** = 批 6（V-13 / V-14 / V-15）· **十二组 → 十三组** = 批 7（V-16）） |
-| 执行器自检 | `api_probe.exe --exec-selftest` | **655 / 0** · exit 0（**2026-10-15 复测** · 原 **546 / 0** = 2026-10-11 实测；同日链 **464 → 490**（`M_patchC` 批 1）**→ 524**（批 2）**→ 544**（批 4）**→ 546**（批 6）：窗口表 / 复位计划 / 归属准入 / 三类归因文案 / 版本迁移 / L2 工厂与回环 —— 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]`） |
+| 工具 / 契约自检（总闸） | `api_probe.exe --selftest` | 末行 `=== 结果: … PASS ===`（**十三组**）· exit **0**；含 配置表 **52/0** · 图片准备 **19/0** · 上传证据 **32/0** · 站点上传模板 **21/0** · **DOM 探测 27/0** · **执行器 681/0**（**2026-10-16 复测** · 原 **546/0** = 2026-10-11 实测；同日链：2026-10-10 = 464 → **+26 = `M_patchC` 批 1**（`PW-02` / `PW-04` / `PW-05` / `PW-08`）→ **+34 = `M_patchAB` 批 2**（会话诊断）→ **+20 = 批 4**（版本迁移）→ **+2 = 批 6**（配置表嵌套 schema）→ **+26 = 2026-10-16 批**（`PD-06①` 通用重跑 / `PW-10` 模板占位符报错 / `PW-11` 归档保底）；**组数：七组 → 九组** = 批 3（V-11 / V-12）· **九组 → 十二组** = 批 6（V-13 / V-14 / V-15）· **十二组 → 十三组** = 批 7（V-16）） |
+| 执行器自检 | `api_probe.exe --exec-selftest` | **681 / 0** · exit 0（**2026-10-16 复测** · 原 **546 / 0** = 2026-10-11 实测；同日链 **464 → 490**（`M_patchC` 批 1）**→ 524**（批 2）**→ 544**（批 4）**→ 546**（批 6）**→ 655**（L2/L3 + 收口批）**→ 681**（`PD-06①` 通用重跑 / `PW-10` 模板占位符报错 / `PW-11` 归档保底 · 2026-10-16）；同日 **`Composition_node` 实施批** 新增「上级节点自检」子段 **51/0** 并入 `--exec-selftest`（汇总仍 **681/0** —— 数字持平因自检分组归属调整，**非断言回退** · 构建 0/0 · graph **151/0** · 断链 0）：窗口表 / 复位计划 / 归属准入 / 三类归因文案 / 版本迁移 / L2 工厂与回环 —— 见 [CHANGELOG](docs/CHANGELOG.md) `[Unreleased]`） |
 | 图模型自检 | `api_probe.exe --graph-selftest` | **151 / 0** · exit 0（**2026-10-15 复测** · 原 **110 / 0** = 2026-10-11 · L1 批升至 **144 / 0** → L2 批 **151 / 0**） |
 | 上传链路自检（离线三组；真机加 `--provider <id> --image <图>`） | `aiwrite.exe --upload-selftest` | **72 / 0** · exit 0（⚠️ 见 §3「GUI 子系统 stdout」；**不要并发跑**，共用 `%TEMP%\aiwrite-upload\selftest`） |
 | 运行时（真实工作流） | `aiwrite.exe --run-selftest` / `--run-selftest --web` | **PASS · exit 0**（**2026-10-09 复跑**：完成 3/5、失败 1、跳过 1 —— official 占位分支缺 Key 属预期；`official` 需 `~/.brain-ai/config.toml` 凭据；`--web` 需已登录一次） |
@@ -82,7 +82,7 @@
 
 ## 5. 编号与登记约定
 
-- **编号空间**：`Ixx`（不变量）/ `D-xx` / `W-Dx`（修正）/ `PW-xx`（补丁 C 任务）/ `M*-xx`（里程碑任务）/ `B*-xx`（批次）/ `AB*-xx`（验收）/ `VB*-xx` / `VB2-xx` / `A*-xx`（验证）/ `PB2-xx` / `R*-xx`（风险）/ `RM-D*`（路线决策）/ **`CS-xx`**（画布快照任务 · [docs/actionPlan/M_canvas_snapshot.md](docs/actionPlan/M_canvas_snapshot.md)）/ **`VC-xx`**（画布快照验证项）/ **`AC-xx`**（画布快照验收项）· **`NE-Qx`**（**节点扩展**待讨论问题）/ **`NE-Dx`**（**节点扩展**决议 —— 见 [docs/actionPlan/M_node_expansion.md](docs/actionPlan/M_node_expansion.md)；任务号 **`NE-01…`** 于**拍板后**启用）/ **`L1-*`**（**节点扩展 L1 深化**任务号）/ **`VL1-*`**（L1 离线验证项）/ **`AL1-*`**（L1 人工验收项）—— 三项见 [docs/actionPlan/M_8nodes_extension.md](docs/actionPlan/M_8nodes_extension.md)（🆕 2026-10-12 批 9-0 登记）· **`L1-R1`~`L1-R3`**（**L1 收尾决议** —— ⚠️ **不是**任务号 `L1-*`）/ **`L2-1`~`L2-5`**（L2 定向议题）/ **`L3-1`~`L3-4`**（L3 定向议题）/ **`G-1`~`G-5`**（全局口径）—— 四项见 [docs/actionPlan/M_node_expansion.md](docs/actionPlan/M_node_expansion.md) §7 / §11（🆕 2026-10-12 批 9-1 登记）· **`L2-01…`** / **`L3-01…`**（**L2 / L3 任务号** —— 🆕 2026-10-12 **批 9-2 先立** · `NE-D39`；⚠️ 与上列 `L2-1`~`L2-5` / `L3-1`~`L3-4`（**定向议题号**）**同形不同物**）· **`CR-*`**（**创作流程**阶段）/ **`CR-OPS-*`**（原子操作）/ **`CR-GAP-*`**（缺口）—— 三项见 [docs/actionPlan/Creation_Roadmap_Guideline.md](docs/actionPlan/Creation_Roadmap_Guideline.md)（🆕 2026-10-12 批 9-3 登记 · 同批归位 `docs/actionPlan/`）。⚠️ **两处「同形不同物」警示**（引用前先看）：① **`NE-D*` 分两段** —— 上游 `M_node_expansion.md` §7 的 `NE-D1`~`NE-D7` + `NE-D15`~`NE-D29` = **全局/四层决策**，其 `NE-D30`~`NE-D37` = **L1 细节别名**；姊妹文档 `M_8nodes_extension.md` §2 的 `NE-D1`~`NE-D13` = **L1 细节** ⇒ **引用 L1 细节一律引姊妹文档的号**；② **`L1`/`L2`/`L3` 既是 PatchB 的层名**（配置表 / 接线 / 站点适配）**又是节点扩展的层名**（深化 / 新节点 / 库·画布 UX）。
+- **编号空间**：`Ixx`（不变量）/ `D-xx` / `W-Dx`（修正）/ `PW-xx`（补丁 C 任务）/ `M*-xx`（里程碑任务）/ `B*-xx`（批次）/ `AB*-xx`（验收）/ `VB*-xx` / `VB2-xx` / `A*-xx`（验证）/ `PB2-xx` / `R*-xx`（风险）/ `RM-D*`（路线决策）/ **`CS-xx`**（画布快照任务 · [docs/actionPlan/M_canvas_snapshot.md](docs/actionPlan/M_canvas_snapshot.md)）/ **`VC-xx`**（画布快照验证项）/ **`AC-xx`**（画布快照验收项）· **`NE-Qx`**（**节点扩展**待讨论问题）/ **`NE-Dx`**（**节点扩展**决议 —— 见 [docs/actionPlan/M_node_expansion.md](docs/actionPlan/M_node_expansion.md)；任务号 **`NE-01…`** 于**拍板后**启用）/ **`L1-*`**（**节点扩展 L1 深化**任务号）/ **`VL1-*`**（L1 离线验证项）/ **`AL1-*`**（L1 人工验收项）—— 三项见 [docs/actionPlan/M_8nodes_extension.md](docs/actionPlan/M_8nodes_extension.md)（🆕 2026-10-12 批 9-0 登记）· **`L1-R1`~`L1-R3`**（**L1 收尾决议** —— ⚠️ **不是**任务号 `L1-*`）/ **`L2-1`~`L2-5`**（L2 定向议题）/ **`L3-1`~`L3-4`**（L3 定向议题）/ **`G-1`~`G-5`**（全局口径）—— 四项见 [docs/actionPlan/M_node_expansion.md](docs/actionPlan/M_node_expansion.md) §7 / §11（🆕 2026-10-12 批 9-1 登记）· **`L2-01…`** / **`L3-01…`**（**L2 / L3 任务号** —— 🆕 2026-10-12 **批 9-2 先立** · `NE-D39`；⚠️ 与上列 `L2-1`~`L2-5` / `L3-1`~`L3-4`（**定向议题号**）**同形不同物**）· **`CR-*`**（**创作流程**阶段）/ **`CR-OPS-*`**（原子操作）/ **`CR-GAP-*`**（缺口）—— 三项见 [docs/actionPlan/Creation_Roadmap_Guideline.md](docs/actionPlan/Creation_Roadmap_Guideline.md)（🆕 2026-10-12 批 9-3 登记 · 同批归位 `docs/actionPlan/`）· **`CN-*`**（**上级节点**任务）/ **`CN-D*`**（**上级节点**决议）/ **`CN-Q*`**（**上级节点**待确认）—— 见 [docs/actionPlan/Composition_node.md](docs/actionPlan/Composition_node.md)（🆕 2026-10-16 批 CN-0 登记 · ⚠️ **不占用 M1–M8 编号**；任务号 `CN-01…` 已启用（CN 实施批 2026-10-16 · **实施完成 ⛔ 待人工验收**）· `CN-D20` = **L4 重启**，覆盖 `M_node_expansion`「L4 不做」）。⚠️ **两处「同形不同物」警示**（引用前先看）：① **`NE-D*` 分两段** —— 上游 `M_node_expansion.md` §7 的 `NE-D1`~`NE-D7` + `NE-D15`~`NE-D29` = **全局/四层决策**，其 `NE-D30`~`NE-D37` = **L1 细节别名**；姊妹文档 `M_8nodes_extension.md` §2 的 `NE-D1`~`NE-D13` = **L1 细节** ⇒ **引用 L1 细节一律引姊妹文档的号**；② **`L1`/`L2`/`L3` 既是 PatchB 的层名**（配置表 / 接线 / 站点适配）**又是节点扩展的层名**（深化 / 新节点 / 库·画布 UX）。
 - **状态词白名单**（只用这几个，别自创）：**已拍板 / 已落地 / 部分落地 / 计划中 / 已归档 / 已退场 / 待真机**。
 - **文档三态标记**（全库统一 · 定义见 [docs/DocMAP.md](docs/DocMAP.md) §五）：✅ **已固定**（已落地视为契约）/ 📦 **已失效**（⛔ **只标记不删除**，必须给「现行指向」）/ ⬜ **待定**（未拍板 ⇒ **必须**在 `DevPlan.todo` 的「**待定 · 未拍板**」分类里有同名 `PQ-xx` 项；拍板后同批置 done）。⚠️ **2026-10-13 批 9-4**：该分类为**空落点分支**（只承载**新** ⬜ 项）；**已拍板历史 20 项**已整组移入 `Archive > ARC-ORG-01`。
 - 新事项先**登记**（计划文档 + `DevPlan.todo`），再开工；收口时回填**实测数字**，不写「应该没问题」。
@@ -133,7 +133,7 @@
 | 行为契约（本文） | `AI_README.md` |
 | 文档地图 / 进度 | `docs/DocMAP.md` |
 | 变更日志 | `docs/CHANGELOG.md` |
-| 现行计划 | `docs/actionPlan/M6.md` · `M8.md` · `M_patchAB_rest.md` · `M_patchC_web_node_bind.md` · `M_canvas_snapshot.md`（画布渲染性能专项 · **计划中**）· `M_node_expansion.md`（节点扩展：L1 已定向·**已实施完成** · **v5 定稿 = [M_node_expansion_part2.md](docs/actionPlan/M_node_expansion_part2.md)**（L2 6 节点 / L3 5 UX 项 🟢 定稿 · L4 不做））· `milestone_plan.md` |
+| 现行计划 | `docs/actionPlan/M6.md` · `M8.md` · `M_patchAB_rest.md` · `M_patchC_web_node_bind.md` · `M_canvas_snapshot.md`（画布渲染性能专项 · **计划中**）· `M_node_expansion.md`（节点扩展：L1 已定向·**已实施完成** · **v5 定稿 = [M_node_expansion_part2.md](docs/actionPlan/M_node_expansion_part2.md)**（L2 6 节点 / L3 5 UX 项 🟢 定稿 · L4 不做 ⚠️ **组合层 L4 已于 2026-10-16 重启** · `CN-D20` · **实施完成（2026-10-16）⛔ 待人工验收** · 见 [Composition_node.md](docs/actionPlan/Composition_node.md)））· `milestone_plan.md` |
 | 开发看板（JSON） | `docs/DevPlan.todo` |
 | 循环开发规则 | `docs/loop_dev.md`（网页站逐站转可用：启动闸 / 三层结构 / 站级 8 步 / 轮次门禁 / 失败分类 / 退出码 / 记录位 / 停止条件） |
 | 术语对照 | `docs/变量术语对照表.md` |
@@ -249,3 +249,31 @@
 - **第一次卡死**（build 后运行无响应 / 死循环 / 界面冻结）：**记录**（命令、场景、现象、日志物证），随后**再测 2 次**。
 - **同一项累计超过 3 次卡死**：**不再反复运行测试**，在 CHANGELOG 记「**3 次卡死 · 暂停循环开发** + 现象物证」，**暂停循环**，等待开发者指示（不得自行继续改动绕过）。
 - 卡死与「编译错误」分开计数；编译错误按 §12.2 正常排错处理。
+
+---
+
+## 13. 后台终端管理纪律（Cline 后台处理 · 2026-10-16）
+
+> **适用**：Cline 的后台处理会为文件处理命令开启新的终端（terminal）来执行。
+> 本规则是**硬约束**：控制后台终端数量，防止内存膨胀。
+
+- **开新终端前必查**：每次要开启一个新的 terminal 之前，先检查当前 **active 的 terminal 数量**。
+- **数量 ≥ 3 ⇒ 先杀后开**：若当前 active 终端数 **≥ 3**，先执行 **kill terminal** 指令（清理已空闲 / 已完成的终端），再开启新终端。
+- **目的**：**节约内存，防止内存膨胀导致进程暴死** —— 后台终端长期挂起会持续占用内存，累积过多会造成内存膨胀 / 卡死 / 崩溃。
+
+### 13.1 验证措施（kill 是否生效 · 2026-10-17 实测闭环）
+
+> Cline 无法直接操作 IDE 终端面板标签，因此用 **VS Code 集成终端后端进程**（`powershell.exe`）作为「活跃终端」的可执行代理口径。
+> 实测：基线 8 → kill 7（保留当前命令自身 shell）→ 复查存活 1 ≤ 3，达标。
+
+- **枚举口径**：`Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.ParentProcessId -eq <VS Code NodeService PID> }`
+  - 判定「IDE 集成终端」：父进程为 **VS Code 的 NodeService utility**（`Code.exe --type=utility --utility-sub-type=node.mojom.NodeService`），且启动参数以 `-noexit -command "...shellIntegration.ps1..."` 开头（终端集成初始化脚本）。
+  - **排除不杀**：`conhost.exe` / `Code.exe` 自身 / 系统进程（如 `SearchHost.exe` 下属的 `msedgewebview2`）均不是本纪律清理对象。
+- **执行闭环（三步）**：
+  1. **基线**：枚举当前 shell 的 PID 集合与数量（打印物证）。
+  2. **kill**：对除 **`$PID`（当前命令自身 shell，杀掉即自断）** 与「正在跑任务的 shell」（命令行含 build.ps1 / python / 测试命令等）之外的终端执行 `Stop-Process -Id <pid> -Force`。
+  3. **复查**：**同一枚举命令再跑一次**，核对已 kill 的 PID 不在存活列表（消失 = 生效），且存活数量 **≤ 3**（理想 = 1，仅剩当前命令自身）。
+- **未达标处理**：存活 > 3 时**不得开新终端**，改由人工在 IDE 终端面板关闭标签（回收站按钮），关闭后**再次复查**直至 ≤ 3。
+- **物证纪律**：基线 / kill 动作 / 复查三段输出保留在会话输出中，作为 kill 生效物证（对齐「收口时回填实测数字」纪律）。
+- **杀后现象**：被杀终端的 VS Code 标签显示「进程已退出」，此为 kill 预期结果，标签可手动关闭，不属异常。
+

@@ -257,7 +257,7 @@ DiagnosticsReport collect_diagnostics()
                     " / 运行动效=" + on_off(config.ui.running_animation));
     lines.push_back("完成后自动打开归档 = " +
                     std::string(on_off(config.output.auto_open_on_complete)));
-    lines.push_back("历史归档 = " + std::string(config.output.keep_history ? "保留多份" : "只留最近 1 份") +
+    lines.push_back("历史归档 = " + std::string(config.output.keep_history ? "保留多份" : "只留最近 3 份") +
                     " / 上限=" + std::to_string(config.output.max_history) +
                     " / 清理阈值=" + std::to_string(config.output.ttl_days) + " 天");
     lines.push_back("日志保留 = " + std::to_string(config.advanced.log_ttl_days) + " 天");

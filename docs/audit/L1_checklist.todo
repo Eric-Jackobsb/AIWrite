@@ -1,91 +1,552 @@
-# L1 节点深化 · 真机验证清单（L1_checklist.todo）
-
-> 依据：[../actionPlan/M_8nodes_extension.md](../actionPlan/M_8nodes_extension.md) §7 验收框架（`VL1-*` 离线断言 / `AL1-*` 人工验收）
-> 状态：⬜ 待真机验证（2026-10-14 · L1-a~f 全部开发完成，离线断言 `--exec-selftest` 598/0 · `--graph-selftest` 144/0 · `check_all` 15/15 全 PASS）
-> 环境：Win32 · `source\build.ps1` 构建通过 · 可执行 `build\bin\aiwrite.exe` / `api_probe.exe`
-> 用法：逐项真机操作并勾选；每项留「物证」位（截图 / Console 输出 / 生成文件路径）。
-
----
-
-## 〇、准备
-
-- [ ] 运行 `.\source\build.ps1` 通过（0 error / 0 warning）
-- [ ] 启动 `build\bin\aiwrite.exe`，新建工作流并保存（如 `L1-verify.json`）
-- [ ] 准备素材：两张测试图片（`a.png` 大图 ≥800px、`b.jpg` 小图）、一个 `.txt` 文本、一个 `.md` 文本
-
----
-
-## 一、L1-a · 参数面板（二级分组 + 网页版标注 + StringList）
-
-- [ ] **A-1 二级分组**（AL1-01）：新建「文本生成」节点，参数面板应出现「采样（折叠）/ 输出（展开）/ 高级（折叠）」二级组；「输出」组默认展开含 `system_prompt`/`mode`/`max_tokens`/`stop`/`stream`；「采样」「高级」默认折叠；折叠状态跨运行保留（imgui.ini）
-  - 物证：
-- [ ] **A-2 新参数可见**：`top_k`/`stop`/`frequency_penalty`/`presence_penalty`/`seed` 出现在「采样」组；`timeout_connect_ms` 等在「高级」组
-- [ ] **A-3 StringList 编辑**：`stop` 以逗号分隔输入（如 `END, \n`），失焦后重开面板值仍在
-- [ ] **A-4 网页版忽略标注**（VL1-12 · UI 侧）：把「模式」切到 `web`，`top_k`/`stop`/`frequency_penalty`/`presence_penalty`/`seed` 旁出现灰色「（网页版忽略）」，参数仍可见、仍可编辑
-- [ ] **A-5 N-07 参数面对称**：新建「图片理解」节点，具备 `mode`（默认 official）/`seed`/`top_k`/`stop`/惩罚类 + `image_order` + 预处理参数（resize_mode 等 8 个）
-
-## 二、L1-b · 参数行为
-
-- [ ] **B-1 N-04 文本合并**（VL1-07）：建 3 个「文本输入」（banana/apple/banana）+「文本合并」；设 `sort_mode=by_name` + `prefix=<` + `suffix=>` + `source_label=[nX]` + `dedup=开` + `empty_line_mode=remove`；运行 → 输出应为 `[1] <apple>\n[2] <banana>`
-  - 物证（Console / 输出）：
-- [ ] **B-2 N-04 空行增强**：`empty_line_mode=collapse` / `remove` 对含空段输入的行为符合「连续空段合并 / 全部移除」
-- [ ] **B-3 N-08 导出模板**（VL1-11 · UI 侧）：「文本输出」设 `export_template` 含 `{workflow}|{node_id}|{time}` + `auto_export=开` + `file_name=测试`；运行 → 导出文件头为自定义模板替换值，文件名 = `测试-时间戳.md`
-  - 物证（导出文件路径）：
-- [ ] **B-4 N-08 批量导出**：`batch_export=开` → 运行后导出**所有有输出节点**到同一目录，文件名带节点 id 后缀
-- [ ] **B-5 多图顺序**（VL1-10 · UI 侧）：「图片理解」连 2 张图，`image_order=by_name` → Console 图片顺序按文件名
-
-## 三、L1-c · 输入侧能力
-
-- [ ] **C-1 N-01 文件导入**（AL1-06）：新建「文本输入」，点「从文件导入…」选 `.txt` → 内容写入 `text`；已有内容时出现「确认覆盖」二次确认；选 GBK 编码文件 → 提示「不是 UTF-8」（不静默乱码）
-  - 物证：
-- [ ] **C-2 N-02 目录批量**（VL1-05 · 真机）：设「图片目录」指向含 2 张图 + 1 个假 `.png`（文本改名）的目录 → 运行后 Console 显示收集 2 张（内容嗅探过滤掉假 png）
-  - 物证（Console）：
-- [ ] **C-3 N-02 预处理缩放**（AL1-05）：`resize_mode=fit` + 最大宽 400 → 输出图片长边 ≤400；Console 显示「预处理：路径 → 缩放 …」
-  - 物证（Console + 生成临时文件尺寸）：
-- [ ] **C-4 N-02 预处理裁剪**（AL1-05）：`crop_enabled=开` + 裁剪区域 → 输出为裁剪后的尺寸
-- [ ] **C-5 N-07 预处理复用**：「图片理解」设 `resize_mode=fit` 最大宽 400 → 发送前应用（Console 记录预处理）
-
-## 四、L1-d · N-03 AI 生成提示词（重项）
-
-- [ ] **D-1 手动模式不变**（AL1-02）：`{vars}` 替换正常（默认 manual）
-- [ ] **D-2 AI 生成**（AL1-02 · 重项单列）：填「模板」指令 + provider + API Key → 点「生成提示词」→ 按钮变「正在生成…」→ 完成后 AI 输出写入模板输入框；先压撤销快照（Ctrl+Z 可回退）
-  - 物证（生成结果 + Console）：
-- [ ] **D-3 失败路径**：模板为空 / 缺 Key / `mode=web` → 按钮提示可操作错误，**不静默回退 manual**
-- [ ] **D-4 seed 隔离**（VL1-06）：设 `seed=123` 生成，模板替换结果不受影响
-
-## 五、L1-e · JSON 输出 + 多候选（需真机实测）
-
-- [ ] **E-1 DeepSeek response_format**（VL1-09 · 实测）：`response_format=json_object` → 运行「文本生成」，请求体应含 `response_format:{type:"json_object"}`；DeepSeek 是否返回 JSON 对象？记录实测结论
-  - 物证（Console 输出 / 返回内容）：
-- [ ] **E-2 豆包 response_format**（同实测）：豆包条目下同样验证
-- [ ] **E-3 n 候选**：`n=3` → 请求体含 `n`；text 端口输出第一个候选；Console 提示「候选数 n=3，text 端口输出第一个」
-- [ ] **E-4 后端不支持提示**：若某后端忽略 response_format / n → Console / 面板如实提示（不静默）
-
-## 六、L1-f · N-05 参数预设
-
-- [ ] **F-1 参数预设带出**（VL1-08 · UI 侧）：切换「提供商配置」的 provider → 空的 `api_base`/`key_ref` 被带出默认值（已填的不覆盖）；`model` 枚举 = 生效条目 `models` 字段
-  - 物证（切换前后参数面板）：
-- [ ] **F-2 连接测试按钮复核**（AL1-03）：官方 API（有 Key 时 ping）+ 网页版（登录态 + 端点一致性）各测一次
-
-## 七、横向 · 超时 + 重试
-
-- [ ] **G-1 节点级覆盖生效**（VL1-03 · AL1-04）：文本生成填 `timeout_connect_ms=3000` + 断网 → 3 秒内报超时；`retry_count=2` + 断网 → Console 显示重试等待
-  - 物证（Console 时间戳）：
-- [ ] **G-2 回落全局**：清空覆盖项 → 走全局 `config.toml [timeout]/[error]`
-
-## 八、回归复检（真机后必跑）
-
-- [ ] `.\source\build.ps1` → 0 error / 0 warning
-- [ ] `api_probe --graph-selftest` → ≥144 / 0
-- [ ] `api_probe --exec-selftest` → ≥598 / 0
-- [ ] `api_probe --selftest` → 十三组 PASS
-- [ ] `check_all.ps1` → 15 / 15 PASS
-- [ ] `check_links.py` → checked ≥1375 / broken 0
-
----
-
-## 结果汇总
-
-- 通过：___ / 共 ___ 项
-- 失败 / 待修：___
-- 真机日期：____  ·  验证人：____
+{
+  "board_rules": [
+    "L1 节点深化 · 真机验证清单（L1_checklist.todo）",
+    "依据：[../actionPlan/M_8nodes_extension.md](../actionPlan/M_8nodes_extension.md) §7 验收框架（`VL1-*` 离线断言 / `AL1-*` 人工验收）",
+    "状态：✅ 已人工验收（2026-10-15 · 用户全项勾选；离线断言终值 `--exec-selftest` 655/0 · `--graph-selftest` 151/0 · `check_all` 15/15 全 PASS —— 2026-10-15 L2/L3 批后复检）",
+    "环境：Win32 · `source\\build.ps1` 构建通过 · 可执行 `build\\bin\\aiwrite.exe` / `api_probe.exe`",
+    "用法：逐项真机操作并勾选；每项留「物证」位（截图 / Console 输出 / 生成文件路径）。"
+  ],
+  "todotree": {
+    "tree": [
+      {
+        "key": 1,
+        "children": [
+          {
+            "key": 2,
+            "children": [],
+            "todo": {
+              "id": 2,
+              "content": "运行 `.\\source\\build.ps1` 通过（0 error / 0 warning）",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 3,
+            "children": [],
+            "todo": {
+              "id": 3,
+              "content": "启动 `build\\bin\\aiwrite.exe`，新建工作流并保存（如 `L1-verify.json`）",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 4,
+            "children": [],
+            "todo": {
+              "id": 4,
+              "content": "准备素材：两张测试图片（`a.png` 大图 ≥800px、`b.jpg` 小图）、一个 `.txt` 文本、一个 `.md` 文本",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 1,
+          "content": "〇、准备（3 项）",
+          "done": true,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 5,
+        "children": [
+          {
+            "key": 6,
+            "children": [],
+            "todo": {
+              "id": 6,
+              "content": "**A-1 二级分组**（AL1-01）：新建「文本生成」节点，参数面板应出现「采样（折叠）/ 输出（展开）/ 高级（折叠）」二级组；「输出」组默认展开含 `system_prompt`/`mode`/`max_tokens`/`stop`/`stream`；「采样」「高级」默认折叠；折叠状态跨运行保留（imgui.ini） ｜ 物证：",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 7,
+            "children": [],
+            "todo": {
+              "id": 7,
+              "content": "**A-2 新参数可见**：`top_k`/`stop`/`frequency_penalty`/`presence_penalty`/`seed` 出现在「采样」组；`timeout_connect_ms` 等在「高级」组",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 8,
+            "children": [],
+            "todo": {
+              "id": 8,
+              "content": "**A-3 StringList 编辑**：`stop` 以逗号分隔输入（如 `END, \\n`），失焦后重开面板值仍在",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 9,
+            "children": [],
+            "todo": {
+              "id": 9,
+              "content": "**A-4 网页版忽略标注**（VL1-12 · UI 侧）：把「模式」切到 `web`，`top_k`/`stop`/`frequency_penalty`/`presence_penalty`/`seed` 旁出现灰色「（网页版忽略）」，参数仍可见、仍可编辑",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 10,
+            "children": [],
+            "todo": {
+              "id": 10,
+              "content": "**A-5 N-07 参数面对称**：新建「图片理解」节点，具备 `mode`（默认 official）/`seed`/`top_k`/`stop`/惩罚类 + `image_order` + 预处理参数（resize_mode 等 8 个）",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 5,
+          "content": "一、L1-a · 参数面板（二级分组 + 网页版标注 + StringList）（5 项）",
+          "done": true,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 11,
+        "children": [
+          {
+            "key": 12,
+            "children": [],
+            "todo": {
+              "id": 12,
+              "content": "**B-1 N-04 文本合并**（VL1-07）：建 3 个「文本输入」（banana/apple/banana）+「文本合并」；设 `sort_mode=by_name` + `prefix=<` + `suffix=>` + `source_label=[nX]` + `dedup=开` + `empty_line_mode=remove`；运行 → 输出应为 `[1] <apple>\\n[2] <banana>` ｜ 物证（Console / 输出）：",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 13,
+            "children": [],
+            "todo": {
+              "id": 13,
+              "content": "**B-2 N-04 空行增强**：`empty_line_mode=collapse` / `remove` 对含空段输入的行为符合「连续空段合并 / 全部移除」",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 14,
+            "children": [],
+            "todo": {
+              "id": 14,
+              "content": "**B-3 N-08 导出模板**（VL1-11 · UI 侧）：「文本输出」设 `export_template` 含 `{workflow}|{node_id}|{time}` + `auto_export=开` + `file_name=测试`；运行 → 导出文件头为自定义模板替换值，文件名 = `测试-时间戳.md` ｜ 物证（导出文件路径）：",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 15,
+            "children": [],
+            "todo": {
+              "id": 15,
+              "content": "**B-4 N-08 批量导出**：`batch_export=开` → 运行后导出**所有有输出节点**到同一目录，文件名带节点 id 后缀",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 16,
+            "children": [],
+            "todo": {
+              "id": 16,
+              "content": "**B-5 多图顺序**（VL1-10 · UI 侧）：「图片理解」连 2 张图，`image_order=by_name` → Console 图片顺序按文件名",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 11,
+          "content": "二、L1-b · 参数行为（5 项）",
+          "done": true,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 17,
+        "children": [
+          {
+            "key": 18,
+            "children": [],
+            "todo": {
+              "id": 18,
+              "content": "**C-1 N-01 文件导入**（AL1-06）：新建「文本输入」，点「从文件导入…」选 `.txt` → 内容写入 `text`；已有内容时出现「确认覆盖」二次确认；选 GBK 编码文件 → 提示「不是 UTF-8」（不静默乱码） ｜ 物证：",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 19,
+            "children": [],
+            "todo": {
+              "id": 19,
+              "content": "**C-2 N-02 目录批量**（VL1-05 · 真机）：设「图片目录」指向含 2 张图 + 1 个假 `.png`（文本改名）的目录 → 运行后 Console 显示收集 2 张（内容嗅探过滤掉假 png） ｜ 物证（Console）：",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 20,
+            "children": [],
+            "todo": {
+              "id": 20,
+              "content": "**C-3 N-02 预处理缩放**（AL1-05）：`resize_mode=fit` + 最大宽 400 → 输出图片长边 ≤400；Console 显示「预处理：路径 → 缩放 …」 ｜ 物证（Console + 生成临时文件尺寸）：",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 21,
+            "children": [],
+            "todo": {
+              "id": 21,
+              "content": "**C-4 N-02 预处理裁剪**（AL1-05）：`crop_enabled=开` + 裁剪区域 → 输出为裁剪后的尺寸",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 22,
+            "children": [],
+            "todo": {
+              "id": 22,
+              "content": "**C-5 N-07 预处理复用**：「图片理解」设 `resize_mode=fit` 最大宽 400 → 发送前应用（Console 记录预处理）",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 17,
+          "content": "三、L1-c · 输入侧能力（5 项）",
+          "done": true,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 23,
+        "children": [
+          {
+            "key": 24,
+            "children": [],
+            "todo": {
+              "id": 24,
+              "content": "**D-1 手动模式不变**（AL1-02）：`{vars}` 替换正常（默认 manual）",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 25,
+            "children": [],
+            "todo": {
+              "id": 25,
+              "content": "**D-2 AI 生成**（AL1-02 · 重项单列）：填「模板」指令 + provider + API Key → 点「生成提示词」→ 按钮变「正在生成…」→ 完成后 AI 输出写入模板输入框；先压撤销快照（Ctrl+Z 可回退） ｜ 物证（生成结果 + Console）：",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 26,
+            "children": [],
+            "todo": {
+              "id": 26,
+              "content": "**D-3 失败路径**：模板为空 / 缺 Key / `mode=web` → 按钮提示可操作错误，**不静默回退 manual**",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 27,
+            "children": [],
+            "todo": {
+              "id": 27,
+              "content": "**D-4 seed 隔离**（VL1-06）：设 `seed=123` 生成，模板替换结果不受影响",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 23,
+          "content": "四、L1-d · N-03 AI 生成提示词（重项）（4 项）",
+          "done": true,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 28,
+        "children": [
+          {
+            "key": 29,
+            "children": [],
+            "todo": {
+              "id": 29,
+              "content": "**E-1 DeepSeek response_format**（VL1-09 · 实测）：`response_format=json_object` → 运行「文本生成」，请求体应含 `response_format:{type:\"json_object\"}`；DeepSeek 是否返回 JSON 对象？记录实测结论 ｜ 物证（Console 输出 / 返回内容）：",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 30,
+            "children": [],
+            "todo": {
+              "id": 30,
+              "content": "**E-2 豆包 response_format**（同实测）：豆包条目下同样验证",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 31,
+            "children": [],
+            "todo": {
+              "id": 31,
+              "content": "**E-3 n 候选**：`n=3` → 请求体含 `n`；text 端口输出第一个候选；Console 提示「候选数 n=3，text 端口输出第一个」",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 32,
+            "children": [],
+            "todo": {
+              "id": 32,
+              "content": "**E-4 后端不支持提示**：若某后端忽略 response_format / n → Console / 面板如实提示（不静默）",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 28,
+          "content": "五、L1-e · JSON 输出 + 多候选（需真机实测）（4 项）",
+          "done": true,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 33,
+        "children": [
+          {
+            "key": 34,
+            "children": [],
+            "todo": {
+              "id": 34,
+              "content": "**F-1 参数预设带出**（VL1-08 · UI 侧）：切换「提供商配置」的 provider → 空的 `api_base`/`key_ref` 被带出默认值（已填的不覆盖）；`model` 枚举 = 生效条目 `models` 字段 ｜ 物证（切换前后参数面板）：",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 35,
+            "children": [],
+            "todo": {
+              "id": 35,
+              "content": "**F-2 连接测试按钮复核**（AL1-03）：官方 API（有 Key 时 ping）+ 网页版（登录态 + 端点一致性）各测一次",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 33,
+          "content": "六、L1-f · N-05 参数预设（2 项）",
+          "done": true,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 36,
+        "children": [
+          {
+            "key": 37,
+            "children": [],
+            "todo": {
+              "id": 37,
+              "content": "**G-1 节点级覆盖生效**（VL1-03 · AL1-04）：文本生成填 `timeout_connect_ms=3000` + 断网 → 3 秒内报超时；`retry_count=2` + 断网 → Console 显示重试等待 ｜ 物证（Console 时间戳）：",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 38,
+            "children": [],
+            "todo": {
+              "id": 38,
+              "content": "**G-2 回落全局**：清空覆盖项 → 走全局 `config.toml [timeout]/[error]`",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 36,
+          "content": "七、横向 · 超时 + 重试（2 项）",
+          "done": true,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 39,
+        "children": [
+          {
+            "key": 40,
+            "children": [],
+            "todo": {
+              "id": 40,
+              "content": "`.\\source\\build.ps1` → 0 error / 0 warning",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 41,
+            "children": [],
+            "todo": {
+              "id": 41,
+              "content": "`api_probe --graph-selftest` → ≥144 / 0",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 42,
+            "children": [],
+            "todo": {
+              "id": 42,
+              "content": "`api_probe --exec-selftest` → ≥598 / 0",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 43,
+            "children": [],
+            "todo": {
+              "id": 43,
+              "content": "`api_probe --selftest` → 十三组 PASS",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 44,
+            "children": [],
+            "todo": {
+              "id": 44,
+              "content": "`check_all.ps1` → 15 / 15 PASS",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 45,
+            "children": [],
+            "todo": {
+              "id": 45,
+              "content": "`check_links.py` → checked ≥1375 / broken 0",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 39,
+          "content": "八、回归复检（真机后必跑）（6 项）",
+          "done": true,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 46,
+        "children": [
+          {
+            "key": 47,
+            "children": [],
+            "todo": {
+              "id": 47,
+              "content": "通过：36 / 共 36 项（含〇准备3 + 八回归复检6）",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 48,
+            "children": [],
+            "todo": {
+              "id": 48,
+              "content": "失败 / 待修：无",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          },
+          {
+            "key": 49,
+            "children": [],
+            "todo": {
+              "id": 49,
+              "content": "真机日期：2026-10-15  ·  验证人：用户（人工验收）",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/actionPlan/M_8nodes_extension.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 46,
+          "content": "结果汇总（3 项）",
+          "done": true,
+          "level": "secondary"
+        }
+      }
+    ]
+  }
+}

@@ -64,7 +64,8 @@ struct Config {
         bool keep_history       = false;
         int  max_history        = 10;
     };   // 说明（PC-05/06 已接线）：运行结束自动归档「每节点 .txt + run.json」到 archive_dir；
-         //      keep_history=false → 只留最近 1 份，true → 保留 max_history 份；ttl_days>0 → 清理超期目录
+         //      keep_history=false → 仍保留最近 kHistoryFloor 份（默认 3，PW-11），true → 保留 max_history 份；
+         //      ttl_days>0 → 清理超期目录
 
     struct Timeout {
         int connect_ms     = 10000;

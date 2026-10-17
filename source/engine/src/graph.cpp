@@ -1,5 +1,6 @@
 #include "graph.h"
 
+#include "composite.h"
 #include "node_registry.h"
 #include "asset_store.h" // P7a-04：File 参数的资源令牌解析
 #include "paths.h"       // P7a-02：File 参数的多值路径解析
@@ -324,6 +325,34 @@ bool Graph::removeEdgesOfNode(const std::string& node_id)
                                }),
                 edges.end());
     return edges.size() != before;
+}
+
+// CN（Composition_node）：依据规格创建 Composite 节点实例
+std::string Graph::addCompositeNode(const std::string& composite_id, float x, float y,
+                                    std::string* error)
+{
+    const CompositeSpec* spec = CompositeRegistry::instance().find(composite_id);
+    if (spec == nullptr) {
+        if (error != nullptr) {
+            *error = "上级节点规格不存在: " + composite_id;
+        }
+        return {};
+    }
+
+    Node node;
+    node.id = makeNodeId();
+    if (!build_composite_node(&node, *spec, error)) {
+        return {};
+    }
+    node.x = x;
+    node.y = y;
+
+    const std::string new_id = node.id;
+    nodes.push_back(std::move(node));
+    if (error != nullptr) {
+        error->clear();
+    }
+    return new_id;
 }
 
 bool Graph::removeNode(const std::string& node_id)

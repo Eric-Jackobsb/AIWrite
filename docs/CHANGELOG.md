@@ -33,6 +33,17 @@
 
 | 日期 | 批次（新 → 旧） |
 |---|---|
+| 2026-10-17 | 🗂️ 看板勾账批（`DevPlan.todo` · 零代码）：**19 项已落地未勾账项补齐 `done`** —— M8 分支 `FEA-M8-21`（批 5）+ M_patchC 分支 `PW-02/04/05/06/08`（批 1）· `PW-10/11`（2026-10-16）· `DOC-PW-12`（2026-10-15）+ Feature 分支 `FEA-M4-11`（2026-10-16）· `FEA-M4-13`（批 7）· `FEA-M_patchB-25`（批 2）· `FEA-M2-02`/`FEA-M2-03`（批 4）+ Debug 分支 `DBG-M6-01`/`DBG-M6-02`（批 4）+ Docs 分支 `DOC-M4-01`/`DOC-M6-01`（2026-10-16）· `DOCS-CS-01`（2026-10-15）；M8 根「要做 2→1 项（余真机 Gate）」· M_patchC 根「代码 8 项全部勾账 · 余真机 `AW-*`」 |
+| 2026-10-17 | 📚 终端管理验证措施批（`AI_README` §13.1 · 零代码）：§13 补 **13.1 验证措施**（kill 生效闭环 —— 枚举口径 / 基线→kill→复查三步 / 达标 ≤3 / 未达标转人工 / 物证纪律 / 排除清单）+ 纪律首跑实测：空闲终端后端 **8 → 1**（保留当前命令 shell） |
+| 2026-10-16 | 🧩 `Composition_node` **实施批（组合层 L4 重启落地）**：上级节点模型 / 注册表 / 独立文件存储 / 展开执行 + 编辑器（打包选区·新建·独立标签页·撤销重做）+ 节点库「上级节点」分类 + 紫条视觉 + 新建草稿保存修正（`allow_incomplete_draft`）+ `composite_selftest` **51 断言**并入 `--exec-selftest`（构建 0/0 · exec **681/0** · graph **151/0**）—— ⛔ 待人工验收 |
+| 2026-10-16 | 📖 规范审查 + 文档收口批 CN-0：`Composition_node.md` 设计定稿（上级节点 = 组合层 **L4 重启** · `CN-D1`~`CN-D20` · 零代码）—— 规范审查（3 阻断 2 冲突 5 缺口全暴露）+ 修正基础节点计数 **20→14**（三处）+ **五处登记**（AI_README §5 / DocMAP / 变量术语对照表 §11.2 / CHANGELOG / DevPlan.todo）+ `CN-D20` L4 重启（覆盖 `M_node_expansion`「L4 不做」） |
+| 2026-10-16 | 🔁 功能批：`PD-06①` 通用重跑（`FEA-M4-11` · NodeOnly/Downstream）+ `PW-10` 模板占位符报错（`PQ-13` 落地）+ `PW-11` 归档保留下限 `kHistoryFloor=3`（exec **655→681** · graph 151/0 · check_all 15/15） |
+
+| 2026-10-16 | 📚 文档批次：`DOC-M6-01` 打包 / 首启 / 设置字段说明 + `DOC-M4-01` Patch B 文档（Provider 抽象 · 官方 API 用法 · 凭据管理器 · 会话失效 · 流式行为）—— README 扩 2 章 + 新建 `packaging/PACKAGING.md`（零代码） |
+| 2026-10-16 | 🛠️ 看板格式修复：`audit/L1_checklist.todo` 由 Markdown 转为 TodoList JSON（`todotree` schema · 与 `DevPlan.todo` 同构 · 36 项全量保留 · 零代码） |
+| 2026-10-15 | 🧾 收口批：**四份文档先行收口** —— `M_patchAB_rest`（§9 决策 8/8 结案 + 任务表补齐 · v11）+ `M6`（3 行勾账 + 余项归口后续批）+ `M_patchC`（`PW-12` 文档收尾 ✅ · v8）+ `M8`（代码全落地 · 余真机归用户）（零代码） |
+| 2026-10-15 | 🧾 收口批：**三份 near-archive 文档补最后一步** —— `M_canvas_snapshot` **CS-10 收口**（使用说明 §10.12 实测回填）+ `M_8nodes_extension` **状态 / 验收回填**（`VL1-*` 全过 · `AL1-*` 用户人工验收）+ `part2` **L2/L3 验收回填**（零代码 · 断链 1487→1502 / 0） |
+| 2026-10-15 | 🧩 对齐线收口**续**：节点内条件分隔线 clamp 到内容区（`ImGui::Separator()` 按画布窗口宽度画线 → 新增 `draw_node_separator()` 自绘 `g_content_width` 宽 · 像素级扫描：每条线 len≈内容宽、无一条超出节点框） |
 | 2026-10-15 | 🧩 节点扩展 **L2 六文本节点 + L3 五 UX 实施**：TextSplit/TextExtract/TextClean/TextReplace/TextStats/TextDiff + 节点搜索/小地图/自动吸附/对齐辅助线/连线提示（exec **546→655** · graph **144→151** · 断链 **1487/0**） |
 | 2026-10-14 | 🧩 `M_8nodes_extension` **L1-d/e/f 收尾**：N-03 AI 生成提示词（重项）+ JSON 输出/多候选 + N-05 参数预设收口（`VL1-06/08/09` · exec **546→598**） |
 | 2026-10-14 | 🧩 `M_8nodes_extension` **L1-c 输入侧能力**：N-01 文件导入 + N-02 目录批量/图片预处理（新模块 `image_preprocess`）+ N-07 预处理复用（`VL1-05` · exec **546→592**） |
@@ -81,13 +92,102 @@
 
 ---
 
+**🧩 `Composition_node` 实施批：上级节点（Composite Node · 组合层 L4 重启落地）（2026-10-16 · 代码批）**
+
+- **背景**：`Composition_node.md` 设计定稿（批 CN-0）后进入实施 —— `CN-D20` 组合层 **L4 重启** 落地；本批即该设计 §1.2 十项设计决策与 §3~§11 的**实现**（设计批 = 纯文档零代码，本批 = 代码 + 离线断言；实施代码与设计批同日完成，本条目为该实施批的登记收口）。
+- **本轮落地（代码 + 离线断言）**：
+  - **模型 / 注册表 / 独立文件存储（§3/§4 · `CN-D6/D7/D8/D12/D16`）**：新增 `engine/composite.{h,cpp}` —— `CompositeSpec`（多输入 + 强制单输出 + 参数选择性暴露 `exposed_params`）+ `validate_composite_spec()`（严格校验：**禁嵌套** `CN-D16` / 输出唯一 / 引用端口与暴露参数存在且 id 唯一 / 标记输入端口无内部入边）+ `composite_to_json/from_json`（独立 schema）+ `build_composite_node()`（实例化）+ `CompositeRegistry`（惰性扫描 `~/.brain-ai/composites/<id>.json` · save / remove / make_id）。
+  - **展开执行（§7 · `CN-D9`）**：`expand_composites()` 在**工作副本**上就地展开（内部节点以 `<外节点id>__<内部id>` 入图 · 暴露参数覆盖内部默认 · 内部边平移 · 外部边重接到内部标记端口 · 移除占位节点）；`executor.cpp` 接入 `startAsync` 与 `startFrom` 重跑两处（重跑定位 `replaced_out`）。
+  - **编辑器（§8 · `CN-D10` 打包/新建 · `CN-D11` 独立标签页）**：新增 `ui/composite_editor.{h,cpp}` —— 编辑会话（载入工作副本 · 保存=严格校验+写注册表+落盘 · 撤销/重做快照 · 关闭确认）；`composite_pack_selection()`（打包选区：内部图=选区+内部连线 · 边界输入=有外部入边 · 输出唯一自动挑选 · 暴露参数=选中节点全部参数）；`composite_new_dialog()`（新建：落盘空白规格 → 打开编辑器）；编辑器内**禁嵌套**守卫（`composite_editor.cpp:388`）。
+  - **节点库 / 画布（§9/§10 · `CN-D13`）**：`node_library.cpp` 独立分类「上级节点」（空态提示 / 列表 / 「新建上级节点…」「打包选区为上级节点…」按钮）；`node_canvas.cpp` 右键菜单「上级节点」子菜单 + 双击/右键打开编辑器 + 紫条视觉区分（`node_canvas.cpp:628`）。
+  - **新建流程修正（本批收口）**：严格校验曾阻断「新建上级节点」空白草稿落盘 ⇒ `validate_composite_spec()` / `CompositeRegistry::save()` 增加 `allow_incomplete_draft`（仅新建草稿跳过空图/无输出校验；编辑器「保存」仍严格校验）。
+  - **自检**：新增 `tools/composite_selftest.{h,cpp}`（**51 断言**：规格校验 / JSON 往返 / 注册表 / 图集成 / 展开执行 / 重跑 / 缺规格拒绝）并入 `api_probe --exec-selftest`（`api_probe.cpp` 主流程）。
+- **验证（2026-10-17 本机实测 · 重建 0 error / 0 warning）**：`--exec-selftest` **681/0**（含「上级节点自检」子段 **51/0**）· `--graph-selftest` **151/0** · 断链全库 0。**⛔ 待真人**：人工验收 = 新建 → 编辑 → 打包 → 父画布运行 → 展开执行结果正确。
+- **落点**：`source/engine/{include/composite.h,src/composite.cpp,src/executor.cpp,src/graph.cpp}` · `source/ui/{include/composite_editor.h,src/composite_editor.cpp,src/node_library.cpp,src/node_canvas.cpp}` · `source/tools/{composite_selftest.cpp,composite_selftest.h,api_probe.cpp}` · `source/CMakeLists.txt` · `docs/actionPlan/Composition_node.md`（v3 收口）· `docs/DocMAP.md` · `docs/DevPlan.todo` · `docs/AI_Status.md` · `AI_README.md`（§5）· 本文件。**⛔ 未提交**（协作契约 §6）。
+
+---
+
+**📖 规范审查 + 文档收口批 CN-0：`Composition_node.md` 设计定稿（2026-10-16 · 零代码）**
+
+- **背景**：上级节点（Composite Node）设计文档经规范审查 —— 暴露 **3 阻断项**（A1 `CN-*` 编号空间未登记 / A2 DocMAP 未登记 / A3 节点数 **20→14** 错误）+ **2 方向性冲突**（B1 L4「不做」vs 本文 L4 重启 / B2 范围冲突）+ **5 实施可行性缺口**（C1~C5，**不在本批处理**，留待实施批）；开发者已确认：**先文档收口，再进入实施**。
+- **本轮落地（零代码 · 纯文档）**：
+  - **`Composition_node.md`**：修正基础节点计数 **20 → 14**（§0.5 定义 / §1.3 分层图 / §12.1 分层图 三处 · 实测注册数 14 = MVP 8 + L2 6）· 新增 `CN-D20`（**L4 重启** · 覆盖 `M_node_expansion` v6「L4 不做」）· 头部状态 / 上游依据 / 文末状态更新 · §16 新增 v2 行。
+  - **五处登记**（参照批 9-3 `Creation_Roadmap` 先例）：AI_README §5 编号空间追加 `CN-*` / `CN-D*` / `CN-Q*` + 现行计划 L4 注记 · DocMAP §一行表新增行 · CHANGELOG 索引 + 本详情 · 变量术语对照表 §11.2 补 `CN-*` 行 · DevPlan.todo Feature 分支登记实施任务箱（key 347 · `CN-01…`）。
+- **验证（2026-10-16 本机实测 · 纯文档批）**：本批零代码 ⇒ 运行链路数字不变；断链检查（`check_links.py`）预期 **>1544 / 0** · 全库 grep 复核五处登记逐处命中。
+- **落点**：`docs/actionPlan/Composition_node.md` · `AI_README.md`（§5 / §3 现行计划）· `docs/DocMAP.md` · `docs/CHANGELOG.md` · `docs/变量术语对照表.md` · `docs/DevPlan.todo`。**⛔ 未提交**（协作契约 §6）。
+
+---
+**🔁 功能批：`PD-06①` 通用重跑 + `PW-10` 模板占位符报错 + `PW-11` 归档保留下限（2026-10-16 · 代码批）**
+
+- **背景**：三项待做项集中落地 —— ① `PD-06①` 通用重跑（`M_patchAB_rest` §0.3 行 6 = ⏳ 待做 · 需执行器支持「从某节点开始」）；② `PW-10` 模板未填充占位符改为报错（`M_patchC` §4.6 · 口径 `PQ-13` 已拍板）；③ `PW-11` 归档保留份数调大（`M_patchC` P4 · 避免吃掉复盘证据）。
+- **本轮落地（代码 + 离线断言）**：
+  - **`PD-06①` 通用重跑（`FEA-M4-11` · `VD-05`）**：`executor.h` 新增 `RerunScope`（`NodeOnly` / `Downstream`）+ `RerunSpec` + `NodeOutputs::erase()` + `Executor::resetSession()` / `collectDownstream()` / `startFrom()`（校验 + 计划 = 全图拓扑序 ∩ 受影响集 · 复用上游运行态结果 · 清受影响节点状态/结果）/ `startAsyncFrom()`，`startAsync` 重构为 `startAsyncImpl(…, rerun*, …)`；`EditorState::start_rerun_async(node_id, scope)`（校验 + 日志），`Skipped` 事件时清陈旧 `view->text/images/delta_bytes`；UI 三入口 = 属性面板按钮（重跑该节点 / 重跑该节点及下游）· 画布右键菜单 · 工具栏「重跑 ▾」（无选中 / 会话运行中禁用）。
+  - **`PW-10` 模板占位符报错（`PQ-13` 落地）**：`local_nodes.cpp` 新增 `is_placeholder_name()`（纯数字或标识符形态才认占位符）；未匹配占位符（如 `{1}` / `{vars}` / `{port_id}`）⇒ 抛 `NodeError`（含占位符名）；JSON 字面量 `{…}`（含空格 / 冒号等）**不误伤**、原样保留；`node_registry.cpp` 模板参数帮助文本同步。
+  - **`PW-11` 归档保留下限**：`output_archive.h` 新增 `kHistoryFloor = 3`；`keep_history=false` 时也至少保留 3 份（原为 1）；`settings_panel.cpp` 设置提示 + `config.h` 注释 + `diagnostics_report.cpp` 口径同步。
+  - **断言（`api_probe.cpp`）**：新增 `PD-06①` 3 例（`NodeOnly` 复用上游 + 只算目标节点 / `Downstream` 刷新下游 / 目标不存在拒绝）+ `PW-10` 正 2 例 + 负 2 例 + `PW-11` 上限用例（5 次运行只留 3）；旧断言更新（模板未匹配 ⇒ 期望节点 `Error` · 归档 `keep_history=false` ⇒ 期望 3 份）。
+- **验证（2026-10-16 本机实测）**：构建 **0 error / 0 warning** · `--exec-selftest` **655 → 681 / 0**（+26）· `--graph-selftest` **151 / 0** · `check_all` **15/15** · 断链全库 0（见 [loop_dev.md](loop_dev.md) §4）。
+- **落点**：`engine/{include/executor.h,src/executor.cpp,src/node_registry.cpp}` · `nodes/src/local_nodes.cpp` · `ui/{include/editor_state.h,src/editor_state.cpp,src/node_canvas.cpp,src/property_panel.cpp,src/toolbar.cpp,src/settings_panel.cpp}` · `utils/{include/config.h,include/output_archive.h,src/output_archive.cpp,src/diagnostics_report.cpp}` · `tools/api_probe.cpp` · 本文件 · [AI_README.md](../AI_README.md) §2 · `actionPlan/M_patchAB_rest.md`（v12）· `actionPlan/M_patchC_web_node_bind.md`（v9）。**⛔ 未提交**（协作契约 §6）。
+
+
+---
+**📚 文档批次：`DOC-M6-01` 打包 / 首启 / 设置字段说明 + `DOC-M4-01` Patch B 文档（2026-10-16 · 零代码）**
+
+- **背景**：看板 Docs 分区两项文档任务 —— ① `DOC-M6-01`「打包与首启引导文档 + 设置面板字段说明（含「需重启生效」标注）」；② `DOC-M4-01`「Patch B 文档：Provider 抽象与官方 API 用法、凭据管理器、会话失效处理、流式行为说明」。
+- **本轮落地（零代码 · 纯文档）**：
+  - **`DOC-M6-01`**：① README.md 新增 **§4 设置**（9 个折叠区字段清单表 + 生效时机列：除特别标注外保存即生效；「网格间距」**暂不生效**（只读展示、未接线）；「logs 保留天数」/凭据「保留天数」的**清理动作下次启动执行**；提供商表新建 / 重载**无需重启**）；② 新建 **`packaging/PACKAGING.md`**（一条命令 `package.ps1` · 退出码 0/2/1 · 关键口径：不含 Python / 不静默装 WebView2 / 版本号单一来源 / payload 离线可验证 · 安装包内容与可选 Bootstrapper · 与用户数据关系 · 干净机器冒烟 `TST-M6-01`）；③ 首启引导章节 M6-09 已由 README §2 覆盖，核对无误。
+  - **`DOC-M4-01`**：README.md 新增 **§5 模型、凭据与官方 API**（官方 API Key 三优先级：节点参数 > 环境变量 > 本地凭据库；凭据库 DPAPI 加密不落明文 + 保留天数清理；网页版登录与**会话失效重登**（不必重启）；**流式行为现状** = 一次性返回整段、不逐字流式，网页版按「分段落定」）。Provider 抽象架构已由 `source/README.md` §4.4/§4.5 覆盖（核对免改）。
+- **验证（2026-10-16 本机实测 · 纯文档批）**：本批零代码 ⇒ 运行链路数字不变；`check_links` 复检（`python source/tools/check_links.py`）**全库 broken 0**。
+- **落点**：`README.md`（§4 设置 + §5 模型/凭据/官方 API + 原 4/5/6 章顺延为 6/7/8 + §1 安装引 PACKAGING）· `packaging/PACKAGING.md`（**新建**）· `source/README.md`（§4.0 打包块补 PACKAGING 链接）· `DocMAP.md`（登记 + README 行描述更新）· `actionPlan/M6.md`（§0.2c）· 本文件。**⛔ 未提交**（协作契约 §6）。
+
+---
+**🛠️ 看板格式修复：`audit/L1_checklist.todo` Markdown → TodoList JSON（2026-10-16 · 零代码）**
+
+- **背景**：`docs/audit/L1_checklist.todo` 此前是 **Markdown 勾选清单**，而 `.todo` 预览工具按 `DevPlan.todo` 的 JSON `todotree` 格式解析 ⇒ 打开报「格式错误 / 无法预览」。
+- **改法**：整份转换为与 `DevPlan.todo` **同构**的合法 JSON —— 顶层 `board_rules`（标题 + 依据 / 状态 / 环境 / 用法 4 行元数据）+ `todotree.tree`（**10 个 `secondary` 分组 + 39 个 `success` 叶子** = 36 勾选项 + 3 行结果汇总，全部 `done:true`；`物证` 子行并入对应项 content；叶子 `fileLink` → `docs/actionPlan/M_8nodes_extension.md`）；**LF 行尾 + 2 空格缩进**（与 `DevPlan.todo` 一致）。
+- **验证**：`json.load` 通过（**49 节点** · `key==id` 无错位）；36 项原勾选内容逐条比对 **无缺失**；本文件非 `*.md`，`check_links.py` 不扫描 ⇒ 断链口径不变（**1517 / 0**）。
+- **落点**：`docs/audit/L1_checklist.todo` · `DocMAP.md` · 本文件。**⛔ 未提交**（协作契约 §6）。
+
+**🧾 收口批：四份文档先行收口（`M_patchAB_rest` §9 决策结案 + `M6` 判定勾账 + `M_patchC` PW-12 落地 + `M8` 余真机归用户 · 2026-10-15 · 零代码批）**
+
+- **背景**：四份文档均为「**代码主体已完成 · 剩文档收口**」—— ① `M_patchAB_rest`：§9 决策点 `D-25`~`D-32` 已 **8/8 结案**但顶部状态行仍写「待你拍板」；② `M6`：§0.2 判定表 3 行标「🟢 要做」实已被 2026-10-11 批 4 / `build.ps1` 落地（`DBG-M6-01/02` / `FEA-M6-03`）；③ `M_patchC`：`PW-12`（文档收尾）本身即待办；④ `M8`：代码侧全部落地，余项全归真机/人工。
+- **本轮落地（零代码 · 纯文档）**：
+  - **`M_patchAB_rest` v11**：① 顶部状态 🟡 待拍板 → 🟢 **文档已收口**（§9 决策 8/8 结案 · 待定 0）；② §0.3 任务表补齐 **7 行**（行 5 流式 = 📦 **已拍板不做**（`D-31`/`PQ-11` · `VB-03` 断言未补）· 行 6 `PD-06①` = ⏳ **待做** · 行 22 `PD-03` / 行 26 `PM-01` / 行 27 `PM-03` / 行 28 `PM-04` = ✅ **归 [M6.md](actionPlan/M6.md) 批 1 已落地** · 行 25 = 🟡 部分）；③ 余人工关卡如实保留（`PB2-29` 逐站回填 · 界面点选 · 企业网络实测）。
+  - **`M6`**：§0.2 判定表 **3 行勾账**（`DBG-M6-01`/`FEA-M6-01`/`FEA-M6-07` → 🔵 批 4 已全部接线 · `DBG-M6-02`/`FEA-M2-03`/`PC-04` → 🔵 批 4 已落地 · `FEA-M6-03` → 🔵 `build.ps1` 已接 `check_all.ps1`）+ 新增 **§0.2b** 收口说明（余 6 项 🟢 **归口后续批次**：`M6-04`/`05`/`06`/`08`/`09`/`10`）；本文维持**现行里程碑计划**身份（未归档）。
+  - **`M_patchC` v8（`PW-12` 文档收尾 ✅）**：① 顶部状态行 + §0.6 全量判定 + §6 表 `PW-12` 行就地改 ✅；② 未做项**如实保留**（`PW-10` 占位符报错 · `PQ-13` 已拍板 · 留后续批 · `PW-11` 归档保留份数 · 留后续批；`PW-09` ⏸ 不排期）；③ 真机 `AW-01`/`03`/`04`/`06` **归用户手工**（与 `M8` 真机三件同批）。
+  - **`M8`**：§0.5 补收口行 —— 代码侧全部完成 · **余项全归真机/人工**（`M8-14` Gate · `M8-12` 供料验证 · 联网 3 项 · 豆包端到端 · Kimi 侦察 · `AW-01`~`AW-06`）。
+- **验证（2026-10-15 本机实测 · 纯文档批）**：本批零代码 ⇒ 运行链路数字不变（沿用 L2/L3 批终值：`--exec-selftest` **655 / 0** · `--graph-selftest` **151 / 0** · `check_all` **15/15**）；`check_links` 复检 **1517 / broken 0**（上批 1503 ⇒ 本批 **+14** = 收口批新增链接）。
+- **落点**：`actionPlan/M_patchAB_rest.md`（v11）· `actionPlan/M6.md` · `actionPlan/M_patchC_web_node_bind.md`（v8）· `actionPlan/M8.md` · `DocMAP.md` · 本文件。**⛔ 未提交**（协作契约 §6）。
+
+---
+
+- **背景**：三份文档各差「最后一步」即可归档 —— ① `M_canvas_snapshot` 唯一保留项 **`CS-10` 文档收口**（2026-10-11 判定）；② `M_8nodes_extension` 文档状态同步 + 人工验收回填（L1 代码 2026-10-14 四批已全落地；`AL1-*` 人工验收由**用户 2026-10-15 完成**）；③ `M_node_expansion_part2` L2/L3 验收回填（2026-10-15 代码批已落地；L3 五项交互走查用户人工完成）。
+- **本轮落地（零代码 · 纯文档）**：
+  - **`M_canvas_snapshot` CS-10 收口**：① `节点编辑器使用说明.md` §10.12 由「计划中 · 尚无代码」改写为**实测口径**（`[诊断] 画布` 指标行 + P0 热修后 `FPS 5~6 → 59~60` · 卡片快照 📦 **不执行** · `--ui-bench` / `canvas_render_mode` ⏸ 未实现）；② 本文顶部状态 → 🔵 **已收口 · 可归档**；③ §6 `CS-10` 行 ✅ + §6.1 判定同步；④ §11「待做」表就地结清第 3/4 条；⑤ §12 增 **v3**；⑥ `变量术语对照表` §12.2「快照三义」更新；⑦ `source/README.md` §4 核对（指标行已在，免改）。
+  - **`M_8nodes_extension` 状态同步 + 验收回填**：① 顶部状态 🟡 未开工 → ✅ **L1 六批（a~f）全落地 + 人工验收完成**；② §7.1 `VL1-01`…`VL1-12` 逐项回填（graph **110→144 / 0** · exec **546→598 / 0** · 断链 **1375 / 0** · check_all **15/15**）；③ §7.2 `AL1-01`…`AL1-06` → ✅ **用户人工验收（2026-10-15）**；④ §7.3 回归基线更新至 L1 终值；⑤ §10 落档动作同步；⑥ §11 变更记录 **v1.4**；⑦ `docs/audit/L1_checklist.todo` 状态 ⬜ 待真机 → ✅ **已验收**（全项勾选 · 用户 2026-10-15）。
+  - **`M_node_expansion_part2` 验收回填**：① 顶部状态补「**L2 / L3 已实施完成（2026-10-15）**」；② §4.3.6 / §4.4.5「验收框架待细化」→ ✅ 已落地（`VL2-01…VL2-07` 进 `--exec-selftest` · L3 五项人工走查通过）；③ §4.4 各 UX 项标 ✅；④ §12 变更记录 **v6**。
+- **验证（2026-10-15 本机实测 · 纯文档批）**：本批零代码 ⇒ 运行链路数字不变（沿用 L2/L3 批终值：`--exec-selftest` **655 / 0** · `--graph-selftest` **151 / 0** · `check_all` **15/15**）；`check_links` 复检 **1502 / broken 0**（上批 1487 ⇒ 本批 +15 = 收口批新增链接）。
+- **落点**：`actionPlan/M_canvas_snapshot.md` · `actionPlan/M_8nodes_extension.md` · `actionPlan/M_node_expansion_part2.md` · `节点编辑器使用说明.md` §10.12 · `audit/L1_checklist.todo` · `DocMAP.md` · `变量术语对照表.md` · 本文件。**⛔ 未提交**（协作契约 §6）。
+
+---
+
+
+**🧩 `M_node_expansion_part2` L3 · 对齐线收口（续）：节点内条件分隔线 clamp 到内容区（2026-10-15 · 代码批 · 跟进修正）**
+
+- **背景（用户反馈）**：上一批删掉标题下方灰线后，节点内其余**条件分隔线**（参数预览 / 图片卡片 / 提供商提示 / 运行结果前）仍会**横跨整个画布宽度、超出节点框** —— 视觉上仍是「超长的灰线」。
+- **根因（本轮查实）**：imgui-node-editor 的节点内容是「**画布窗口里的一个 `BeginGroup`**」（`NodeBuilder::Begin` 只 `SetCursorPos` + NodePadding + `BeginGroup`，`imgui_node_editor.cpp:5249-5257`）；`ImGui::Separator()` 取的是**画布窗口**的 `Pos/Size` 画线（`imgui_widgets.cpp` 横向分支 `x1=window->Pos.x; x2=window->Pos.x+window->Size.x`）⇒ 线横跨整个画布，远宽于节点（实测旧行为 ~1079px vs 节点 120px）。
+- **落地**：`node_canvas.cpp` 新增 **`draw_node_separator()`** —— 在光标当前 y 自绘一条**恰好 `g_content_width` 宽**的线（配色 `ImGuiCol_Separator`、垂直间距与 `Separator` 一致 = 推进一个 `ItemSpacing.y`），替换节点内 **4 处** `ImGui::Separator()`（参数预览 / 图片卡片 / 提供商提示 / 运行结果前）。弹窗 / 工具栏里的 `Separator`（真实窗口）不受影响、保持原样。
+- **验证（2026-10-15 本机实测 · 像素级扫描）**：内置示例 5 节点、内容区 160px、zoom 0.68 下，**每条分隔线实测 len ≈ 109px（= 160 × 0.68）**、左右内边距 ≈ 5-6px（= 10 × 0.68）⇒ **全部落在节点内容区内，无一条超出节点框**。`source/build.ps1` **0 error / 0 warning**；`check_all.ps1` **15 / 15 PASS**；`check_links` **1487 / broken 0**。
+- **落点**：`source/ui/src/node_canvas.cpp`（`draw_node_separator()` + 4 处替换）。**⛔ 未提交**（协作契约 §6）。
+
+---
+
 **🧩 `M_node_expansion_part2` L3 · 对齐线收口（2026-10-15 · 代码批 · 当日修正）**
 
 - **背景（用户反馈）**：每个节点**上面都自带了一条很长的灰色横线**，观感像「网格对齐线」，希望去掉；**画布网格本身要保留**。
 - **初版误判 → 当日修正**：先误判为「关闭内置 16px 网格吸附 + 默认关网格线」（`AlignPointToGrid` 恒返回原值 + `ui.show_grid` 默认 false），用户澄清后**已全部还原**：网格与 16px 吸附**保留**（`AlignPointToGrid` 恢复原逻辑 + `show_grid` 默认恢复 true）。
 - **真正落地（本轮最终）**：移除 `node_canvas.cpp` `draw_node_body` 中标题下方的 `ImGui::Separator()` —— 即「每个节点上面那条很长的灰色线」。节点内其余**条件**分隔线（参数预览 / 图片卡片 / 提供商提示 / 运行结果前）保持不变。
 - **验证（2026-10-15 本机实测）**：`source/build.ps1` **0 error / 0 warning**；`check_all.ps1` **15 / 15 PASS**；`check_links` **1487 / broken 0**；GUI 冒烟通过。
-- **落点**：`source/ui/src/node_canvas.cpp`（删节点标题下 Separator）· `source/third_party/imgui-node-editor/imgui_node_editor_internal.h`（恢复 16px 网格吸附）· `source/utils/include/config.h` · `source/engine/src/migration.cpp`（`show_grid` 恢复默认 true）· 文档同步（ai_writer_nodes / 节点编辑器使用说明 / M_node_expansion_part2 / AI_Status / 本文）。**⛔ 未提交**（协作契约 §6）。
+- **落点**：`source/ui/src/node_canvas.cpp`（删节点标题下 Separator）· `source/third_party/imgui-node-editor/imgui_node_editor_internal.h`（恢复 16px 网格吸附）· `source/utils/include/config.h` · `source/engine/src/migration.cpp`（`show_grid` 恢复默认 true）· 文档同步（ai_writer_nodes / 节点编辑器使用说明 / M_node_expansion_part2 / AI_Status / 本文）。**✅ 已提交**（开发者 2026-10-15 · `38b0a46`「minimap & L2 implement」；跟进修正见上方「对齐线收口（续）」条目）。
 
 ---
 

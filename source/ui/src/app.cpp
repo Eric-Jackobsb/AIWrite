@@ -1,6 +1,7 @@
 #include "app.h"
 
 #include "console_panel.h"
+#include "composite_editor.h"   // CN：上级节点编辑器 / 打包 / 新建
 #include "editor_state.h"
 #include "error_bar.h"
 #include "node_canvas.h"
@@ -49,6 +50,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <thread>
@@ -64,10 +66,47 @@ constexpr const char* kWindowParams  = "参数";
 constexpr const char* kWindowConsole = "Console";
 constexpr const char* kWindowOutput  = "输出";
 constexpr const char* kWindowInfo    = "工作流信息";
+constexpr const char* kWindowCompositeEditor = "上级节点编辑"; // CN
 
 void glfw_error_callback(int code, const char* description)
 {
     log::error("GLFW 错误 " + std::to_string(code) + ": " + (description ? description : ""));
+}
+
+// [调试·窗口栈看门狗] 快照 ImGui 当前窗口栈（Begin/BeginChild 未配对的定位工具）。
+// 在 Render()（内部 EndFrame() 断言「Mismatched Begin/BeginChild vs End/EndChild」）
+// 之前调用：栈深≠1 时，栈顶窗口就是「调了 Begin/BeginChild 却没配 End/EndChild」的那个。
+std::string window_stack_dump()
+{
+    ImGuiContext* ctx = ImGui::GetCurrentContext();
+    std::string   dump;
+    if (ctx == nullptr) {
+        return dump + "(无 ImGui 上下文)";
+    }
+    dump += "栈深=" + std::to_string(ctx->CurrentWindowStack.Size) + "\n";
+    for (int i = 0; i < ctx->CurrentWindowStack.Size; ++i) {
+        const ImGuiWindow* w = ctx->CurrentWindowStack.Data[i].Window;
+        dump += "  [" + std::to_string(i) + "] ";
+        dump += (w != nullptr && w->Name != nullptr) ? w->Name : "(null)";
+        if (w != nullptr) {
+            dump += (w->Flags & ImGuiWindowFlags_ChildWindow) != 0 ? " [child]" : " [window]";
+            dump += " BeginCount=" + std::to_string(w->BeginCount);
+            if (w->Appearing) {
+                dump += " Appearing";
+            }
+            if (!w->WasActive) {
+                dump += " !WasActive";
+            }
+        }
+        dump += "\n";
+    }
+    if (ctx->CurrentWindowStack.Size > 1) {
+        const ImGuiWindow* top = ctx->CurrentWindowStack.back().Window;
+        dump += "  → 顶层未 End 的窗口: ";
+        dump += (top != nullptr && top->Name != nullptr) ? top->Name : "(null)";
+        dump += "\n";
+    }
+    return dump;
 }
 
 // 在候选目录中按顺序查找第一个存在的字体文件
@@ -201,6 +240,7 @@ void build_default_layout(ImGuiID dockspace_id, const ImVec2& size)
     const ImGuiID left   = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.18f, nullptr, &center);
 
     ImGui::DockBuilderDockWindow(kWindowCanvas, center);
+    ImGui::DockBuilderDockWindow(kWindowCompositeEditor, center); // CN：与画布同区（标签页切换）
     ImGui::DockBuilderDockWindow(kWindowLibrary, left);
     ImGui::DockBuilderDockWindow(kWindowConsole, bottom);
     ImGui::DockBuilderDockWindow(kWindowOutput, bottom); // PA-02：与 Console 同区（可拖动分离）
@@ -615,6 +655,7 @@ int run(const AppOptions& options)
     bool show_library         = config.ui.show_node_library;
     bool show_params          = config.ui.show_property_panel;
     bool show_info            = true; // 工作流信息面板不在 config 中：始终显示
+    bool show_composite_editor = false; // CN：上级节点编辑器（会话打开时自动显示）
     bool layout_ready         = false;
     bool request_layout_reset = false;
     // M6：菜单「帮助 → 首次使用引导」置位（重置本会话「已看过」标记；不影响 first_run_done）
@@ -799,6 +840,34 @@ int run(const AppOptions& options)
         // 必须紧跟 NewFrame()（在画布/面板开始取纹理之前），见 ui/texture_cache.h 说明。
         ui::begin_frame();
 
+        // [调试·自动复现] --auto-open-composite：程序化走「新建上级节点」路径。
+        // 第 6 帧打开对话框并在其可见帧自动点「创建并打开编辑器」（与手工同路径）。
+        if (options.auto_open_composite && frame_index == 6) {
+            composite_editor_test_drive_new_dialog();
+            log::info("[自动复现] 已触发「新建上级节点」对话框（第 6 帧）");
+        }
+        // 若新建因规格校验失败而未打开编辑器：第 12 帧再走「内存会话」路径（旧实现），
+        // 以判定断言是否来自「无文件支撑的内存会话」（composite_editor_open 的 find 落空回退）。
+        if (options.auto_open_composite && frame_index == 12 && !composite_editor_state().active) {
+            engine::CompositeSpec fresh;
+            fresh.id   = engine::CompositeRegistry::instance().make_id();
+            fresh.name = "内存会话复现";
+            composite_editor_open(fresh.id);
+            log::info("[自动复现] 走内存会话路径打开编辑器 " + fresh.id + "（第 12 帧）");
+        }
+        // 编辑器已打开后：第 16 帧添加一个内部节点（覆盖非空内部图的 BeginNode 绘制路径），
+        // 第 24 帧点「保存」（应因未标记输出被严格校验拦截 → 属预期行为，非崩溃）。
+        if (options.auto_open_composite && frame_index == 16 && composite_editor_state().active) {
+            const std::string nid = composite_editor_add_node("TextInput", 0.0f, 0.0f);
+            log::info("[自动复现] 编辑器内添加内部节点 " + nid + "（第 16 帧）");
+        }
+        if (options.auto_open_composite && frame_index == 24 && composite_editor_state().active) {
+            std::string save_err;
+            const bool  saved = composite_editor_save(&save_err);
+            log::info(std::string("[自动复现] 编辑器保存（预期失败：未标记输出）ok=") +
+                      (saved ? "1" : "0") + "  err=" + save_err + "（第 24 帧）");
+        }
+
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
         const float status_height     = ImGui::GetFrameHeight();
         EditorState& state            = editor();
@@ -941,6 +1010,28 @@ int run(const AppOptions& options)
                         log::warn("界面可见性保存失败：config.toml 不可写？");
                     }
                 }
+            }
+
+            if (ImGui::BeginMenu("上级节点")) {
+                if (ImGui::MenuItem("新建上级节点…")) {
+                    composite_new_dialog();
+                }
+                if (ImGui::MenuItem("打包选区为上级节点…", nullptr, false,
+                                    state.selected_nodes.size() >= 2)) {
+                    composite_pack_dialog();
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("在画布上框选/多选至少 2 个节点后打包");
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("打开上级节点编辑器")) {
+                    // 一律走文件路径：弹新建对话框 → 落盘空白规格 JSON → 打开编辑器读取。
+                    // 不直接创建无文件支撑的内存会话（避免依赖 imgui-node-editor 上下文时序）。
+                    if (!composite_editor_state().active) {
+                        composite_new_dialog();
+                    }
+                }
+                ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("帮助")) {
@@ -1114,6 +1205,20 @@ int run(const AppOptions& options)
             ImGui::PopFont();
         }
 
+        // ---- CN：上级节点编辑器 + 新建/打包对话框 ----
+        if (composite_editor_state().active) {
+            show_composite_editor = true; // 会话打开 → 自动显示窗口
+        }
+        if (show_composite_editor) {
+            ImGui::PushFont(fonts.ui);
+            draw_composite_editor(kWindowCompositeEditor, &show_composite_editor);
+            ImGui::PopFont();
+        }
+        if (!composite_editor_state().active) {
+            show_composite_editor = false; // 会话关闭 → 隐藏窗口
+        }
+        draw_composite_dialogs();
+
         // ---- M6：首次使用引导 + 设置面板（未打开时为空操作 / 零副作用）----
         ImGui::PushFont(fonts.ui);
         draw_first_run_guide(config, state, webview2, request_first_run_guide);
@@ -1184,6 +1289,29 @@ int run(const AppOptions& options)
         }
         ImGui::End();
         ImGui::PopStyleVar(2);
+
+        // [调试·窗口栈看门狗] 在 Render()（内部 EndFrame() 断言窗口栈）之前快照。
+        //  * 常开：栈深≠1 时写入 windowstack_crash.txt（工作目录）+ app 日志 —— 这就是
+        //    断言触发帧，栈顶即「没配 End/EndChild 的窗口」。
+        //  * --auto-open-composite 时前 40 帧每帧都记录，便于观察编辑会话首帧前后窗口栈演变。
+        {
+            ImGuiContext* const watchdog_ctx = ImGui::GetCurrentContext();
+            const int stack_size = (watchdog_ctx != nullptr) ? watchdog_ctx->CurrentWindowStack.Size : 0;
+            const bool stack_bad = stack_size != 1;
+            if (stack_bad || (options.auto_open_composite && frame_index <= 40)) {
+                const std::string watchdog_dump = window_stack_dump();
+                if (FILE* watchdog_file = std::fopen("windowstack_crash.txt", "a");
+                    watchdog_file != nullptr) {
+                    std::fprintf(watchdog_file, "=== 帧 %d ===\n%s", frame_index,
+                                 watchdog_dump.c_str());
+                    std::fclose(watchdog_file);
+                }
+                if (stack_bad) {
+                    log::error("[窗口栈看门狗] 帧 " + std::to_string(frame_index) +
+                               "：\n" + watchdog_dump);
+                }
+            }
+        }
 
         ImGui::Render();
         int display_w = 0;

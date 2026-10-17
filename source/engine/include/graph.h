@@ -89,6 +89,9 @@ struct Node {
     std::vector<Param> params;
     NodeState          state = NodeState::Idle;
     std::string        error_message;
+    // CN（Composition_node）：上级节点实例 —— 非空 = 本节点是 Composite 节点，
+    // 端口/参数来自该规格（见 composite.h）。执行时由 Executor 在**工作副本**上展开。
+    std::string        composite_id;
 
     const Port*  findPort(const std::string& port_id, PortDirection dir) const;
     Port*        findPort(const std::string& port_id, PortDirection dir);
@@ -147,6 +150,11 @@ public:
     //       因此创建接口统一返回 **稳定 id**，访问时用 findNode/findEdge 重新获取。
     // 依据注册表创建节点；成功返回新节点 id，失败返回空串并写 error
     std::string addNode(const std::string& type, float x, float y, std::string* error);
+    // CN（Composition_node）：依据上级节点规格创建 Composite 节点实例
+    //  * 端口/参数来自规格（暴露输入 in1…、暴露输出 out1…、暴露参数）
+    //  * 规格缺失或非法时失败并写 error
+    std::string addCompositeNode(const std::string& composite_id, float x, float y,
+                                 std::string* error);
     bool        removeNode(const std::string& node_id);          // 连带删除相关边
     bool        removeEdgesOfNode(const std::string& node_id);
     // 复制节点（图内克隆，位置偏移 dx/dy；不含连线）；成功返回新节点 id

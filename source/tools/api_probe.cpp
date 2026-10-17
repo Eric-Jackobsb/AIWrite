@@ -32,6 +32,7 @@
 #include "provider_resolve.h" // M5-02：生效提供商 / 模型名断言
 #include "workflow_io.h"
 #include "migration.h"       // M_patchAB §4（PC-04）：版本迁移（workflow + config）离线断言
+#include "composite_selftest.h" // CN：上级节点（Composition_node）自检
 #include "nodes.h"
 #include "config.h"
 #include "output_archive.h"
@@ -3311,7 +3312,7 @@ int execution_selftest()
                "提供商节点：输出包含模型名");
     }
 
-    // ------------------------------------------- 4. 文本合并 / 模板容错 -----
+    // ------------------------------------------- 4. 文本合并 / 模板占位符报错（PW-10）----
     {
         Graph             graph;
         const std::string a = add_node(check, graph, "TextInput", "合并 a");
@@ -3334,10 +3335,72 @@ int execution_selftest()
         const nlohmann::json* merged = executor.outputs().find(m, "text");
         expect_eq(check, merged != nullptr ? merged->dump() : std::string("(无输出)"),
                   nlohmann::json("第一段|第二段").dump(), "文本合并：按分隔符拼接");
-        const nlohmann::json* templated = executor.outputs().find(t, "text");
-        expect_eq(check, templated != nullptr ? templated->dump() : std::string("(无输出)"),
-                  nlohmann::json("X{unknown}Y第一段|第二段Z").dump(),
-                  "提示词模板：未匹配占位符原样保留，{vars} 正常替换");
+        // PW-10（PQ-13）：未匹配的占位符不再原样保留 ⇒ 模板节点失败（{unknown} 未命中任何输入）
+        const engine::Node* tpl_node = graph.findNode(t);
+        expect(check, tpl_node != nullptr && tpl_node->state == NodeState::Error,
+               "PW-10：模板存在未填充占位符 ⇒ 节点失败（不再静默下发）");
+        expect(check,
+               tpl_node != nullptr &&
+                   tpl_node->error_message.find("{unknown}") != std::string::npos,
+               "PW-10：错误信息含未填充的占位符名",
+               tpl_node ? tpl_node->error_message : std::string());
+    }
+
+    // ------------------------------------------- 4b. 模板占位符（PW-10 正 / 负例）----
+    {
+        // 正例：JSON 字面量 {…} 不算占位符 → 原样保留、不报错；{vars} 单值正常替换
+        {
+            nlohmann::json inputs;
+            inputs["vars"] = {"值A"};
+            nlohmann::json params;
+            params["template"] = "{vars} 的 JSON: {\"a\": 1}";
+            engine::ExecutionContext ctx;
+            const nlohmann::json out = aiwrite::nodes::execute_prompt_template(inputs, params, ctx);
+            expect_eq(check, out.dump(), nlohmann::json("值A 的 JSON: {\"a\": 1}").dump(),
+                      "PW-10 正例：{vars} 替换且 JSON 字面量 {…} 原样保留");
+        }
+        // 正例：纯 JSON 字面量（无任何输入）→ 不报错、原样保留
+        {
+            nlohmann::json inputs;
+            nlohmann::json params;
+            params["template"] = "{\"k\": 1}";
+            engine::ExecutionContext ctx;
+            const nlohmann::json out = aiwrite::nodes::execute_prompt_template(inputs, params, ctx);
+            expect_eq(check, out.dump(), nlohmann::json("{\"k\": 1}").dump(),
+                      "PW-10 正例：纯 JSON 字面量 {…} 不误报");
+        }
+        // 负例：{vars} 在 2 个值时未提供 → 报错（PQ-13：不再静默下发 {vars}）
+        {
+            nlohmann::json inputs;
+            inputs["vars"] = {"A", "B"};
+            nlohmann::json params;
+            params["template"] = "前缀{vars}后缀";
+            engine::ExecutionContext ctx;
+            bool threw = false;
+            try {
+                (void)aiwrite::nodes::execute_prompt_template(inputs, params, ctx);
+            }
+            catch (const engine::NodeError& err) {
+                threw = std::string(err.what()).find("{vars}") != std::string::npos;
+            }
+            expect(check, threw, "PW-10 负例：多值下 {vars} 未填充 ⇒ 报错并含 {vars}");
+        }
+        // 负例：数字占位符越界（只有 1 个值却写 {2}）→ 报错
+        {
+            nlohmann::json inputs;
+            inputs["vars"] = {"A"};
+            nlohmann::json params;
+            params["template"] = "a{2}b";
+            engine::ExecutionContext ctx;
+            bool threw = false;
+            try {
+                (void)aiwrite::nodes::execute_prompt_template(inputs, params, ctx);
+            }
+            catch (const engine::NodeError& err) {
+                threw = std::string(err.what()).find("{2}") != std::string::npos;
+            }
+            expect(check, threw, "PW-10 负例：{2} 越界 ⇒ 报错并含 {2}");
+        }
     }
 
     // ------------------------------------------- 5. 图片输入（文件不存在）----
@@ -3373,6 +3436,77 @@ int execution_selftest()
         expect(check, node_c != nullptr && node_c->state == NodeState::Waiting,
                "取消：未执行的节点保持 waiting");
         expect(check, executor.finishedCount() == 1, "取消：已完成 1 个节点");
+    }
+
+    // ------------------------------------------- 6b. PD-06① 通用重跑（FEA-M4-11）----
+    // VD-05：只重跑目标节点时上游结果复用；重跑「该节点及下游」时受影响节点结果刷新
+    {
+        Graph             graph;
+        const std::string n1 = add_node(check, graph, "TextInput", "重跑 n1（上游）");
+        const std::string n2 = add_node(check, graph, "PromptTemplate", "重跑 n2（目标）");
+        const std::string n3 = add_node(check, graph, "TextOutput", "重跑 n3（下游）");
+        graph.edges.push_back(make_edge("e1", n1, "text", n2, "vars"));
+        graph.edges.push_back(make_edge("e2", n2, "text", n3, "text"));
+        set_param(graph, n1, "text", "上游值");
+        set_param(graph, n2, "template", "{vars}!");
+
+        Executor    executor;
+        std::string error;
+
+        // 先做一次全量运行（得到可复用的上游结果）
+        expect(check, executor.start(graph, &error), "重跑：全量 start 通过", error);
+        expect(check, executor.runToCompletion(&graph, 32), "重跑：全量运行完成");
+        const nlohmann::json* full2 = executor.outputs().find(n2, "text");
+        expect_eq(check, full2 != nullptr ? full2->dump() : std::string("(无输出)"),
+                  nlohmann::json("上游值!").dump(), "重跑：全量运行 n2 = 上游值!");
+
+        // ① 只重跑目标节点（NodeOnly）：上游结果复用（n1 不再执行），n3 不被触碰
+        set_param(graph, n2, "template", "{vars}!!");
+        engine::RerunSpec node_only;
+        node_only.target_node = n2;
+        node_only.scope       = engine::RerunScope::NodeOnly;
+        expect(check, executor.startFrom(graph, node_only, &error),
+               "重跑：NodeOnly startFrom 通过", error);
+        expect(check, executor.plan() == std::vector<std::string>{n2},
+               "重跑：NodeOnly 计划 = 仅目标节点");
+        expect(check, executor.runToCompletion(&graph, 32) &&
+                          executor.state() == ExecState::Finished,
+               "重跑：NodeOnly 运行完成");
+        const nlohmann::json* rerun2 = executor.outputs().find(n2, "text");
+        expect_eq(check, rerun2 != nullptr ? rerun2->dump() : std::string("(无输出)"),
+                  nlohmann::json("上游值!!").dump(),
+                  "重跑：NodeOnly 复用上游结果并刷新本节点");
+        expect(check, executor.runInfos().size() == 1 &&
+                          executor.runInfos().front().node_id == n2,
+               "重跑：NodeOnly 只执行了目标节点（上游 n1 未重算）");
+        const nlohmann::json* old3 = executor.outputs().find(n3, "__result"); // 汇点节点输出在 __result
+        const engine::Node*   stale3 = graph.findNode(n3);
+        expect(check, old3 != nullptr && old3->dump() == nlohmann::json("上游值!").dump() &&
+                          stale3 != nullptr && stale3->state == NodeState::Done,
+               "重跑：NodeOnly 不触碰下游（n3 结果保持旧值）");
+
+        // ② 重跑「该节点及下游」（Downstream）：n2 + n3 都刷新
+        engine::RerunSpec downstream;
+        downstream.target_node = n2;
+        downstream.scope       = engine::RerunScope::Downstream;
+        expect(check, executor.startFrom(graph, downstream, &error),
+               "重跑：Downstream startFrom 通过", error);
+        expect(check, executor.plan() == std::vector<std::string>({n2, n3}),
+               "重跑：Downstream 计划 = 目标 + 下游（拓扑序）");
+        expect(check, executor.runToCompletion(&graph, 32) &&
+                          executor.state() == ExecState::Finished,
+               "重跑：Downstream 运行完成");
+        const nlohmann::json* down3 = executor.outputs().find(n3, "__result"); // 汇点节点输出在 __result
+        expect_eq(check, down3 != nullptr ? down3->dump() : std::string("(无输出)"),
+                  nlohmann::json("上游值!!").dump(),
+                  "重跑：Downstream 下游结果刷新为 n2 新值");
+
+        // ③ 目标节点不存在 → startFrom 拒绝
+        engine::RerunSpec bad;
+        bad.target_node = "n_not_exist";
+        expect(check, !executor.startFrom(graph, bad, &error) &&
+                          error.find("重跑目标节点不存在") != std::string::npos,
+               "重跑：目标节点不存在 ⇒ startFrom 拒绝", error);
     }
 
     // ------------------------------------------- 7. 运行前校验失败 ----------
@@ -3459,8 +3593,27 @@ int execution_selftest()
                 ++dir_count;
             }
         }
-        expect(check, second.ok && dir_count == 1,
-               "归档：keep_history=false 只保留最近 1 份", std::to_string(dir_count) + " 份");
+        expect(check, second.ok && dir_count == 2,
+               "PW-11：keep_history=false 也至少保留 kHistoryFloor 份（两次运行后两份都还在）",
+               std::to_string(dir_count) + " 份");
+
+        // PW-11：保留下限 = kHistoryFloor —— 再多运行几次也只保留最近 3 份
+        for (int i = 0; i < 3; ++i) {
+            const aiwrite::utils::ArchiveResult extra =
+                aiwrite::utils::archive_run(request, nodes, "完成 2/3，失败 1");
+            expect(check, extra.ok, "归档：连续归档（第 " + std::to_string(i + 3) + " 次）成功",
+                   extra.error);
+        }
+        dir_count = 0;
+        for (const std::filesystem::directory_entry& entry :
+             std::filesystem::directory_iterator(temp_root, ec)) {
+            if (entry.is_directory(ec)) {
+                ++dir_count;
+            }
+        }
+        expect(check, dir_count == static_cast<std::size_t>(aiwrite::utils::kHistoryFloor),
+               "PW-11：keep_history=false 保留下限 = kHistoryFloor(3)",
+               std::to_string(dir_count) + " 份");
 
         request.archive_dir = (temp_root / "not_a_dir").string();
         {
@@ -6721,6 +6874,9 @@ int main(int argc, char** argv)
 
     if (options.exec_selftest) {
         if (executor_selftest() != 0) {
+            exit_code = 1;
+        }
+        if (composite_selftest() != 0) { // CN：上级节点自检（展开执行等）
             exit_code = 1;
         }
         if (execution_selftest() != 0) {

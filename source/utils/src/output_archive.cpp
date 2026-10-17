@@ -215,7 +215,8 @@ ArchiveResult archive_run(const ArchiveRequest& request, const std::vector<Archi
     result.files = files;
 
     // ---- 保留策略与 TTL（只处理符合命名规则的目录，避免误删用户其它文件）----
-    const int keep = request.keep_history ? std::max(1, request.max_history) : 1;
+    // PW-11：即使 keep_history=false 也至少保留 kHistoryFloor 份（避免复盘证据被清）
+    const int keep = request.keep_history ? std::max(1, request.max_history) : kHistoryFloor;
 
     std::vector<std::pair<fs::path, std::time_t>> dirs;
     std::error_code                              list_ec;

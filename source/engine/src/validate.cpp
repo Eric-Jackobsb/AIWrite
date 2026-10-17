@@ -1,5 +1,6 @@
 #include "validate.h"
 
+#include "composite.h"
 #include "node_registry.h"
 #include "provider_resolve.h"
 
@@ -35,7 +36,14 @@ bool validateWorkflow(const Graph& graph, ValidationMessages* errors)
     std::vector<std::string> seen_ids;
     seen_ids.reserve(graph.nodes.size());
     for (const Node& node : graph.nodes) {
-        if (NodeRegistry::instance().find(node.type) == nullptr) {
+        // CN（Composition_node）：上级节点不走节点注册表，改查规格注册表
+        if (!node.composite_id.empty()) {
+            if (CompositeRegistry::instance().find(node.composite_id) == nullptr) {
+                found.push_back("[" + node.id + "] 上级节点规格不存在: " + node.composite_id);
+                continue;
+            }
+        }
+        else if (NodeRegistry::instance().find(node.type) == nullptr) {
             found.push_back("[" + node.id + "] 未知节点类型: " + node.type);
             continue;
         }

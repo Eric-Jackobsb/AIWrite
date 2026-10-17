@@ -1,5 +1,6 @@
 #include "workflow_io.h"
 
+#include "composite.h"
 #include "migration.h"     // M_patchAB §4（PC-04）：版本迁移（未来版本明确拒绝）
 #include "node_registry.h"
 #include "log.h"
@@ -53,6 +54,10 @@ nlohmann::json graph_to_json(const Graph& graph)
         node_json["type"]     = node.type;
         node_json["title"]    = node.title;
         node_json["position"] = {{"x", sane_position(node.x)}, {"y", sane_position(node.y)}};
+        // CN（Composition_node）：上级节点实例 —— 端口/参数来自规格，序列化只需规格引用
+        if (!node.composite_id.empty()) {
+            node_json["composite_id"] = node.composite_id;
+        }
 
         nlohmann::json params = nlohmann::json::object();
         for (const Param& param : node.params) {
@@ -124,7 +129,7 @@ bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* erro
     parsed.name        = document.value("name", std::string("未命名工作流"));
     parsed.description = document.value("description", std::string());
 
-    // ---- 节点：端口与参数定义一律以注册表为准，参数值取自文件 ----
+    // ---- 节点：端口与参数定义一律以注册表/规格为准，参数值取自文件 ----
     for (const auto& node_json : document["nodes"]) {
         if (!node_json.is_object()) {
             continue;
@@ -133,14 +138,59 @@ bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* erro
         if (type.empty()) {
             continue;
         }
-        if (registry.find(type) == nullptr) {
-            log::warn("[工作流] 跳过未注册的节点类型: " + type);
-            continue;
-        }
 
         const auto  position = node_json.value("position", nlohmann::json::object());
         const float x        = static_cast<float>(sane_position(position.value("x", 0.0)));
         const float y        = static_cast<float>(sane_position(position.value("y", 0.0)));
+
+        // CN（Composition_node）：上级节点 —— 端口/参数以规格为准（注册表里没有 Composite 定义）
+        const std::string composite_id = node_json.value("composite_id", std::string());
+        if (!composite_id.empty()) {
+            if (CompositeRegistry::instance().find(composite_id) == nullptr) {
+                log::warn("[工作流] 跳过上级节点（规格缺失，请确认 " +
+                          CompositeRegistry::instance().root().string() + "\\" + composite_id +
+                          ".json 存在）: " + node_json.value("id", std::string()));
+                continue;
+            }
+            std::string       composite_error;
+            const std::string generated_id =
+                parsed.addCompositeNode(composite_id, x, y, &composite_error);
+            if (generated_id.empty()) {
+                log::warn("[工作流] 跳过上级节点: " + composite_error);
+                continue;
+            }
+            Node* node = parsed.findNode(generated_id);
+            if (node == nullptr) {
+                continue;
+            }
+
+            const std::string wanted_id = node_json.value("id", std::string());
+            if (!wanted_id.empty() && wanted_id != generated_id &&
+                parsed.findNode(wanted_id) == nullptr) {
+                node->id = wanted_id;
+            }
+            const std::string wanted_title = node_json.value("title", std::string());
+            if (!wanted_title.empty()) {
+                node->title = wanted_title;
+            }
+            const auto params = node_json.find("params");
+            if (params != node_json.end() && params->is_object()) {
+                for (auto it = params->begin(); it != params->end(); ++it) {
+                    if (Param* param = node->findParam(it.key())) {
+                        if (param->is_secret) {
+                            continue; // 密钥不从文件恢复（只驻留内存）
+                        }
+                        param->value = it.value();
+                    }
+                }
+            }
+            continue;
+        }
+
+        if (registry.find(type) == nullptr) {
+            log::warn("[工作流] 跳过未注册的节点类型: " + type);
+            continue;
+        }
 
         const std::string generated_id = parsed.addNode(type, x, y, nullptr);
         if (generated_id.empty()) {

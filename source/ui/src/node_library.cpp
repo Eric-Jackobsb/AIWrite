@@ -1,5 +1,7 @@
 #include "node_library.h"
 
+#include "composite.h"          // CN：上级节点注册表
+#include "composite_editor.h"   // CN：新建/打包对话框
 #include "node_registry.h"
 #include "node_canvas.h"
 #include "theme.h"
@@ -161,6 +163,41 @@ void draw_node_library(const char* title, bool* open)
         }
     }
     else {
+        // ---- CN：上级节点（组合节点）独立分类 ----
+        if (ImGui::CollapsingHeader("上级节点", ImGuiTreeNodeFlags_DefaultOpen)) {
+            const std::vector<const engine::CompositeSpec*> composites =
+                engine::CompositeRegistry::instance().list();
+            if (composites.empty()) {
+                ImGui::TextDisabled("（暂无上级节点）");
+            }
+            for (const engine::CompositeSpec* spec : composites) {
+                ImGui::PushID(spec->id.c_str());
+                if (ImGui::Selectable(spec->name.c_str())) {
+                    canvas_add_composite_at_center(spec->id);
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::BeginTooltip();
+                    ImGui::TextWrapped("%s", spec->description.c_str());
+                    ImGui::Separator();
+                    ImGui::TextDisabled("输入 %d / 输出 %d / 参数 %d",
+                                        static_cast<int>(spec->inputs.size()),
+                                        static_cast<int>(spec->outputs.size()),
+                                        static_cast<int>(spec->exposed_params.size()));
+                    ImGui::EndTooltip();
+                }
+                ImGui::PopID();
+            }
+            ImGui::Separator();
+            if (ImGui::Button("新建上级节点…", ImVec2(-1.0f, 0.0f))) {
+                composite_new_dialog();
+            }
+            if (ImGui::Button("打包选区为上级节点…", ImVec2(-1.0f, 0.0f))) {
+                composite_pack_dialog();
+            }
+            ImGui::Spacing();
+            ImGui::Separator();
+        }
+
         for (engine::NodeCategory category : categories) {
             const std::vector<const engine::Definition*> items = registry.listByCategory(category);
             if (items.empty()) {

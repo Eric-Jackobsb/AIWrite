@@ -80,6 +80,13 @@ const std::filesystem::path& logs_dir()
     return value;
 }
 
+// CN-实施（Composition_node）：上级节点独立文件存储目录
+const std::filesystem::path& composites_dir()
+{
+    static const std::filesystem::path value = data_root() / "composites";
+    return value;
+}
+
 const std::filesystem::path& config_file()
 {
     static const std::filesystem::path value = data_root() / "config.toml";
@@ -178,7 +185,8 @@ int ensure_data_dirs()
     const std::filesystem::path dirs[] = {data_root(),         outputs_dir(),     workflows_dir(),
                                           snapshots_dir(),     logs_dir(),
                                           assets_images_dir(), // P7a-04：统一资源目录
-                                          user_providers_dir()}; // 配置表用户目录（PB2-02）
+                                          user_providers_dir(), // 配置表用户目录（PB2-02）
+                                          composites_dir()}; // CN：上级节点独立存储目录
 
     for (const auto& dir : dirs) {
         std::error_code ec;

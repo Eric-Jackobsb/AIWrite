@@ -36,6 +36,10 @@ struct EditorState {
     // PB-01：线程化运行入口（GUI 用）——校验后由执行器在工作线程推进；
     //  主循环每帧 tick_run() → pump_run_events() 应用事件（写 Graph 状态 + 维护 run_snapshot）
     bool start_run_async();
+    // PD-06①（FEA-M4-11 · 通用重跑）：从 node_id 开始重跑（复用上游结果）
+    //  * scope=NodeOnly → 「重跑该节点」；scope=Downstream → 「重跑该节点及下游」
+    //  * 与 start_run_async 相同的运行前校验；重跑不清空 run_snapshot（上游结果保持可见）
+    bool start_rerun_async(const std::string& node_id, engine::RerunScope scope);
     void pump_run_events();
     void stop_run_async();   // 退出 / 切图前调用（join，幂等）
     bool session_active() const { return session_active_; }

@@ -1,0 +1,623 @@
+#include "composite.h"
+
+#include "log.h"
+#include "node_registry.h"
+#include "paths.h"
+#include "validate.h"
+#include "workflow_io.h"
+
+#include <algorithm>
+#include <fstream>
+#include <set>
+
+namespace aiwrite::engine {
+namespace {
+
+constexpr int kCompositeSchemaVersion = 1;
+
+// 内部图里查找节点端口
+const Port* find_internal_port(const CompositeSpec& spec, const std::string& node_id,
+                               const std::string& port_id, PortDirection dir)
+{
+    const Node* node = spec.internal_graph.findNode(node_id);
+    return (node != nullptr) ? node->findPort(port_id, dir) : nullptr;
+}
+
+// 内部图里查找节点参数
+const Param* find_internal_param(const CompositeSpec& spec, const std::string& node_id,
+                                 const std::string& param_id)
+{
+    const Node* node = spec.internal_graph.findNode(node_id);
+    return (node != nullptr) ? node->findParam(param_id) : nullptr;
+}
+
+} // namespace
+
+// ------------------------------------------------------------------ 校验 ----
+bool validate_composite_spec(const CompositeSpec& spec, std::string* error,
+                             bool allow_incomplete_draft)
+{
+    const auto fail = [error](const std::string& text) {
+        if (error != nullptr) {
+            *error = text;
+        }
+        return false;
+    };
+
+    if (spec.id.empty()) {
+        return fail("上级节点 id 不能为空");
+    }
+    if (spec.name.empty()) {
+        return fail("上级节点名称不能为空");
+    }
+
+    // ---- 内部图：合法（含无环）、非空、无嵌套 ----
+    // 草稿（新建空白规格）允许空内部图：用户先在编辑器里添加内部节点，保存时才严格校验。
+    if (spec.internal_graph.nodes.empty() && !allow_incomplete_draft) {
+        return fail("上级节点内部图为空：请先添加内部节点");
+    }
+    for (const Node& node : spec.internal_graph.nodes) {
+        if (!node.composite_id.empty()) {
+            return fail("上级节点不支持嵌套：内部图不能包含上级节点（" + node.id + "）");
+        }
+    }
+    // 仅非空图才跑 validateWorkflow：空图没有节点/边/环可校验（且 validateWorkflow 会
+    // 对空图报「工作流为空」，草稿保存需放行）。
+    if (!spec.internal_graph.nodes.empty()) {
+        ValidationMessages graph_errors;
+        validateWorkflow(spec.internal_graph, &graph_errors);
+        if (!graph_errors.empty()) {
+            return fail("内部图校验失败：" + graph_errors.front());
+        }
+    }
+
+    // ---- 输出：强制单输出（设计 CN-D7）----
+    // 草稿允许未标记输出（0 个）；编辑器「保存」仍强制 1 个输出。
+    if (spec.outputs.size() != 1 && !allow_incomplete_draft) {
+        return fail("上级节点必须标记 1 个输出端口（当前 " +
+                    std::to_string(spec.outputs.size()) + " 个）");
+    }
+
+    // ---- 暴露端口引用：端口存在 + 方向正确 ----
+    for (std::size_t i = 0; i < spec.inputs.size(); ++i) {
+        const CompositePortRef& ref = spec.inputs[i];
+        if (find_internal_port(spec, ref.internal_node, ref.internal_port, PortDirection::Input) ==
+            nullptr) {
+            return fail("暴露输入 " + std::to_string(i + 1) + " 引用的内部输入端口不存在：" +
+                        ref.internal_node + "." + ref.internal_port);
+        }
+        // 标记为对外输入的端口不应再有内部入边（展开后会重复占用）
+        if (spec.internal_graph.findEdgeIntoInput(ref.internal_node, ref.internal_port) != nullptr) {
+            return fail("暴露输入「" + ref.display_name + "」对应的内部端口已有内部连线，" +
+                        "请先删除该内部连线或更换标记端口");
+        }
+    }
+    for (std::size_t i = 0; i < spec.outputs.size(); ++i) {
+        const CompositePortRef& ref = spec.outputs[i];
+        if (find_internal_port(spec, ref.internal_node, ref.internal_port, PortDirection::Output) ==
+            nullptr) {
+            return fail("暴露输出 " + std::to_string(i + 1) + " 引用的内部输出端口不存在：" +
+                        ref.internal_node + "." + ref.internal_port);
+        }
+    }
+
+    // ---- 暴露参数：参数存在 + 外部参数 id 唯一 ----
+    std::set<std::string> seen_param_ids;
+    for (std::size_t i = 0; i < spec.exposed_params.size(); ++i) {
+        const CompositeParamRef& ref = spec.exposed_params[i];
+        if (find_internal_param(spec, ref.internal_node, ref.param_id) == nullptr) {
+            return fail("暴露参数「" + ref.param_id + "」对应的内部参数不存在：" + ref.internal_node +
+                        "." + ref.param_id);
+        }
+        if (!seen_param_ids.insert(ref.param_id).second) {
+            return fail("暴露参数 id 重复：" + ref.param_id);
+        }
+    }
+
+    if (error != nullptr) {
+        error->clear();
+    }
+    return true;
+}
+
+// ------------------------------------------------------------ 序列化 ----
+nlohmann::json composite_to_json(const CompositeSpec& spec)
+{
+    nlohmann::json document;
+    document["schema_version"] = kCompositeSchemaVersion;
+    document["id"]             = spec.id;
+    document["name"]           = spec.name;
+    document["description"]    = spec.description;
+
+    nlohmann::json inputs = nlohmann::json::array();
+    for (const CompositePortRef& ref : spec.inputs) {
+        inputs.push_back({{"internal_node", ref.internal_node},
+                          {"internal_port", ref.internal_port},
+                          {"display_name", ref.display_name},
+                          {"type", portTypeName(ref.type)},
+                          {"is_optional", ref.is_optional}});
+    }
+    document["inputs"] = std::move(inputs);
+
+    nlohmann::json outputs = nlohmann::json::array();
+    for (const CompositePortRef& ref : spec.outputs) {
+        outputs.push_back({{"internal_node", ref.internal_node},
+                           {"internal_port", ref.internal_port},
+                           {"display_name", ref.display_name},
+                           {"type", portTypeName(ref.type)}});
+    }
+    document["outputs"] = std::move(outputs);
+
+    nlohmann::json params = nlohmann::json::array();
+    for (const CompositeParamRef& ref : spec.exposed_params) {
+        params.push_back({{"internal_node", ref.internal_node},
+                          {"param_id", ref.param_id},
+                          {"display_name", ref.display_name}});
+    }
+    document["exposed_params"] = std::move(params);
+
+    document["internal_graph"] = graph_to_json(spec.internal_graph);
+    return document;
+}
+
+bool composite_from_json(const nlohmann::json& json, CompositeSpec& spec, std::string* error)
+{
+    const auto fail = [error](const std::string& text) {
+        if (error != nullptr) {
+            *error = text;
+        }
+        return false;
+    };
+
+    if (!json.is_object()) {
+        return fail("上级节点 JSON 不是对象");
+    }
+    CompositeSpec parsed;
+    parsed.id          = json.value("id", std::string());
+    parsed.name        = json.value("name", std::string());
+    parsed.description = json.value("description", std::string());
+
+    const auto read_type = [](const std::string& name) {
+        if (name == "text") {
+            return PortType::Text;
+        }
+        if (name == "image") {
+            return PortType::Image;
+        }
+        if (name == "provider") {
+            return PortType::Provider;
+        }
+        if (name == "number") {
+            return PortType::Number;
+        }
+        return PortType::Any;
+    };
+
+    const auto inputs = json.find("inputs");
+    if (inputs != json.end() && inputs->is_array()) {
+        for (const auto& item : *inputs) {
+            if (!item.is_object()) {
+                continue;
+            }
+            CompositePortRef ref;
+            ref.internal_node = item.value("internal_node", std::string());
+            ref.internal_port = item.value("internal_port", std::string());
+            ref.display_name  = item.value("display_name", std::string());
+            ref.type          = read_type(item.value("type", std::string()));
+            ref.is_optional   = item.value("is_optional", true);
+            parsed.inputs.push_back(std::move(ref));
+        }
+    }
+    const auto outputs = json.find("outputs");
+    if (outputs != json.end() && outputs->is_array()) {
+        for (const auto& item : *outputs) {
+            if (!item.is_object()) {
+                continue;
+            }
+            CompositePortRef ref;
+            ref.internal_node = item.value("internal_node", std::string());
+            ref.internal_port = item.value("internal_port", std::string());
+            ref.display_name  = item.value("display_name", std::string());
+            ref.type          = read_type(item.value("type", std::string()));
+            parsed.outputs.push_back(std::move(ref));
+        }
+    }
+    const auto params = json.find("exposed_params");
+    if (params != json.end() && params->is_array()) {
+        for (const auto& item : *params) {
+            if (!item.is_object()) {
+                continue;
+            }
+            CompositeParamRef ref;
+            ref.internal_node = item.value("internal_node", std::string());
+            ref.param_id      = item.value("param_id", std::string());
+            ref.display_name  = item.value("display_name", std::string());
+            parsed.exposed_params.push_back(std::move(ref));
+        }
+    }
+
+    const auto internal = json.find("internal_graph");
+    if (internal == json.end() || !internal->is_object()) {
+        return fail("上级节点缺少 internal_graph");
+    }
+    std::string graph_error;
+    if (!graph_from_json(*internal, parsed.internal_graph, &graph_error)) {
+        return fail("internal_graph 加载失败：" + graph_error);
+    }
+
+    spec = std::move(parsed);
+    if (error != nullptr) {
+        error->clear();
+    }
+    return true;
+}
+
+// ---------------------------------------------------- 节点实例构建 ----
+bool build_composite_node(Node* node, const CompositeSpec& spec, std::string* error)
+{
+    if (node == nullptr) {
+        return false;
+    }
+    if (!validate_composite_spec(spec, error)) {
+        return false;
+    }
+
+    node->type         = "Composite";
+    node->composite_id = spec.id;
+    node->title        = spec.name;
+
+    node->inputs.clear();
+    for (std::size_t i = 0; i < spec.inputs.size(); ++i) {
+        const CompositePortRef& ref = spec.inputs[i];
+        const Port* internal_port =
+            find_internal_port(spec, ref.internal_node, ref.internal_port, PortDirection::Input);
+        Port port;
+        port.id           = "in" + std::to_string(i + 1);
+        port.name         = ref.display_name.empty() ? port.id : ref.display_name;
+        port.display_name = port.name;
+        port.type         = (internal_port != nullptr) ? internal_port->type : ref.type;
+        port.direction    = PortDirection::Input;
+        port.is_optional  = true; // 暴露输入恒可选：是否必接由内部端口决定（展开后校验）
+        node->inputs.push_back(std::move(port));
+    }
+
+    node->outputs.clear();
+    for (std::size_t i = 0; i < spec.outputs.size(); ++i) {
+        const CompositePortRef& ref = spec.outputs[i];
+        const Port* internal_port =
+            find_internal_port(spec, ref.internal_node, ref.internal_port, PortDirection::Output);
+        Port port;
+        port.id           = "out" + std::to_string(i + 1);
+        port.name         = ref.display_name.empty() ? port.id : ref.display_name;
+        port.display_name = port.name;
+        port.type         = (internal_port != nullptr) ? internal_port->type : ref.type;
+        port.direction    = PortDirection::Output;
+        node->outputs.push_back(std::move(port));
+    }
+
+    node->params.clear();
+    for (const CompositeParamRef& ref : spec.exposed_params) {
+        const Param* internal_param = find_internal_param(spec, ref.internal_node, ref.param_id);
+        if (internal_param == nullptr) {
+            continue;
+        }
+        Param copy = *internal_param;
+        copy.value = copy.default_value; // 新实例取默认值
+        if (!ref.display_name.empty()) {
+            copy.display_name = ref.display_name;
+        }
+        node->params.push_back(std::move(copy));
+    }
+
+    if (error != nullptr) {
+        error->clear();
+    }
+    return true;
+}
+
+
+// ------------------------------------------------------------ 展开执行 ----
+// CN-实施决策：在执行器工作副本上**就地展开**（见设计文档 §7.2「展开执行」）
+//  * 展开发生在 start/startFrom 之内 ⇒ 同步/异步两条路径天然共用
+//  * 展开后图中不再有 Composite 节点 ⇒ 无需注册 Composite 执行器
+//  * 运行前校验在展开后的图上执行 ⇒ 内部必填端口未接会被正确拦截
+bool expand_composites(Graph& graph,
+                       std::unordered_map<std::string, std::vector<std::string>>* replaced_out,
+                       std::string* error)
+{
+    CompositeRegistry& registry = CompositeRegistry::instance();
+    // 节点快照副本：展开过程会增删 graph.nodes，不能边遍历边改
+    const std::vector<Node> original_nodes = graph.nodes;
+
+    for (const Node& composite : original_nodes) {
+        if (composite.composite_id.empty()) {
+            continue;
+        }
+        const CompositeSpec* spec = registry.find(composite.composite_id);
+        if (spec == nullptr) {
+            if (error != nullptr) {
+                *error = "[上级节点] 规格不存在: " + composite.composite_id + "（文件 " +
+                         registry.root().string() + "\\" + composite.composite_id +
+                         ".json 缺失或被移除）";
+            }
+            return false;
+        }
+
+        // ---- 内部节点平移：深拷贝 + 前缀 id（<composite节点id>__<内部节点id>）----
+        std::vector<std::string> internal_ids;
+        internal_ids.reserve(spec->internal_graph.nodes.size());
+        for (const Node& internal : spec->internal_graph.nodes) {
+            Node copy = internal;
+            copy.id  = composite.id + "__" + internal.id;
+            copy.x += 16.0f; // 轻微偏移：仅调试视觉，不影响执行
+            copy.y += 16.0f;
+            copy.state = NodeState::Idle;
+            copy.error_message.clear();
+            graph.nodes.push_back(std::move(copy));
+            internal_ids.push_back(composite.id + "__" + internal.id);
+        }
+
+        // ---- 暴露参数覆盖内部参数值（外部实例值优先）----
+        for (const Param& external_param : composite.params) {
+            for (const CompositeParamRef& ref : spec->exposed_params) {
+                if (ref.param_id != external_param.id) {
+                    continue;
+                }
+                Node*  target = graph.findNode(composite.id + "__" + ref.internal_node);
+                Param* target_param = (target != nullptr) ? target->findParam(external_param.id)
+                                                          : nullptr;
+                if (target_param != nullptr) {
+                    target_param->value = external_param.value;
+                }
+                break;
+            }
+        }
+
+        // ---- 内部边平移 ----
+        for (const Edge& edge : spec->internal_graph.edges) {
+            Edge copy       = edge;
+            copy.id         = composite.id + "__" + edge.id;
+            copy.from_node  = composite.id + "__" + edge.from_node;
+            copy.to_node    = composite.id + "__" + edge.to_node;
+            copy.is_valid   = true;
+            graph.edges.push_back(std::move(copy));
+        }
+
+        // ---- 外部输入边 → 内部标记输入端口 ----
+        // 外部输入端口 id = in1…inN，按 spec.inputs 顺序一一对应
+        for (std::size_t k = 0; k < spec->inputs.size(); ++k) {
+            const std::string       ext_port = "in" + std::to_string(k + 1);
+            const CompositePortRef& ref      = spec->inputs[k];
+            const std::string       int_node = composite.id + "__" + ref.internal_node;
+            for (Edge& edge : graph.edges) {
+                if (edge.to_node == composite.id && edge.to_port == ext_port) {
+                    edge.to_node = int_node;
+                    edge.to_port = ref.internal_port;
+                }
+            }
+        }
+
+        // ---- 外部输出边 ← 内部标记输出端口 ----
+        for (std::size_t k = 0; k < spec->outputs.size(); ++k) {
+            const std::string       ext_port = "out" + std::to_string(k + 1);
+            const CompositePortRef& ref      = spec->outputs[k];
+            const std::string       int_node = composite.id + "__" + ref.internal_node;
+            for (Edge& edge : graph.edges) {
+                if (edge.from_node == composite.id && edge.from_port == ext_port) {
+                    edge.from_node = int_node;
+                    edge.from_port = ref.internal_port;
+                }
+            }
+        }
+
+        // ---- 移除 Composite 占位节点（残余连线已全部重接/内部化）----
+        graph.removeNode(composite.id);
+
+        if (replaced_out != nullptr) {
+            (*replaced_out)[composite.id] = std::move(internal_ids);
+        }
+    }
+
+    if (error != nullptr) {
+        error->clear();
+    }
+    return true;
+}
+
+
+// -------------------------------------------------------------- 注册表 ----
+CompositeRegistry& CompositeRegistry::instance()
+{
+    static CompositeRegistry registry;
+    return registry;
+}
+
+void CompositeRegistry::set_root(std::filesystem::path root)
+{
+    root_   = std::move(root);
+    loaded_ = false;
+    specs_.clear();
+    reload();
+}
+
+std::filesystem::path CompositeRegistry::root() const
+{
+    return root_.empty() ? paths::composites_dir() : root_;
+}
+
+void CompositeRegistry::reload()
+{
+    specs_.clear();
+    loadFromDir(root());
+    loaded_ = true;
+}
+
+const CompositeSpec* CompositeRegistry::find(const std::string& id) const
+{
+    ensureLoaded();
+    for (const CompositeSpec& spec : specs_) {
+        if (spec.id == id) {
+            return &spec;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<const CompositeSpec*> CompositeRegistry::list() const
+{
+    ensureLoaded();
+    std::vector<const CompositeSpec*> result;
+    result.reserve(specs_.size());
+    for (const CompositeSpec& spec : specs_) {
+        result.push_back(&spec);
+    }
+    std::sort(result.begin(), result.end(),
+              [](const CompositeSpec* a, const CompositeSpec* b) { return a->name < b->name; });
+    return result;
+}
+
+void CompositeRegistry::ensureLoaded() const
+{
+    if (!loaded_) {
+        // 场景：workflow 加载早于 UI 首帧 → 注册表在第一次访问时扫描目录
+        const_cast<CompositeRegistry*>(this)->reload();
+    }
+}
+
+void CompositeRegistry::loadFromDir(const std::filesystem::path& dir)
+{
+    std::error_code ec;
+    if (!std::filesystem::exists(dir, ec)) {
+        return; // 目录不存在 = 空注册表
+    }
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+        if (ec) {
+            break;
+        }
+        if (!entry.is_regular_file(ec) || entry.path().extension() != ".json") {
+            continue;
+        }
+        std::ifstream file(entry.path());
+        if (!file.is_open()) {
+            log::warn("[上级节点] 无法读取文件: " + entry.path().string());
+            continue;
+        }
+        nlohmann::json document;
+        try {
+            file >> document;
+        }
+        catch (const nlohmann::json::parse_error&) {
+            log::warn("[上级节点] 跳过损坏文件: " + entry.path().string());
+            continue;
+        }
+        CompositeSpec spec;
+        std::string   parse_error;
+        if (!composite_from_json(document, spec, &parse_error)) {
+            log::warn("[上级节点] 跳过无效规格 " + entry.path().string() + "：" + parse_error);
+            continue;
+        }
+        specs_.push_back(std::move(spec));
+    }
+    std::sort(specs_.begin(), specs_.end(),
+              [](const CompositeSpec& a, const CompositeSpec& b) { return a.id < b.id; });
+}
+
+bool CompositeRegistry::save(const CompositeSpec& spec, std::string* error,
+                             bool allow_incomplete_draft)
+{
+    const auto fail = [error](const std::string& text) {
+        if (error != nullptr) {
+            *error = text;
+        }
+        return false;
+    };
+
+    std::string validate_error;
+    if (!validate_composite_spec(spec, &validate_error, allow_incomplete_draft)) {
+        return fail(validate_error);
+    }
+
+    const std::filesystem::path dir = root();
+    std::error_code             ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) {
+        return fail("无法创建上级节点目录: " + dir.string());
+    }
+
+    const std::filesystem::path file = dir / (spec.id + ".json");
+    std::ofstream               out(file, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        return fail("无法写入文件: " + file.string());
+    }
+    out << composite_to_json(spec).dump(4);
+    out.close();
+    if (!out.good()) {
+        return fail("写入文件失败: " + file.string());
+    }
+
+    // 写盘成功 → 更新内存副本（同 id 覆盖）
+    auto it = std::find_if(specs_.begin(), specs_.end(),
+                           [&spec](const CompositeSpec& s) { return s.id == spec.id; });
+    if (it != specs_.end()) {
+        *it = spec;
+    }
+    else {
+        specs_.push_back(spec);
+        std::sort(specs_.begin(), specs_.end(),
+                  [](const CompositeSpec& a, const CompositeSpec& b) { return a.id < b.id; });
+    }
+
+    if (error != nullptr) {
+        error->clear();
+    }
+    return true;
+}
+
+bool CompositeRegistry::remove(const std::string& id, std::string* error)
+{
+    const auto fail = [error](const std::string& text) {
+        if (error != nullptr) {
+            *error = text;
+        }
+        return false;
+    };
+
+    const std::filesystem::path file = root() / (id + ".json");
+    std::error_code             ec;
+    if (std::filesystem::exists(file, ec)) {
+        if (!std::filesystem::remove(file, ec) || ec) {
+            return fail("删除文件失败: " + file.string());
+        }
+    }
+    specs_.erase(std::remove_if(specs_.begin(), specs_.end(),
+                                [&id](const CompositeSpec& s) { return s.id == id; }),
+                 specs_.end());
+
+    if (error != nullptr) {
+        error->clear();
+    }
+    return true;
+}
+
+std::string CompositeRegistry::make_id() const
+{
+    ensureLoaded();
+    std::set<int> used;
+    for (const CompositeSpec& spec : specs_) {
+        if (spec.id.rfind("c", 0) == 0) {
+            try {
+                used.insert(std::stoi(spec.id.substr(1)));
+            }
+            catch (...) {
+            }
+        }
+    }
+    int candidate = 1;
+    while (used.count(candidate) > 0) {
+        ++candidate;
+    }
+    return "c" + std::to_string(candidate);
+}
+
+} // namespace aiwrite::engine
+

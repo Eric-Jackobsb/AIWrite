@@ -24,5 +24,7 @@ void draw_node_canvas(const char* title, CanvasOptions& options);
 
 // 在画布可视中心创建节点（节点库点击 / 粘贴 使用）；返回新节点 id
 std::string canvas_add_node_at_center(const std::string& type);
+// CN（Composition_node）：在画布可视中心创建上级节点（依据规格）；返回新节点 id
+std::string canvas_add_composite_at_center(const std::string& composite_id);
 
 } // namespace aiwrite::ui

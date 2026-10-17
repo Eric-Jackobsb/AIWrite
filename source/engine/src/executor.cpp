@@ -1,10 +1,12 @@
 #include "executor.h"
 
+#include "composite.h"
 #include "validate.h"
 
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 namespace aiwrite::engine {
@@ -48,6 +50,11 @@ const nlohmann::json* NodeOutputs::find(const std::string& node_id,
 void NodeOutputs::clear()
 {
     values_.clear();
+}
+
+void NodeOutputs::erase(const std::string& node_id)
+{
+    values_.erase(node_id);
 }
 
 std::size_t NodeOutputs::size() const
@@ -236,6 +243,13 @@ void Executor::setStateHandler(std::function<void(const std::string&, NodeState)
 
 void Executor::reset()
 {
+    resetSession();  // PD-06①：会话级复位（保留 outputs_）；全量运行再清空运行态值
+    outputs_.clear();
+}
+
+// PD-06①：会话级复位 —— 与 reset() 的区别是**保留 outputs_**（供「重跑该节点」复用上游结果）
+void Executor::resetSession()
+{
     plan_.clear();
     cursor_ = 0;
     finished_ = 0;
@@ -247,7 +261,6 @@ void Executor::reset()
     // PB-02：每次运行换一枚**新令牌**（上一轮的取消不影响下一轮）
     cancel_token_     = std::make_shared<ai::CancelToken>();
     ctx_.cancel_token = cancel_token_;
-    outputs_.clear();
     run_infos_.clear();
     start_time_ = {};
     end_time_ = {};
@@ -266,6 +279,15 @@ void Executor::cancel()
 bool Executor::start(Graph& graph, std::string* error)
 {
     reset();
+
+    // CN（Composition_node）展开执行：工作图就地展开上级节点
+    //  * 展开后图中不再有 Composite 节点 ⇒ 内部节点成为父图一部分，按同一拓扑序推进
+    //  * 运行前校验/执行实现检查因此在**展开后的图**上执行（内部必填端口未接会被正确拦截）
+    //  * 展开失败（如规格缺失）直接判定运行失败
+    if (!expand_composites(graph, nullptr, error)) {
+        state_ = ExecState::Failed;
+        return false;
+    }
 
     ValidationMessages errors;
     ValidationMessages warnings;
@@ -306,6 +328,144 @@ bool Executor::start(Graph& graph, std::string* error)
     ctx_.run_id = std::to_string(
         std::chrono::duration_cast<std::chrono::milliseconds>(start_time_.time_since_epoch()).count());
     ctx_.console("[执行器] 开始执行：共 " + std::to_string(plan_.size()) + " 个节点");
+    for (const std::string& text : warnings) {
+        ctx_.console("[警告] " + text);
+    }
+    return true;
+}
+
+// ------------------------------------------------------ PD-06① 通用重跑 ------
+// 收集 start 节点的全部下游（含目标本身；沿 edges 的 from→to 单向可达）
+void Executor::collectDownstream(const Graph& graph, const std::string& start,
+                                 std::unordered_set<std::string>* out) const
+{
+    if (out == nullptr || graph.findNode(start) == nullptr) {
+        return;
+    }
+    std::vector<std::string> pending{start};
+    while (!pending.empty()) {
+        const std::string current = pending.back();
+        pending.pop_back();
+        for (const Edge& edge : graph.edges) {
+            if (edge.from_node != current) {
+                continue;
+            }
+            if (out->insert(edge.to_node).second) {
+                pending.push_back(edge.to_node);
+            }
+        }
+    }
+}
+
+// 「重跑该节点」/「重跑该节点及下游」（FEA-M4-11 · 复用上游结果）
+//  * 计划 = 全图拓扑序 ∩ 受影响集合（保持执行顺序）；上游不在计划里 ⇒ 运行态值原样复用
+//  * 重跑前清除受影响节点的运行态结果与状态（运行态值，不进撤销快照 / 工作流 JSON）
+bool Executor::startFrom(Graph& graph, const RerunSpec& rerun, std::string* error)
+{
+    resetSession(); // 保留 outputs_（复用上游）
+
+    const Node* target_node = graph.findNode(rerun.target_node);
+    if (target_node == nullptr) {
+        state_ = ExecState::Failed;
+        if (error != nullptr) {
+            *error = "重跑目标节点不存在: " + rerun.target_node;
+        }
+        return false;
+    }
+    // CN：重跑目标是上级节点时，展开后需要映射到其内部节点
+    const bool target_is_composite = !target_node->composite_id.empty();
+
+    // CN 展开执行：与 start() 一致，先就地展开上级节点
+    std::unordered_map<std::string, std::vector<std::string>> replaced;
+    if (!expand_composites(graph, &replaced, error)) {
+        state_ = ExecState::Failed;
+        return false;
+    }
+
+    // 受影响集合：NodeOnly = {target}；Downstream = {target} ∪ 其全部下游
+    //  * 上级节点：展开后以内部节点为受影响集（NodeOnly = 全部内部节点）
+    std::unordered_set<std::string> affected;
+    if (target_is_composite) {
+        const auto it = replaced.find(rerun.target_node);
+        if (it == replaced.end() || it->second.empty()) {
+            state_ = ExecState::Failed;
+            if (error != nullptr) {
+                *error = "重跑目标上级节点未展开: " + rerun.target_node;
+            }
+            return false;
+        }
+        for (const std::string& id : it->second) {
+            affected.insert(id);
+        }
+        if (rerun.scope == RerunScope::Downstream) {
+            for (const std::string& id : it->second) {
+                collectDownstream(graph, id, &affected);
+            }
+        }
+    }
+    else {
+        affected.insert(rerun.target_node);
+        if (rerun.scope == RerunScope::Downstream) {
+            collectDownstream(graph, rerun.target_node, &affected);
+        }
+    }
+
+    // 与全量运行一致：整图运行前校验 + 执行实现齐全检查
+    ValidationMessages errors;
+    ValidationMessages warnings;
+    if (!validateBeforeRun(graph, &errors, &warnings)) {
+        state_ = ExecState::Failed;
+        if (error != nullptr) {
+            *error = errors.empty() ? std::string("运行前校验失败") : errors.front();
+        }
+        return false;
+    }
+    for (const Node& node : graph.nodes) {
+        if (NodeExecutorRegistry::instance().find(node.type) == nullptr) {
+            state_ = ExecState::Failed;
+            if (error != nullptr) {
+                *error = "[" + node.id + "] 节点类型缺少执行实现: " + node.type +
+                         "（请先调用 nodes::registerAllExecutors()）";
+            }
+            return false;
+        }
+    }
+
+    // 计划 = 全图拓扑序 ∩ 受影响集合（保持执行顺序）
+    std::vector<std::string> full;
+    if (!graph.topologicalOrder(&full, error)) {
+        state_ = ExecState::Failed;
+        return false;
+    }
+    plan_.clear();
+    for (const std::string& id : full) {
+        if (affected.count(id) != 0) {
+            plan_.push_back(id);
+        }
+    }
+
+    // 受影响节点状态复位为 Waiting + 清错误（画布就地刷新）；非受影响节点保留原状态
+    for (Node& node : graph.nodes) {
+        if (affected.count(node.id) != 0) {
+            node.state = NodeState::Waiting;
+            node.error_message.clear();
+        }
+    }
+
+    // 清除受影响节点的运行态值（复用上游；受影响节点不得残留旧值）
+    for (const std::string& id : affected) {
+        outputs_.erase(id);
+    }
+
+    state_      = ExecState::Running;
+    start_time_ = std::chrono::steady_clock::now();
+    // M_patchC（PW-01 · 归属）：运行会话 id —— 同一次运行内稳定，供 web::WebOwner 标注
+    ctx_.run_id = std::to_string(
+        std::chrono::duration_cast<std::chrono::milliseconds>(start_time_.time_since_epoch()).count());
+    const char* scope_text =
+        rerun.scope == RerunScope::Downstream ? "该节点及下游" : "仅该节点";
+    ctx_.console("[执行器] 重跑「" + rerun.target_node + "」（" + scope_text + "，共 " +
+                 std::to_string(plan_.size()) + " 个节点；上游结果复用）");
     for (const std::string& text : warnings) {
         ctx_.console("[警告] " + text);
     }
@@ -370,6 +530,18 @@ bool Executor::tick(Graph* graph)
 // 主线程每帧 pumpEvents() 取事件（写 Graph 状态 / 刷新 UI 读模型）——「Graph 唯一写者」原则。
 bool Executor::startAsync(Graph* graph, std::string* error)
 {
+    return startAsyncImpl(graph, nullptr, error);
+}
+
+// PD-06①：异步通用重跑（从某节点开始，复用上游结果）
+bool Executor::startAsyncFrom(Graph* graph, const RerunSpec& rerun, std::string* error)
+{
+    return startAsyncImpl(graph, &rerun, error);
+}
+
+// startAsync / startAsyncFrom 的公共实现（rerun 为空 = 全量运行）
+bool Executor::startAsyncImpl(Graph* graph, const RerunSpec* rerun, std::string* error)
+{
     if (graph == nullptr) {
         if (error != nullptr) {
             *error = "graph 为空";
@@ -384,7 +556,12 @@ bool Executor::startAsync(Graph* graph, std::string* error)
     }
 
     worker_graph_ = *graph; // 副本：工作线程的节点状态/错误只落在副本上，主线程从事件应用
-    if (!start(worker_graph_, error)) {
+    if (rerun == nullptr) {
+        if (!start(worker_graph_, error)) {
+            return false;
+        }
+    }
+    else if (!startFrom(worker_graph_, *rerun, error)) {
         return false;
     }
 

@@ -168,6 +168,36 @@ void draw_toolbar_buttons()
                           "（蓝=运行中 / 绿=完成 / 红=失败 / 暗=跳过）");
     }
 
+    // ---- PD-06①（FEA-M4-11 · 通用重跑）：对「选中节点」重跑（复用上游结果）----
+    {
+        const bool rerun_busy = running || state.session_active();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(rerun_busy || state.selected_nodes.empty());
+        if (ImGui::Button("重跑 ▾")) {
+            ImGui::OpenPopup("##toolbar_rerun");
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("对选中的节点做通用重跑（复用上游结果）");
+        }
+        if (ImGui::BeginPopup("##toolbar_rerun")) {
+            const std::string target =
+                state.selected_nodes.empty() ? std::string() : state.selected_nodes.front();
+            const engine::Node* sel = target.empty() ? nullptr : state.graph.findNode(target);
+            const bool can_rerun = sel != nullptr && sel->state != engine::NodeState::Waiting;
+            if (ImGui::MenuItem("重跑选中节点", nullptr, false, can_rerun)) {
+                state.start_rerun_async(target, engine::RerunScope::NodeOnly);
+            }
+            if (ImGui::MenuItem("重跑选中节点及下游", nullptr, false, can_rerun)) {
+                state.start_rerun_async(target, engine::RerunScope::Downstream);
+            }
+            if (ImGui::IsItemHovered() && !can_rerun) {
+                ImGui::SetTooltip("选中节点尚未运行过（状态为等待），暂不可重跑");
+            }
+            ImGui::EndPopup();
+        }
+    }
+
     // ---- 运行前预检弹窗（P1-b）----
     // 为什么不把 official 升级为运行前校验的 error：--run-selftest 与 api_probe 断言都要求
     // 运行前校验「不阻断」（见 api_probe「未配置 Key：运行前校验仍通过」）；拦截只发生在工具栏。

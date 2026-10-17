@@ -14,14 +14,14 @@ AIwrite/
 ├── .vscode/                    VS Code 构建/调试配置（launch.json / tasks.json / settings.json）
 ├── build/                      ★ 唯一的构建目录（Visual Studio 2026 生成器）
 │   ├── aiwrite.slnx            可用 Visual Studio 2026 直接打开
-│   └── bin/                    产物：aiwrite.exe / api_probe.exe / webview2_login.exe
+│   └── bin/                    产物：aiwrite.exe / api_probe.exe / webview2_login.exe / ce_repro.exe（临时调试）
 ├── source/                     工程根（CMakeLists.txt 所在）
 │   ├── ai/ engine/ nodes/ ui/ utils/ web/
 │   │                             ★ **每个模块自带 src/ + include/**（2026-10-09 · FEA-L05 起）
 │   │                             ├─ src/     .cpp 实现；`ai/src/<站点>/`（deepseek/、doubao/、kimi/）= **站点专属只在这里**
 │   │                             └─ include/ 该模块的头文件（**拍平**；引用写裸名：`#include "log.h"`）
 │   ├── app/src/main.cpp        程序入口（无头文件 ⇒ `app/` 只有 `src/`）
-│   ├── tools/                  api_probe.cpp（V-04/05/06 + 图模型自检）、webview2_login.cpp（V-03）
+│   ├── tools/                  api_probe.cpp（V-04/05/06 + 图模型自检 + CN 上级节点自检）、composite_selftest.cpp（CN · 51 断言）、ce_repro.cpp（临时复现 ImGui 窗口栈断言 · CN 调试）、webview2_login.cpp（V-03）
 │   ├── ports/                  overlay port（nativefiledialog-extended 1.3.0；vcpkg 快照缺此包）
 │   ├── third_party/            imgui-node-editor v0.9.3（源码集成 + 最小补丁）
 │   ├── cmake/                  构建脚本片段（运行时 DLL 拷贝）
@@ -252,6 +252,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [
 #     `.iss ↔ payload` 一致性锁（4 条 Source 通配逐条核对）已实测 —— 见 `docs/CHANGELOG.md` `[Unreleased]`
 #   ⚠ 附带 WebView2 Bootstrapper（`PQ-02`）为**可选件**：把 `MicrosoftEdgeWebview2Setup.exe` 放进
 #     `packaging\webview2\` 即随包；没有则该行 `skipifsourcedoesntexist` 静默跳过（见该目录 README）
+#   📦 完整打包与分发说明（口径 / 安装包内容 / 干净机器冒烟）：见 [../../packaging/PACKAGING.md](../../packaging/PACKAGING.md)
 
 # —— M6 新增配置键 / 新接线项 ——
 #   [ui] first_run_done            = false  # 首启引导是否已看过（**缺键 = false** ⇒ 老用户也会看一次，可跳过）

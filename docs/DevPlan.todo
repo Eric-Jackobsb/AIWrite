@@ -74,7 +74,7 @@
                 "todo": {
                   "id": 15,
                   "content": "DBG-M6-01 仍未生效的配置：output.auto_open_on_complete / advanced.log_ttl_days / timeout.* / error.*（归口 PB-06/PB-08/PD-03）；ui.grid_size 受 vendored imgui-node-editor 限制（PD-03）；已接线：console_height / running_animation / 窗口几何 / 归档；已移除：general.language / general.startup（2026-10-09 · PQ-18②：i18n 不做、config.toml 不再有 [general] 节）｜ §3.2",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -85,7 +85,7 @@
                 "todo": {
                   "id": 16,
                   "content": "DBG-M6-02 工作流与配置缺版本迁移路径，跨版本文件只能 warn 后被拒/忽略 ｜ §5.1 PC-04",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -140,7 +140,7 @@
                 "todo": {
                   "id": 20,
                   "content": "FEA-M2-02 最近列表治理：打开前校验存在性、失效项灰显并提供「清理失效条目」 ｜ §5.1 PC-03",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -151,7 +151,7 @@
                 "todo": {
                   "id": 21,
                   "content": "FEA-M2-03 工作流/配置版本迁移框架（迁移表 + 未来版本明确拒绝 + 迁移自检） ｜ §5.1 PC-04",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -195,7 +195,7 @@
                 "todo": {
                   "id": 39,
                   "content": "FEA-M4-11 通用重跑能力：重跑该节点 / 该节点及下游（复用上游结果，需执行器支持「从某节点开始」；重跑前清除受影响节点结果与状态）—— 与 FEA-M4-17 的「新 seed 重跑」区分 ｜ §6.1 PD-06",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -217,7 +217,7 @@
                 "todo": {
                   "id": 120,
                   "content": "FEA-M4-13 代理与自签证书策略（PB-06 剩余部分）：HTTPS_PROXY/HTTP_PROXY 支持 + 自签证书开关（默认严格校验）+ config.toml [credentials] dir/ttl_days/backend 接线 ｜ §4.1 PB-06",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md · PB-06"
                 }
@@ -261,7 +261,7 @@
                 "todo": {
                   "id": 149,
                   "content": "FEA-M_patchB-25 网页版会话失效可诊断：--web-probe 判据加「端点 code=0」+ 面板/校验识别会话失效并给重登入口（与 PB-07 合并）+ token 形状变化走 web.token_expr 表驱动覆盖 ｜ §3 PB2-25 · 风险 R19/R20 · 建议验收 AB2-17 ｜ 进度（2026-09-28 核对）：识别层已落地（v15：web_session_failure_hint / needs_relogin，命中 40002/401 作废该站点会话；api_probe VB2-27①② PASS）；剩余 = 界面「重新登录」入口 + --web-probe 判据加「端点 code=0」（token_expr 表驱动已就绪） ｜ 🟢 保留要做（2026-10-11 · 与 PW-05 收口）",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -294,6 +294,17 @@
               "content": "Patch B · L4 登录层去 DeepSeek 化 + 站点数据（1 项）",
               "done": false,
               "level": "secondary"
+            }
+          },
+          {
+            "key": 347,
+            "children": [],
+            "todo": {
+              "id": 347,
+              "content": "CN-01… 上级节点（Composite Node）实施 —— 组合层 L4 重启（CN-D20）· 设计依据 docs/actionPlan/Composition_node.md（🆕 2026-10-16 批 CN-0 登记 · 设计定稿 · **实施完成**（代码 2026-10-16：模型 / 注册表 / 独立文件存储 / 展开执行 / 编辑器（打包·新建·独立标签页·撤销重做）/ 节点库「上级节点」分类 / 紫条视觉 / 新建草稿保存修正 / `composite_selftest` **51 断言** · exec **681/0** · graph **151/0** · 构建 0/0）· **⛔ 待人工验收**：新建 → 编辑 → 打包 → 父画布运行 → 展开执行结果正确；验收通过后勾 done + 另决定是否补 `VCN-*`/`ACN-*` 验收框架、程序化生成规则、调试设施去留）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/Composition_node.md"
             }
           }
         ],
@@ -602,7 +613,7 @@
                 "todo": {
                   "id": 82,
                   "content": "DOC-M4-01 Patch B 文档：Provider 抽象与官方 API 用法、凭据管理器、会话失效处理、流式行为说明 ｜ §4",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -624,7 +635,7 @@
                 "todo": {
                   "id": 86,
                   "content": "DOC-M6-01 打包与首启引导文档 + 设置面板字段说明（含「需重启生效」标注）",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M6.md"
                 }
@@ -635,7 +646,7 @@
                 "todo": {
                   "id": 245,
                   "content": "DOCS-CS-01 画布快照文档收口（CS-10）：使用说明 §10.12 补实测与截图 + CHANGELOG 实测小节 + DocMAP §5.3 + 变量术语对照表 + source/README §4（`--ui-bench` 与配置键） ｜ M_canvas_snapshot.md §11 ｜ 🟢 保留（= CS-10 文档收口 · 2026-10-11）",
-                  "done": false,
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_canvas_snapshot.md"
                 }
@@ -3040,7 +3051,7 @@
             "todo": {
               "id": 301,
               "content": "FEA-M8-21 解禁 capabilities.vision（官方 API 三处同批：nodes/local_nodes.cpp · engine/provider_resolve.h · ui/property_panel.cpp）｜ 并入 FEA-M7-09 / M7-10 ｜ M8.md §0.5 / M8-21",
-              "done": false,
+              "done": true,
               "level": "default",
               "fileLink": "docs/actionPlan/M8.md"
             }
@@ -3059,7 +3070,7 @@
         ],
         "todo": {
           "id": 300,
-          "content": "M8 网页通道（要做 2 项 · ⏸ 不排期 2 项已于 2026-10-14 移入 Deprecate · 已勾账 2 项已于 2026-10-13 移入 Archive · 2026-10-11 改判）",
+          "content": "M8 网页通道（要做 1 项 · ⏸ 不排期 2 项已于 2026-10-14 移入 Deprecate · 已勾账 2 项已于 2026-10-13 移入 Archive · 2026-10-11 改判 · 2026-10-17 勾账 FEA-M8-21，余 TST-M8-01 真机 Gate）",
           "done": false,
           "level": "secondary"
         }
@@ -3073,7 +3084,7 @@
             "todo": {
               "id": 321,
               "content": "FEA-PW-02 窗口表 / 独立窗口（I24）：按 (owner, site_key) 取窗 · 同站点不同 owner 各自独立窗口/profile · 🟢 批 1 首项 · 唯一结构改动 ｜ M_patchC §0.6",
-              "done": false,
+              "done": true,
               "level": "default",
               "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
             }
@@ -3084,7 +3095,7 @@
             "todo": {
               "id": 322,
               "content": "FEA-PW-04 归属化运行态（I26）：脚本槽 / 上传槽 / 网络回执 / 基线 / 轮询分桶 ｜ M_patchC §0.6",
-              "done": false,
+              "done": true,
               "level": "default",
               "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
             }
@@ -3095,7 +3106,7 @@
             "todo": {
               "id": 323,
               "content": "FEA-PW-05 归因分离（未就绪 / 无入口 / 被抢占）+ 日志带 owner 与级 ｜ M_patchC §0.6",
-              "done": false,
+              "done": true,
               "level": "default",
               "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
             }
@@ -3106,7 +3117,7 @@
             "todo": {
               "id": 324,
               "content": "FEA-PW-06 同站点真并行（两节点各自独立窗口/profile，各带自己的槽与回执）｜ M_patchC §0.6",
-              "done": false,
+              "done": true,
               "level": "default",
               "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
             }
@@ -3117,7 +3128,7 @@
             "todo": {
               "id": 325,
               "content": "FEA-PW-08 运行级复位（首次 + 失败时）+ 复位后就绪确认 ｜ M_patchC §0.6",
-              "done": false,
+              "done": true,
               "level": "default",
               "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
             }
@@ -3128,7 +3139,7 @@
             "todo": {
               "id": 326,
               "content": "FEA-PW-10 模板未填充占位符 ⇒ 报错（PQ-13 已拍板）｜ M_patchC §0.6",
-              "done": false,
+              "done": true,
               "level": "default",
               "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
             }
@@ -3139,7 +3150,7 @@
             "todo": {
               "id": 327,
               "content": "FEA-PW-11 归档保留份数调大（避免吃掉复盘证据）· 🟢 小 ｜ M_patchC §0.6",
-              "done": false,
+              "done": true,
               "level": "default",
               "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
             }
@@ -3150,7 +3161,7 @@
             "todo": {
               "id": 328,
               "content": "DOC-PW-12 文档收尾（M_patchC + M8 + 实测记录 + CHANGELOG + 索引）｜ M_patchC §0.6",
-              "done": false,
+              "done": true,
               "level": "default",
               "fileLink": "docs/actionPlan/M_patchC_web_node_bind.md"
             }
@@ -3158,7 +3169,7 @@
         ],
         "todo": {
           "id": 320,
-          "content": "M_patchC 网页节点归属（未完成 8 项 · ⏸ 不排期 1 项已于 2026-10-14 移入 Deprecate · 已勾账 1 项已于 2026-10-13 移入 Archive · 2026-10-11 核对）",
+          "content": "M_patchC 网页节点归属（代码 8 项已全部勾账 · 2026-10-17 · ⏸ 不排期 1 项已于 2026-10-14 移入 Deprecate · 已勾账 1 项已于 2026-10-13 移入 Archive · 2026-10-11 核对 · 余真机 AW-* 手工）",
           "done": false,
           "level": "secondary"
         }

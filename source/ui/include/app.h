@@ -13,6 +13,10 @@ struct AppOptions {
     //            `aiwrite.exe --open source\workflows\testAllAI.json`），
     //            配合 app.log 里的 `[诊断] 画布` 行可离线复核帧率与纹理缓存命中率
     std::string open_workflow;
+    // [调试] --auto-open-composite：启动第 8 帧程序化走「新建上级节点」路径
+    //（落盘空白规格 JSON → composite_editor_open），配合窗口栈看门狗复现/定位
+    // 「Mismatched Begin/BeginChild vs End/EndChild」断言。
+    bool auto_open_composite = false;
 };
 
 int run(const AppOptions& options);

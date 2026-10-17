@@ -391,6 +391,51 @@ bool EditorState::start_run()
     return true;
 }
 
+// PD-06①（FEA-M4-11 · 通用重跑）：从 node_id 开始重跑（复用上游结果）
+bool EditorState::start_rerun_async(const std::string& node_id, engine::RerunScope scope)
+{
+    aiwrite::nodes::registerAllExecutors(); // 幂等
+
+    engine::ValidationMessages errors;
+    engine::ValidationMessages warnings;
+    if (!engine::validateBeforeRun(graph, &errors, &warnings)) {
+        for (const std::string& text : errors) {
+            log::error("[运行前校验] " + text);
+            log::workflow("[运行前校验-失败] " + text);
+        }
+        set_status("重跑被拒绝：" + (errors.empty() ? std::string("未知原因") : errors.front()));
+        return false;
+    }
+    for (const std::string& text : warnings) {
+        log::warn("[运行前校验] " + text);
+        log::workflow("[运行前校验-警告] " + text);
+    }
+
+    engine::RerunSpec rerun;
+    rerun.target_node = node_id;
+    rerun.scope       = scope;
+
+    std::string error;
+    if (!executor.startAsyncFrom(&graph, rerun, &error)) {
+        log::error("启动重跑失败：" + error);
+        log::workflow("[重跑启动失败] " + error);
+        set_status("启动重跑失败：" + error);
+        return false;
+    }
+
+    // 重跑**不清空** run_snapshot：上游结果保持可见；受影响节点由事件逐帧覆盖
+    run_snapshot.running = true;
+    run_snapshot.summary.clear();
+    session_active_ = true;
+    const char* scope_text = scope == engine::RerunScope::Downstream ? "及下游" : "";
+    log::info("开始重跑节点 " + node_id + scope_text + "（后台线程）：计划 " +
+              std::to_string(executor.totalCount()) + " 个节点");
+    log::workflow("===== 重跑开始（节点 " + node_id + scope_text + " · 计划 " +
+                  std::to_string(executor.totalCount()) + " 个节点，异步）=====");
+    set_status("重跑中：" + node_id + scope_text + "…");
+    return true;
+}
+
 void EditorState::cancel_run()
 {
     if (!executor.running()) {
@@ -493,6 +538,12 @@ void EditorState::pump_run_events()
             if (!event.error.empty()) {
                 view->error = event.error;
             }
+            // PD-06①：重跑时被跳过的下游节点 ⇒ 其旧结果已失效，清掉避免「状态=跳过、正文=旧值」
+            if (event.state == engine::NodeState::Skipped) {
+                view->text.clear();
+                view->images.clear();
+                view->delta_bytes = 0;
+            }
             break;
         }
         case engine::RunEvent::Kind::NodeOutput: {
@@ -537,9 +588,29 @@ void EditorState::stop_run_async()
 // 运行收尾：join → 权威快照落定 → 状态栏/日志 → 归档 → 错误条
 void EditorState::finish_run_session()
 {
-    executor.stopAsync();                            // 契约：先 join 再读权威数据
-    run_snapshot     = engine::makeSnapshot(graph, executor); // 最终值覆盖增量（同源）
-    session_active_  = false;
+    executor.stopAsync(); // 契约：先 join 再读权威数据
+
+    // CN（展开执行）：权威快照以 executor.runInfos 为准（含内部节点），
+    // 但 nodeOutputText 在 UI 图上解析不到内部节点端口 → 内部节点正文会变空。
+    // 收尾前保留增量快照（运行中逐事件写入，内部节点正文完整），收尾后把空正文补回。
+    const engine::RunSnapshot incremental = run_snapshot;
+    run_snapshot                          = engine::makeSnapshot(graph, executor);
+    if (incremental.nodes.size() > 1) { // 有增量事件才需要补（首次全量快照为空）
+        for (auto& view : run_snapshot.nodes) {
+            if (!view.text.empty() && !view.images.empty()) {
+                continue;
+            }
+            if (const engine::RunNodeView* prev = incremental.find(view.node_id)) {
+                if (view.text.empty()) {
+                    view.text = prev->text;
+                }
+                if (view.images.empty()) {
+                    view.images = prev->images;
+                }
+            }
+        }
+    }
+    session_active_ = false;
     set_status("运行结束：" + run_snapshot.summary);
     log::workflow("===== 运行结束：" + run_snapshot.summary + " =====");
     // PA-04：逐节点耗时明细（补 M4-13 登记项）
