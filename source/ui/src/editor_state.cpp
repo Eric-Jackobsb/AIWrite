@@ -54,6 +54,37 @@ EditorState& editor()
     return state;
 }
 
+// ARCH-R2：构造时订阅 RunEvent（UI 改为订阅，不再主动 pumpEvents）
+EditorState::EditorState()
+{
+    run_sub_handle_ = run.subscribeRunEvents(
+        [this](const engine::RunEvent& event) { onRunEvent(event); });
+}
+
+EditorState::~EditorState()
+{
+    run.unsubscribeRunEvents(run_sub_handle_);
+}
+
+// ARCH-R2：RunEvent 订阅回调 —— 只更新「变化通知」字段，供输出面板 / 状态栏读取
+void EditorState::onRunEvent(const engine::RunEvent& event)
+{
+    switch (event.kind) {
+    case engine::RunEvent::Kind::NodeOutput:
+    case engine::RunEvent::Kind::Delta:
+        follow_output_  = true;
+        follow_node_id_ = event.node_id;
+        break;
+    case engine::RunEvent::Kind::Finished:
+        follow_output_    = false; // 运行结束：停止跟随滚动
+        run_finished_     = true;
+        run_last_summary_ = event.summary;
+        break;
+    default:
+        break;
+    }
+}
+
 void EditorState::setStatus(const std::string& text)
 {
     status = text;
@@ -378,6 +409,9 @@ bool EditorState::startRerunAsync(const std::string& node_id, engine::RerunScope
         setStatus(error);
         return false;
     }
+    // ARCH-R2：新会话开始 → 重置订阅通知（等待新事件置位）
+    follow_output_ = false;
+    run_finished_  = false;
     const char* scope_text = scope == engine::RerunScope::Downstream ? "及下游" : "";
     setStatus("重跑中：" + node_id + scope_text + "…");
     return true;
@@ -411,16 +445,11 @@ bool EditorState::startRunAsync()
         setStatus(error);
         return false;
     }
+    // ARCH-R2：新会话开始 → 重置订阅通知（等待新事件置位）
+    follow_output_ = false;
+    run_finished_  = false;
     setStatus("运行中…（界面保持响应；停止在节点边界生效）");
     return true;
-}
-
-void EditorState::pumpRunEvents()
-{
-    // 事件应用与快照维护归 RunSession；泵到 Finished → 本层做 UI 收尾
-    if (run.pumpEvents(graph)) {
-        finishRunSession();
-    }
 }
 
 void EditorState::stopRunAsync()

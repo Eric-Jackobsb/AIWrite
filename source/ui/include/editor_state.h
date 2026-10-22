@@ -22,6 +22,10 @@
 namespace aiwrite::ui {
 
 struct EditorState {
+    // ARCH-R2：构造时订阅 RunEvent（UI 改为订阅，不再主动 pumpEvents）
+    EditorState();
+    ~EditorState();
+
     engine::Graph      graph;
     engine::UndoStack  undo;
 
@@ -44,7 +48,6 @@ struct EditorState {
     //  * scope=NodeOnly → 「重跑该节点」；scope=Downstream → 「重跑该节点及下游」
     //  * 与 start_run_async 相同的运行前校验；重跑不清空 run_snapshot（上游结果保持可见）
     bool startRerunAsync(const std::string& node_id, engine::RerunScope scope);
-    void pumpRunEvents();
     void stopRunAsync();   // 退出 / 切图前调用（join，幂等）
     bool session_active() const { return run.session_active(); }
     void cancelRun();
@@ -130,6 +133,14 @@ struct EditorState {
 
     std::string status;                       // 状态栏提示
 
+    // ---- ARCH-R2：RunEvent 订阅通知（EditorState 构造时订阅 run，面板读这些字段）----
+    //  * 输出面板：收到 NodeOutput/Delta → follow_output 请求滚动到该节点（PB-03 流式呈现）
+    //  * 状态栏：收到 Finished → 缓存最后摘要（executor reset 后仍可见「上次运行」）
+    bool        follow_output_   = false;     // 输出面板：有新的节点输出 → 跟随滚动
+    std::string follow_node_id_;              // 输出面板：要跟随的节点 id（最新有输出的节点）
+    bool        run_finished_    = false;     // 状态栏：本次会话收到过 Finished 事件
+    std::string run_last_summary_;            // 状态栏：最后一次 Finished 事件的 summary
+
     // 一次性请求（由画布消费）
     bool request_focus_title          = false; // 双击节点标题 → 参数面板聚焦标题输入框
     bool request_navigate_to_content  = false; // 新建/粘贴后视图跟随内容
@@ -163,6 +174,10 @@ struct EditorState {
 private:
     // ARCH-R1：把运行结束的收尾（run.finish → 状态栏 → 明细日志 → 归档 → 错误条 → 自动导出）集中一处
     void finishRunSession();
+    // ARCH-R2：RunEvent 订阅回调（构造时注册；更新 follow_output_ / run_finished_ / run_last_summary_）
+    void onRunEvent(const engine::RunEvent& event);
+
+    std::size_t run_sub_handle_ = 0;          // ARCH-R2：run.subscribeRunEvents 返回的句柄
 
     std::vector<engine::Node> clipboard_nodes_;                        // 复制的节点
     std::vector<engine::Edge> clipboard_edges_;                        // 选区内部的连线

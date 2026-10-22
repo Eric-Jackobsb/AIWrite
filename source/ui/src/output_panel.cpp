@@ -422,6 +422,14 @@ void drawOutputPanel(const char* title, bool* open, EditorState& state)
                 ImGui::TextDisabled("（该节点无输出）");
             }
         }
+        // ARCH-R2：RunEvent 订阅通知 → 流式跟随滚动（PB-03）
+        //  * EditorState::onRunEvent 在收到 NodeOutput/Delta 时置位 follow_output_，
+        //    渲染到「最新有输出的节点」段后滚动到底，然后清除标记（只跟一次）。
+        //  * 渲染仍直接读快照（规则 3）；订阅只做「变化通知」。
+        if (state.follow_output_ && state.follow_node_id_ == info.node_id) {
+            ImGui::SetScrollHereY(1.0f);
+            state.follow_output_ = false;
+        }
         ImGui::PopID();
     }
 

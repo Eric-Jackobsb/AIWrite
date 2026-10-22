@@ -223,8 +223,45 @@ bool RunSession::pumpEvents(engine::Graph& graph)
             break;
         }
         }
+        // ARCH-R2：每个事件应用后分发给订阅者（主线程 FIFO；「变化通知」）
+        dispatchRunEvent(event);
     }
     return need_finish;
+}
+
+// ARCH-R2：把单个事件分发给全部订阅者（主线程 FIFO）
+//  * 拷贝回调列表再遍历，避免回调里 subscribe/unsubscribe 改容器导致迭代器失效
+void RunSession::dispatchRunEvent(const engine::RunEvent& event)
+{
+    if (run_subscribers_.empty()) {
+        return;
+    }
+    std::vector<RunEventCallback> callbacks;
+    callbacks.reserve(run_subscribers_.size());
+    for (const auto& [handle, callback] : run_subscribers_) {
+        callbacks.push_back(callback);
+    }
+    for (const RunEventCallback& callback : callbacks) {
+        callback(event);
+    }
+}
+
+// ------------------------------------------------------------- 订阅（ARCH-R2）----
+std::size_t RunSession::subscribeRunEvents(RunEventCallback callback)
+{
+    const std::size_t handle = next_sub_id_++;
+    run_subscribers_.emplace_back(handle, std::move(callback));
+    return handle;
+}
+
+void RunSession::unsubscribeRunEvents(std::size_t handle)
+{
+    for (auto it = run_subscribers_.begin(); it != run_subscribers_.end(); ++it) {
+        if (it->first == handle) {
+            run_subscribers_.erase(it);
+            return;
+        }
+    }
 }
 
 // 主循环每帧调用一次：异步会话 → 泵事件；同步会话 → 推进一个节点

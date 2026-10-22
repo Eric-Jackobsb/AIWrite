@@ -320,7 +320,7 @@ SettingsPanel settings(ctx.config());
 | 批 | 内容 | 产出 | 验证 |
 |---|---|---|---|
 | **ARCH-R1** | `RunSession` 对象化：Executor + 快照从 `editor()` 拆出 | `RunSession` 独立 | 构建 + `--exec-selftest` 713/0 |
-| **ARCH-R2** | RunEvent 订阅化：输出面板/状态栏改为订阅 `RunEvent` | UI 不再主动 `pumpEvents()` | 构建 + `--exec-selftest` + 人工确认 |
+| **ARCH-R2** | ~~RunEvent 订阅化：输出面板/状态栏改为订阅 `RunEvent`~~ ✅ **已落地（2026-10-22）** | UI 不再主动 `pumpEvents()`（`rg pumpRunEvents` = 0） | 构建 0/0 + `--exec-selftest` 713/0 + `--run-selftest`（新增订阅断言）+ check_links 1768/0 |
 | **ARCH-R3** | `ReadOnlyView` 落地：渲染只读 `ReadOnlyView` | 渲染与状态解耦 | 构建 + 人工确认渲染正常 |
 | **ARCH-R4** | 命令路由层：`ui/commands.h/.cpp`（AppCommand + 快捷键表 + dispatchCommand） | 三入口收敛 + 修 Ctrl+S | 构建 + 人工确认 Ctrl+S |
 
@@ -457,7 +457,8 @@ SettingsPanel settings(ctx.config());
 ---
 
 **文档结束 · v1.1 定稿。**
-**下一步：按 ARCH-R1 开始实施（等用户启动）。**
+**下一步：按 ARCH-R3 实施（ReadOnlyView 落地；等用户启动）。**
+**已完成：ARCH-R1（RunSession 对象化）· ARCH-R2（RunEvent 订阅化）—— 审计见 docs/audit/audit_arch_r1.md / audit_arch_r2.md。**
 
 
 

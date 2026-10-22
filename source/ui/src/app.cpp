@@ -1271,9 +1271,15 @@ int run(const AppOptions& options)
                 ImGui::TextDisabled("  %s", duration_text.c_str());
             }
             const std::string run_text = state.runStatusText();
-            if (!run_text.empty()) {
+            // ARCH-R2：状态栏订阅 RunEvent —— 运行中/刚结束时文本仍直接读 executor（实时秒表），
+            //  但 executor 被 reset（切图/退出）后，改用 Finished 事件缓存的最后摘要（run_last_summary_）
+            const std::string run_text_final =
+                !run_text.empty() ? run_text
+                                  : (state.run_finished_ ? state.run_last_summary_ : std::string());
+            if (!run_text_final.empty()) {
                 ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.40f, 0.72f, 1.0f, 1.0f), "  %s", run_text.c_str());
+                ImGui::TextColored(ImVec4(0.40f, 0.72f, 1.0f, 1.0f), "  %s",
+                                   run_text_final.c_str());
             }
             if (!state.status.empty()) {
                 ImGui::SameLine();

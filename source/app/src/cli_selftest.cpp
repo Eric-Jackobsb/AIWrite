@@ -596,6 +596,9 @@ int runSelftest(bool use_web, const std::string& provider_id)
             state.tickRun(); // 主线程：pump_run_events（写 Graph + 维护 run_snapshot）
         }
         const bool session_ended = !state.session_active();
+        // ARCH-R2：EditorState 构造时订阅 RunEvent —— startRunAsync 重置通知，Finished 事件置位
+        //  * 走到这里 run_finished_ == true 证明「订阅 → 泵事件 → 回调」链路工作（不再主动 pump）
+        const bool subscribed_notify = state.run_finished_;
 
         // 读模型 == 权威数据（状态 / 类型 / 文本），且 Graph 节点状态已由事件应用到位
         const aiwrite::engine::RunSnapshot& view = state.run_snapshot_view();
@@ -612,12 +615,12 @@ int runSelftest(bool use_web, const std::string& provider_id)
             }
         }
         state.stopRunAsync(); // 幂等（收尾已 join）
-        session_ok = started && session_ended && same_view &&
+        session_ok = started && session_ended && same_view && subscribed_notify &&
                      state.executor().state() != aiwrite::engine::ExecState::Running;
         std::printf("[运行自检] PB-01 第二步（EditorState 异步 + RunSnapshot）：%s（启动=%s / 会话结束=%s / "
-                    "快照·Graph == 权威=%s / 节点 %zu 个 / 状态 %s）\n",
+                    "快照·Graph == 权威=%s / 订阅通知=%s / 节点 %zu 个 / 状态 %s）\n",
                     session_ok ? "OK" : "失败", started ? "是" : "否", session_ended ? "是" : "否",
-                    same_view ? "是" : "否", view.nodes.size(),
+                    same_view ? "是" : "否", subscribed_notify ? "是" : "否", view.nodes.size(),
                     aiwrite::engine::execStateName(state.executor().state()));
     }
     else {
