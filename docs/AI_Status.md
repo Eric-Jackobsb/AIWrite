@@ -33,7 +33,7 @@
 > 下面汇总行与两份分片、§2.2 由 `loop_verify.ps1` **同一次调用**写入 ⇒ **同源、不会漂移**；分片依据 = `kind`（`web` × 11 / `official` × 9）。
 
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-19 · 覆盖轮次 0：
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-22 · 覆盖轮次 0：
 > **分通道明细**（按 `kind` 分片 · 同一次调用写入 ⇒ 与本文汇总同源）：**网页版** `kind=web` **11** 站 → `docs/AI_Status_web.md` §二 · **官方 API** `kind=official` **9** 条 → `docs/AI_Status_api.md` §二
 > **汇总**：共 20 条（web 11 / official 9）· 文字理解 ✅ 实测 **9** · 图片理解 ✅ 实测 **3** · 🟡 就绪/声明 6 · ⬜ 未接/未声明 9 · ⚠ 声明不一致 0
 > 重建（零副作用，随时可跑）：`powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\loop_verify.ps1 -StatusOnly`

@@ -966,9 +966,10 @@ int runSelftest(bool use_web, const std::string& provider_id)
         std::vector<std::string> received;
         const std::size_t h1 = bus.subscribe(EditEventKind::NodeAdded,
             [&received](const EditEvent& e) { received.push_back("A:" + e.node_id); });
-        const std::size_t h2 = bus.subscribe(EditEventKind::NodeAdded,
+        // h2/h3 句柄不保存（本块内不注销；bus 销毁即随弃）
+        bus.subscribe(EditEventKind::NodeAdded,
             [&received](const EditEvent& e) { received.push_back("B:" + e.node_id); });
-        const std::size_t h3 = bus.subscribe(EditEventKind::NodeRemoved,
+        bus.subscribe(EditEventKind::NodeRemoved,
             [&received](const EditEvent& e) { received.push_back("R:" + e.node_id); });
         bus.publish(EditEvent::node(EditEventKind::NodeAdded, "n_test"));
         // NodeRemoved 订阅者 h3 不得收到 NodeAdded → 只收到 A/B 两条（按订阅顺序 FIFO）
@@ -1011,10 +1012,92 @@ int runSelftest(bool use_web, const std::string& provider_id)
                     remove_mapping_ok ? "是" : "否");
     }
 
+    // ---- ARCH-E2：Undo/autosave 订阅化断言（before-edit 通道机制 + Undo 事件驱动 +
+    //     批量重置 diff 事件 + autosave 内容事件标记）----
+    //  * before-edit 机制：publish_before_edit 按订阅顺序 FIFO 携带 label · publish(EditEvent)
+    //    不触发 before 订阅者（通道隔离）· unsubscribe_before_edit 后不再收到
+    //  * Undo 订阅化：真实 editor() 构造时已订阅 before 通道 → snapshot(label) 只发通知，
+    //    压快照由订阅回调完成（undoDepth +1）；发 NodeAdded 不压快照（通道隔离）
+    //  * 批量重置 diff：undoOnce 恢复整图 → 逐节点 NodeRemoved 事件
+    //  * autosave 订阅化：内容类事件 → autosaveDirty() 置位；SelectionChanged 不触发
+    bool edit_subscribe_ok = false;
+    {
+        using aiwrite::ui::EditEvent;
+        using aiwrite::ui::EditEventKind;
+
+        // ① before-edit 机制（独立临时总线验证，不污染 editor() 的事件总线）
+        aiwrite::ui::EventBus         bus;
+        std::vector<std::string>      before_received;
+        const std::size_t bh1 = bus.subscribe_before_edit(
+            [&before_received](const std::string& label) { before_received.push_back("A:" + label); });
+        // bh2 句柄不保存（本块内不注销；bus 销毁即随弃）
+        bus.subscribe_before_edit(
+            [&before_received](const std::string& label) { before_received.push_back("B:" + label); });
+        bus.publish_before_edit("创建节点");
+        const bool before_fifo_ok = before_received.size() == 2 &&
+                                    before_received[0] == "A:创建节点" &&
+                                    before_received[1] == "B:创建节点";
+        bus.unsubscribe_before_edit(bh1);
+        bus.publish_before_edit("删除节点");
+        const bool before_unsub_ok =
+            before_received.size() == 3 && before_received[2] == "B:删除节点";
+        // 通道隔离：publish(EditEvent) 不得触发 before 订阅者
+        bus.publish(EditEvent::node(EditEventKind::NodeAdded, "n_iso"));
+        const bool before_isolate_ok = before_received.size() == 3 &&
+                                       bus.before_subscriber_count() == 1;
+
+        // ② Undo 订阅化（真实 editor()：构造时订阅 before 通道，snapshot 只发通知）
+        const std::size_t undo_before = state.undo.undoDepth();
+        state.snapshot("自检快照");
+        const bool undo_push_ok = state.undo.undoDepth() == undo_before + 1;
+        // 通道隔离：发 NodeAdded 不额外压快照
+        const std::size_t undo_before2 = state.undo.undoDepth();
+        state.event_bus().publish(EditEvent::node(EditEventKind::NodeAdded, "n_iso2"));
+        const bool undo_isolate_ok = state.undo.undoDepth() == undo_before2;
+
+        // ③ 批量重置 diff（undoOnce 恢复整图 → 订阅真实总线记录 NodeRemoved）
+        int               diff_removed = 0;
+        const std::size_t hd = state.event_bus().subscribe(
+            EditEventKind::NodeRemoved, [&diff_removed](const EditEvent& e) {
+                if (!e.node_id.empty()) {
+                    ++diff_removed;
+                }
+            });
+        state.snapshot("自检创建节点");
+        const std::string undo_tmp_id = state.createNode("TextInput", 0.0f, 0.0f);
+        const bool        undo_once_ok = !undo_tmp_id.empty() && state.undoOnce();
+        const bool        diff_ok      = diff_removed >= 1;
+        state.event_bus().unsubscribe(hd);
+        // 清理：撤销 ② 压的空快照（恢复同一张图，diff 为空）回到基线深度
+        state.undoOnce();
+
+        // ④ autosave 订阅化（真实 editor()：内容类事件 → autosaveDirty() 置位）
+        state.markAutosaveBaseline(); // 先重置（与自检前状态无关）
+        const bool dirty_baseline_ok = !state.autosaveDirty();
+        state.event_bus().publish(EditEvent::node(EditEventKind::SelectionChanged, ""));
+        const bool dirty_selection_ok = !state.autosaveDirty(); // 选择非内容变化 → 不置位
+        state.event_bus().publish(EditEvent::node(EditEventKind::NodeAdded, "n_dirty"));
+        const bool dirty_content_ok = state.autosaveDirty(); // 内容事件 → 置位
+        state.markAutosaveBaseline();                        // 恢复基线，不污染后续运行
+
+        edit_subscribe_ok = before_fifo_ok && before_unsub_ok && before_isolate_ok &&
+                            undo_push_ok && undo_isolate_ok && undo_once_ok && diff_ok &&
+                            dirty_baseline_ok && dirty_selection_ok && dirty_content_ok;
+        std::printf("[运行自检] 编辑订阅：%s（beforeFIFO=%s / before注销=%s / before隔离=%s / "
+                    "snapshot→undo=%s / NodeAdded不压栈=%s / undoOnce撤销=%s / "
+                    "undoOnce→NodeRemoved=%s / 基线=%s / Selection不置位=%s / 内容置位=%s）\n",
+                    edit_subscribe_ok ? "OK" : "失败", before_fifo_ok ? "是" : "否",
+                    before_unsub_ok ? "是" : "否", before_isolate_ok ? "是" : "否",
+                    undo_push_ok ? "是" : "否", undo_isolate_ok ? "是" : "否",
+                    undo_once_ok ? "是" : "否", diff_ok ? "是" : "否",
+                    dirty_baseline_ok ? "是" : "否", dirty_selection_ok ? "是" : "否",
+                    dirty_content_ok ? "是" : "否");
+    }
+
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
                       consistency_ok && param_driven_ok && async_ok && session_ok && sink_ok && seed_ok &&
                       param_range_ok && paste_ok && readonly_view_ok && command_route_ok &&
-                      edit_event_ok;
+                      edit_event_ok && edit_subscribe_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

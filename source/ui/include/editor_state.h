@@ -76,9 +76,10 @@ struct EditorState {
     //   * 仅变更时写（无变更 ⇒ 一次盘都不写）
     //   * 启动时 `autosave_paused = true`（PC-02：先问「恢复未保存的更改？」再放行）
     //     —— 否则启动时创建的示例工作流会在 3 秒后把真快照冲掉
-    void tickAutosave();                       // 主循环每帧调用一次（内部 1 Hz 探测）
+    void tickAutosave();                       // 主循环每帧调用一次（ARCH-E2：事件驱动，无事件不写）
     void pauseAutosave(bool paused);           // true = 暂停（不写、不探测）
     void markAutosaveBaseline();              // 以当前图为「已保存」基线（不写盘）
+    bool autosaveDirty() const { return autosave_change_seen_; } // ARCH-E2：自检钩子（有未保存变更？）
     void flushAutosaveOnExit();              // 退出前补写一次（有未保存更改时）
     // PC-02：把快照恢复进当前图（**不覆盖原文件** —— 恢复后 `current_workflow_path` 留空，
     //  保存必然走「另存为」，原文件由用户显式决定；原路径记在 restored_from_autosave_path）
@@ -152,7 +153,9 @@ struct EditorState {
     bool request_focus_selection      = false; // P7a-17：错误条定位 → 视图**居中并放大**到选中节点
 
     // ------------------------------------------------------------- 编辑 -----
-    void        snapshot(const std::string& label);   // 修改前压快照
+    // ARCH-E2：修改前压快照由 Undo 订阅者完成（构造时订阅 before-edit 通道）；
+    // 本方法只发布「修改前」通知（对外签名不变，全部调用点零改动）
+    void        snapshot(const std::string& label);
     bool        undoOnce();
     bool        redoOnce();
     void        clearWorkflow();
@@ -181,8 +184,15 @@ private:
     void finishRunSession();
     // ARCH-R2：RunEvent 订阅回调（构造时注册；更新 follow_output_ / run_finished_ / run_last_summary_）
     void onRunEvent(const engine::RunEvent& event);
+    // ARCH-E2：autosave 订阅回调（内容类 EditEvent → 标记「有未保存变更」）
+    void onEditContent();
+    // ARCH-E2：整图重置（undo/redo/clear/open/restore）后逐节点 diff 事件
+    //  （NodeRemoved 隐含连带连线，端点已删的连线不重复发 EdgeRemoved）
+    void publishGraphDiff(const engine::Graph& before, const engine::Graph& after);
 
     std::size_t run_sub_handle_ = 0;          // ARCH-R2：run.subscribeRunEvents 返回的句柄
+    std::size_t undo_sub_handle_ = 0;         // ARCH-E2：event_bus_.subscribe_before_edit 返回的句柄（Undo 订阅）
+    std::vector<std::size_t> autosave_sub_handles_; // ARCH-E2：autosave 订阅内容类事件的句柄集合
 
     EventBus event_bus_;                      // ARCH-E1：编辑事件总线（单线程 FIFO 通知）
 
@@ -195,11 +205,11 @@ private:
     bool        background_pending_ = false;
 
     // ---- PC-01：自动保存节流状态（说明见上方 tick_autosave 注释）----
-    std::string                           autosave_signature_;      // 上次写入快照时的内容指纹
-    std::chrono::steady_clock::time_point autosave_last_probe_{};    // 上次探测时刻（1 Hz）
-    std::chrono::steady_clock::time_point autosave_last_change_{};   // 最近一次「发现变更」时刻
+    //  ARCH-E2：变更感知改为订阅 EditEvent（onEditContent 标记），不再每帧算 content
+    //  signature，故不再需要 autosave_signature_ / autosave_last_probe_（1 Hz 探测）。
+    std::chrono::steady_clock::time_point autosave_last_change_{};   // 最近一次「发现变更」时刻（事件回调刷新）
     std::chrono::steady_clock::time_point autosave_retry_after_{};   // 写失败后的退避截止
-    bool                                  autosave_change_seen_ = false;
+    bool                                  autosave_change_seen_ = false; // 有未保存变更（事件驱动标记）
 };
 
 // 全局单例（UI 生命周期内唯一）

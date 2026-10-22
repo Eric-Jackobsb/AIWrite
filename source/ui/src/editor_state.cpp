@@ -46,6 +46,13 @@ std::string run_detail_text(const engine::Executor& executor)
     return text;
 }
 
+// ARCH-E2：autosave 订阅的内容类编辑事件（SelectionChanged 非内容变化，不触发写盘）
+constexpr EditEventKind kAutosaveEditKinds[] = {
+    EditEventKind::NodeAdded,   EditEventKind::NodeRemoved, EditEventKind::NodeMoved,
+    EditEventKind::EdgeAdded,   EditEventKind::EdgeRemoved, EditEventKind::ParamChanged,
+    EditEventKind::TitleChanged,
+};
+
 } // namespace
 
 EditorState& editor()
@@ -59,11 +66,31 @@ EditorState::EditorState()
 {
     run_sub_handle_ = run.subscribeRunEvents(
         [this](const engine::RunEvent& event) { onRunEvent(event); });
+
+    // ARCH-E2：Undo 订阅「修改前」通道 —— 编辑操作修改前经 publish_before_edit 通知，
+    // 快照式撤销在此压栈（snapshot() 只发通知，不再直接操作 undo 栈）
+    undo_sub_handle_ = event_bus_.subscribe_before_edit(
+        [this](const std::string& label) {
+            // 运行中修改工作流 → 计划与图不再一致，先终止本次运行（M2-04 守卫）
+            abortRunIfAny("修改工作流（" + label + "）");
+            undo.push(graph, label);
+        });
+
+    // ARCH-E2：autosave 订阅内容类编辑事件（替代每帧 1 Hz content signature 轮询；
+    // SelectionChanged 非内容变化不订阅；收到事件 → 标记「有未保存变更」）
+    for (const EditEventKind kind : kAutosaveEditKinds) {
+        autosave_sub_handles_.push_back(
+            event_bus_.subscribe(kind, [this](const EditEvent&) { onEditContent(); }));
+    }
 }
 
 EditorState::~EditorState()
 {
     run.unsubscribeRunEvents(run_sub_handle_);
+    event_bus_.unsubscribe_before_edit(undo_sub_handle_);
+    for (const std::size_t handle : autosave_sub_handles_) {
+        event_bus_.unsubscribe(handle);
+    }
 }
 
 // ARCH-R2：RunEvent 订阅回调 —— 只更新「变化通知」字段，供输出面板 / 状态栏读取
@@ -85,6 +112,15 @@ void EditorState::onRunEvent(const engine::RunEvent& event)
     }
 }
 
+// ARCH-E2：autosave 事件回调 —— 任何内容类编辑事件 → 标记「有未保存变更」。
+//  * 不检查 autosave_paused：暂停期间产生的变更解闸后仍会补写（与 1 Hz 轮询语义等价）
+//  * last_change_ 每次收到事件都刷新 ⇒ 持续编辑（如拖拽 NodeMoved）不断后移「静默」时刻
+void EditorState::onEditContent()
+{
+    autosave_change_seen_ = true;
+    autosave_last_change_ = std::chrono::steady_clock::now();
+}
+
 void EditorState::setStatus(const std::string& text)
 {
     status = text;
@@ -97,11 +133,11 @@ void EditorState::logSummary(const std::string& prefix) const
 }
 
 // ------------------------------------------------------------------ 撤销 -----
+// ARCH-E2：修改前压快照由 Undo 订阅者完成（构造时订阅 before-edit 通道，
+// 回调 = abortRunIfAny + undo.push）；本方法只发布「修改前」通知（对外签名不变）。
 void EditorState::snapshot(const std::string& label)
 {
-    // 运行中修改工作流 → 计划与图不再一致，先终止本次运行（M2-04 守卫）
-    abortRunIfAny("修改工作流（" + label + "）");
-    undo.push(graph, label);
+    event_bus_.publish_before_edit(label);
 }
 
 bool EditorState::undoOnce()
@@ -112,11 +148,13 @@ bool EditorState::undoOnce()
         setStatus("没有可撤销的操作");
         return false;
     }
+    const engine::Graph before = graph; // ARCH-E2：撤销 = 整图替换 → 逐节点 diff 事件
     graph = std::move(restored);
     selected_nodes.clear();
     selected_node.clear();
     logSummary("[撤销] " + label);
     setStatus("已撤销：" + label);
+    publishGraphDiff(before, graph);
     return true;
 }
 
@@ -128,17 +166,20 @@ bool EditorState::redoOnce()
         setStatus("没有可重做的操作");
         return false;
     }
+    const engine::Graph before = graph; // ARCH-E2：重做 = 整图替换 → 逐节点 diff 事件
     graph = std::move(restored);
     selected_nodes.clear();
     selected_node.clear();
     logSummary("[重做] " + label);
     setStatus("已重做：" + label);
+    publishGraphDiff(before, graph);
     return true;
 }
 
 // ----------------------------------------------------------------- 工作流 ----
 void EditorState::clearWorkflow()
 {
+    const engine::Graph before = graph; // ARCH-E2：清空 = 整图重置 → 逐节点 diff 事件
     graph.clear();
     undo.clear();
     selected_nodes.clear();
@@ -148,6 +189,8 @@ void EditorState::clearWorkflow()
     logSummary("[新建] 已清空画布");
     setStatus("画布已清空（撤销栈也已清空）");
 
+    // ARCH-E2：整图重置通知（全部 NodeRemoved / EdgeRemoved；在 baseline 之前发）
+    publishGraphDiff(before, graph);
     // PC-01/02：清空画布**不删**快照（保守：不替用户决定丢弃可恢复内容），只重设基线
     markAutosaveBaseline();
 }
@@ -755,23 +798,23 @@ void EditorState::abortRunIfAny(const std::string& reason)
 
 // ----------------------------------------------------------- 自动保存（PC-01）----
 // 时机与判据（落点 engine::autosave_*；本层只回答「现在写不写」）：
-//  * 1 Hz 探测：engine::graph_content_signature(graph) 与「上次写入时的指纹」比较
-//    —— 指纹不含 viewport ⇒ 画布平移 / 缩放不会触发写盘
-//  * 首次发现变更时记时刻；**静默 ≥ autosave_idle_sec 秒**（默认 3）才写一次
-//  * 无变更 ⇒ 一次盘都不写；写失败 ⇒ 退避 10 秒（避免每帧重试砸盘 + 刷日志）
+//  * ARCH-E2：变更感知 = 订阅内容类 EditEvent（onEditContent 标记 dirty），不再每帧
+//    算 content signature；**静默 ≥ autosave_idle_sec 秒**（默认 3）才写一次
+//  * 无变更（无事件）⇒ 一次盘都不写；写失败 ⇒ 退避 10 秒（避免每帧重试砸盘 + 刷日志）
 void EditorState::pauseAutosave(bool paused)
 {
     autosave_paused = paused;
     if (!paused) {
-        autosave_last_probe_ = std::chrono::steady_clock::now(); // 解闸后重新计时
+        // ARCH-E2：解闸后重新计时「静默」（替代 1 Hz 探测重置）—— 解闸前已标记的变更
+        // 也要再静默 idle_sec 才写，避免解闸瞬间立刻写盘
+        autosave_last_change_ = std::chrono::steady_clock::now();
     }
 }
 
 void EditorState::markAutosaveBaseline()
 {
-    autosave_signature_   = engine::graphContentSignature(graph);
     autosave_change_seen_ = false;
-    autosave_last_probe_  = std::chrono::steady_clock::now();
+    autosave_last_change_ = std::chrono::steady_clock::now();
     autosave_retry_after_ = {};
 }
 
@@ -789,31 +832,19 @@ void EditorState::tickAutosave()
     if (now < autosave_retry_after_) {
         return; // 写失败退避中
     }
-    if (now - autosave_last_probe_ < std::chrono::milliseconds(1000)) {
-        return;
-    }
-    autosave_last_probe_ = now;
-
-    const std::string signature = engine::graphContentSignature(graph);
-    if (signature != autosave_signature_) {
-        autosave_change_seen_ = true;
-        autosave_last_change_ = now; // 持续变更 ⇒ 时刻不断后移（= 「静默」判据）
-        return;
-    }
     if (!autosave_change_seen_) {
-        return;
+        return; // ARCH-E2：事件驱动 —— 没有编辑事件 ⇒ 无变更 ⇒ 不写盘
     }
 
     const int idle_seconds = std::max(1, config.ui.autosave_idle_sec);
     if (now - autosave_last_change_ < std::chrono::seconds(idle_seconds)) {
-        return;
+        return; // 静默判据（持续编辑 ⇒ last_change_ 不断后移 = 「静默」语义）
     }
 
     engine::AutosaveInfo info;
     std::string          error;
     if (engine::autosave_write(graph, current_workflow_path, config.ui.autosave_keep, &info,
                                &error)) {
-        autosave_signature_   = signature;
         autosave_change_seen_ = false;
         log::info("[自动保存] 已写入快照（节点 " + std::to_string(graph.nodes.size()) + " / 连线 " +
                   std::to_string(graph.edges.size()) +
@@ -842,6 +873,7 @@ bool EditorState::restoreAutosave(std::string* error)
     }
 
     abortRunIfAny("恢复自动保存");
+    const engine::Graph before = graph; // ARCH-E2：恢复 = 整图替换 → 逐节点 diff 事件
     graph = std::move(loaded);
     undo.clear();
     selected_nodes.clear();
@@ -853,6 +885,8 @@ bool EditorState::restoreAutosave(std::string* error)
     restored_from_autosave_path = info.workflow_path;
     current_workflow_path.clear();
 
+    // ARCH-E2：整图替换通知（在 baseline 之前发）
+    publishGraphDiff(before, graph);
     markAutosaveBaseline(); // 恢复内容 = 当前状态（否则会立刻再写一份同样的快照）
     log::info("[自动保存] 已恢复快照（节点 " + std::to_string(graph.nodes.size()) + " / 连线 " +
               std::to_string(graph.edges.size()) + "）" +
@@ -872,8 +906,8 @@ void EditorState::flushAutosaveOnExit()
     if (!config.ui.autosave_enabled) {
         return;
     }
-    if (engine::graphContentSignature(graph) == autosave_signature_) {
-        return; // 没有未保存的更改 ⇒ 不写盘
+    if (!autosave_change_seen_) {
+        return; // ARCH-E2：没有未保存的更改（无编辑事件）⇒ 不写盘
     }
 
     engine::AutosaveInfo info;
@@ -960,6 +994,7 @@ bool EditorState::openWorkflowFrom(const std::string& path, std::string* error)
     }
 
     abortRunIfAny("切换工作流");
+    const engine::Graph before = graph; // ARCH-E2：换图 = 整图重置 → 逐节点 diff 事件
     graph = std::move(loaded);
     undo.clear(); // 设计 §6.6：加载工作流清空撤销栈
     selected_nodes.clear();
@@ -969,6 +1004,8 @@ bool EditorState::openWorkflowFrom(const std::string& path, std::string* error)
     current_workflow_path       = path;
     engine::pushRecentFile(path, graph.name);
 
+    // ARCH-E2：整图重置通知（在 baseline 之前发）
+    publishGraphDiff(before, graph);
     // PC-01/02：换图**不删**快照（任何情况下都不丢稿；「快照 vs 工作流」的新旧由 mtime 判定），
     //  只把当前图设为「已保存」基线 ⇒ 不因换图本身触发一次写盘
     markAutosaveBaseline();
@@ -979,6 +1016,40 @@ bool EditorState::openWorkflowFrom(const std::string& path, std::string* error)
     logSummary("[工作流] 已加载");
     setStatus("已打开：" + path);
     return true;
+}
+
+// ARCH-E2：整图重置（undo/redo/clear/open/restore）后的逐节点 diff 事件。
+//  * 与单点操作同构：NodeRemoved 隐含连带连线（端点已删的连线不重复发 EdgeRemoved）
+//  * 通知形态：消费者（autosave 等）只读事件，具体数据直接读当前图
+void EditorState::publishGraphDiff(const engine::Graph& before, const engine::Graph& after)
+{
+    std::vector<std::string> removed_nodes;
+    for (const engine::Node& node : before.nodes) {
+        if (after.findNode(node.id) == nullptr) {
+            removed_nodes.push_back(node.id);
+            event_bus_.publish(EditEvent::node(EditEventKind::NodeRemoved, node.id));
+        }
+    }
+    for (const engine::Node& node : after.nodes) {
+        if (before.findNode(node.id) == nullptr) {
+            event_bus_.publish(EditEvent::node(EditEventKind::NodeAdded, node.id));
+        }
+    }
+    for (const engine::Edge& edge : before.edges) {
+        const bool endpoint_gone =
+            std::find(removed_nodes.begin(), removed_nodes.end(), edge.from_node) !=
+                removed_nodes.end() ||
+            std::find(removed_nodes.begin(), removed_nodes.end(), edge.to_node) !=
+                removed_nodes.end();
+        if (!endpoint_gone && after.findEdge(edge.id) == nullptr) {
+            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeRemoved, edge));
+        }
+    }
+    for (const engine::Edge& edge : after.edges) {
+        if (before.findEdge(edge.id) == nullptr) {
+            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, edge));
+        }
+    }
 }
 
 std::vector<engine::RecentEntry> EditorState::recentWorkflows() const

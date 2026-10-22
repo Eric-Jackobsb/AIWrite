@@ -1,8 +1,9 @@
 // ============================================================================
-//  事件总线实现（ARCH-E1：EventBus + EditEvent）
+//  事件总线实现（ARCH-E1：EventBus + EditEvent · ARCH-E2：修改前通道）
 //
 //  publish 同步分发（UI 线程单线程 FIFO）：拷贝订阅列表后按 kind 匹配分发，
 //  回调内 subscribe / unsubscribe 不影响本次分发（下一事件起生效）。
+//  publish_before_edit（ARCH-E2）与 publish 同构：修改前通知通道，Undo 订阅压快照。
 // ============================================================================
 
 #include "event_bus.h"
@@ -76,6 +77,35 @@ void EventBus::publish(const EditEvent& event)
             sub.callback(event);
         }
     }
+}
+
+// ---- ARCH-E2：修改前通道（Undo 订阅化）----
+std::size_t EventBus::subscribe_before_edit(BeforeEditCallback callback)
+{
+    before_subscribers_.push_back(BeforeSubscriber{before_next_handle_, std::move(callback)});
+    return before_next_handle_++;
+}
+
+void EventBus::unsubscribe_before_edit(std::size_t handle)
+{
+    before_subscribers_.erase(
+        std::remove_if(before_subscribers_.begin(), before_subscribers_.end(),
+                       [handle](const BeforeSubscriber& sub) { return sub.handle == handle; }),
+        before_subscribers_.end());
+}
+
+void EventBus::publish_before_edit(const std::string& label)
+{
+    // 与 publish 同构：单线程 FIFO；拷贝列表防回调内订阅/注销影响本次分发
+    const std::vector<BeforeSubscriber> snapshot = before_subscribers_;
+    for (const BeforeSubscriber& sub : snapshot) {
+        sub.callback(label);
+    }
+}
+
+std::size_t EventBus::before_subscriber_count() const
+{
+    return before_subscribers_.size();
 }
 
 std::size_t EventBus::subscriberCount(EditEventKind kind) const

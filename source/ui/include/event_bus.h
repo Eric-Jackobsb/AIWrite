@@ -10,7 +10,9 @@
 //   * 本批落地 EditEvent（8 种，ARCH-D12）；RunEvent 仍走 RunSession 现有队列（ARCH-D10）
 //
 //  E1 范围（事件系统就绪）：EventBus + EditEvent 类型 + 编辑操作发布点 + 单元断言；
-//  消费方（Undo / autosave / RunSession）在 E2 起逐步改为订阅（ARCH-D22 / ARCH-E2）。
+//  E2（本批）：Undo / autosave 改为订阅 —— Undo 订阅「修改前」通道 publish_before_edit
+//    压快照（快照式撤销需修改前状态，而 EditEvent 在修改后发布）；autosave 订阅内容类
+//    EditEvent 替代每帧 content signature 轮询；RunSession 感知留 ARCH-D22 / E2 后。
 //  过渡登记：EventBus 当前由 `EditorState` 持有（editor().event_bus()）；E3 拆出
 //  `WorkflowModel` 后迁到文档级对象（§1.8.11 依赖图：WorkflowModel 依赖 EventBus）。
 // ============================================================================
@@ -64,6 +66,11 @@ struct EditEvent {
 class EventBus {
 public:
     using EditCallback = std::function<void(const EditEvent&)>;
+    // ARCH-E2：修改前通道（Undo 订阅化）—— 快照式撤销需要「修改前」状态，而 EditEvent
+    // 在修改**后**发布；总线另提供「修改前」通道：编辑操作在修改前调用
+    // publish_before_edit(label)，Undo 订阅此通道压快照；修改完成后照常 publish(EditEvent)
+    // 通知其他消费者（autosave / UI）。
+    using BeforeEditCallback = std::function<void(const std::string& label)>;
 
     // 订阅某种编辑事件；返回句柄 id（>0）。重复订阅同一类型 = 追加（FIFO 顺序）。
     std::size_t subscribe(EditEventKind kind, EditCallback callback);
@@ -72,9 +79,15 @@ public:
     // 发布：同步分发给该类型全部订阅者（拷贝列表防回调改容器）。
     void publish(const EditEvent& event);
 
+    // ARCH-E2：修改前通道 —— 订阅 / 注销 / 发布（单线程 FIFO，与 publish 同构）
+    std::size_t subscribe_before_edit(BeforeEditCallback callback);
+    void        unsubscribe_before_edit(std::size_t handle);
+    void        publish_before_edit(const std::string& label);
+
     // 自检辅助（--run-selftest 单元断言用）
     std::size_t subscriberCount(EditEventKind kind) const;
     std::size_t subscriberCount() const;
+    std::size_t before_subscriber_count() const;
 
 private:
     struct Subscriber {
@@ -82,8 +95,14 @@ private:
         EditEventKind kind;
         EditCallback  callback;
     };
-    std::vector<Subscriber> subscribers_;   // 按订阅顺序（FIFO）
-    std::size_t             next_handle_ = 1;
+    struct BeforeSubscriber {
+        std::size_t        handle;
+        BeforeEditCallback callback;
+    };
+    std::vector<Subscriber>       subscribers_;        // 按订阅顺序（FIFO）
+    std::vector<BeforeSubscriber> before_subscribers_; // 修改前通道（FIFO；Undo 订阅）
+    std::size_t                   next_handle_         = 1;
+    std::size_t                   before_next_handle_  = 1;
 };
 
 } // namespace aiwrite::ui
