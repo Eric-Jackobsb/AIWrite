@@ -80,6 +80,12 @@ EditorState::EditorState()
         autosave_sub_handles_.push_back(
             model_.event_bus().subscribe(kind, [this](const EditEvent&) { onEditContent(); }));
     }
+
+    // ARCH-E4：选中变化 → 发 SelectionChanged 编辑事件。SelectionState 无依赖
+    //（§1.8.11 第 6 位），变化通知经回调注入；SelectionChanged 为通知形态
+    //（无内容消费者，autosave 不订阅），与 E1 `sync_selection` 变化检测语义一致。
+    selection_.set_changed_callback(
+        [this]() { model_.event_bus().publish(EditEvent{EditEventKind::SelectionChanged}); });
 }
 
 EditorState::~EditorState()
@@ -146,8 +152,7 @@ bool EditorState::undoOnce()
         setStatus("没有可撤销的操作");
         return false;
     }
-    selected_nodes.clear();
-    selected_node.clear();
+    selection_.clear_nodes(); // ARCH-E4：选中独立对象（清 nodes + single，保留 links）
     logSummary("[撤销] " + label);
     setStatus("已撤销：" + label);
     return true;
@@ -160,8 +165,7 @@ bool EditorState::redoOnce()
         setStatus("没有可重做的操作");
         return false;
     }
-    selected_nodes.clear();
-    selected_node.clear();
+    selection_.clear_nodes(); // ARCH-E4：选中独立对象（清 nodes + single，保留 links）
     logSummary("[重做] " + label);
     setStatus("已重做：" + label);
     return true;
@@ -171,8 +175,7 @@ bool EditorState::redoOnce()
 void EditorState::clearWorkflow()
 {
     model_.clear(); // 清图 + 清撤销栈 + 逐节点 diff 事件
-    selected_nodes.clear();
-    selected_node.clear();
+    selection_.clear_nodes(); // ARCH-E4：选中独立对象（清 nodes + single，保留 links）
     clipboard_nodes_.clear();
     clipboard_edges_.clear();
     logSummary("[新建] 已清空画布");
@@ -250,8 +253,7 @@ void EditorState::createSampleWorkflow()
     }
 
     model_.undo.clear(); // 默认工作流作为初始状态，不进入撤销历史
-    selected_nodes.clear();
-    selected_node.clear();
+    selection_.clear_nodes(); // ARCH-E4：选中独立对象（清 nodes + single，保留 links）
     request_navigate_to_content = true;
     logSummary("[默认工作流] 已创建");
     setStatus("已创建默认工作流（含提供商配置 → 文本生成），并保存到 default.json");
@@ -288,34 +290,30 @@ bool EditorState::deleteNode(const std::string& node_id)
         return false;
     }
 
-    selected_nodes.erase(std::remove(selected_nodes.begin(), selected_nodes.end(), node_id),
-                         selected_nodes.end());
-    if (selected_node == node_id) {
-        selected_node.clear();
-    }
+    // ARCH-E4：从选中集合移除（若单选节点正是它 → single 一并清空）
+    selection_.remove_node(node_id);
     log::info("删除节点 " + node_id + "（" + title + "）");
     return true;
 }
 
 bool EditorState::deleteSelected()
 {
-    if (selected_nodes.empty() && selected_links.empty()) {
+    if (selection_.empty()) {
         setStatus("没有选中的节点或连线");
         return false;
     }
 
-    const std::size_t node_total = selected_nodes.size();
-    const std::size_t link_total = selected_links.size();
+    const std::size_t node_total = selection_.nodes().size();
+    const std::size_t link_total = selection_.links().size();
 
     // ---- 节点：直接删除（连带其连线，内部已按需压快照）----
-    if (!selected_nodes.empty()) {
+    if (selection_.has_nodes()) {
         snapshot("删除选中节点");
-        const std::vector<std::string> targets = selected_nodes;
+        const std::vector<std::string> targets = selection_.nodes();
         for (const std::string& id : targets) {
             deleteNode(id);
         }
-        selected_nodes.clear();
-        selected_node.clear();
+        selection_.clear_nodes();
     }
 
     // ---- 连线：同样直接删模型 ----
@@ -323,9 +321,9 @@ bool EditorState::deleteSelected()
     // **静默返回 false**（右键菜单打开期间当前动作就是上下文菜单动作），因此删除不会入队。
     // 本工程以 Graph 为唯一真相：删掉边后画布不再提交该连线，编辑器会在本帧 End() 时
     // 因"未被提交（!m_IsLive）"自动回收内部连线对象（见 imgui_node_editor.cpp L1307）。
-    if (!selected_links.empty()) {
+    if (selection_.has_links()) {
         snapshot("删除选中连线");
-        for (const std::string& edge_id : selected_links) {
+        for (const std::string& edge_id : selection_.links()) {
             const engine::Edge* edge = model_.graph.findEdge(edge_id);
             if (model_.graph.removeEdge(edge_id)) {
                 // ARCH-E1：编辑事件通知（删除前取边数据作负载）
@@ -335,7 +333,7 @@ bool EditorState::deleteSelected()
                 log::info("删除连线 " + edge_id);
             }
         }
-        selected_links.clear();
+        selection_.clear_links();
     }
 
     logSummary("[删除] 已删除 节点 " + std::to_string(node_total) + " / 连线 " +
@@ -356,22 +354,22 @@ void EditorState::copySelection()
     clipboard_nodes_.clear();
     clipboard_edges_.clear();
 
-    if (selected_nodes.empty()) {
+    if (selection_.nodes().empty()) {
         setStatus("没有选中的节点");
         return;
     }
 
-    for (const std::string& id : selected_nodes) {
+    for (const std::string& id : selection_.nodes()) {
         if (const engine::Node* node = model_.graph.findNode(id)) {
             clipboard_nodes_.push_back(*node);
         }
     }
     // 只复制选区内部的连线
     for (const engine::Edge& edge : model_.graph.edges) {
-        const bool from_selected = std::find(selected_nodes.begin(), selected_nodes.end(),
-                                             edge.from_node) != selected_nodes.end();
-        const bool to_selected   = std::find(selected_nodes.begin(), selected_nodes.end(),
-                                             edge.to_node) != selected_nodes.end();
+        const bool from_selected = std::find(selection_.nodes().begin(), selection_.nodes().end(),
+                                             edge.from_node) != selection_.nodes().end();
+        const bool to_selected   = std::find(selection_.nodes().begin(), selection_.nodes().end(),
+                                             edge.to_node) != selection_.nodes().end();
         if (from_selected && to_selected) {
             clipboard_edges_.push_back(edge);
         }
@@ -436,8 +434,9 @@ bool EditorState::pasteClipboard()
         }
     }
 
-    selected_nodes = created;
-    selected_node  = created.empty() ? std::string() : created.front();
+    // ARCH-E4：粘贴出的节点全部选中（single = 首个）
+    selection_.set_nodes(created);
+    selection_.set_single(created.empty() ? std::string() : created.front());
     request_navigate_to_content = true;
 
     logSummary("[粘贴] 已粘贴 " + std::to_string(created.size()) + " 个节点");
@@ -863,9 +862,7 @@ bool EditorState::restoreAutosave(std::string* error)
     abortRunIfAny("恢复自动保存");
     // ARCH-E3：整图替换（替换数据 + 清空撤销栈 + 逐节点 diff 事件）归 WorkflowModel::load
     model_.load(std::move(loaded));
-    selected_nodes.clear();
-    selected_links.clear();
-    selected_node.clear();
+    selection_.clear(); // ARCH-E4：选中独立对象（全清：nodes + links + single）
     request_navigate_to_content = true;
 
     // PC-02：**不覆盖原文件** —— 恢复后当前路径留空 ⇒ 保存必然走「另存为」（用户显式确认目标）
@@ -983,9 +980,7 @@ bool EditorState::openWorkflowFrom(const std::string& path, std::string* error)
     abortRunIfAny("切换工作流");
     // ARCH-E3：整图替换（替换数据 + 清空撤销栈 + 逐节点 diff 事件）归 WorkflowModel::load
     model_.load(std::move(loaded));
-    selected_nodes.clear();
-    selected_links.clear();
-    selected_node.clear();
+    selection_.clear(); // ARCH-E4：选中独立对象（全清：nodes + links + single）
     request_navigate_to_content = true; // 视图跟随新内容
     current_workflow_path       = path;
     engine::pushRecentFile(path, model_.graph.name);

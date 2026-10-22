@@ -875,7 +875,7 @@ void run_pack_dialog()
                                 ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
         return;
     }
-    const int count = static_cast<int>(editor().selected_nodes.size());
+    const int count = static_cast<int>(editor().selection().nodes().size()); // ARCH-E4
     ImGui::TextWrapped("把选中的 %d 个节点打包为上级节点。\n边界输入/输出、暴露参数将自动识别（可在编辑器调整）。",
                        count);
     ImGui::SetNextItemWidth(220.0f);
@@ -931,7 +931,7 @@ void compositePackDialog()
         g_pack_dialog_open = true;
         g_pack_name[0]     = '\0';
         g_pack_error.clear(); // 重新打开时清空上次失败原因
-        if (editor().selected_nodes.size() >= 2) {
+        if (editor().selection().nodes().size() >= 2) { // ARCH-E4：选中独立对象
             std::snprintf(g_pack_name, sizeof(g_pack_name), "组合节点");
         }
         else {

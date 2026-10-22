@@ -11,11 +11,11 @@
 //  * **渲染签名** `render(const ReadOnlyView&)`（ARCH-D33）
 //  * **使用者**：所有渲染模块（画布、参数面板、输出面板、状态栏）（ARCH-D35）
 //
-//  过渡说明（R3 落地形态）：
-//  * `SelectionState` 尚未拆分（ARCH-E4），本批先用 `SelectionReadView`（只读引用
-//    聚合）承载选中字段；E4 落地后替换为 `const SelectionState&`，调用点不变。
-//  * `graph()` 为**过渡访问器**：画布绘制层（canvas_view）仍需整图只读查询
-//    （findNode / canConnect 等），E5 收敛交互后逐步收窄为 nodes/edges + 查询方法。
+//  ARCH-E4：`SelectionReadView` 过渡结构已由独立对象 `SelectionState` 替换（§1.8.4 /
+//  ARCH-D28）—— 本视图 `selection` 字段 = `const SelectionState&`；渲染调用点不变
+//  （`view.selection.nodes()` / `.links()` / `.single()`，访问器名与过渡字段一致）。
+//  `graph()` 为**过渡访问器**：画布绘制层（canvas_view）仍需整图只读查询
+//  （findNode / canConnect 等），E5 收敛交互后逐步收窄为 nodes/edges + 查询方法。
 // ============================================================================
 
 #include <string>
@@ -24,15 +24,9 @@
 #include "config.h"
 #include "executor.h"
 #include "graph.h"
+#include "selection_state.h" // ARCH-E4：选中状态独立对象（§1.8.4）
 
 namespace aiwrite::ui {
-
-// 选中状态只读视图（ARCH-E4 拆出 `SelectionState` 后替换为该对象引用）
-struct SelectionReadView {
-    const std::vector<std::string>& nodes;   // 选中的节点 id（画布同步 / 状态栏计数）
-    const std::vector<std::string>& links;   // 选中的连线 id
-    const std::string&              single;  // 单选节点 id（参数面板用）
-};
 
 struct ReadOnlyView {
     // ---- 工作流数据（零拷贝：返回 graph 内部数组 const 引用）----
@@ -48,11 +42,11 @@ struct ReadOnlyView {
     const engine::Graph& graph() const { return graph_; }
 
     // ---- 三个核心 + 配置 ----
-    const SelectionReadView&  selection;  // 选中状态（E4 后 = SelectionState）
+    const SelectionState&    selection;  // 选中状态（ARCH-E4：独立对象，§1.8.4）
     const engine::RunSnapshot& snapshot;  // 运行快照（空对象 = 未运行）
     const Config&              config;    // 应用配置
 
-    ReadOnlyView(const engine::Graph& graph, const SelectionReadView& sel,
+    ReadOnlyView(const engine::Graph& graph, const SelectionState& sel,
                  const engine::RunSnapshot& snap, const Config& cfg)
         : selection(sel), snapshot(snap), config(cfg), graph_(graph) {}
 
@@ -61,3 +55,4 @@ private:
 };
 
 } // namespace aiwrite::ui
+

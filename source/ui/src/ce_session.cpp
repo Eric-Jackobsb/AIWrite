@@ -113,12 +113,10 @@ bool compositeEditorSave(std::string* error)
         main_state.model().graph, state.working.id, old_name, &refresh_error);
     if (refreshed > 0) {
         // 清理可能已失效的连线选中引用（节点 id 保留，选中节点不受影响）
-        main_state.selected_links.erase(
-            std::remove_if(main_state.selected_links.begin(), main_state.selected_links.end(),
-                           [&](const std::string& eid) {
-                               return main_state.model().graph.findEdge(eid) == nullptr;
-                           }),
-            main_state.selected_links.end());
+        // ARCH-E4：选中独立对象 —— prune_links 移除失效引用（内置变化检测）
+        main_state.selection().prune_links([&](const std::string& eid) {
+            return main_state.model().graph.findEdge(eid) != nullptr;
+        });
         main_state.setStatus("上级节点已保存：已同步画布中 " + std::to_string(refreshed) +
                               " 个「" + state.working.name + "」实例");
     }

@@ -363,7 +363,7 @@ void draw_info_panel(const char* title, bool* open, const ReadOnlyView& view)
     if (ImGui::CollapsingHeader("当前工作流", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("节点     : %d", static_cast<int>(view.nodes_for_render().size()));
         ImGui::Text("连线     : %d", static_cast<int>(view.edges_for_render().size()));
-        ImGui::Text("选中     : %d", static_cast<int>(view.selection.nodes.size()));
+        ImGui::Text("选中     : %d", static_cast<int>(view.selection.nodes().size()));
         ImGui::Text("撤销栈   : %d（可重做 %d）", static_cast<int>(state.model().undo.undoDepth()),
                     static_cast<int>(state.model().undo.redoDepth()));
         if (!state.status.empty()) {
@@ -883,9 +883,9 @@ int run(const AppOptions& options)
         // ARCH-R3：主循环**统一构建一次**渲染只读视图（ARCH-D30），传给所有渲染模块
         //  * 字段 = 三个核心 + 配置（ARCH-D31）：工作流数据 / 选中 / 运行快照 / 配置
         //  * 只存引用、零拷贝（ARCH-D34）；快照空对象 = 未运行（ARCH-D32）
-        const SelectionReadView selection_view{state.selected_nodes, state.selected_links,
-                                               state.selected_node};
-        const ReadOnlyView view{state.model().graph, selection_view, state.run_snapshot_view(), config};
+        // ARCH-E4：选中独立对象（SelectionState）；ReadOnlyView 直接引用 state.selection()
+        const ReadOnlyView view{state.model().graph, state.selection(), state.run_snapshot_view(),
+                                config};
 
         // ---- 全屏 DockSpace 宿主窗口 ----
         ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -1036,7 +1036,7 @@ int run(const AppOptions& options)
                     dispatchCommand(AppCommand::CompositeNew, cmd_ctx);
                 }
                 if (ImGui::MenuItem("打包选区为上级节点…", nullptr, false,
-                                    state.selected_nodes.size() >= 2)) {
+                                    state.selection().nodes().size() >= 2)) {
                     dispatchCommand(AppCommand::CompositePack, cmd_ctx);
                 }
                 if (ImGui::IsItemHovered()) {
@@ -1187,7 +1187,9 @@ int run(const AppOptions& options)
         if (show_params) {
             ImGui::PushFont(fonts.ui);
             engine::Node* selected =
-                state.selected_node.empty() ? nullptr : state.model().graph.findNode(state.selected_node);
+                state.selection().single().empty()
+                    ? nullptr
+                    : state.model().graph.findNode(state.selection().single());
 
             PropertyEditResult edit;
             draw_property_panel(kWindowParams, &show_params, selected, view, edit);
@@ -1286,7 +1288,7 @@ int run(const AppOptions& options)
             ImGui::Text("节点 %d  连线 %d  选中 %d  |  %.1f FPS",
                         static_cast<int>(view.nodes_for_render().size()),
                         static_cast<int>(view.edges_for_render().size()),
-                        static_cast<int>(view.selection.nodes.size()), io.Framerate);
+                        static_cast<int>(view.selection.nodes().size()), io.Framerate);
             ImGui::SameLine();
             // P7a-18：状态栏四项 —— 提供商 / 模式（含站点）/ 最后耗时（+ 节点统计）
             ImGui::TextDisabled("  %s", provider_summary_text(view).c_str());

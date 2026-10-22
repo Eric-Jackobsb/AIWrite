@@ -383,46 +383,50 @@ float clamp_position(float value)
 // ------------------------------------------------------------- 状态同步 -----
 void sync_selection(EditorState& state)
 {
-    // ARCH-E1：变化检测 → 选中真正变化才发 SelectionChanged（避免每帧高频通知）
-    const std::vector<std::string> prev_nodes  = state.selected_nodes;
-    const std::vector<std::string> prev_links  = state.selected_links;
-    const std::string              prev_single = state.selected_node;
-
+    // ARCH-E4：选中集合归 `SelectionState`（§1.8.4）—— 从画布读回后一次
+    // `set_selection` 提交；变化检测 + SelectionChanged 发布由对象内部完成
+    //（内置 prev 比较，仅真正变化才回调，避免每帧高频通知 —— 与 E1 语义一致）。
     const int count = ed::GetSelectedObjectCount();
     const std::size_t capacity = static_cast<std::size_t>(std::max(count, 0));
 
     // 选中的节点
     std::vector<ed::NodeId> node_handles(capacity);
     const int node_count = (count > 0) ? ed::GetSelectedNodes(node_handles.data(), count) : 0;
-    state.selected_nodes.clear();
+    std::vector<std::string> node_ids;
+    node_ids.reserve(static_cast<std::size_t>(node_count));
     for (int i = 0; i < node_count; ++i) {
-        state.selected_nodes.push_back("n" +
-                                       std::to_string(node_handles[static_cast<std::size_t>(i)].Get()));
+        node_ids.push_back("n" +
+                           std::to_string(node_handles[static_cast<std::size_t>(i)].Get()));
     }
 
     // 选中的连线（左键点连线 / 框选都会选中连线 → 可与工具栏「删除选中」联动）
     std::vector<ed::LinkId> link_handles(capacity);
     const int link_count = (count > 0) ? ed::GetSelectedLinks(link_handles.data(), count) : 0;
-    state.selected_links.clear();
+    std::vector<std::string> link_ids;
+    link_ids.reserve(static_cast<std::size_t>(link_count));
     for (int i = 0; i < link_count; ++i) {
-        state.selected_links.push_back("e" +
-                                       std::to_string(link_handles[static_cast<std::size_t>(i)].Get()));
+        link_ids.push_back("e" +
+                           std::to_string(link_handles[static_cast<std::size_t>(i)].Get()));
     }
 
-    if (state.selected_nodes.size() == 1) {
-        state.selected_node = state.selected_nodes.front();
+    // 单选节点（参数面板用）：单选 = 唯一选中节点；多选且原单选仍在选中内 → 保留
+    std::string single;
+    if (node_ids.size() == 1) {
+        single = node_ids.front();
     }
-    else if (state.selected_node.empty() ||
-             std::find(state.selected_nodes.begin(), state.selected_nodes.end(),
-                       state.selected_node) == state.selected_nodes.end()) {
-        state.selected_node.clear();
+    else {
+        const std::string& prev_single = state.selection().single();
+        if (prev_single.empty() ||
+            std::find(node_ids.begin(), node_ids.end(), prev_single) == node_ids.end()) {
+            single.clear();
+        }
+        else {
+            single = prev_single;
+        }
     }
 
-    // ARCH-E1：选中变化通知（仅在实际变化时发布）
-    if (state.selected_nodes != prev_nodes || state.selected_links != prev_links ||
-        state.selected_node != prev_single) {
-        state.model().event_bus().publish(EditEvent{EditEventKind::SelectionChanged});
-    }
+    // ARCH-E4：一次提交（内部变化检测 → 变化才回调 → SelectionChanged）
+    state.selection().set_selection(node_ids, link_ids, single);
 }
 
 // ------------------------------------------------------- Delete 键（ARCH-R4）----
@@ -498,8 +502,7 @@ void show_add_node_menu(EditorState& state, const ImVec2& spawn)
                 state.snapshot(std::string("创建节点 ") + definition->display_name);
                 const std::string id = state.createNode(definition->type, spawn.x, spawn.y);
                 if (!id.empty()) {
-                    state.selected_nodes = {id};
-                    state.selected_node  = id;
+                    state.selection().select_node(id); // ARCH-E4：选中独立对象
                 }
             }
             if (ImGui::IsItemHovered() && !definition->description.empty()) {
@@ -528,8 +531,7 @@ void show_add_node_menu(EditorState& state, const ImVec2& spawn)
                     const std::string id =
                         state.model().graph.addCompositeNode(spec->id, spawn.x, spawn.y, &error);
                     if (!id.empty()) {
-                        state.selected_nodes = {id};
-                        state.selected_node  = id;
+                        state.selection().select_node(id); // ARCH-E4：选中独立对象
                         state.setStatus("已创建上级节点：" + spec->name);
                     }
                     else {
@@ -965,8 +967,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     //       连线删除请用「左键单击连线选中 → 工具栏【删除选中】」。
     if (ed::ShowNodeContextMenu(&context_node_handle)) {
         context_node         = "n" + std::to_string(context_node_handle.Get());
-        state.selected_nodes = {context_node};
-        state.selected_node  = context_node;
+        state.selection().select_node(context_node); // ARCH-E4：选中独立对象
         ImGui::OpenPopup("##node_menu");
     }
     else if (ed::ShowBackgroundContextMenu()) {
@@ -1041,8 +1042,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     const ed::NodeId double_clicked = ed::GetDoubleClickedNode();
     if (double_clicked.Get() != 0) {
         const std::string node_id = "n" + std::to_string(double_clicked.Get());
-        state.selected_nodes      = {node_id};
-        state.selected_node       = node_id;
+        state.selection().select_node(node_id); // ARCH-E4：选中独立对象
         if (const engine::Node* node = state.model().graph.findNode(node_id);
             node != nullptr && !node->composite_id.empty()) {
             compositeEditorOpen(node->composite_id);
@@ -1149,8 +1149,7 @@ std::string canvasAddNodeAtCenter(const std::string& type)
     state.snapshot("创建节点");
     const std::string id = state.createNode(type, center_canvas.x, center_canvas.y);
     if (!id.empty()) {
-        state.selected_nodes = {id};
-        state.selected_node  = id;
+        state.selection().select_node(id); // ARCH-E4：选中独立对象
     }
     return id;
 }
@@ -1170,8 +1169,7 @@ std::string canvasAddCompositeAtCenter(const std::string& composite_id)
     const std::string id =
         state.model().graph.addCompositeNode(composite_id, center_canvas.x, center_canvas.y, &error);
     if (!id.empty()) {
-        state.selected_nodes = {id};
-        state.selected_node  = id;
+        state.selection().select_node(id); // ARCH-E4：选中独立对象
         if (const engine::Node* node = state.model().graph.findNode(id)) {
             state.setStatus("已创建上级节点：" + node->title + "（双击进入内部图编辑）");
         }

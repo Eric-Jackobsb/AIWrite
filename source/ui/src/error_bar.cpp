@@ -33,8 +33,7 @@ void drawErrorBar(EditorState& state)
         // 点击 → 选中失败节点（复用视图跟随；连续错误只覆盖显示、不堆积）
         // 多失败时 node_id = 首个失败节点（定位首个；全部明细在悬停提示）
         if (state.model().graph.findNode(state.last_error.node_id) != nullptr) {
-            state.selected_node  = state.last_error.node_id;
-            state.selected_nodes = {state.last_error.node_id};
+            state.selection().select_node(state.last_error.node_id); // ARCH-E4：选中独立对象
             // P7a-17：**居中并放大**到该节点（NavigateToSelection），而不是仅跟随全部内容
             state.request_focus_selection = true;
             state.setStatus(state.last_error.failed_count > 1

@@ -25,19 +25,19 @@ std::string compositePackSelection(const std::string& name, std::string* error)
         return std::string();
     };
 
-    if (state.selected_nodes.size() < 2) {
+    if (state.selection().nodes().size() < 2) {
         return fail("打包需要至少选中 2 个节点");
     }
     const auto is_selected = [&state](const std::string& node_id) {
-        return std::find(state.selected_nodes.begin(), state.selected_nodes.end(), node_id) !=
-               state.selected_nodes.end();
+        const std::vector<std::string>& sel_nodes = state.selection().nodes(); // ARCH-E4
+        return std::find(sel_nodes.begin(), sel_nodes.end(), node_id) != sel_nodes.end();
     };
 
     engine::CompositeSpec spec;
     spec.name = name.empty() ? "组合节点" : name;
 
     // ---- 1) internal_graph：选中节点（深拷贝，保持 id 与坐标）+ 选区内部连线 ----
-    for (const std::string& nid : state.selected_nodes) {
+    for (const std::string& nid : state.selection().nodes()) { // ARCH-E4：选中独立对象
         const engine::Node* n = state.model().graph.findNode(nid);
         if (n == nullptr) {
             continue;

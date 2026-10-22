@@ -794,10 +794,12 @@ int runSelftest(bool use_web, const std::string& provider_id)
         const std::size_t nodes_before_paste = state.model().graph.nodes.size();
         const std::size_t edges_before_paste = state.model().graph.edges.size();
 
-        state.selected_nodes.clear();
+        // ARCH-E4：选中集合归 SelectionState（set_nodes 一次性提交）
+        std::vector<std::string> sel_node_ids;
         for (const Source& source : sources) {
-            state.selected_nodes.push_back(source.id);
+            sel_node_ids.push_back(source.id);
         }
+        state.selection().set_nodes(sel_node_ids);
         state.copySelection();
         const bool copied = state.has_clipboard();
         const bool pasted = state.pasteClipboard();
@@ -858,13 +860,13 @@ int runSelftest(bool use_web, const std::string& provider_id)
             }
         }
 
-        const bool selection_ok = state.selected_nodes.size() == 2 &&
+        const bool selection_ok = state.selection().nodes().size() == 2 &&
                                   state.request_navigate_to_content; // 视图跟随延后到画布绘制后
         const bool undo_ok = (state.model().undo.canUndo() && state.model().undoOnce() &&
                               state.model().graph.nodes.size() == nodes_before_paste &&
                               state.model().graph.edges.size() == edges_before_paste);
         // 空剪贴板：清空选择后复制 → 剪贴板应为空，粘贴被拒绝
-        state.selected_nodes.clear();
+        state.selection().clear_nodes(); // ARCH-E4：清节点选中（copySelection 只看节点）
         state.copySelection();
         const bool empty_ok = !state.has_clipboard() && !state.pasteClipboard();
 
@@ -884,19 +886,19 @@ int runSelftest(bool use_web, const std::string& provider_id)
     //  * snapshot / config 与底层对象同源（视图不复制数据）
     bool readonly_view_ok = false;
     {
-        const aiwrite::ui::SelectionReadView sel_view{state.selected_nodes, state.selected_links,
-                                                      state.selected_node};
-        const aiwrite::ui::ReadOnlyView rv{state.model().graph, sel_view, state.run_snapshot_view(),
-                                           aiwrite::appConfig()};
+        // ARCH-E4：ReadOnlyView 直接引用 SelectionState（对象同源 + 三访问器同源）
+        const aiwrite::ui::ReadOnlyView rv{state.model().graph, state.selection(),
+                                           state.run_snapshot_view(), aiwrite::appConfig()};
         const bool nodes_same = (&rv.nodes_for_render() == &state.model().graph.nodes);
         const bool edges_same = (&rv.edges_for_render() == &state.model().graph.edges);
         const bool find_same  = (rv.find_node("n1") == state.model().graph.findNode("n1")) &&
                                 (rv.find_node("zz_missing") == nullptr);
         const bool snap_same  = (&rv.snapshot == &state.run_snapshot_view());
         const bool cfg_same   = (&rv.config == &aiwrite::appConfig());
-        const bool sel_same   = (&rv.selection.nodes == &state.selected_nodes) &&
-                                (&rv.selection.links == &state.selected_links) &&
-                                (rv.selection.single == state.selected_node);
+        const bool sel_same   = (&rv.selection == &state.selection()) &&
+                                (&rv.selection.nodes() == &state.selection().nodes()) &&
+                                (&rv.selection.links() == &state.selection().links()) &&
+                                (rv.selection.single() == state.selection().single());
         readonly_view_ok = nodes_same && edges_same && find_same && snap_same && cfg_same &&
                            sel_same;
         std::printf("[运行自检] ReadOnlyView：%s（节点零拷贝=%s / 连线零拷贝=%s / find_node=%s / "

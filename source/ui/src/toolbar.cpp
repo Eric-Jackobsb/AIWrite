@@ -95,8 +95,8 @@ void drawToolbarButtons()
     ImGui::TextDisabled("| 节点 %d  连线 %d  |  选中 节点 %d / 连线 %d  |  撤销栈 %d",
                         static_cast<int>(state.model().graph.nodes.size()),
                         static_cast<int>(state.model().graph.edges.size()),
-                        static_cast<int>(state.selected_nodes.size()),
-                        static_cast<int>(state.selected_links.size()),
+                        static_cast<int>(state.selection().nodes().size()),
+                        static_cast<int>(state.selection().links().size()),
                         static_cast<int>(state.model().undo.undoDepth()));
 
     // ---- 运行 / 停止（右对齐 = 顶栏右上角；设计 §6.5 / §7.1）----
@@ -174,7 +174,7 @@ void drawToolbarButtons()
     {
         const bool rerun_busy = running || state.session_active();
         ImGui::SameLine();
-        ImGui::BeginDisabled(rerun_busy || state.selected_nodes.empty());
+        ImGui::BeginDisabled(rerun_busy || state.selection().nodes().empty());
         if (ImGui::Button("重跑 ▾")) {
             ImGui::OpenPopup("##toolbar_rerun");
         }
@@ -183,8 +183,8 @@ void drawToolbarButtons()
             ImGui::SetTooltip("对选中的节点做通用重跑（复用上游结果）");
         }
         if (ImGui::BeginPopup("##toolbar_rerun")) {
-            const std::string target =
-                state.selected_nodes.empty() ? std::string() : state.selected_nodes.front();
+            const std::vector<std::string>& sel_nodes = state.selection().nodes(); // ARCH-E4
+            const std::string target = sel_nodes.empty() ? std::string() : sel_nodes.front();
             const engine::Node* sel = target.empty() ? nullptr : state.model().graph.findNode(target);
             const bool can_rerun = sel != nullptr && sel->state != engine::NodeState::Waiting;
             if (ImGui::MenuItem("重跑选中节点", nullptr, false, can_rerun)) {

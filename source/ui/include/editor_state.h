@@ -5,6 +5,8 @@
 //
 //  * ARCH-E3：文档数据（Graph + Undo + EventBus）已拆出为 `WorkflowModel model_`（§1.8.3）；
 //    本层持有并编排（运行 / 状态栏 / 选中 / autosave / 剪贴板）
+//  * ARCH-E4：选中集合已拆出为独立对象 `SelectionState selection_`（§1.8.4 / ARCH-D28）；
+//    `editor().selection()` 访问；`selected_nodes` 等公有成员移除
 //  * 提供"修改前自动压快照"的编辑操作（薄封装委托 `model()`），供画布 / 节点库 / 工具栏 / 菜单调用
 //  * 所有可验证的逻辑都在 engine::Graph 内，本层只做编排与日志
 // ============================================================================
@@ -19,6 +21,7 @@
 #include "event_bus.h"
 #include "recent_files.h"
 #include "run_session.h"
+#include "selection_state.h" // ARCH-E4：选中状态独立对象（§1.8.4）
 #include "undo_stack.h"
 #include "workflow_model.h" // ARCH-E3：文档级工作流模型（Graph + Undo + EventBus 拆出）
 
@@ -36,6 +39,12 @@ struct EditorState {
 
     WorkflowModel&       model() { return model_; }
     const WorkflowModel& model() const { return model_; }
+
+    // ARCH-E4：文档级选中状态（§1.8.4 / ARCH-D28）—— 节点 / 连线 / 单选节点 id 集合。
+    // 变化时发 SelectionChanged（回调在 EditorState 构造时注入到 model().event_bus()）。
+    // editor() 退场（ARCH-A3）后 UI 模块直接持有 SelectionState。
+    SelectionState&       selection() { return selection_; }
+    const SelectionState& selection() const { return selection_; }
 
     // -------------------------------------------------------------- 运行 -----
     // ARCH-R1：执行器 + 快照已拆到 RunSession（ARCHITECTURE §1.8.2）——
@@ -137,12 +146,8 @@ struct EditorState {
     void postBackgroundStatus(const std::string& text);
     bool takeBackgroundStatus(std::string* out);
 
-    // 画布每帧同步的选择信息
-    std::vector<std::string> selected_nodes;
-    std::vector<std::string> selected_links;       // 选中的连线（左键点连线 / 框选）
-    std::string              selected_node;        // 单选时用于参数面板
-
-    std::string status;                       // 状态栏提示
+    // 状态栏提示（ARCH-E4：选中集合已拆到 selection()）
+    std::string status;
 
     // ---- ARCH-R2：RunEvent 订阅通知（EditorState 构造时订阅 run，面板读这些字段）----
     //  * 输出面板：收到 NodeOutput/Delta → follow_output 请求滚动到该节点（PB-03 流式呈现）
@@ -178,7 +183,7 @@ struct EditorState {
     void        copySelection();
     bool        pasteClipboard();
     bool        has_clipboard() const { return !clipboard_nodes_.empty(); }
-    bool        has_selection() const { return !selected_nodes.empty() || !selected_links.empty(); }
+    bool        has_selection() const { return selection_.has_nodes() || selection_.has_links(); }
     void        setStatus(const std::string& text);
 
     void        logSummary(const std::string& prefix) const;
@@ -197,6 +202,10 @@ private:
     std::size_t run_sub_handle_ = 0;          // ARCH-R2：run.subscribeRunEvents 返回的句柄
     std::vector<std::size_t> autosave_sub_handles_; // ARCH-E2：autosave 订阅内容类事件的句柄集合
     // ARCH-E3：Undo 订阅「修改前」通道已迁到 WorkflowModel 构造（回调 = 修改前钩子 + undo.push）
+
+    // ARCH-E4：文档级选中状态（§1.8.4 / ARCH-D28）—— 变化回调在构造时注入
+    //（发 SelectionChanged 到 model().event_bus()；依赖图第 6 位无依赖）
+    SelectionState selection_;
 
     std::vector<engine::Node> clipboard_nodes_;                        // 复制的节点
     std::vector<engine::Edge> clipboard_edges_;                        // 选区内部的连线
