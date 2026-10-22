@@ -271,7 +271,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
     }
 
     int guard = 0;
-    while (state.executor.running() && guard++ < 4096) {
+    while (state.executor().running() && guard++ < 4096) {
         state.tickRun();
     }
 
@@ -284,12 +284,12 @@ int runSelftest(bool use_web, const std::string& provider_id)
         std::printf("[运行自检] %-3s %-15s %-8s %s\n", node.id.c_str(), node.type.c_str(),
                     aiwrite::engine::nodeStateName(node.state), detail.c_str());
     }
-    std::printf("[运行自检] %s\n", state.executor.summary().c_str());
+    std::printf("[运行自检] %s\n", state.executor().summary().c_str());
 
-    const bool finished = state.executor.state() == aiwrite::engine::ExecState::Finished;
+    const bool finished = state.executor().state() == aiwrite::engine::ExecState::Finished;
 
     // ---- PA-02：输出面板数据通道（与面板「复制全文 / 导出」同一实现）----
-    const std::string output_text = aiwrite::ui::runOutputText(state.graph, state.executor);
+    const std::string output_text = aiwrite::ui::runOutputText(state.graph, state.executor());
     std::printf("[运行自检] 输出面板文本：%zu 字符\n", output_text.size());
     if (!output_text.empty()) {
         const std::size_t head = output_text.size() > 100 ? 100 : output_text.size();
@@ -300,7 +300,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
     std::string llm_result;
     for (const aiwrite::engine::Node& node : state.graph.nodes) {
         if (node.type == "LLMGenerate") {
-            llm_result = aiwrite::ui::node_output_text(state.graph, state.executor, node.id);
+            llm_result = aiwrite::ui::node_output_text(state.graph, state.executor(), node.id);
             break;
         }
     }
@@ -430,12 +430,12 @@ int runSelftest(bool use_web, const std::string& provider_id)
     // ---- VA-01（PA-03）：三处呈现同源（画布节点摘要 / 参数面板结果区 / 输出面板全文）----
     bool consistency_ok = false;
     {
-        const std::string all = aiwrite::ui::runOutputText(state.graph, state.executor);
+        const std::string all = aiwrite::ui::runOutputText(state.graph, state.executor());
         std::size_t       compared  = 0;
         bool              contained = true;
-        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
+        for (const aiwrite::engine::NodeRunInfo& info : state.executor().runInfos()) {
             const std::string per_node =
-                aiwrite::ui::node_output_text(state.graph, state.executor, info.node_id);
+                aiwrite::ui::node_output_text(state.graph, state.executor(), info.node_id);
             if (per_node.empty()) {
                 continue;
             }
@@ -470,16 +470,16 @@ int runSelftest(bool use_web, const std::string& provider_id)
             (input_node != nullptr) ? input_node->findParam("text") : nullptr;
         if (input_node != nullptr && tpl_node != nullptr && text_param != nullptr) {
             const std::string before =
-                aiwrite::ui::node_output_text(state.graph, state.executor, input_node->id);
+                aiwrite::ui::node_output_text(state.graph, state.executor(), input_node->id);
             text_param->value = marker; // 模拟"参数面板输入框里改写文本内容"
             state.startRun();
             int guard2 = 0;
-            while (state.executor.running() && guard2++ < 4096) {
+            while (state.executor().running() && guard2++ < 4096) {
                 state.tickRun();
             }
-            const std::string after  = aiwrite::ui::node_output_text(state.graph, state.executor,
+            const std::string after  = aiwrite::ui::node_output_text(state.graph, state.executor(),
                                                                      input_node->id);
-            const std::string prompt = aiwrite::ui::node_output_text(state.graph, state.executor,
+            const std::string prompt = aiwrite::ui::node_output_text(state.graph, state.executor(),
                                                                      tpl_node->id);
             const bool        changed = (after == marker) && (after != before);
             const bool        flowed  = prompt.find(marker) != std::string::npos;
@@ -505,18 +505,18 @@ int runSelftest(bool use_web, const std::string& provider_id)
         }
 
         std::string start_error;
-        const bool  started = state.executor.startAsync(&state.graph, &start_error);
+        const bool  started = state.executor().startAsync(&state.graph, &start_error);
 
         std::vector<aiwrite::engine::RunEvent> events;
         int                                    guard3 = 0;
-        while (state.executor.state() == aiwrite::engine::ExecState::Running && guard3++ < 20000) {
+        while (state.executor().state() == aiwrite::engine::ExecState::Running && guard3++ < 20000) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            state.executor.pumpEvents(&events);
+            state.executor().pumpEvents(&events);
         }
         // 【API 契约】先 join 再取最后一轮事件：会话结束的那一刻 state_ 已翻转为非 Running，
         // 而 worker 的 Finished 事件可能尚未入队 —— 必须先 stopAsync()（join）再 pumpEvents()
-        state.executor.stopAsync();
-        state.executor.pumpEvents(&events);
+        state.executor().stopAsync();
+        state.executor().pumpEvents(&events);
 
         std::size_t state_events = 0;
         std::size_t output_events = 0;
@@ -544,9 +544,9 @@ int runSelftest(bool use_web, const std::string& provider_id)
 
         // ② 快照 == 权威数据（runInfos / outputs）
         const aiwrite::engine::RunSnapshot snapshot =
-            aiwrite::engine::makeSnapshot(state.graph, state.executor);
-        bool same_view = snapshot.nodes.size() == state.executor.runInfos().size();
-        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
+            aiwrite::engine::makeSnapshot(state.graph, state.executor());
+        bool same_view = snapshot.nodes.size() == state.executor().runInfos().size();
+        for (const aiwrite::engine::NodeRunInfo& info : state.executor().runInfos()) {
             const aiwrite::engine::RunNodeView* view = snapshot.find(info.node_id);
             if (view == nullptr || view->state != info.state || view->type != info.type ||
                 std::fabs(view->duration_ms - info.duration_ms) > 0.0001) {
@@ -556,9 +556,9 @@ int runSelftest(bool use_web, const std::string& provider_id)
         }
 
         bool text_same = true;
-        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
+        for (const aiwrite::engine::NodeRunInfo& info : state.executor().runInfos()) {
             const std::string authoritative =
-                aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(), info.node_id);
+                aiwrite::engine::nodeOutputText(state.graph, state.executor().outputs(), info.node_id);
             const aiwrite::engine::RunNodeView* view = snapshot.find(info.node_id);
             const std::string from_snapshot = (view != nullptr) ? view->text : std::string();
             if (authoritative != from_snapshot) {
@@ -569,7 +569,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
 
         async_ok = started && finish_events == 1 && state_events > 0 && output_events > 0 &&
                    console_events > 0 && graph_untouched && same_view && text_same &&
-                   state.executor.state() != aiwrite::engine::ExecState::Running;
+                   state.executor().state() != aiwrite::engine::ExecState::Running;
         std::printf("[运行自检] PB-01 线程化：%s（启动=%s / 状态事件 %zu / 输出事件 %zu / Console %zu / "
                     "增量事件 %zu / Finished %zu / Graph 未被工作线程写=%s / 快照一致=%s / 文本一致=%s）\n",
                     async_ok ? "OK" : "失败", started ? "是" : "否", state_events, output_events,
@@ -599,13 +599,13 @@ int runSelftest(bool use_web, const std::string& provider_id)
 
         // 读模型 == 权威数据（状态 / 类型 / 文本），且 Graph 节点状态已由事件应用到位
         const aiwrite::engine::RunSnapshot& view = state.run_snapshot_view();
-        bool same_view = view.nodes.size() == state.executor.runInfos().size();
-        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
+        bool same_view = view.nodes.size() == state.executor().runInfos().size();
+        for (const aiwrite::engine::NodeRunInfo& info : state.executor().runInfos()) {
             const aiwrite::engine::RunNodeView* item = view.find(info.node_id);
             const aiwrite::engine::Node*        node = state.graph.findNode(info.node_id);
             if (item == nullptr || node == nullptr || item->state != info.state ||
                 node->state != info.state ||
-                item->text != aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(),
+                item->text != aiwrite::engine::nodeOutputText(state.graph, state.executor().outputs(),
                                                               info.node_id)) {
                 same_view = false;
                 break;
@@ -613,12 +613,12 @@ int runSelftest(bool use_web, const std::string& provider_id)
         }
         state.stopRunAsync(); // 幂等（收尾已 join）
         session_ok = started && session_ended && same_view &&
-                     state.executor.state() != aiwrite::engine::ExecState::Running;
+                     state.executor().state() != aiwrite::engine::ExecState::Running;
         std::printf("[运行自检] PB-01 第二步（EditorState 异步 + RunSnapshot）：%s（启动=%s / 会话结束=%s / "
                     "快照·Graph == 权威=%s / 节点 %zu 个 / 状态 %s）\n",
                     session_ok ? "OK" : "失败", started ? "是" : "否", session_ended ? "是" : "否",
                     same_view ? "是" : "否", view.nodes.size(),
-                    aiwrite::engine::execStateName(state.executor.state()));
+                    aiwrite::engine::execStateName(state.executor().state()));
     }
     else {
         std::printf("[运行自检] PB-01 第二步：跳过（--web 模式避免二次联网）\n");
@@ -643,9 +643,9 @@ int runSelftest(bool use_web, const std::string& provider_id)
         std::string source_text;
         bool sink_same = false;
         if (!output_id.empty() && !source_id.empty()) {
-            sink_text   = aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(), output_id);
-            source_text = aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(), source_id);
-            const aiwrite::engine::RunSnapshot snap = aiwrite::engine::makeSnapshot(state.graph, state.executor);
+            sink_text   = aiwrite::engine::nodeOutputText(state.graph, state.executor().outputs(), output_id);
+            source_text = aiwrite::engine::nodeOutputText(state.graph, state.executor().outputs(), source_id);
+            const aiwrite::engine::RunSnapshot snap = aiwrite::engine::makeSnapshot(state.graph, state.executor());
             const aiwrite::engine::RunNodeView* view = snap.find(output_id);
             sink_same = (sink_text == source_text) && view != nullptr && view->text == source_text;
         }

@@ -722,7 +722,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
             ImGui::TextDisabled("随机种子：%d（0 = 不指定；「重新生成」会写入新值）",
                                 static_cast<int>(seed_param->number(0.0)));
         }
-        const bool rerunning = editor().executor.running() || editor().session_active();
+        const bool rerunning = editor().executor().running() || editor().session_active();
         ImGui::BeginDisabled(rerunning);
         if (ImGui::Button("重新生成（新 seed）", ImVec2(-FLT_MIN, 0.0f))) {
             if (engine::Param* seed_param = node->findParam("seed")) {
@@ -749,7 +749,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     // ---- PD-06①（FEA-M4-11 · 通用重跑）：重跑该节点 / 重跑该节点及下游（复用上游结果）----
     if (node->state != engine::NodeState::Waiting) {
         ImGui::Separator();
-        const bool rerunning = editor().executor.running() || editor().session_active();
+        const bool rerunning = editor().executor().running() || editor().session_active();
         ImGui::BeginDisabled(rerunning);
         if (ImGui::Button("重跑该节点", ImVec2(-FLT_MIN, 0.0f))) {
             editor().startRerunAsync(node->id, engine::RerunScope::NodeOnly);

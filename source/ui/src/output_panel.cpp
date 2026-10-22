@@ -276,7 +276,7 @@ void drawOutputPanel(const char* title, bool* open, EditorState& state)
         return;
     }
 
-    const engine::Executor& executor = state.executor;
+    const engine::Executor& executor = state.executor();
     const engine::RunSnapshot& snapshot = state.run_snapshot_view();
     const auto&             infos    = snapshot.nodes;
 

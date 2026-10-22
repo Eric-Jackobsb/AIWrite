@@ -98,7 +98,7 @@ void drawToolbarButtons()
                         static_cast<int>(state.undo.undoDepth()));
 
     // ---- 运行 / 停止（右对齐 = 顶栏右上角；设计 §6.5 / §7.1）----
-    const bool  running    = state.executor.running();
+    const bool  running    = state.executor().running();
     const char* run_label  = "▶ 运行";
     const char* stop_label = "■ 停止";
 

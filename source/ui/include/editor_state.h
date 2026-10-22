@@ -14,9 +14,9 @@
 #include <utility>
 #include <vector>
 
-#include "executor.h"
 #include "graph.h"
 #include "recent_files.h"
+#include "run_session.h"
 #include "undo_stack.h"
 
 namespace aiwrite::ui {
@@ -26,10 +26,14 @@ struct EditorState {
     engine::UndoStack  undo;
 
     // -------------------------------------------------------------- 运行 -----
-    // 执行会话（M2-04）：分帧推进由主循环调用 tick_run()；
-    //  * 运行态端口值保存在 Executor 内部，**不写回 Graph**
-    //  * 节点状态写在 Graph 上（画布就地染状态色）
-    engine::Executor executor;
+    // ARCH-R1：执行器 + 快照已拆到 RunSession（ARCHITECTURE §1.8.2）——
+    //  * 本层只做编排（校验日志 / 状态栏 / 收尾 UI），执行与读模型归 run
+    //  * 过渡期访问器 executor()（最终态 editor() 退场后一并移除）
+    RunSession run;
+
+    engine::Executor&       executor();
+    const engine::Executor& executor() const;
+    const engine::RunSnapshot& run_snapshot_view() const { return run.snapshot(); }
 
     // 启动运行：先做运行前校验（失败 → 每条错误写 Console 与状态栏，不启动）
     bool startRun();
@@ -42,10 +46,10 @@ struct EditorState {
     bool startRerunAsync(const std::string& node_id, engine::RerunScope scope);
     void pumpRunEvents();
     void stopRunAsync();   // 退出 / 切图前调用（join，幂等）
-    bool session_active() const { return session_active_; }
+    bool session_active() const { return run.session_active(); }
     void cancelRun();
     void tickRun();                       // 主循环每帧调用一次
-    std::string runStatusText() const;    // 状态栏文本（Idle 时为空）
+    std::string runStatusText() const { return run.statusText(); } // 状态栏文本（Idle 时为空）
     void abortRunIfAny(const std::string& reason); // 运行中修改/切换工作流时终止运行
 
     // ------------------------------------------------------- 工作流文件 -----
@@ -80,8 +84,7 @@ struct EditorState {
     // ---- PB-01：线程化运行的 UI 读模型 ----
     //  * 运行中由事件维护（节点状态/输出全文/结束统计）；结束时由 makeSnapshot 用权威数据落定
     //  * UI 只读它，永不跨线程读 Executor 运行态
-    engine::RunSnapshot run_snapshot;
-    const engine::RunSnapshot& run_snapshot_view() const { return run_snapshot; }
+    //  * ARCH-R1：读模型归 RunSession，经 run_snapshot_view() 读取
 
     std::string last_archive_dir;        // 最近一次归档目录（输出面板显示 + 自检断言）
     std::string workflowDisplayName() const; // 工作流名（文件名去扩展名；空 → 未命名）
@@ -158,12 +161,8 @@ struct EditorState {
     void        archiveRunOutputs();
 
 private:
-    // PB-01：会话是否活动（异步运行中，或结束事件尚未全部应用）
-    bool session_active_ = false;
-    // PB-01：把结束事件后的收尾（join → 权威快照 → 归档 → 错误条）集中一处
+    // ARCH-R1：把运行结束的收尾（run.finish → 状态栏 → 明细日志 → 归档 → 错误条 → 自动导出）集中一处
     void finishRunSession();
-    // PB-01：取/建 run_snapshot 中某节点的条目
-    engine::RunNodeView* snapshotEntry(const std::string& node_id);
 
     std::vector<engine::Node> clipboard_nodes_;                        // 复制的节点
     std::vector<engine::Edge> clipboard_edges_;                        // 选区内部的连线

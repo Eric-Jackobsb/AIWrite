@@ -364,6 +364,7 @@ add_executable(aiwrite WIN32
     ui/src/panel_widgets.cpp  # CLN-12 拆分（参数控件域）
     ui/src/panel_web.cpp      # CLN-12 拆分（网页会话 / 提供商域）
     ui/src/editor_state.cpp
+    ui/src/run_session.cpp    # ARCH-R1 拆分（运行会话：Executor + 快照从 editor() 拆出）
     ui/src/node_canvas.cpp
     ui/src/canvas_view.cpp
     ui/src/node_library.cpp

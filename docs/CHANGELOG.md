@@ -33,6 +33,7 @@
 
 | 日期 | 批次（新 → 旧） |
 |---|---|
+| 2026-10-22 | 🛑 **重构专项 · ARCH-R1 落地（RunSession 对象化 · 行为等价）**：[refactor/ARCHITECTURE.md](refactor/ARCHITECTURE.md) 阶段一第一批 —— `RunSession` 独立（`run_session.h/.cpp`：Executor + 快照 + 会话生命周期 + 事件泵从 `editor()` 拆出）；`editor_state` 运行域改委托 + UI 收尾；调用方经 `editor().executor()` 读运行态；**ARCH-D16 依赖图取证**先出图确认无环（[audit/audit_arch_r1.md](audit/audit_arch_r1.md)）。验证：构建 **0/0** · `--run-selftest` **PASS** · exec **713/0** · graph **151/0** · selftest 十三组 PASS · check_links **1755/0**。下一步 = `ARCH-R2`。 |
 | 2026-10-22 | 🛑 **重构专项 · 架构 v1.1 定稿（零代码 · 文档）**：对象定义总表补充定稿 —— [refactor/ARCHITECTURE.md](refactor/ARCHITECTURE.md) **v1.0 → v1.1**（**§1.8 对象定义总表 10 个对象全部定稿** + 新增 25 条对象级决策 `ARCH-D20`~`D44`（19→**44**）+ 验收判据第 8 条 `AppContext` 运行时不可访问）；FREEZE §5 / DocMAP 行 + 最近更新行同步。**纯文档改动。下一步 = 按 `ARCH-R1` 开始实施。** |
 | 2026-10-22 | 🛑 **重构专项 · 架构 v1.0 定稿（零代码 · 文档）**：审计结论 → 用户拍板「冻结 → 重新设计架构 → 重构」全流程推进至**定稿** —— [refactor/ARCHITECTURE.md](refactor/ARCHITECTURE.md) **v0.1 → v1.0**（19 项决策 `ARCH-D1`~`D19` 全部拍板 · 迁移路线重组为 `ARCH-R/E/A/Z` 四阶段）；[refactor/FREEZE.md](refactor/FREEZE.md) 加 §5 进度记录；DocMAP 文档地图行 + 最近更新行同步。**纯文档改动。下一步 = 按 `ARCH-R1` 开始实施。** |
 | 2026-10-21 | 📋 **M_polish §2.5 拆条版（零代码 · 文档）**：用户要求「优先级表描述不够详细、看不懂（如『功能逻辑走查：上级节点 16 条 + M1/M2 画布 22 项勾账』）」→ §2.5 总览表加「拆条」列 + 新增 §2.5.2 拆条明细（P0-A/B · P1-A~J · P2-A/B），把每个任务批逐条列出（引用 DevPlan.todo Test 根节点 id，含怎么点 / 物证）：上级节点 16 条（含 FAIL #457/#465）· M2 画布 22 项（20 done + #505/#510 open + FAIL #506/#511）· 真机实测 11 节点 · 人工验收 13 顶层项 · 打包 2 条。**纯文档改动。** |
@@ -47,6 +48,14 @@
 | 2026-10-21 | ✨ **M_polish 阶段二开工（POL-UX · 操作体验）**：细列 `POL-UX` 清单（01 重试按钮 ✅ 本批 · 02 视觉统一离线走查登记 ✅ · 03 启动体验 ⏳ 真机 · 04 交互手感复核 ⏳ 真机）；**`POL-UX-01`** = 错误条「重试」按钮（复用 PD-06① `startRerunAsync(Downstream)` · 纯 UI 薄接线）· 构建 **0/0** · exec **691/0** · graph **151/0** · selftest 十三组 PASS |
 | 2026-10-21 | 🧮 **债务清零 · 批 A 离线项落地（A-2/3/4/5/7/8 ✅ · A-6 代码部分 ✅）**：L7 VB-03 假增量断言（682→686）· L8 失败汇总纯函数 + UI 接线（686→691）· L9 校验 5 边界（73→83）· C3 check_all 补 CLI 自检 + ce_repro 回归 · C4 `##node_inline_` 去借名 · C2 拆分评估维持不拆 · L11 字体 FontDefault 显式（视觉顺延） |
 | 2026-10-21 | 🧾 **债务清零立项（零代码 · 当前主线）**：用户拍板「优先解决所有债务问题」→ 债务总账 `audit/DEBT.todo`（6 类 / 26 项：代码债主体已清零 · 逻辑残项 11 · 验证人工 6 · 打包 2 · 文档 1 · 已知 bug 1）+ 专项 `actionPlan/M_debt.md`（批 A 离线 8 项 / 批 B 人工 18 项）· 人工验证项全登记 `ToVerify.todo`「四、债务清零人工验证」组（13 主项 / 6 站点子项 / 7 Human 子项）· roadmap §二 加「债务清零」主线行 · `M_polish.md` 补前置阶段衔接 · `check_links` broken 0（下条） |
+- **2026-10-22 · 🛑 重构专项 · `ARCH-R1` 落地（RunSession 对象化 · 行为等价）**：迁移路线阶段一第一批 ——
+  - **`RunSession` 独立**（新增 `source/ui/include/run_session.h` + `source/ui/src/run_session.cpp`，会话级）：持有执行器（ARCH-D20）+ 读模型快照 + 会话生命周期 + 事件泵；`start` / `startAsync` / `startRerunAsync`（运行前校验归 `RunSession::start()`，ARCH-D27）/ `tick` / `pumpEvents` / `finish`（join → 权威快照 → 增量补回）/ `stopAsync` / `cancel` / `abortIfAny` / `statusText`；不持有 Graph（校验 / 状态写回 / 权威快照用的 Graph 走方法参数）、不碰 UI。
+  - **`editor_state.h/cpp` 运行域改为委托**：`Executor` / `run_snapshot` / `session_active_` / `snapshotEntry` 移除；`EditorState` 持有 `RunSession run`，保留对外方法签名（`startRun*` / `tickRun` / `runStatusText` / `abortRunIfAny` / `session_active` / `run_snapshot_view`）做编排 + UI 收尾（状态栏文案 / 运行明细日志 / 归档 / 错误条 / TextOutput 自动导出）；新增过渡期访问器 `executor()`（最终态 `editor()` 退场后一并移除）。
+  - **调用方收敛**：`cli_selftest.cpp`（31 处）`output_panel.cpp` / `property_panel.cpp` / `toolbar.cpp` 的 `state.executor` 全部改经 `editor().executor()` 访问器；`source/CMakeLists.txt` 的 `aiwrite` 目标加 `run_session.cpp`。
+  - **ARCH-D16 依赖图取证（拆分前）**：运行域引用点清单（10 个 TU）+ 依赖图，确认 `EditorState → RunSession → engine` 单向无环（取证见 [audit/audit_arch_r1.md](audit/audit_arch_r1.md) §1）。
+  - **验证（FREEZE §4 回归基线 · 只升不降）**：构建 **0 error / 0 warning**（4 目标）· `aiwrite --run-selftest` **PASS** · `api_probe --exec-selftest` **713 通过 / 0 失败** · `--graph-selftest` **151/0** · `--selftest` 十三组全 PASS · `check_links` **1755 / 0**。**零断言增减。**
+
+
 
 - **2026-10-22 · 🛑 重构专项 · 架构 v1.1 定稿（零代码 · 纯文档）**：对象定义总表补充定稿 ——
   - **`ARCHITECTURE.md` v1.0 → v1.1**（`docs/refactor/`）：新增 **§1.8 对象定义总表** —— `EventBus` / `RunSession` / `WorkflowModel` / `SelectionState` / `ReadOnlyView` / `AutosaveService` / `Diagnostics` / `Clipboard` / `WorkflowFile` / `AppContext` **10 个对象全部定稿**（一句话定义 + 维度表 + 限制 + 依赖图 §1.8.11 + 注入示例 §1.8.12 + `rg` 断言 §1.8.13）；§1.4 ReadOnlyView 签名更新（`nodes_for_render()` / `edges_for_render()` 零拷贝访问器 + `config`）；§1.5 RecentFiles 归属 WorkflowFile；§1.6 `RunSession` 改为「启动（常驻）」；§1.7 菜单/设置面板改为「仅启动注入」；§4 验收判据新增第 8 条（`AppContext` 运行时不可访问）；§5 风险表新增「`AppContext` 重新长成上帝对象」对策；§7 新增 **25 条对象级决策 `ARCH-D20`~`D44`**（总数 19 → **44 条**）。**§2.1「单例总线」「上帝对象」两行解法同步指向 §1.8。**

@@ -29,7 +29,7 @@
 
 - 构建：`source/build.ps1` → 0 error / 0 warning
 - 自检：`api_probe --selftest`、`--exec-selftest`（713/0）、`--graph-selftest`（151/0）
-- 链路：`tools/check_all.ps1`（含 `--run-selftest`、`ce_repro`、文档断链 1730/0）
+- 链路：`tools/check_all.ps1`（含 `--run-selftest`、`ce_repro`、文档断链 1755/0）
 - 原则：**只升不降** —— 每批落地后断言数只增不减
 
 **冻结生效。**
@@ -43,3 +43,4 @@
 | 2026-10-21 | 冻结生效 | 本文建立 · 用户拍板「先冻结功能与模块，重新设计清晰架构，再执行重构」 |
 | 2026-10-22 | **架构定稿（v1.0）** | [ARCHITECTURE.md](ARCHITECTURE.md) **v1.0 定稿**（用户拍板 19 项决策 `ARCH-D1`~`D19` · 迁移路线 = ARCH-R/E/A/Z 四阶段）· **冻结继续生效** · 解除条件 = 重构完成（四阶段全落地）+ 回归基线全绿（§3） |
 | 2026-10-22 | **架构定稿（v1.1 · 当前）** | [ARCHITECTURE.md](ARCHITECTURE.md) **v1.1 定稿**（补充 §1.8 对象定义总表 —— 10 个对象一句话定义 + 依赖图 + 注入示例 + `rg` 断言 · 新增 25 条决策 `ARCH-D20`~`D44` · 验收判据 +1 = 第 8 条 `AppContext` 运行时不可访问）· **冻结继续生效** |
+| 2026-10-22 | **重构批 `ARCH-R1` 落地** | [ARCHITECTURE.md](ARCHITECTURE.md) 迁移路线阶段一第一批 —— **`RunSession` 对象化**：Executor + 快照从 `editor()` 拆出（新增 `run_session.h/.cpp` · 运行域委托 + UI 收尾留在 EditorState · 过渡期访问器 `executor()`）· **ARCH-D16 依赖图取证**先出图确认无环（[审计](../audit/audit_arch_r1.md)）· 验证 = 构建 0/0 · `--run-selftest` PASS · exec **713/0** · graph **151/0** · selftest 十三组 PASS · check_links **1755/0** · **冻结继续生效** |
