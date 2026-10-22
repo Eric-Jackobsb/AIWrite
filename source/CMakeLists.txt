@@ -386,6 +386,8 @@ target_sources(aiwrite PRIVATE
     ui/src/event_bus.cpp       # ARCH-E1（事件总线：EventBus + EditEvent 落地）
     ui/src/workflow_model.cpp  # ARCH-E3（文档级工作流模型：Graph + Undo + EventBus 拆出）
     ui/src/selection_state.cpp) # ARCH-E4（选中状态独立：SelectionState 拆分 · §1.8.4）
+target_sources(aiwrite PRIVATE
+    ui/src/interactor.cpp)      # ARCH-E5（画布交互共享层：双画布单套交互 · 关键谓词唯一）
 
 # M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：面板诊断按钮 + 错误条「重新登录」（PT-07）
 # M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」异步后端

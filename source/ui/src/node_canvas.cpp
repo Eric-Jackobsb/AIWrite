@@ -3,6 +3,7 @@
 #include "composite.h"        // CN：上级节点实例识别 / 创建
 #include "canvas_view.h"      // CN_editor_refactor：共享只读绘制层（CEA-01 / CEA-02）
 #include "commands.h"         // ARCH-R4：命令路由层（快捷键表 / handleShortcut）
+#include "interactor.h"       // ARCH-E5：画布交互共享层（双画布单套交互）
 #include "composite_editor.h" // CN：双击/右键打开上级节点编辑器
 #include "node_registry.h"
 #include "provider_resolve.h"
@@ -214,76 +215,67 @@ CanvasContext g_canvas;
 // draw_node_separator / draw_node_body）已整体上移 canvas_view.{h,cpp}
 // （CN_editor_refactor CEA-01：主画布与上级编辑器共用同一实现，杜绝「简化副本」漂移）。
 
-// ------------------------------------------------------------- 连线创建 -----
-// 设计 §6.2：拖拽创建连接；类型不兼容变红并拒绝；输入端口已连接则替换
-//
-// 【重要契约】imgui-node-editor v0.9.3：ed::BeginCreate() 内部会调用
-//   CreateItemAction::Begin()（其中 IM_ASSERT(false == m_InActive); m_InActive = true;），
-//   只有 ed::EndCreate() 会把它复位为 false。因此 Begin/End **必须成对调用**，
-//   不能用返回值提前 return（否则下一帧 Begin 时断言 IM_ASSERT(false == m_InActive) 失败）。
-//   官方示例（widgets-example / blueprints-example）同样是无条件调用 EndCreate()。
-void handle_create_link()
+// --------------------------------------------------------- 交互回调组 ------
+// ARCH-E5：主画布与 ce 画布共用 interactor（双画布单套交互）；模型差异
+//（图源 = editor().model().graph + SelectionState / 快照归属 / 提示落点）经回调注入。
+CanvasInteract makeMainCanvasInteract(); // 前向声明（定义紧随其后）
+
+// 每帧被连线/删除/选中/位置同步调用 4 次 → 静态缓存一次构造；回调无捕获，
+// 每次调用从 editor() 读取当前状态，跨帧复用安全。
+const CanvasInteract& mainCanvasInteract()
 {
-    EditorState& state = editor();
+    static const CanvasInteract interact = makeMainCanvasInteract();
+    return interact;
+}
 
-    const bool creating = ed::BeginCreate(ImVec4(0.29f, 0.56f, 0.89f, 1.0f), 2.0f);
+CanvasInteract makeMainCanvasInteract()
+{
+    CanvasInteract interact;
 
-    ed::PinId start_pin;
-    ed::PinId end_pin;
-    if (creating && ed::QueryNewLink(&start_pin, &end_pin) && start_pin && end_pin) {
-        PinRef from = resolvePin(start_pin, state.model().graph);
-        PinRef to   = resolvePin(end_pin, state.model().graph);
-
-        // 统一成"输出 → 输入"
-        if (from.valid && to.valid && from.direction == PortDirection::Input &&
-            to.direction == PortDirection::Output) {
-            std::swap(from, to);
-        }
-
-        if (!from.valid || !to.valid) {
-            ed::RejectNewItem(ImVec4(1.0f, 0.30f, 0.30f, 1.0f), 2.0f);
+    interact.resolve_pin = [](ed::PinId start_pin, ed::PinId end_pin, PinRef& from, PinRef& to) {
+        EditorState& state = editor();
+        from = resolvePin(start_pin, state.model().graph);
+        to   = resolvePin(end_pin, state.model().graph);
+        return from.valid && to.valid;
+    };
+    interact.can_connect = [](const PinRef& from, const PinRef& to, std::string& reason,
+                              bool& would_replace) {
+        EditorState& state = editor();
+        return state.model().graph.canConnect(from.node_id, from.port_id, to.node_id, to.port_id,
+                                              &reason, &would_replace);
+    };
+    interact.on_link_accepted = [](const PinRef& from, const PinRef& to, bool would_replace) {
+        EditorState& state = editor();
+        state.snapshot(would_replace ? "替换连线" : "新建连线");
+        std::string error;
+        const std::string edge_id = state.model().graph.addEdge(from.node_id, from.port_id,
+                                                                to.node_id, to.port_id, &error);
+        if (edge_id.empty()) {
+            log::error("[连线] 创建失败：" + error);
+            state.setStatus("连线失败：" + error);
         }
         else {
-            bool        would_replace = false;
-            std::string reason;
-            const bool  ok = state.model().graph.canConnect(from.node_id, from.port_id, to.node_id,
-                                                    to.port_id, &reason, &would_replace);
-            if (!ok) {
-                ed::RejectNewItem(ImVec4(1.0f, 0.30f, 0.30f, 1.0f), 2.0f);
-                if (ImGui::IsMouseReleased(0)) {
-                    log::warn("[连线] 被拒绝：" + reason);
-                    state.setStatus("连线被拒绝：" + reason);
-                }
-            }
-            else {
-                if (ed::AcceptNewItem(ImVec4(0.29f, 0.56f, 0.89f, 1.0f), 2.0f)) {
-                    state.snapshot(would_replace ? "替换连线" : "新建连线");
-                    std::string error;
-                    const std::string edge_id = state.model().graph.addEdge(
-                        from.node_id, from.port_id, to.node_id, to.port_id, &error);
-                    if (edge_id.empty()) {
-                        log::error("[连线] 创建失败：" + error);
-                        state.setStatus("连线失败：" + error);
-                    }
-                    else {
-                        // ARCH-E1：连线创建通知（EdgeAdded；负载含两端端口与 id）
-                        state.model().event_bus().publish(EditEvent::edge(
-                            EditEventKind::EdgeAdded, from.node_id, from.port_id, to.node_id,
-                            to.port_id, edge_id));
-                        state.logSummary("[连线] " + from.node_id + "." + from.port_id + " → " +
-                                          to.node_id + "." + to.port_id);
-                        state.setStatus("已连线 " + from.node_id + " → " + to.node_id +
-                                         (would_replace ? "（替换了原连线）" : ""));
-                    }
-                }
-            }
+            // ARCH-E1：连线创建通知（EdgeAdded；负载含两端端口与 id）
+            state.model().event_bus().publish(EditEvent::edge(
+                EditEventKind::EdgeAdded, from.node_id, from.port_id, to.node_id, to.port_id,
+                edge_id));
+            state.logSummary("[连线] " + from.node_id + "." + from.port_id + " → " +
+                             to.node_id + "." + to.port_id);
+            state.setStatus("已连线 " + from.node_id + " → " + to.node_id +
+                            (would_replace ? "（替换了原连线）" : ""));
         }
-    }
+    };
+    interact.on_link_rejected = [](const std::string& reason) {
+        EditorState& state = editor();
+        log::warn("[连线] 被拒绝：" + reason);
+        state.setStatus("连线被拒绝：" + reason);
+    };
 
-    // ---- M_node_expansion L3-09：连线交互提示（鼠标旁显示端口类型与兼容性）----
-    //  * QueryNewLink 已在上面调用过（end_pin 可能为 0 = 还没拖到目标端口）
-    //  * 「类型不兼容变红」由 RejectNewItem 已提供（既有），这里补充文字提示
-    if (creating && start_pin.Get() != 0) {
+    interact.on_create_tip = [](ed::PinId start_pin, ed::PinId end_pin) {
+        // M_node_expansion L3-09：连线交互提示（鼠标旁显示端口类型与兼容性）。
+        //  * QueryNewLink 已由交互层调用过（end_pin 可能为 0 = 还没拖到目标端口）
+        //  * 「类型不兼容变红」由 RejectNewItem 已提供（既有），这里补充文字提示
+        EditorState& state = editor();
         const PinRef from = resolvePin(start_pin, state.model().graph);
         const PinRef to   = resolvePin(end_pin, state.model().graph);
         const Node*  fnode = from.valid ? state.model().graph.findNode(from.node_id) : nullptr;
@@ -297,7 +289,7 @@ void handle_create_link()
             std::string reason;
             bool        would_replace = false;
             const bool  ok = state.model().graph.canConnect(from.node_id, from.port_id, to.node_id,
-                                                    to.port_id, &reason, &would_replace);
+                                                            to.port_id, &reason, &would_replace);
             tip = std::string(engine::portTypeName(fport->type)) + " → " +
                   engine::portTypeName(tport->type);
             if (ok) {
@@ -310,7 +302,8 @@ void handle_create_link()
             }
         }
         else if (fport != nullptr) {
-            tip = std::string("从 ") + engine::portTypeName(fport->type) + " 端口连线（拖向目标端口）";
+            tip = std::string("从 ") + engine::portTypeName(fport->type) +
+                  " 端口连线（拖向目标端口）";
         }
         if (!tip.empty()) {
             ImDrawList* draw_list = ImGui::GetForegroundDrawList();
@@ -321,112 +314,77 @@ void handle_create_link()
                                      IM_COL32(16, 18, 24, 232), 3.0f);
             draw_list->AddText(mouse + ImVec2(14.0f, 12.0f), color, tip.c_str());
         }
-    }
-
-    ed::EndCreate();
+    };
+    interact.on_delete_batch = [](const std::string& label) { editor().snapshot(label); };
+    interact.delete_link = [](const std::string& link_id) {
+        EditorState& state = editor();
+        const engine::Edge* edge = state.model().graph.findEdge(link_id);
+        if (state.model().graph.removeEdge(link_id)) {
+            // ARCH-E1：连线删除通知（删除前取边数据作负载）
+            if (edge != nullptr) {
+                state.model().event_bus().publish(EditEvent::edge(EditEventKind::EdgeRemoved, *edge));
+            }
+            state.logSummary("[连线] 删除 " + link_id);
+            state.setStatus("已删除连线 " + link_id);
+        }
+    };
+    interact.delete_node = [](const std::string& node_id) {
+        EditorState& state = editor();
+        if (state.deleteNode(node_id)) {
+            state.logSummary("[节点] 删除 " + node_id);
+            state.setStatus("已删除节点 " + node_id + "（含其连线）");
+        }
+    };
+    interact.on_selection = [](const std::vector<std::string>& node_ids,
+                               const std::vector<std::string>& link_ids) {
+        EditorState& state = editor();
+        // 单选节点（参数面板用）：单选 = 唯一选中节点；多选且原单选仍在选中内 → 保留
+        std::string single;
+        if (node_ids.size() == 1) {
+            single = node_ids.front();
+        }
+        else {
+            const std::string& prev_single = state.selection().single();
+            if (prev_single.empty() ||
+                std::find(node_ids.begin(), node_ids.end(), prev_single) == node_ids.end()) {
+                single.clear();
+            }
+            else {
+                single = prev_single;
+            }
+        }
+        // ARCH-E4：一次提交（内部变化检测 → 变化才回调 → SelectionChanged）
+        state.selection().set_selection(node_ids, link_ids, single);
+    };
+    return interact;
 }
+
+// ------------------------------------------------------------- 连线创建 -----
+// 设计 §6.2：拖拽创建连接；类型不兼容变红并拒绝；输入端口已连接则替换
+//（ARCH-E5：BeginCreate/EndCreate 成对契约 + 拒绝/接受/替换语义已收敛进 interactor.cpp；
+//  拖拽提示见 mainCanvasInteract.on_create_tip）
+void handle_create_link()
+{
+    interactorCreateLink(mainCanvasInteract());
+}
+
 
 // ------------------------------------------------------------- 删除处理 -----
 // 设计 §6.1：删除节点（连带连线）；§6.2：删除连线。每个对象一次撤销快照
-// 【重要契约】同 handle_create_link：BeginDelete()/EndDelete() 必须成对调用
+//（ARCH-E5：BeginDelete/EndDelete 成对契约收敛进 interactor.cpp）
 void handle_delete_items()
 {
-    EditorState& state = editor();
-
-    const bool deleting = ed::BeginDelete();
-
-    if (deleting) {
-        ed::LinkId deleted_link;
-        while (ed::QueryDeletedLink(&deleted_link)) {
-            if (ed::AcceptDeletedItem()) {
-                const std::string edge_id = "e" + std::to_string(deleted_link.Get());
-                state.snapshot("删除连线");
-                const engine::Edge* edge = state.model().graph.findEdge(edge_id);
-                if (state.model().graph.removeEdge(edge_id)) {
-                    // ARCH-E1：连线删除通知（删除前取边数据作负载）
-                    if (edge != nullptr) {
-                        state.model().event_bus().publish(EditEvent::edge(EditEventKind::EdgeRemoved, *edge));
-                    }
-                    state.logSummary("[连线] 删除 " + edge_id);
-                    state.setStatus("已删除连线 " + edge_id);
-                }
-            }
-        }
-
-        ed::NodeId deleted_node;
-        while (ed::QueryDeletedNode(&deleted_node)) {
-            if (ed::AcceptDeletedItem()) {
-                const std::string node_id = "n" + std::to_string(deleted_node.Get());
-                state.snapshot("删除节点");
-                if (state.deleteNode(node_id)) {
-                    state.logSummary("[节点] 删除 " + node_id);
-                    state.setStatus("已删除节点 " + node_id + "（含其连线）");
-                }
-            }
-        }
-    }
-
-    ed::EndDelete();
+    interactorDeleteOuter(mainCanvasInteract(), "删除连线", "删除节点");
 }
 
-// 位置安全上限：任何异常数值（FLT_MAX / NaN / 溢出）都不得进入绘图与视图计算
-constexpr float kPositionLimit = 100000.0f;
-
-float clamp_position(float value)
-{
-    if (!std::isfinite(value)) {
-        return 0.0f;
-    }
-    return std::clamp(value, -kPositionLimit, kPositionLimit);
-}
 
 // ------------------------------------------------------------- 状态同步 -----
-void sync_selection(EditorState& state)
+void sync_selection()
 {
-    // ARCH-E4：选中集合归 `SelectionState`（§1.8.4）—— 从画布读回后一次
-    // `set_selection` 提交；变化检测 + SelectionChanged 发布由对象内部完成
-    //（内置 prev 比较，仅真正变化才回调，避免每帧高频通知 —— 与 E1 语义一致）。
-    const int count = ed::GetSelectedObjectCount();
-    const std::size_t capacity = static_cast<std::size_t>(std::max(count, 0));
-
-    // 选中的节点
-    std::vector<ed::NodeId> node_handles(capacity);
-    const int node_count = (count > 0) ? ed::GetSelectedNodes(node_handles.data(), count) : 0;
-    std::vector<std::string> node_ids;
-    node_ids.reserve(static_cast<std::size_t>(node_count));
-    for (int i = 0; i < node_count; ++i) {
-        node_ids.push_back("n" +
-                           std::to_string(node_handles[static_cast<std::size_t>(i)].Get()));
-    }
-
-    // 选中的连线（左键点连线 / 框选都会选中连线 → 可与工具栏「删除选中」联动）
-    std::vector<ed::LinkId> link_handles(capacity);
-    const int link_count = (count > 0) ? ed::GetSelectedLinks(link_handles.data(), count) : 0;
-    std::vector<std::string> link_ids;
-    link_ids.reserve(static_cast<std::size_t>(link_count));
-    for (int i = 0; i < link_count; ++i) {
-        link_ids.push_back("e" +
-                           std::to_string(link_handles[static_cast<std::size_t>(i)].Get()));
-    }
-
-    // 单选节点（参数面板用）：单选 = 唯一选中节点；多选且原单选仍在选中内 → 保留
-    std::string single;
-    if (node_ids.size() == 1) {
-        single = node_ids.front();
-    }
-    else {
-        const std::string& prev_single = state.selection().single();
-        if (prev_single.empty() ||
-            std::find(node_ids.begin(), node_ids.end(), prev_single) == node_ids.end()) {
-            single.clear();
-        }
-        else {
-            single = prev_single;
-        }
-    }
-
-    // ARCH-E4：一次提交（内部变化检测 → 变化才回调 → SelectionChanged）
-    state.selection().set_selection(node_ids, link_ids, single);
+    // ARCH-E4/E5：选中集合归 `SelectionState`（§1.8.4）—— ed 选中读取经
+    // interactorSyncSelection（GetSelected* 唯一封装在 interactor.cpp）；
+    // single 保留逻辑见 mainCanvasInteract.on_selection（一次 set_selection 提交）。
+    interactorSyncSelection(mainCanvasInteract());
 }
 
 // ------------------------------------------------------- Delete 键（ARCH-R4）----
@@ -440,40 +398,33 @@ void sync_selection(EditorState& state)
 void handle_delete_key()
 {
     handleShortcut(CommandScope::Main,
-                   /*window_active=*/ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) ||
-                       ImGui::IsWindowHovered(),
+                   /*window_active=*/interactorWindowActiveMain(),
                    CommandContext{},
                    /*only=*/AppCommand::DeleteSelection);
 }
 
 // 位置同步（双向）：
 //   · 编辑器已认识该节点  → 读回位置写进 Graph（对应拖拽移动）
-//   · 编辑器还不认识（ed::GetNodePosition 对未知手柄返回 FLT_MAX，见 imgui_node_editor.cpp:1676）
-//     → 用 ed::SetNodePosition 把 Graph 的位置推给编辑器，**绝不把脏值回写模型**
-//   · 非有限值 / 超上限一律夹紧，避免溢出进入绘图与视图导航（历史"复制粘贴卡死"根因，见 CHANGELOG）
+//   · 编辑器还不认识（GetNodePosition 对未知手柄返回 FLT_MAX）→ interactor 把
+//     Graph 位置推给编辑器，**绝不把脏值回写模型**
+//   · 非有限值 / 超上限一律夹紧（interactor 内按 kCanvasPositionLimit）
 // 一次拖拽只压一次撤销快照
 void sync_positions(EditorState& state)
 {
     bool moved = false;
     for (Node& node : state.model().graph.nodes) {
-        const ImVec2 position = ed::GetNodePosition(nodeHandle(node.id));
-
-        const bool editor_knows =
-            std::isfinite(position.x) && std::isfinite(position.y) &&
-            std::fabs(position.x) < kPositionLimit && std::fabs(position.y) < kPositionLimit;
-
-        if (!editor_knows) {
-            ed::SetNodePosition(nodeHandle(node.id), ImVec2(node.x, node.y)); // 模型 → 编辑器
-            continue;
+        const PositionRead p =
+            interactorReadNodePosition(node.id, node.x, node.y, kCanvasPositionLimit, 0.5f);
+        if (!p.editor_knows) {
+            continue; // 编辑器不认识的节点：interactor 已把模型坐标推给编辑器
         }
-
-        if (std::fabs(position.x - node.x) > 0.5f || std::fabs(position.y - node.y) > 0.5f) {
+        if (p.changed) {
             if (!g_drag_in_progress) {
                 g_drag_in_progress = true;
                 state.snapshot("移动节点");
             }
-            node.x = clamp_position(position.x);
-            node.y = clamp_position(position.y);
+            node.x = p.x;
+            node.y = p.y;
             moved  = true;
             // ARCH-E1：节点移动通知（拖拽期间每帧位置变化都会发；通知形态，重复无害）
             state.model().event_bus().publish(EditEvent::node(EditEventKind::NodeMoved, node.id));
@@ -922,7 +873,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     // 位置同步：新建 / 粘贴的节点在这里落到 Graph 记录的位置
     // ARCH-R3：渲染读取走 view（nodes_for_render 零拷贝返回 graph 内部数组 const 引用）
     for (const Node& node : view.nodes_for_render()) {
-        ed::SetNodePosition(nodeHandle(node.id), ImVec2(node.x, node.y));
+        interactorPushNodePosition(node.id, node.x, node.y);
     }
     // 宽度自适应 + 节点卡片绘制：走共享 canvas_view 只读绘制层（CEA-01 / CEA-02）
     //   —— 主题 = 主画布默认主题；运行读模型 = view.snapshot（ARCH-R3 渲染只读 ReadOnlyView）
@@ -1055,7 +1006,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
         }
     }
 
-    sync_selection(state);
+    sync_selection();
     handle_delete_key();
 
     // 视图跟随前先确认坐标正常（历史卡死根因：异常坐标 + NavigateToContent 会让视图落到天文数字区间）
@@ -1064,8 +1015,8 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
         std::all_of(view.nodes_for_render().begin(), view.nodes_for_render().end(),
                     [](const Node& node) {
                         return std::isfinite(node.x) && std::isfinite(node.y) &&
-                               std::fabs(node.x) < kPositionLimit &&
-                               std::fabs(node.y) < kPositionLimit;
+                               std::fabs(node.x) < kCanvasPositionLimit &&
+                               std::fabs(node.y) < kCanvasPositionLimit;
                     });
 
     if (g_first_frame || state.request_navigate_to_content) {

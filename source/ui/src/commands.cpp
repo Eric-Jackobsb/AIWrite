@@ -9,7 +9,7 @@
 #include "paths.h"
 #include "log.h"
 
-#include <imgui_node_editor.h> // ed::ClearSelection（删除后清编辑器内部选中）
+#include "interactor.h"       // ARCH-E5：interactorClearSelection（删除后清编辑器内部选中）
 
 #include <GLFW/glfw3.h>        // glfwSetWindowShouldClose（退出命令）
 
@@ -17,7 +17,6 @@
 #include <vector>
 
 namespace aiwrite::ui {
-namespace ed = ax::NodeEditor;
 
 // ============================================================================
 //  dispatchCommand：三入口**单一实现**
@@ -73,7 +72,7 @@ void dispatchCommand(AppCommand cmd, const CommandContext& ctx)
         // Delete 键原行为一致 —— 无选中按 Delete 不做任何事）
         if (state.has_selection()) {
             state.deleteSelected();
-            ed::ClearSelection(); // 删除后清空编辑器内部选中，避免残留选中框/状态
+            interactorClearSelection(); // 删除后清空编辑器内部选中，避免残留选中框/状态
         }
         break;
 

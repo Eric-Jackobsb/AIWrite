@@ -2,6 +2,7 @@
 #include "ce_internal.h"
 #include "canvas_view.h"
 #include "commands.h"      // ARCH-R4：命令路由层（快捷键表 / dispatchCommand / handleShortcut）
+#include "interactor.h"     // ARCH-E5：画布交互共享层（双画布单套交互）
 #include "editor_state.h"
 #include "log.h"
 #include "node_registry.h"
@@ -51,6 +52,52 @@ std::array<char, 128>& ce_name_buffer(const std::string& key, const std::string&
     return it->second;
 }
 
+
+// ------------------------------------------------------- ce 交互回调组 ------
+// ARCH-E5：ce 画布与主画布共用 interactor（双画布单套交互）；模型差异
+//（图源 = working.internal_graph / 无替换连线语义 / 局部单选）经回调注入。
+// on_selection 需捕获 draw 内局部 ce_selected_node，由 drawCompositeEditor 在
+// 核心之上补充（本函数不含选中同步回调）。
+CanvasInteract ceInteractCore()
+{
+    CanvasInteract interact;
+
+    interact.resolve_pin = [](ed::PinId start_pin, ed::PinId end_pin, PinRef& from, PinRef& to) {
+        const engine::Graph& graph = compositeEditorState().working.internal_graph;
+        from = resolvePin(start_pin, graph);
+        to   = resolvePin(end_pin, graph);
+        return from.valid && to.valid;
+    };
+    interact.can_connect = [](const PinRef& from, const PinRef& to, std::string& reason,
+                              bool& would_replace) {
+        CompositeEditorState& state = compositeEditorState();
+        would_replace = false; // ce 内部图无替换语义（与主画布 canConnect 差异点）
+        return state.working.internal_graph.canConnect(from.node_id, from.port_id, to.node_id,
+                                                       to.port_id, &reason);
+    };
+    interact.on_link_accepted = [](const PinRef& from, const PinRef& to, bool) {
+        CompositeEditorState& state = compositeEditorState();
+        compositeEditorSnapshot("添加内部连线");
+        std::string add_error;
+        composite_editor_add_edge(from.node_id, from.port_id, to.node_id, to.port_id, &add_error);
+        if (!add_error.empty()) {
+            state.error = add_error;
+        }
+    };
+    interact.on_link_rejected = [](const std::string& reason) {
+        compositeEditorState().error = reason;
+    };
+    // on_create_tip：ce 无拖拽连线提示（保持两画布差异；主画布有 L3-09）
+    interact.on_delete_batch = [](const std::string& label) { compositeEditorSnapshot(label); };
+    interact.delete_link = [](const std::string& link_id) {
+        compositeEditorState().working.internal_graph.removeEdge(link_id);
+    };
+    interact.delete_node = [](const std::string& node_id) {
+        ceRemoveNode(compositeEditorState(), node_id);
+    };
+    return interact;
+}
+
 } // namespace
 
 // ---------------------------------------------------- 命令路由层（ARCH-R4）----
@@ -65,30 +112,14 @@ std::array<char, 128>& ce_name_buffer(const std::string& key, const std::string&
 // 窗口/按键检测统一在 handleShortcut（commands.cpp）内，本函数只做删除本身。
 void compositeEditorDeleteSelection()
 {
-    CompositeEditorState& state = compositeEditorState();
-
-    const int count = ed::GetSelectedObjectCount();
-    if (count <= 0) {
+    // ARCH-E5：ed 选中读取 + 删除收敛进 interactor（GetSelected* / ClearSelection
+    // 唯一封装在 interactor.cpp；一次批次只压一次撤销快照 —— 与 Delete 键原行为一致）
+    const SelectionRead sel = interactorReadSelection();
+    if (sel.node_ids.empty() && sel.link_ids.empty()) {
         return;
     }
-    std::vector<ed::NodeId> node_handles(static_cast<std::size_t>(count));
-    const int node_count = ed::GetSelectedNodes(node_handles.data(), count);
-    std::vector<ed::LinkId> link_handles(static_cast<std::size_t>(count));
-    const int link_count = ed::GetSelectedLinks(link_handles.data(), count);
-    if (node_count == 0 && link_count == 0) {
-        return;
-    }
-
-    cePushSnapshot("删除选中（Delete 键）"); // 一次批次只压一次快照
-    for (int i = 0; i < node_count; ++i) {
-        ceRemoveNode(state,
-                       "n" + std::to_string(node_handles[static_cast<std::size_t>(i)].Get()));
-    }
-    for (int i = 0; i < link_count; ++i) {
-        state.working.internal_graph.removeEdge(
-            "e" + std::to_string(link_handles[static_cast<std::size_t>(i)].Get()));
-    }
-    ed::ClearSelection(); // 清掉内部选中 → 右侧「参数编辑」回落「未选中」（下一帧再同步）
+    interactorDeleteSelection(ceInteractCore(), sel,
+                              []() { cePushSnapshot("删除选中（Delete 键）"); });
 }
 
 namespace {
@@ -148,8 +179,7 @@ void drawCompositeEditor(const char* title, bool* open)
         return;
     }
     // 窗口 Begin 成功后计算聚焦/悬停（RootAndChildWindows：顶栏 / 规格面板 / 画布都算）
-    g_ce_window_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) ||
-                          ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+    g_ce_window_focused = interactorWindowActiveComposite(); // ARCH-E5：窗口判定收敛进 interactor
 
     // ---- 顶栏 ----
     ImGui::SetNextItemWidth(200.0f);
@@ -232,6 +262,13 @@ void drawCompositeEditor(const char* title, bool* open)
     // ---- 主体布局：左侧画布 + 右侧规格面板 ----
     const float spec_panel_w = 320.0f;
     std::string ce_selected_node; // PS-09-G1：本帧选中的内部节点（单选），供右侧参数编辑区使用
+    // ARCH-E5：ce 画布交互回调组（核心 + 选中同步；on_selection 捕获本帧局部单选）
+    CanvasInteract ce_interact = ceInteractCore();
+    ce_interact.on_selection = [&ce_selected_node](const std::vector<std::string>& node_ids,
+                                                   const std::vector<std::string>&) {
+        // PS-09-G1：单选 → 右侧「参数编辑」区显示该节点参数（ce 独立选中，不互通主画布）
+        ce_selected_node = (node_ids.size() == 1) ? node_ids.front() : std::string();
+    };
     ImGui::BeginChild("##ce_canvas_host",
                       ImVec2(ImGui::GetContentRegionAvail().x - spec_panel_w, 0.0f));
     {
@@ -240,7 +277,7 @@ void drawCompositeEditor(const char* title, bool* open)
 
         // 位置同步：新建节点落到 working 记录坐标
         for (const engine::Node& n : state.working.internal_graph.nodes) {
-            ed::SetNodePosition(nodeHandle(n.id), ImVec2(n.x, n.y));
+            interactorPushNodePosition(n.id, n.x, n.y);
         }
 
         blockMinimapInput(g_ce_show_minimap, g_ce_minimap); // G4：小地图区域输入与画布隔离（ed::Begin 之前）
@@ -298,65 +335,12 @@ void drawCompositeEditor(const char* title, bool* open)
         }
 
         // 拖出连线（类型不符变红被拒）
-        const bool ce_creating = ed::BeginCreate(ImVec4(0.29f, 0.56f, 0.89f, 1.0f), 2.0f);
-        if (ce_creating) {
-            ed::PinId start_pin;
-            ed::PinId end_pin;
-            if (ed::QueryNewLink(&start_pin, &end_pin) && start_pin && end_pin) {
-                PinRef from = resolvePin(start_pin, state.working.internal_graph);
-                PinRef to   = resolvePin(end_pin, state.working.internal_graph);
-                if (from.valid && to.valid && from.direction == engine::PortDirection::Input &&
-                    to.direction == engine::PortDirection::Output) {
-                    std::swap(from, to);
-                }
-                if (!from.valid || !to.valid) {
-                    ed::RejectNewItem(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), 2.0f);
-                }
-                else {
-                    std::string reason;
-                    const bool  ok = state.working.internal_graph.canConnect(
-                        from.node_id, from.port_id, to.node_id, to.port_id, &reason);
-                    if (!ok) {
-                        ed::RejectNewItem(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), 2.0f);
-                        if (ImGui::IsMouseReleased(0)) {
-                            state.error = reason;
-                        }
-                    }
-                    else if (ed::AcceptNewItem(ImVec4(0.29f, 0.56f, 0.89f, 1.0f), 2.0f)) {
-                        compositeEditorSnapshot("添加内部连线");
-                        std::string add_error;
-                        composite_editor_add_edge(from.node_id, from.port_id, to.node_id,
-                                                  to.port_id, &add_error);
-                        if (!add_error.empty()) {
-                            state.error = add_error;
-                        }
-                    }
-                }
-            }
-        }
-        // 【重要契约】与主画布 handle_create_link 一致：BeginCreate 返回 false 时
-        // CreateItemAction 的 m_InActive 仍被置 true，EndCreate() 必须无条件配对，
-        // 否则下一帧 BeginCreate 触发 IM_ASSERT(false == m_InActive) 崩溃。
-        ed::EndCreate();
+        // ARCH-E5：BeginCreate..EndCreate 成对契约 + 拒绝/接受语义收敛进 interactor.cpp
+        interactorCreateLink(ce_interact);
 
         // 删除（节点连带连线；连线直接删模型）
-        const bool ce_deleting = ed::BeginDelete();
-        if (ce_deleting) {
-            ed::LinkId deleted_link;
-            while (ed::QueryDeletedLink(&deleted_link)) {
-                if (ed::AcceptDeletedItem()) {
-                    compositeEditorSnapshot("删除内部连线");
-                    state.working.internal_graph.removeEdge("e" + std::to_string(deleted_link.Get()));
-                }
-            }
-            ed::NodeId deleted_node;
-            while (ed::QueryDeletedNode(&deleted_node)) {
-                if (ed::AcceptDeletedItem()) {
-                    compositeEditorDeleteNode("n" + std::to_string(deleted_node.Get()));
-                }
-            }
-        }
-        ed::EndDelete(); // 与 BeginDelete 无条件配对（契约同 BeginCreate）
+        // ARCH-E5：BeginDelete..EndDelete 成对契约收敛进 interactor.cpp
+        interactorDeleteOuter(ce_interact, "删除内部连线", "删除内部节点");
 
         // 右键菜单（节点 > 背景；G2 节点菜单：删除内部节点 / 改名）
         ed::Suspend();
@@ -380,7 +364,7 @@ void drawCompositeEditor(const char* title, bool* open)
             }
             if (ImGui::MenuItem("删除内部节点")) {
                 compositeEditorDeleteNode(ce_context_node);
-                ed::ClearSelection(); // 删除后清空选中，参数编辑区回落「未选中」
+                interactorClearSelection(); // 删除后清空选中，参数编辑区回落「未选中」
             }
             ImGui::EndPopup();
         }
@@ -475,37 +459,30 @@ void drawCompositeEditor(const char* title, bool* open)
         // G5/G7：拖动中的对齐吸附（辅助线）+ 网格 16px 吸附
         const SnapResult ce_snap = ceApplySnap(state.working.internal_graph);
 
-        // 位置写回（有变化才标记 dirty）
+        // 位置写回（有变化才标记 dirty；ARCH-E5：读回经 interactorReadNodePosition，
+        // 0.0f clamp = 不夹紧（保持 ce 原语义）、0.0f epsilon = 任何变化都写回）
         for (engine::Node& n : state.working.internal_graph.nodes) {
-            const ImVec2 p = ed::GetNodePosition(nodeHandle(n.id));
-            if (p.x != n.x || p.y != n.y) {
-                n.x          = p.x;
-                n.y          = p.y;
-                state.dirty  = true;
+            const PositionRead p = interactorReadNodePosition(n.id, n.x, n.y, 0.0f, 0.0f);
+            if (p.changed && p.editor_knows) {
+                n.x         = p.x;
+                n.y         = p.y;
+                state.dirty = true;
             }
         }
 
-        // PS-09-G1：同步内部节点选中（单选 → 右侧「参数编辑」区显示该节点参数）
+        // PS-09-G1：同步内部节点选中（单选 → 右侧「参数编辑」区显示该节点参数；
+        // ARCH-E5：ed 选中读取经 interactorSyncSelection，单选落点 = ce_interact.on_selection）
         ce_selected_node.clear();
-        {
-            const int sel_count = ed::GetSelectedObjectCount();
-            if (sel_count > 0) {
-                std::vector<ed::NodeId> sel_nodes(static_cast<std::size_t>(sel_count));
-                const int node_count = ed::GetSelectedNodes(sel_nodes.data(), sel_count);
-                if (node_count == 1) {
-                    ce_selected_node = "n" + std::to_string(sel_nodes[0].Get());
-                }
-            }
-        }
+        interactorSyncSelection(ce_interact);
 
         // ARCH-R4：Delete / Ctrl+S 统一走命令路由层（快捷键表 + dispatchCommand）。
         //  * 作用域 = CompositeEditor；窗口条件 = 上级节点编辑器根窗口聚焦/悬停
         //    （RootAndChildWindows：画布 / 顶栏 / 规格面板都算 —— DEBT-B1 修复语义）
         //  * 通用隔离（文本输入 / 激活控件 / 弹层 / 左键）在 handleShortcut 内判定
         //  * 与主画布 Delete / 菜单 / 工具栏同一实现（三入口收敛）
+        //  * 窗口判定收敛进 interactor（ARCH-E5：interactorWindowActiveComposite）
         handleShortcut(CommandScope::CompositeEditor,
-                       /*window_active=*/ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) ||
-                           ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows),
+                       /*window_active=*/interactorWindowActiveComposite(),
                        CommandContext{});
 
         ed::End();
