@@ -12,6 +12,7 @@
 #include "output_panel.h"
 #include "readonly_view.h"   // ARCH-R3：ReadOnlyView 渲染视图断言（零拷贝 / 同源）
 #include "commands.h"        // ARCH-R4：命令路由层断言（快捷键表完整性 / 唯一性）
+#include "event_bus.h"       // ARCH-E1：编辑事件断言（EventBus 机制 + 8 种类型 + 操作→事件）
 #include "deepseek_official_provider.h"
 #include "provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）
 #include "provider_factory.h"    // L2（B2-b · PB2-09）：按表 protocol 分派
@@ -950,9 +951,70 @@ int runSelftest(bool use_web, const std::string& provider_id)
                     has_ce_save ? "有" : "无", table_unique ? "是" : "否");
     }
 
+    // ---- ARCH-E1：编辑事件断言（EventBus 机制 + 8 种类型完整性 + 编辑操作→事件映射）----
+    //  * 机制：按 kind 分组订阅（发 NodeAdded 不触发 NodeRemoved 订阅者）· 同 kind 按订阅顺序
+    //    FIFO 分发 · 重复订阅追加 · unsubscribe 后不再收到（ARCH-D7 形态 1：通知）
+    //  * 类型：EditEventKind::Count == 8（ARCH-D12）
+    //  * 映射：createNode → NodeAdded · deleteNode → NodeRemoved（真实 editor() 操作，结束后恢复）
+    bool edit_event_ok = false;
+    {
+        using aiwrite::ui::EditEvent;
+        using aiwrite::ui::EditEventKind;
+
+        // ① 机制（用独立临时总线验证，不污染 editor() 的事件总线）
+        aiwrite::ui::EventBus bus;
+        std::vector<std::string> received;
+        const std::size_t h1 = bus.subscribe(EditEventKind::NodeAdded,
+            [&received](const EditEvent& e) { received.push_back("A:" + e.node_id); });
+        const std::size_t h2 = bus.subscribe(EditEventKind::NodeAdded,
+            [&received](const EditEvent& e) { received.push_back("B:" + e.node_id); });
+        const std::size_t h3 = bus.subscribe(EditEventKind::NodeRemoved,
+            [&received](const EditEvent& e) { received.push_back("R:" + e.node_id); });
+        bus.publish(EditEvent::node(EditEventKind::NodeAdded, "n_test"));
+        // NodeRemoved 订阅者 h3 不得收到 NodeAdded → 只收到 A/B 两条（按订阅顺序 FIFO）
+        const bool kind_filter_ok = received.size() == 2 && received[0] == "A:n_test" &&
+                                    received[1] == "B:n_test";
+        bus.unsubscribe(h1);
+        bus.publish(EditEvent::node(EditEventKind::NodeAdded, "n2"));
+        const bool unsubscribe_ok = received.size() == 3 && received[2] == "B:n2";
+        bus.publish(EditEvent::node(EditEventKind::NodeRemoved, "n3"));
+        const bool node_removed_ok = received.size() == 4 && received[3] == "R:n3";
+        const bool count_ok = (bus.subscriberCount(EditEventKind::NodeAdded) == 1) &&
+                              (bus.subscriberCount() == 2); // h2 + h3
+
+        // ② 8 种类型完整性（ARCH-D12）
+        const bool eight_kinds = static_cast<int>(EditEventKind::Count) == 8;
+
+        // ③ 编辑操作 → 事件映射（真实 editor() 操作；断言后删除恢复原图）
+        bool op_add = false;
+        bool op_remove = false;
+        const std::size_t ha = state.event_bus().subscribe(
+            EditEventKind::NodeAdded, [&op_add](const EditEvent& e) { op_add = !e.node_id.empty(); });
+        const std::size_t hr = state.event_bus().subscribe(
+            EditEventKind::NodeRemoved,
+            [&op_remove](const EditEvent& e) { op_remove = !e.node_id.empty(); });
+        const std::string tmp_id = state.createNode("TextInput", 0.0f, 0.0f);
+        const bool add_mapping_ok = op_add && !tmp_id.empty();
+        const bool remove_mapping_ok = state.deleteNode(tmp_id) && op_remove;
+        state.event_bus().unsubscribe(ha);
+        state.event_bus().unsubscribe(hr);
+
+        edit_event_ok = kind_filter_ok && unsubscribe_ok && node_removed_ok && count_ok &&
+                        eight_kinds && add_mapping_ok && remove_mapping_ok;
+        std::printf("[运行自检] 编辑事件：%s（kind分组=%s / FIFO顺序=%s / 注销=%s / "
+                    "NodeRemoved=%s / 计数=%s / 8种=%s / createNode→NodeAdded=%s / "
+                    "deleteNode→NodeRemoved=%s）\n",
+                    edit_event_ok ? "OK" : "失败", kind_filter_ok ? "是" : "否",
+                    kind_filter_ok ? "是" : "否", unsubscribe_ok ? "是" : "否",
+                    node_removed_ok ? "是" : "否", count_ok ? "是" : "否",
+                    eight_kinds ? "是" : "否", add_mapping_ok ? "是" : "否",
+                    remove_mapping_ok ? "是" : "否");
+    }
+
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
                       consistency_ok && param_driven_ok && async_ok && session_ok && sink_ok && seed_ok &&
-                      param_range_ok && paste_ok && readonly_view_ok && command_route_ok;
+                      param_range_ok && paste_ok && readonly_view_ok && command_route_ok &&
+                      edit_event_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "graph.h"
+#include "event_bus.h"     // ARCH-E1：编辑事件总线（E3 拆 WorkflowModel 后迁出）
 #include "recent_files.h"
 #include "run_session.h"
 #include "undo_stack.h"
@@ -38,6 +39,10 @@ struct EditorState {
     engine::Executor&       executor();
     const engine::Executor& executor() const;
     const engine::RunSnapshot& run_snapshot_view() const { return run.snapshot(); }
+
+    // ARCH-E1：编辑事件总线（E3 拆出 WorkflowModel 后迁到文档级对象；本批由本层持有过渡）
+    EventBus&       event_bus() { return event_bus_; }
+    const EventBus& event_bus() const { return event_bus_; }
 
     // 启动运行：先做运行前校验（失败 → 每条错误写 Console 与状态栏，不启动）
     bool startRun();
@@ -178,6 +183,8 @@ private:
     void onRunEvent(const engine::RunEvent& event);
 
     std::size_t run_sub_handle_ = 0;          // ARCH-R2：run.subscribeRunEvents 返回的句柄
+
+    EventBus event_bus_;                      // ARCH-E1：编辑事件总线（单线程 FIFO 通知）
 
     std::vector<engine::Node> clipboard_nodes_;                        // 复制的节点
     std::vector<engine::Edge> clipboard_edges_;                        // 选区内部的连线

@@ -175,11 +175,28 @@ void EditorState::createSampleWorkflow()
         const std::string provider_id = graph.nodes[4].id;
 
         std::string error;
-        graph.addEdge(input_id, "text", prompt_id, "vars", &error);
-        graph.addEdge(prompt_id, "text", llm_id, "prompt", &error);
-        graph.addEdge(llm_id, "text", output_id, "text", &error);
+        const std::string e_input_prompt = graph.addEdge(input_id, "text", prompt_id, "vars", &error);
+        if (!e_input_prompt.empty()) {
+            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, input_id, "text",
+                                               prompt_id, "vars", e_input_prompt));
+        }
+        const std::string e_prompt_llm = graph.addEdge(prompt_id, "text", llm_id, "prompt", &error);
+        if (!e_prompt_llm.empty()) {
+            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, prompt_id, "text",
+                                               llm_id, "prompt", e_prompt_llm));
+        }
+        const std::string e_llm_output = graph.addEdge(llm_id, "text", output_id, "text", &error);
+        if (!e_llm_output.empty()) {
+            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, llm_id, "text",
+                                               output_id, "text", e_llm_output));
+        }
         // 设计 §9.2：ProviderConfig 输出 provider 句柄 → 推理节点的 provider 输入
-        graph.addEdge(provider_id, "provider", llm_id, "provider", &error);
+        const std::string e_provider_llm =
+            graph.addEdge(provider_id, "provider", llm_id, "provider", &error);
+        if (!e_provider_llm.empty()) {
+            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, provider_id, "provider",
+                                               llm_id, "provider", e_provider_llm));
+        }
 
         if (engine::Node* input = graph.findNode(input_id)) {
             if (engine::Param* param = input->findParam("text")) {
@@ -222,6 +239,8 @@ std::string EditorState::createNode(const std::string& type, float x, float y)
     const std::string name = (definition != nullptr) ? definition->display_name : type;
     log::info("创建节点 " + id + "（" + name + "）");
     setStatus("已创建节点：" + name + "（" + id + "）");
+    // ARCH-E1：编辑事件通知（形态 1：通知；消费者各自订阅处理）
+    event_bus_.publish(EditEvent::node(EditEventKind::NodeAdded, id));
     return id;
 }
 
@@ -243,6 +262,8 @@ bool EditorState::deleteNode(const std::string& node_id)
         selected_node.clear();
     }
     log::info("删除节点 " + node_id + "（" + title + "）");
+    // ARCH-E1：编辑事件通知（连带其连线由 NodeRemoved 隐含）
+    event_bus_.publish(EditEvent::node(EditEventKind::NodeRemoved, node_id));
     return true;
 }
 
@@ -275,7 +296,12 @@ bool EditorState::deleteSelected()
     if (!selected_links.empty()) {
         snapshot("删除选中连线");
         for (const std::string& edge_id : selected_links) {
+            const engine::Edge* edge = graph.findEdge(edge_id);
             if (graph.removeEdge(edge_id)) {
+                // ARCH-E1：编辑事件通知（删除前取边数据作负载）
+                if (edge != nullptr) {
+                    event_bus_.publish(EditEvent::edge(EditEventKind::EdgeRemoved, *edge));
+                }
                 log::info("删除连线 " + edge_id);
             }
         }
@@ -352,6 +378,8 @@ bool EditorState::pasteClipboard()
         }
         id_map.emplace_back(source.id, new_id);
         created.push_back(new_id);
+        // ARCH-E1：粘贴创建的每个节点发 NodeAdded（与 createNode 同构）
+        event_bus_.publish(EditEvent::node(EditEventKind::NodeAdded, new_id));
     }
 
     for (const engine::Edge& edge : clipboard_edges_) {
@@ -369,7 +397,13 @@ bool EditorState::pasteClipboard()
             continue;
         }
         std::string error;
-        graph.addEdge(from_id, edge.from_port, to_id, edge.to_port, &error);
+        const std::string edge_id =
+            graph.addEdge(from_id, edge.from_port, to_id, edge.to_port, &error);
+        // ARCH-E1：粘贴创建的每条连线发 EdgeAdded
+        if (!edge_id.empty()) {
+            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, from_id, edge.from_port,
+                                               to_id, edge.to_port, edge_id));
+        }
     }
 
     selected_nodes = created;

@@ -1198,9 +1198,19 @@ int run(const AppOptions& options)
             }
             if (edit.changed) {
                 state.setStatus("参数已修改（可用工具栏「撤销」回退）");
+                // ARCH-E1：参数变化通知（未跟踪具体 key → 负载只带 node_id，通知「有参数变了」）
+                if (selected != nullptr) {
+                    state.event_bus().publish(EditEvent::node(EditEventKind::ParamChanged,
+                                                              selected->id));
+                }
             }
             if (edit.renamed) {
                 state.setStatus("节点标题已修改");
+                // ARCH-E1：标题变化通知
+                if (selected != nullptr) {
+                    state.event_bus().publish(EditEvent::node(EditEventKind::TitleChanged,
+                                                              selected->id));
+                }
             }
             ImGui::PopFont();
         }

@@ -266,6 +266,10 @@ void handle_create_link()
                         state.setStatus("连线失败：" + error);
                     }
                     else {
+                        // ARCH-E1：连线创建通知（EdgeAdded；负载含两端端口与 id）
+                        state.event_bus().publish(EditEvent::edge(
+                            EditEventKind::EdgeAdded, from.node_id, from.port_id, to.node_id,
+                            to.port_id, edge_id));
                         state.logSummary("[连线] " + from.node_id + "." + from.port_id + " → " +
                                           to.node_id + "." + to.port_id);
                         state.setStatus("已连线 " + from.node_id + " → " + to.node_id +
@@ -337,7 +341,12 @@ void handle_delete_items()
             if (ed::AcceptDeletedItem()) {
                 const std::string edge_id = "e" + std::to_string(deleted_link.Get());
                 state.snapshot("删除连线");
+                const engine::Edge* edge = state.graph.findEdge(edge_id);
                 if (state.graph.removeEdge(edge_id)) {
+                    // ARCH-E1：连线删除通知（删除前取边数据作负载）
+                    if (edge != nullptr) {
+                        state.event_bus().publish(EditEvent::edge(EditEventKind::EdgeRemoved, *edge));
+                    }
                     state.logSummary("[连线] 删除 " + edge_id);
                     state.setStatus("已删除连线 " + edge_id);
                 }
@@ -374,6 +383,11 @@ float clamp_position(float value)
 // ------------------------------------------------------------- 状态同步 -----
 void sync_selection(EditorState& state)
 {
+    // ARCH-E1：变化检测 → 选中真正变化才发 SelectionChanged（避免每帧高频通知）
+    const std::vector<std::string> prev_nodes  = state.selected_nodes;
+    const std::vector<std::string> prev_links  = state.selected_links;
+    const std::string              prev_single = state.selected_node;
+
     const int count = ed::GetSelectedObjectCount();
     const std::size_t capacity = static_cast<std::size_t>(std::max(count, 0));
 
@@ -402,6 +416,12 @@ void sync_selection(EditorState& state)
              std::find(state.selected_nodes.begin(), state.selected_nodes.end(),
                        state.selected_node) == state.selected_nodes.end()) {
         state.selected_node.clear();
+    }
+
+    // ARCH-E1：选中变化通知（仅在实际变化时发布）
+    if (state.selected_nodes != prev_nodes || state.selected_links != prev_links ||
+        state.selected_node != prev_single) {
+        state.event_bus().publish(EditEvent{EditEventKind::SelectionChanged});
     }
 }
 
@@ -451,6 +471,8 @@ void sync_positions(EditorState& state)
             node.x = clamp_position(position.x);
             node.y = clamp_position(position.y);
             moved  = true;
+            // ARCH-E1：节点移动通知（拖拽期间每帧位置变化都会发；通知形态，重复无害）
+            state.event_bus().publish(EditEvent::node(EditEventKind::NodeMoved, node.id));
         }
     }
     if (!moved) {

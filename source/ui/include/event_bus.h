@@ -1,0 +1,89 @@
+#pragma once
+
+// ============================================================================
+//  事件总线（ARCH-E1：EventBus + EditEvent 落地 · 阶段 2 编辑侧事件化）
+//
+//  架构落点：ARCHITECTURE.md §1.3 通信层 / §1.8.1 `EventBus` / 决策 ARCH-D7 / D12
+//   * 形态 1：通知（规则 4）—— 生产者只发事件，不关心谁消费；消费者各自订阅处理
+//   * 渲染 / 读取仍直接读核心状态（规则 3），事件只用于「变化通知」，不携带数据本身
+//   * 单线程 FIFO：publish 同步按订阅顺序分发（UI 线程），不跨线程、不存历史、不合并
+//   * 本批落地 EditEvent（8 种，ARCH-D12）；RunEvent 仍走 RunSession 现有队列（ARCH-D10）
+//
+//  E1 范围（事件系统就绪）：EventBus + EditEvent 类型 + 编辑操作发布点 + 单元断言；
+//  消费方（Undo / autosave / RunSession）在 E2 起逐步改为订阅（ARCH-D22 / ARCH-E2）。
+//  过渡登记：EventBus 当前由 `EditorState` 持有（editor().event_bus()）；E3 拆出
+//  `WorkflowModel` 后迁到文档级对象（§1.8.11 依赖图：WorkflowModel 依赖 EventBus）。
+// ============================================================================
+
+#include <cstddef>
+#include <functional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "graph.h"   // engine::Edge（连线事件负载）
+
+namespace aiwrite::ui {
+
+// 8 种编辑事件类型（ARCH-D12）
+enum class EditEventKind {
+    NodeAdded,         // 节点创建
+    NodeRemoved,       // 节点删除（连带其连线由 NodeRemoved 隐含）
+    NodeMoved,         // 节点位置变化（拖拽）
+    EdgeAdded,         // 连线创建
+    EdgeRemoved,       // 连线删除
+    ParamChanged,      // 参数值变化
+    TitleChanged,      // 标题变化
+    SelectionChanged,  // 选中变化
+    Count              // 哨兵：类型总数（断言用 = 8）
+};
+
+// 编辑事件（通知形态：只携带最小标识负载；具体数据消费者直接读核心状态）
+struct EditEvent {
+    EditEventKind kind = EditEventKind::Count;
+    // 节点类事件负载（NodeAdded / NodeRemoved / NodeMoved / ParamChanged / TitleChanged）
+    std::string node_id;
+    // 参数事件负载（ParamChanged；未跟踪到具体 key 时留空 = 通知「有参数变了」）
+    std::string param_key;
+    // 连线事件负载（EdgeAdded / EdgeRemoved）
+    std::string edge_id;
+    std::string edge_from_node;
+    std::string edge_from_port;
+    std::string edge_to_node;
+    std::string edge_to_port;
+
+    // 静态工厂（发布点免手动填全部字段）
+    static EditEvent node(EditEventKind kind, std::string node_id);
+    static EditEvent param(std::string node_id, std::string param_key);
+    static EditEvent edge(EditEventKind kind, const engine::Edge& edge);
+    static EditEvent edge(EditEventKind kind, std::string from_node, std::string from_port,
+                          std::string to_node, std::string to_port, std::string edge_id);
+};
+
+// 事件总线（单线程 FIFO 通知总线；订阅者按类型分组，按订阅顺序分发）
+class EventBus {
+public:
+    using EditCallback = std::function<void(const EditEvent&)>;
+
+    // 订阅某种编辑事件；返回句柄 id（>0）。重复订阅同一类型 = 追加（FIFO 顺序）。
+    std::size_t subscribe(EditEventKind kind, EditCallback callback);
+    // 按句柄注销；不存在的句柄为空操作。
+    void unsubscribe(std::size_t handle);
+    // 发布：同步分发给该类型全部订阅者（拷贝列表防回调改容器）。
+    void publish(const EditEvent& event);
+
+    // 自检辅助（--run-selftest 单元断言用）
+    std::size_t subscriberCount(EditEventKind kind) const;
+    std::size_t subscriberCount() const;
+
+private:
+    struct Subscriber {
+        std::size_t   handle;
+        EditEventKind kind;
+        EditCallback  callback;
+    };
+    std::vector<Subscriber> subscribers_;   // 按订阅顺序（FIFO）
+    std::size_t             next_handle_ = 1;
+};
+
+} // namespace aiwrite::ui

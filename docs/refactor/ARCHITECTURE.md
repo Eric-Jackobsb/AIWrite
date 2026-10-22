@@ -328,7 +328,7 @@ SettingsPanel settings(ctx.config());
 
 | 批 | 内容 | 产出 | 验证 |
 |---|---|---|---|
-| **ARCH-E1** | `EventBus` + `EditEvent` 落地：新增事件总线 + 8 种事件类型 | 事件系统就绪 | 构建 + 单元断言 |
+| **ARCH-E1** | ~~`EventBus` + `EditEvent` 落地：新增事件总线 + 8 种事件类型~~ ✅ **已落地（2026-10-22）** | 事件系统就绪（8 种类型各有真实发布点 + 单元断言） | 构建 0/0 + `--run-selftest`（新增编辑事件断言）+ exec 713/0 + graph 151/0 + ce_repro 全帧 OK + check_links 1786/0 + check_all 19/19 |
 | **ARCH-E2** | Undo/autosave 订阅化：改为订阅 `EditEvent` | 同步次数降低 | 构建 + `--graph-selftest` 151/0 |
 | **ARCH-E3** | `WorkflowModel` 拆分：Graph + Undo 从 `editor()` 拆出 | 文档级独立 | 构建 + `--graph-selftest` |
 | **ARCH-E4** | `SelectionState` 拆分 | 选中独立 | 构建 + `--graph-selftest` |
@@ -454,13 +454,14 @@ SettingsPanel settings(ctx.config());
 | 2026-10-22 | v1.0 | **用户拍板全部决策** —— ① 增量式重构；② 6 个对象拆分；③ CeSession 对称拆分；④ 先运行后编辑；⑤ 调用方直接持有对象；⑥ 工具+流程双保险；⑦ 事件形态 1（通知）；⑧ 渲染直接读；⑨ 保留 WorkflowModel；⑩ 复用 RunEvent；⑪ ReadOnlyView；⑫ 8 种 EditEvent；⑬ RunEvent 订阅化；⑭ `editor()` 完全退场；⑮ 删除 TextureCache 例外；⑯ 补依赖图；⑰ 补差异盘点；⑱ 补对象交互断言；⑲ 回归基线只升不降。**迁移路线重组为 ARCH-R / E / A / Z 四阶段。** |
 | 2026-10-22 | **v1.1** | **补充 §1.8 对象定义总表** —— ① `EventBus` / `RunSession` / `WorkflowModel` / `SelectionState` / `ReadOnlyView` / `AutosaveService` / `Diagnostics` / `Clipboard` / `WorkflowFile` / `AppContext` **10 个对象全部定稿**（一句话定义 + 维度表 + 限制 + 依赖图 + 注入示例 + `rg` 断言）；② 新增 `ARCH-D20`~`ARCH-D44`（25 条对象级决策）；③ §4 验收判据新增第 8 条（`AppContext` 运行时不可访问）；④ §5 风险表新增「`AppContext` 重新长成上帝对象」对策；⑤ §1.6 状态生命周期表 `RunSession` 改为「启动（常驻）」。 |
 | 2026-10-22 | **v1.2** | **ARCH-R3 落地** —— ① 新增 `ReadOnlyView`（`readonly_view.h`）：每帧主循环统一构建一次（`ARCH-D30`）、字段 = 三个核心 + 配置（`ARCH-D31`）、快照空对象 = 未运行（`ARCH-D32`）、渲染签名 `render(const ReadOnlyView&)`（`ARCH-D33`）、零拷贝访问器 `nodes_for_render` / `edges_for_render`（`ARCH-D34`）、使用者 = 画布/参数面板/输出面板/状态栏/信息面板（`ARCH-D35`）；② 画布 / 输出面板 / 参数面板 / 状态栏 / 信息面板渲染读取统一走 view，交互写仍走 `editor()`（E3/E4 拆分后收敛）；③ `--run-selftest` 新增 ReadOnlyView 零拷贝/同源断言（`ARCH-D18`）。验证：构建 0/0 · run-selftest PASS · exec 713/0 · graph 151/0 · check_links 1768/0。 |
-| 2026-10-22 | **v1.3（当前）** | **ARCH-R4 落地（命令路由层）** —— ① 新增 `ui/commands.h/.cpp`：`AppCommand` 命令全集 + `dispatchCommand` **单一实现** + `ShortcutBinding` **快捷键表** + `handleShortcut` 表驱动分派；② **三入口收敛**：菜单（文件/编辑/上级节点/帮助）/ 工具栏（撤销/重做/删除/新建/示例/打开/保存）/ 快捷键（主画布 Delete · ce Delete/Ctrl+S）统一经 `dispatchCommand` —— §2.1「三入口行为漂移」关闭；③ **修 Ctrl+S**：主窗口 Ctrl+S = 保存工作流（此前主窗口无保存快捷键），作用域隔离经 `compositeEditorWindowFocused()`（ce 窗口聚焦/悬停 → Ctrl+S 归 ce 保存上级节点）；ce 顶栏「保存」按钮收敛到 `dispatchCommand(CompositeSave)`（与 Ctrl+S 同一路径 = DEBT-B1 语义）；④ 范围边界：视图菜单（面板可见性 + config 持久化）与运行/停止（P1-b 预检弹窗）不入命令层（单入口 / 无三入口漂移，见审计）。验证：构建 0/0 · run-selftest PASS（新增命令路由断言）· exec 713/0 · graph 151/0 · ce_repro 全帧 OK · check_links 1774/0 · check_all 19/19。 |
+| 2026-10-22 | **v1.3** | **ARCH-R4 落地（命令路由层）** —— ① 新增 `ui/commands.h/.cpp`：`AppCommand` 命令全集 + `dispatchCommand` **单一实现** + `ShortcutBinding` **快捷键表** + `handleShortcut` 表驱动分派；② **三入口收敛**：菜单（文件/编辑/上级节点/帮助）/ 工具栏（撤销/重做/删除/新建/示例/打开/保存）/ 快捷键（主画布 Delete · ce Delete/Ctrl+S）统一经 `dispatchCommand` —— §2.1「三入口行为漂移」关闭；③ **修 Ctrl+S**：主窗口 Ctrl+S = 保存工作流（此前主窗口无保存快捷键），作用域隔离经 `compositeEditorWindowFocused()`（ce 窗口聚焦/悬停 → Ctrl+S 归 ce 保存上级节点）；ce 顶栏「保存」按钮收敛到 `dispatchCommand(CompositeSave)`（与 Ctrl+S 同一路径 = DEBT-B1 语义）；④ 范围边界：视图菜单（面板可见性 + config 持久化）与运行/停止（P1-b 预检弹窗）不入命令层（单入口 / 无三入口漂移，见审计）。验证：构建 0/0 · run-selftest PASS（新增命令路由断言）· exec 713/0 · graph 151/0 · ce_repro 全帧 OK · check_links 1774/0 · check_all 19/19。 |
+| 2026-10-22 | **v1.4（当前）** | **ARCH-E1 落地（阶段 2 编辑侧事件化 · EventBus + EditEvent）** —— ① 新增 `ui/event_bus.h/.cpp`：`EventBus`（`subscribe` / `unsubscribe` / `publish` 单线程 FIFO 通知总线，§1.8.1 形态 1 = ARCH-D7）+ `EditEvent` 8 种类型（ARCH-D12）+ 静态工厂；② `EditorState` 持有 EventBus（`editor().event_bus()`；E3 拆 WorkflowModel 后迁到文档级对象）；③ **发布点覆盖 8 种事件**（§2.2 问题乙「一次操作触发多次同步」的事件基础就绪）：`createNode`→NodeAdded · `deleteNode`→NodeRemoved · 画布拖拽（sync_positions）→NodeMoved · 画布连线（handle_create_link / pasteClipboard / createSampleWorkflow）→EdgeAdded · 连线删除（handle_delete_items / deleteSelected）→EdgeRemoved · 参数面板（edit.changed）→ParamChanged · 标题（edit.renamed）→TitleChanged · 选中同步（sync_selection 变化检测）→SelectionChanged；④ `--run-selftest` 新增「编辑事件」断言（机制：kind 分组 / FIFO 顺序 / 注销 / 计数 + 8 种类型完整性 + 编辑操作→事件映射 = ARCH-D18）。范围边界：ce（上级节点编辑器）独立模型不接入（E3/E5 处理）；批量/重置操作（undo / clear / open）细粒度事件语义留 E2 定义。验证：构建 0/0 · run-selftest PASS · exec 713/0 · graph 151/0 · ce_repro 全帧 OK · check_links 1786/0 · check_all 19/19。 |
 
 ---
 
-**文档结束 · v1.3 定稿。**
-**下一步：按 ARCH-E1 实施（阶段 2 编辑侧事件化 · EventBus + EditEvent；等用户启动）。**
-**已完成：ARCH-R1（RunSession 对象化）· ARCH-R2（RunEvent 订阅化）· ARCH-R3（ReadOnlyView 渲染视图）· ARCH-R4（命令路由层）—— 审计见 docs/audit/audit_arch_r1.md / audit_arch_r2.md / audit_arch_r3.md / audit_arch_r4.md。**
+**文档结束 · v1.4 定稿。**
+**下一步：按 ARCH-E2 实施（Undo / autosave 订阅化：改为订阅 EditEvent；等用户启动）。**
+**已完成：ARCH-R1（RunSession 对象化）· ARCH-R2（RunEvent 订阅化）· ARCH-R3（ReadOnlyView 渲染视图）· ARCH-R4（命令路由层）· ARCH-E1（EventBus + EditEvent）—— 审计见 docs/audit/audit_arch_r1.md / audit_arch_r2.md / audit_arch_r3.md / audit_arch_r4.md / audit_arch_e1.md。**
 
 
 
