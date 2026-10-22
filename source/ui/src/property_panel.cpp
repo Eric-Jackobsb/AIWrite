@@ -774,11 +774,13 @@ void sync_provider_id_with_mode(Node& node)
     }
 }
 
-// 绘制单个参数控件
+} // namespace
+
+// 绘制单个参数控件（PS-09-G1 方案乙：公共入口，主属性面板 / 上级节点编辑器共用）
 //  返回 edited = 本次编辑结束（失焦/回车）；begin_edit = 控件刚被激活（值尚未变化，
 //  外层在此刻压撤销快照）；changed_now = 值已写回模型（编辑过程中每帧都可能为 true）
 bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed_now,
-                       const std::vector<std::string>* enum_override = nullptr)
+                       const std::vector<std::string>* enum_override)
 {
     bool edited             = false;
     const std::string label = param_label(param);
@@ -1233,8 +1235,6 @@ bool draw_param_widget(Node& node, Param& param, bool& begin_edit, bool& changed
     ImGui::PopID();
     return edited;
 }
-
-} // namespace
 
 void draw_property_panel(const char* window_title, bool* open, Node* node,
                          PropertyEditResult& result)

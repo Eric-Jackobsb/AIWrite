@@ -1,0 +1,171 @@
+{
+  "board_rules": [
+    "待人工验证清单（ToVerify.todo）",
+    "依据：Archive/README.md §三 5（指令式归档）—— 归档件仅缺人工验证的部分，全部迁此承接",
+    "来源：docs/Archive/actionPlan/Composition_node.md（2026-10-18 归档）· 承接原 DevPlan.todo Human > GUI 点选验收（id=434）",
+    "状态：⏳ 待真人执行 —— 每项真机/点选操作后勾选 done；验收结论回填 CHANGELOG + AI_Status",
+    "环境：Win32 · source\\build.ps1 构建通过 · 可执行 build\\bin\\aiwrite.exe",
+    "用法：逐项真机操作并勾选；每项留「物证」位（截图 / Console 输出 / 生成文件路径）。"
+  ],
+  "todotree": {
+    "tree": [
+      {
+        "key": 1,
+        "children": [
+          {
+            "key": 2,
+            "children": [],
+            "todo": {
+              "id": 2,
+              "content": "新建：节点库「上级节点」分类 → 「新建上级节点」→ 独立编辑标签页打开（§10 · CN-D11）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          },
+          {
+            "key": 3,
+            "children": [],
+            "todo": {
+              "id": 3,
+              "content": "编辑：编辑器内添加基础节点 + 连线 + 标记输入/输出端口（占位节点 · CN-D6/D7）→ 命名 → 保存",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          },
+          {
+            "key": 4,
+            "children": [],
+            "todo": {
+              "id": 4,
+              "content": "打包：画布选中多节点 → 右键「打包为上级节点」→ 暴露参数勾选 → 保存（§8 · CN-D10 双创建方式）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          },
+          {
+            "key": 5,
+            "children": [],
+            "todo": {
+              "id": 5,
+              "content": "父画布运行：把上级节点拖入父画布 → 连外部节点 → 运行 → 展开执行结果正确（§7.1 · CN-D9 · 内部 id 无冲突）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          },
+          {
+            "key": 6,
+            "children": [],
+            "todo": {
+              "id": 6,
+              "content": "存储验证：`~/.brain-ai/composites/<id>.json` 独立文件生成（§3.3 · CN-D12）· 重启应用后节点库「上级节点」分类仍可见（惰性扫描）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          },
+          {
+            "key": 7,
+            "children": [],
+            "todo": {
+              "id": 7,
+              "content": "禁止嵌套：上级节点编辑器中不能再拖入上级节点（编辑时禁止 + 校验拒绝 · CN-D5/D16）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          },
+          {
+            "key": 8,
+            "children": [],
+            "todo": {
+              "id": 8,
+              "content": "视觉区分：画布紫条 + 节点库独立分类「上级节点」肉眼确认（§10 · CN-D13）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 1,
+          "content": "〇、CN-01 上级节点（Composite Node）人工验收（§14 十项清单 · 原 DevPlan id=434）—— 新建 → 编辑 → 打包 → 父画布运行 → 展开执行结果正确",
+          "done": false,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 9,
+        "children": [
+          {
+            "key": 10,
+            "children": [],
+            "todo": {
+              "id": 10,
+              "content": "是否补正式验收框架 `VCN-*` / `ACN-*`（§14-8 · 现以 `composite_selftest` 51 断言替代）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          },
+          {
+            "key": 11,
+            "children": [],
+            "todo": {
+              "id": 11,
+              "content": "程序化生成上级节点规则（§14-10 · 现仅 UI 打包路径）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          },
+          {
+            "key": 12,
+            "children": [],
+            "todo": {
+              "id": 12,
+              "content": "预览增强：悬停 / 弹窗放大预览形态（§14-3 未拍板部分）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          },
+          {
+            "key": 13,
+            "children": [],
+            "todo": {
+              "id": 13,
+              "content": "调试设施去留：`--auto-open-composite` / 窗口栈 watchdog / `ce_repro` / `composite_editor_test_drive_new_dialog` 保留 or 摘除",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          }
+        ],
+        "todo": {
+          "id": 9,
+          "content": "一、CN-01 待拍板项（人工决策 · 验收通过后一并回填）",
+          "done": false,
+          "level": "secondary"
+        }
+      }
+    ],
+    "expandKeys": [
+      9,
+      1
+    ],
+    "add_mode": "bottom",
+    "virtual": false,
+    "showLine": false,
+    "playFontSize": 24,
+    "title": "ToVerify",
+    "autoSort": false,
+    "showEndTime": false,
+    "simpleMode": false,
+    "lang": "en",
+    "version": "1792327295538"
+  }
+}

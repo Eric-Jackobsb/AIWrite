@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 本文件记录 AIwrite 的全部重要变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循语义化版本 `MAJOR.MINOR`（设计文档 T-15）。
@@ -33,12 +33,31 @@
 
 | 日期 | 批次（新 → 旧） |
 |---|---|
+| 2026-10-18 | 📦 `Composition_node` **指令式归档批（组合层 L4 重启 · 零代码）**：设计文档 `docs/actionPlan/Composition_node.md` → `docs/Archive/actionPlan/`（`git mv` · 归档标记行 + 状态 ✅ + 相对链接层级修正 + 承接位指定）· 新建 **`docs/actionPlan/ToVerify.todo`**（TodoList JSON · 承接原 DevPlan `Human > GUI 点选验收 id=434`）· DevPlan.todo：**id=347 勾 done**（归档）· **id=434 迁出**（Human 30→29 · GUI 8→7）· 五处索引同步（Archive/README · DocMAP · AI_README · 变量术语对照表 · M_preset_library）· 人工验收 + 待拍板项（`VCN-*`/`ACN-*` 验收框架 · 程序化生成规则 · 调试设施去留）全部迁 ToVerify.todo —— ⏳ 待真人执行 |
+| 2026-10-17 | 🧩 批 ⑦（PW-08 复位动作根治 · D-35③ 修订）：R2 阻塞根因实锤 —— **干净 profile 复现 `0x802A000C`**（关窗后**同一毫秒**重开撞 `CreateCoreWebView2Controller` 浏览器侧瞬时竞态 · **profile 论否决**）→ 复位**首选**改为**同一控制器导航回新会话页**（新增 `navigate_and_wait` 原语：`kNavigateMessage` / `run_navigate_in_window` / `navigate_now` · `window_table.h` 新 `ResetAction::NavigateToSession`）· **关窗重开降级兜底**（`kReopenSettleMs` 避让 + CreateController **3×300ms 退避重试** + 四处死壳重开点避让）· `api_probe` PW-08 断言同步（6→7 条）· 文档 §4.4 / §6 / §9 修订 | | 2026-10-17 | 📦 批 ⑥（ISCC 装包编译 + R2 探测阻塞登记）：winget 装 **Inno Setup 6.7.3** → `package.ps1` 全流程 **exit 0** · `AIwrite-Setup-0.2.0.exe` **9.1 MB**（payload 19 文件 / 34.6 MB · .iss 4/4 PASS）· **Human ①-1 勾账 done**；**R2 探测轮受阻未闭环**（门禁 11/11 PASS · DOM 探测 10 站全「控制器未就绪」= Debug `abort()` 弹窗 · `Invoke-Capture` 句柄继承缺陷致脚本崩溃） |
+| 2026-10-17 | 🧩 批 ⑤（Human 人工关卡总账 + Bootstrapper 补齐）：`DevPlan.todo` 新增 **`Human`（人工关卡）根分类**（8 组 **30 条 checklist** · 打包/站点回填/Key 门/GUI/环境模拟/真机/结论人审/契约 · 与 Test/Feature 并行不改原条目）+ 网络恢复后 **WebView2 Bootstrapper 自动下载**（1.78 MB · `PQ-02` 可选件补齐）· 零代码 |
+| 2026-10-17 | 🧩 批 ④（TST-L03 收口 + Debug 清零 + 看板一致性）：`loop_verify.ps1` 新增 **①′ 跨轮 diff 段**（对齐 `--json-diff` 口径）+ ③ 待人工清单成熟化 · **`DBG-M1-01` 勾账 done（Debug 分支清零）** · **`TST-L03` 勾账 done（Test 15→14）** · Docs 陈旧计数修正（批②遗留 4→1）· `FEA-M_patchB-30②` 已落地登记 |
+| 2026-10-17 | 🗂️ 看板勾账批 ③ + 📦 `FEA-M6-06` 打包入闸（组合批）：**`FEA-M4-02` / `DBG-M4-02` / `FEA-M4-12`（批 3 真取消 + 自检扩展 · V-11 6/0 · V-12 17/0）/ `DBG-L01`（批 5 断链收口 · 1549/0）实证已落地补齐 `done`** + Debug/Feature 子树计数修正（Debug 3→1 · Feature 5→3 · M4 双组清零）+ **打包 payload 入 `check_all` 第 ⑦ 项**（`package.ps1 -SkipBuild -SkipInstaller` · 一键自检 **15→16 项**） |
 | 2026-10-17 | 🗂️ 看板勾账批 ②（`DevPlan.todo` · 零代码）：**`FEA-M4-07` / `DBG-M4-05` 实证已落地（2026-10-11 批 2）补齐 `done`** + Debug/Feature 子树计数修正（M4·M6·M2·PatchB-L1 组 + 根计数） |
 | 2026-10-17 | 🗂️ 看板勾账批（`DevPlan.todo` · 零代码）：**19 项已落地未勾账项补齐 `done`** —— M8 分支 `FEA-M8-21`（批 5）+ M_patchC 分支 `PW-02/04/05/06/08`（批 1）· `PW-10/11`（2026-10-16）· `DOC-PW-12`（2026-10-15）+ Feature 分支 `FEA-M4-11`（2026-10-16）· `FEA-M4-13`（批 7）· `FEA-M_patchB-25`（批 2）· `FEA-M2-02`/`FEA-M2-03`（批 4）+ Debug 分支 `DBG-M6-01`/`DBG-M6-02`（批 4）+ Docs 分支 `DOC-M4-01`/`DOC-M6-01`（2026-10-16）· `DOCS-CS-01`（2026-10-15）；M8 根「要做 2→1 项（余真机 Gate）」· M_patchC 根「代码 8 项全部勾账 · 余真机 `AW-*`」 |
 | 2026-10-17 | 📚 终端管理验证措施批（`AI_README` §13.1 · 零代码）：§13 补 **13.1 验证措施**（kill 生效闭环 —— 枚举口径 / 基线→kill→复查三步 / 达标 ≤3 / 未达标转人工 / 物证纪律 / 排除清单）+ 纪律首跑实测：空闲终端后端 **8 → 1**（保留当前命令 shell） |
 | 2026-10-16 | 🧩 `Composition_node` **实施批（组合层 L4 重启落地）**：上级节点模型 / 注册表 / 独立文件存储 / 展开执行 + 编辑器（打包选区·新建·独立标签页·撤销重做）+ 节点库「上级节点」分类 + 紫条视觉 + 新建草稿保存修正（`allow_incomplete_draft`）+ `composite_selftest` **51 断言**并入 `--exec-selftest`（构建 0/0 · exec **681/0** · graph **151/0**）—— ⛔ 待人工验收 |
 | 2026-10-16 | 📖 规范审查 + 文档收口批 CN-0：`Composition_node.md` 设计定稿（上级节点 = 组合层 **L4 重启** · `CN-D1`~`CN-D20` · 零代码）—— 规范审查（3 阻断 2 冲突 5 缺口全暴露）+ 修正基础节点计数 **20→14**（三处）+ **五处登记**（AI_README §5 / DocMAP / 变量术语对照表 §11.2 / CHANGELOG / DevPlan.todo）+ `CN-D20` L4 重启（覆盖 `M_node_expansion`「L4 不做」） |
 | 2026-10-16 | 🔁 功能批：`PD-06①` 通用重跑（`FEA-M4-11` · NodeOnly/Downstream）+ `PW-10` 模板占位符报错（`PQ-13` 落地）+ `PW-11` 归档保留下限 `kHistoryFloor=3`（exec **655→681** · graph 151/0 · check_all 15/15） |
+
+**📦 `Composition_node` 指令式归档批（2026-10-18 · 零代码）**
+
+- **背景**：上级节点（Composite Node · 组合层 L4 重启）设计定稿（2026-10-16）+ 实施完成（代码 2026-10-16 · `composite_selftest` 51 断言 · exec **681/0** · graph **151/0** · 构建 0/0），**仅剩人工验收** —— 开发者指令「只缺人工验证就先归档」⇒ 按 `Archive/README.md` §三 5（**指令式归档**）直接归档。
+- **归档动作**：`git mv docs/actionPlan/Composition_node.md docs/Archive/actionPlan/Composition_node.md` —— 顶部加 `📦 已归档` 标记行（含**承接位**）· 状态行 `🟢 设计定稿·⛔ 待人工验收` → `✅ 已归档（2026-10-18 · 指令式）` · 相对链接层级修正（同目录 `M_node_expansion.md` 等 → `../`；`../ai_writer_nodes.md` → `../../`；`../../AI_README.md` → `../../../`）· 正文按归档纪律**只增不改**。
+- **人工验证迁移**：新建 **`docs/actionPlan/ToVerify.todo`**（TodoList JSON · 与 `L1_checklist.todo` 同构 · board_rules + todotree）承载全部人工项：
+  - **〇、CN-01 人工验收（§14 十项清单 · 原 DevPlan id=434）**：新建 → 编辑 → 打包 → 父画布运行 → 展开执行结果正确（7 条子项：新建独立标签页 / 编辑端口标记 / 打包暴露参数 / 父画布运行 / 存储独立文件 + 重启可见 / 禁嵌套 / 紫条视觉）。
+  - **一、CN-01 待拍板项**：① 是否补正式 `VCN-*`/`ACN-*` 验收框架（§14-8 · 现以 51 断言替代）· ② 程序化生成上级节点规则（§14-10）· ③ 预览增强（§14-3 悬停/弹窗放大）· ④ 调试设施去留（`--auto-open-composite` / 窗口栈 watchdog / `ce_repro` / `composite_editor_test_drive_new_dialog`）。
+- **看板同步（`DevPlan.todo`）**：id=347（CN-01 实施）勾 **done** + 内容改「已归档 · 人工验收迁 ToVerify.todo」· fileLink → 归档路径；id=434 从 `Human > GUI 点选验收` **迁出**（Human 30→**29** 项 · GUI 8→**7** 项 · 计数文本同步）。
+- **五处索引同步**：`docs/Archive/README.md`（§一 索引行 + 「最近归档」行 + 承接位说明）· `docs/DocMAP.md`（行移至 Archive 路径 + 状态 ✅ + ToVerify 指针）· `AI_README.md` §3（现行计划 L4 注记改「已归档 · 人工验收见 ToVerify.todo」）· `docs/变量术语对照表.md` §11.2（`CN-*` 行来源改归档路径 + 归档注）· `docs/draft/M_preset_library.md`（4 处 `../actionPlan/Composition_node.md` → `../Archive/actionPlan/Composition_node.md`）。
+- **验证（2026-10-18 本机 · 零代码批）**：本批零代码 ⇒ 运行链路数字不变；`DevPlan.todo` JSON 可解析（`json.load` 通过 · tree 10 根不变）；归档件全量链接扫描 = 7 个相对链接全部落在有效路径；全库 grep 复核 `actionPlan/Composition_node.md` 旧路径 0 残留（历史批次 CHANGELOG 记录除外 · 只增不改）。
+- **落点**：`docs/Archive/actionPlan/Composition_node.md` · `docs/actionPlan/ToVerify.todo`（新建）· `docs/DevPlan.todo` · `docs/Archive/README.md` · `docs/DocMAP.md` · `AI_README.md` · `docs/变量术语对照表.md` · `docs/draft/M_preset_library.md` · `docs/AI_Status.md` · 本文件。**⛔ 未提交**（协作契约 §6）。
+
+---
 
 | 2026-10-16 | 📚 文档批次：`DOC-M6-01` 打包 / 首启 / 设置字段说明 + `DOC-M4-01` Patch B 文档（Provider 抽象 · 官方 API 用法 · 凭据管理器 · 会话失效 · 流式行为）—— README 扩 2 章 + 新建 `packaging/PACKAGING.md`（零代码） |
 | 2026-10-16 | 🛠️ 看板格式修复：`audit/L1_checklist.todo` 由 Markdown 转为 TodoList JSON（`todotree` schema · 与 `DevPlan.todo` 同构 · 36 项全量保留 · 零代码） |
@@ -90,6 +109,54 @@
 | 2026-10-08 | 📨 `PW-07f` 真实发送链路：CDP 可信输入 + 回执验证 + 兜底点击 |
 | 2026-10-08 | ↩️ `PW-08` 答案归属门 v2「已回退」 |
 | 2026-10-08 | 🔒 `PW-07` 答案归属门（精简版）落地 + `PW-07b..n` 隔离存档 |
+
+---
+
+**🧩 批 ④：TST-L03 收口 + DBG-M1-01 勾账（Debug 清零）+ 看板一致性（2026-10-17）**
+
+- **背景**：`DBG-M1-01`（WebView2 缺失引导）与 `TST-L03`（报告模板）是剩余**可自动化**的两项看板项 —— `DBG-M1-01` 的修复早已由 M6-02 首启引导（`PM-01` · 2026-10-10）承接但从未勾账（陈旧项）；`TST-L03` 只余「跨轮 diff 段 + 待人工清单成熟化」两项待办。
+- **本轮落地**：
+  * **`TST-L03` 收口（代码）**：`source/tools/loop_verify.ps1` 新增 **①′ 跨轮 diff 段**（对齐 `--json-diff` 口径 —— 对比上一份 `build/loop/*/report.json` 的 `matrix[].state`，输出 状态变化（prev→cur）/ 新增 / 消失 + URL 变化提示；`report.md` 段 + `report.json` `diff{}` 块）+ **③ 待人工清单成熟化**（每条 S3 失败 / 未测项补「复现 + 只读诊断」命令）；算法四分支独立测试 **ALL PASS** · 空轮端到端（`-SkipGates -SkipProbe`）**exit 0** ⇒ 勾账 done（Test **15→14 项**）。
+  * **`DBG-M1-01` 勾账（零代码）**：由 M6-02 首启引导承接 —— `utils/webview2_runtime.{h,cpp}` 三路只读探测 + 界面「依赖自检」区（缺失红字 + 安装建议 + 「打开下载页」/「随包安装」/「重新检测」按钮）+ `--dep-check`（缺失 ⇒ exit 1 + 安装指引）+ 诊断报告 `[依赖]` 分节 + 启动日志；2026-10-17 复测 `--dep-check` **PASS · exit 0**（WebView2 运行时 152.0.4191.66（api））⇒ 勾账 done（**Debug 分支清零**：Debug 1→0 · M1 1→0）。
+  * **看板一致性**：Docs 陈旧计数修正（批②遗留 `Docs 4→1` · Docs/M4·M6 归零）；`FEA-M_patchB-29…30` 进度登记 **`PB2-30②` 面板「测试选择器」✅ 已落地**（2026-10-11 批 2 · `ui/connection_test.{h,cpp}` + 面板按钮）⇒ 剩余唯一人工关卡 = 11 条 `answer_selector` 逐站实测回填（需人工登录 + 发消息）。
+- **验证（2026-10-17 本机实测）**：loop_verify.ps1 语法 0 错误 · diff 四分支独立测试 ALL PASS · 空轮端到端 exit 0 · 看板一致性验证 ALL PASS（Debug/Feature/Test/Docs 计数 = 实际未 done 数 · 纯 CRLF 无 BOM）。
+- **⛔ 仍挂人工 / 真机（如实登记）**：`DBG-M1-01` 余「模拟缺失环境」人工关卡（VM-01）；`TST-L03` 的跨轮 diff 需下一份真轮次报告才见实绩（当前 `build/loop` 为空）；`FEA-M_patchB-29` 余 11 条 `answer_selector`（唯一人工关卡）。
+- **落点**：`source/tools/loop_verify.ps1`（①′ 跨轮 diff + ③ 成熟化）· `docs/DevPlan.todo`（2 项勾账 + 计数 + Docs 修正 + PB2-30② 登记）· `docs/loop_dev.md`（§6.1 目录契约 + §10 TST-L03 状态）· `docs/AI_Status.md`（最近更新）· 本文件。
+
+---
+**📦 批 ⑥：ISCC（Inno Setup 6.7.3）安装 + 安装包编译 + R2 探测轮阻塞登记（2026-10-17）**
+
+- **背景**：批 ⑤ 收口后按用户指令顺序执行「跑 R2 → 装 ISCC + 构建安装包」。Human ① 打包分发第 1 项（ISCC→package.ps1）此前因 winget 无网络未装。
+- **本轮落地**：
+  * **ISCC 6.7.3 安装**：`winget install --id JRSoftware.InnoSetup -e`（网络已恢复 · 本机 per-user 落点 `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe` · `package.ps1` ④ 段候选路径已覆盖该落点）。
+  * **安装包编译**：`package.ps1`（默认 debug · 全流程）**exit 0** —— ① 构建 0/0 → ② payload **19 文件 / 34.6 MB**（含随包 Bootstrapper 1.78 MB · `*.py=0`）→ ③.5 `.iss↔payload` 一致性锁 **4/4 PASS** → ④ ISCC 产出 **`build\dist\AIwrite-Setup-0.2.0.exe`（9.1 MB · 2026-10-17 18:57）**；同步 PACKAGING.md / AI_Status.md §一 / `DevPlan.todo`（Human ① 第 1 项 key 411 勾 `done` · node 52 剩人工改为「干净机冒烟 TST-M6-01」）。
+  * **R2 探测轮（先跑）→ 阻塞登记**：门禁 **11/11 PASS**（selftest 十三组 · graph 151/0 · exec 681/0 · provider 52/0 · upload 72/0 · dump 20 条 · 夹具 44/17/15 · links broken=1≤8）；S2 批量只读探测 **10 站全「环境级失败」**（WebView2 控制器在时限内未就绪 · 2 次尝试/站 · `probe.json` 已产出）；单站复现（`--provider kimi-web`）= **Debug CRT `abort()` 弹窗**（`Microsoft Visual C++ Runtime Library · Debug Error! · abort() has been called`）且进程不退出（弹窗阻塞）；**对照 `webview2_login.exe --selftest` 正常**（环境+控制器+导航+Cookie 全 PASS · 同一 profile `~/.brain-ai/webview2`）⇒ 排除运行时/加载器（152.0.4191.66 · 09-06 安装未变）/源码回归（今日 git diff 仅 2 个 ps1 脚本）→ 疑点指向 **WebView2 profile 状态 / DOM 探测开窗路径**（清 profile 属 loop_dev §1 停条件 4 · 待开发者决策）；叠加缺陷：`loop_verify.ps1` `Invoke-Capture` 在探测子进程**写盘后不退出**且**子进程继承重定向 stdout 句柄**时 `ReadAllText` 抛 IOException（`ErrorActionPreference=Stop`）⇒ **整轮崩溃、未出 report / 台账**（物证 `build\loop\R2-20261017-1824\` · 14 文件 · gates 齐全 + probe.json/out）。
+- **⛔ 待决策 / 待办**：① WebView2 profile 是否授权重建/迁移（`~/.brain-ai/webview2`）② `loop_verify.ps1` `Invoke-Capture` 加固（杀进程后等句柄释放 / 读前重试）③ R2 重跑时机（建议 profile 决策后）④ 干净机器冒烟 `TST-M6-01`（Human ①-2）。
+- **落点**：`build\dist\AIwrite-Setup-0.2.0.exe`（新增 · 9.1 MB）· `build\loop\R2-20261017-1824\`（R2 物证）· `packaging/PACKAGING.md`（当前状态）· `docs/AI_Status.md`（最近更新 + §一）· `docs/DevPlan.todo`（key 411 勾账 + node 52 进度）· 本文件。**⛔ 未提交**（协作契约 §6）。
+
+---
+**🧩 批 ⑤：DevPlan.todo 新增 Human（人工关卡）分类 + WebView2 Bootstrapper 补齐（2026-10-17 · 零代码）**
+
+- **背景**：批 ④ 收口后剩余待办几乎全是「需真人执行」的关卡（安装 / 点选 / 登录 / Key / 真机），散在 Test/Feature 分支，看不出「人还剩多少事」。用户要求新增 **`Human`（人工关卡）** 分类，按组做成**一事一行的 checklist 总账**。
+- **本轮落地（零代码）**：
+  * **`DevPlan.todo` 新增 `Human` 根分类**（key 400 · 8 组 **30 项** · 每项 = 一条 checklist，全部未 done；只做**总账**，不改动原 Test/Feature 条目）：① 打包与分发 2 项（ISCC→package.ps1 · 干净机冒烟 TST-M6-01）② 网页版站点回填 11 项（单站流程写进组描述 = 人工登录→发一条消息→`--web-dom-dump`→回填→复核→端到端→`verified:true`+附录 E 两列；**★ 本批 6 站** kimi/qwen/doubao/yuanbao/ernie/spark（D-32 ①）+ **◯ 不在本批 4 站**（chatglm WAF · 境外 chatgpt/claude/gemini）+ PB2-24 界面点选回路）③ API Key 门 3 项（TST-M1-01 · TST-M4-02 · DOC-M1-01）④ GUI 点选 8 项（VB-02「■ 停止」1 秒内生效 · CN-01 上级节点验收等）⑤ 环境模拟 1 项（VM-01 待立）⑥ 真机 1 项（TST-M8-01）⑦ 循环结论人审 2 项（R1 基线固化 + 每轮新报告）⑧ 契约/过程 2 项（未提交审阅 · TST-M2-02）。
+  * **WebView2 Bootstrapper 补齐**：网络恢复（go.microsoft.com 200）后自动下载 `packaging/webview2/MicrosoftEdgeWebview2Setup.exe`（**1.78 MB · MZ 头通过**）⇒ 批 ③ 登记的「未附带（PQ-02）」关闭；`webview2/README.md` + `PACKAGING.md` 状态行同步。
+- **验证（2026-10-17 本机）**：DevPlan.todo JSON 合法（**327 节点** · key 唯一 · `id==key` · expandKeys 自洽）；Human 根 30 项 = 实际未 done 叶子数，8 组计数逐组一致（**2 / 11 / 3 / 8 / 1 / 1 / 2 / 2**）；原有根计数无回归（Debug 0 · Feature 3 · Test 14 · Docs 1 · Deprecate 13）；**纯 CRLF 无 BOM**（3687 CRLF / 0 lone LF）；Bootstrapper 大小 + PE 头校验通过。
+- **⛔ 仍挂人工（= 本批 Human 分类内容）**：ISCC 安装（winget 现可用 · 属系统级安装待用户同意）→ 安装包构建；10 站 answer_selector 回填（**唯一人工步 = 登录 + 发一条消息**）；Key 门；GUI 点选；干净机冒烟；轮次结论人审。
+- **落点**：`docs/DevPlan.todo`（Human 根 · 30 项）· `packaging/webview2/MicrosoftEdgeWebview2Setup.exe`（新增 · 1.78 MB）· `packaging/webview2/README.md` · `packaging/PACKAGING.md` · `docs/AI_Status.md` · 本文件。**⛔ 未提交**（协作契约 §6）。
+
+---
+
+
+**🗂️ 看板勾账批 ③ + 📦 `FEA-M6-06` 打包流水线入闸（2026-10-17 · 组合批）**
+
+- **背景**：批 0 / 批 ② 勾账漏掉的 4 项陈旧看板项（与 `FEA-M4-07` 同款）—— 实际已于 2026-10-11 批 3 / 批 5 落地，看板却仍挂「待办」：`FEA-M4-02`（真取消 · `PB-02`）· `DBG-M4-02`（「■ 停止」无法中断 · 同一实现）· `FEA-M4-12`（自检扩展 · `PB-09`）· `DBG-L01`（断链检查器残余 · 批 5 已收口）。另：`FEA-M6-06`（打包与分发 · `M6-08`）的 payload 流水线此前**从未入任何门禁**——跑不跑都行。
+- **本轮落地**：
+  * **实证勾账（零代码）**：`api_probe --selftest` **13 组全 PASS · exit 0**（**V-11 无 Key 请求构造 6/0** · **V-12 取消与超时 17/0** · V-16 网络与凭据 16/0）· `--exec-selftest` **681/0** · `--graph-selftest` **151/0** · `check_links` **1549/0** —— 勾 `FEA-M4-02` / `DBG-M4-02` / `FEA-M4-12` / `DBG-L01` 4 项 `done`（勾账段注明 ⛔ 真人关卡：GUI「■ 停止」1 秒内生效 · `--run-selftest --official` 需 Key）· Debug 根 **3→1**（M4 + Docs 断链两组清零 · 余 `DBG-M1-01`）· Feature 根 **5→3**（M4 分支清零 · 余 `FEA-M6-06`/`FEA-M_patchB-29…30`/`CN-01`）。
+  * **`FEA-M6-06` 打包入闸（代码 + 离线断言）**：`check_all.ps1` 新增 **⑦ 打包 payload 自检** —— 跑 `package.ps1 -SkipBuild -SkipInstaller`（重建 payload + manifest + `.iss ↔ payload` 一致性锁），判据 = 退出码 ∈ {0, 2} **且** manifest 存在（ISCC 缺失**不是**失败）⇒ 一键自检 **15 → 16 项**；本机实测 payload **18 文件 / 32.8 MB** · Python 摘钩 `*.py=0` · 一致性锁 4 条通配 PASS。
+- **验证（2026-10-17 本机实测）**：完整 `check_all.ps1` **16/16 PASS · exit 0**（物证 `build/logs/check_all_20261017_161648.log` —— 构建 0/0 · ⑦ `PASS package（payload + 一致性锁）exit=2 · payload 18 文件 / 32.8 MB`）；勾账后看板复核 = 4 项 `done` + 5 组计数**全一致**（脚本重算叶子数 vs 标签数）。
+- **⛔ 仍挂人工 / 真机（如实登记）**：① `ISCC`（Inno Setup 6）未装 ⇒ 安装包编译未在本机验证（`package.ps1` exit 2 口径）② WebView2 Bootstrapper 未附带（`PQ-02` 可选件 · 本机无网络）③ GUI「■ 停止」1 秒内生效（`VB-02`）④ `--run-selftest --official` 需 Key（`VB-04`）。
+- **落点**：`source/tools/check_all.ps1`（⑦ 新增）· `docs/DevPlan.todo`（4 项勾账 + 计数）· `AI_README.md` §2（权威位 15→16）· `docs/AI_Status.md`（§一 门禁表 16/16 + package 行 + 最近更新）· `docs/actionPlan/M6.md`（§0.2 判定表 M6-08/M6-10）· `docs/actionPlan/milestone_plan.md`（M6-10 16/16）· `packaging/PACKAGING.md`（当前状态）· 本文件。**⛔ 未提交**（协作契约 §6 · 批 ③ 全程无 `git commit`）。
 
 ---
 

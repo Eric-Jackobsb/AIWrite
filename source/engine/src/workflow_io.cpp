@@ -147,9 +147,12 @@ bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* erro
         const std::string composite_id = node_json.value("composite_id", std::string());
         if (!composite_id.empty()) {
             if (CompositeRegistry::instance().find(composite_id) == nullptr) {
-                log::warn("[工作流] 跳过上级节点（规格缺失，请确认 " +
-                          CompositeRegistry::instance().root().string() + "\\" + composite_id +
-                          ".json 存在）: " + node_json.value("id", std::string()));
+                log::warn("[工作流] 跳过上级节点（规格缺失，请确认用户源 " +
+                          CompositeRegistry::instance().user_root().string() + "\\" + composite_id +
+                          ".json 或内置源 " +
+                          CompositeRegistry::instance().builtin_root().string() + "\\" +
+                          composite_id + ".json 存在）: " +
+                          node_json.value("id", std::string()));
                 continue;
             }
             std::string       composite_error;

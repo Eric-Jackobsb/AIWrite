@@ -305,6 +305,8 @@ target_include_directories(aiwrite_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/ui/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/utils/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/web/include")
+# 源码目录宏（PS-D9 内置上级节点源：paths::builtin_composites_dir() 需解析 <source>/workflows/compositeNodes）
+target_compile_definitions(aiwrite_core PRIVATE AIWRITE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(aiwrite_core
     PUBLIC aiwrite_build_options
     PUBLIC spdlog::spdlog

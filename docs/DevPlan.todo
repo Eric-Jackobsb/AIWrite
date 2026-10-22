@@ -18,8 +18,8 @@
                 "children": [],
                 "todo": {
                   "id": 3,
-                  "content": "DBG-M1-01 WebView2 Runtime 缺失时仅有日志提示与退出码 1，缺少面向用户的引导 ｜ 遗留表（M6-02/M6-08）",
-                  "done": false,
+                  "content": "DBG-M1-01 WebView2 Runtime 缺失时仅有日志提示与退出码 1，缺少面向用户的引导 ｜ 遗留表（M6-02/M6-08） ｜ 2026-10-17 勾账：✅ 由 M6-02 首启引导（PM-01 · 2026-10-10 落地）承接（清零 M1 唯一遗留）—— utils/webview2_runtime.{h,cpp} 三路只读探测（环境变量 / 加载器 API / 注册表兜底）+ 界面「依赖自检」区（缺失红字 + 安装建议 + 「打开下载页」按钮 + PQ-02 随包安装按钮 + 「重新检测」）+ `api_probe --dep-check`（缺失 ⇒ exit 1 + 安装指引）+ 诊断报告 [依赖] 分节 + 启动日志提示（「帮助 → 首次使用引导」可重看）；2026-10-17 复测 `--dep-check` = PASS · exit 0（WebView2 运行时 152.0.4191.66（api））⇒ 勾账 done；⏳ 「模拟缺失环境」人工关卡（VM-01）",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/Archive/actionPlan/M1.md"
                 }
@@ -27,7 +27,7 @@
             ],
             "todo": {
               "id": 2,
-              "content": "M1（1 项）",
+              "content": "M1（0 项 · 已全部勾账 2026-10-17）",
               "done": false,
               "level": "secondary"
             }
@@ -40,8 +40,8 @@
                 "children": [],
                 "todo": {
                   "id": 8,
-                  "content": "DBG-M4-02 「■ 停止」无法中断正在执行的节点（cancel 仅阻止开启新节点） ｜ §4.1 PB-02",
-                  "done": false,
+                  "content": "DBG-M4-02 「■ 停止」无法中断正在执行的节点（cancel 仅阻止开启新节点） ｜ §4.1 PB-02 ｜ 2026-10-17 勾账：✅ 批 3（2026-10-11）已落地（与 FEA-M4-02 同实现）—— cancel_token.h `run_cancellable` + 执行器取消归因 `Skipped` + 日志「[取消] nX 已中断」；V-12 取消与超时语义 **17/0**（2026-10-17 `--selftest` 复测 exit 0 全 PASS）｜ ⛔ GUI「■ 停止」1 秒内生效待真人点一次",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -60,7 +60,7 @@
             ],
             "todo": {
               "id": 6,
-              "content": "M4（1 项）",
+              "content": "M4（0 项 · 已全部勾账 2026-10-17）",
               "done": false,
               "level": "secondary"
             }
@@ -106,8 +106,8 @@
                 "children": [],
                 "todo": {
                   "id": 240,
-                  "content": "DBG-L01 文档断链自检（**2026-10-10 收口**）：**7 条真断链已全部修复**（皆为 `actionPlan/M7B.md` 未指向 `Archive/` —— `ai_writer_nodes.md` ×3 · `节点编辑器使用说明.md` ×3 · `actionPlan/M_patchAB_rest.md` ×1）；第 8 条 = **检查器跨反引号误判**（`actionPlan/M8.md` 表内 `](../ → ../../` 字样），已改文档表述规避，但**检查器缺陷本身未修**。实测 **checked 806 / broken 0**；判据由「本轮不得新增」**升级为「全库 0」**。**残余（故本项未置 `done`）**：① 检查器跨行 / 跨反引号误判未收敛；② 断链与文档一致性**尚未纳入 `check_all.ps1`** —— 两者并作「文档门禁」专项 ｜ loop_dev.md §4",
-                  "done": false,
+                  "content": "DBG-L01 文档断链自检（**2026-10-10 收口**）：**7 条真断链已全部修复**（皆为 `actionPlan/M7B.md` 未指向 `Archive/` —— `ai_writer_nodes.md` ×3 · `节点编辑器使用说明.md` ×3 · `actionPlan/M_patchAB_rest.md` ×1）；第 8 条 = **检查器跨反引号误判**（`actionPlan/M8.md` 表内 `](../ → ../../` 字样），已改文档表述规避，但**检查器缺陷本身未修**。实测 **checked 806 / broken 0**；判据由「本轮不得新增」**升级为「全库 0」**。**残余（故本项未置 `done`）**：① 检查器跨行 / 跨反引号误判未收敛；② 断链与文档一致性**尚未纳入 `check_all.ps1`** —— 两者并作「文档门禁」专项 ｜ loop_dev.md §4 ｜ 2026-10-17 勾账：✅ 批 5（2026-10-11）已收口 —— `check_links.py` 入库（剔除围栏代码块与行内代码跨度、链接目标同一行且无空白 ⇒ **修掉跨行 / 跨反引号误判**）+ `check_all.ps1` 新增 **⑥ 文档断链** 入闸 ⇒ 判据**全库 0**（2026-10-17 复测 **checked 1549 / broken 0** · exit 0）",
+                  "done": true,
                   "level": "warning",
                   "fileLink": "docs/loop_dev.md · §4"
                 }
@@ -115,7 +115,7 @@
             ],
             "todo": {
               "id": 239,
-              "content": "Docs 断链与门禁（1 项）",
+              "content": "Docs 断链与门禁（0 项 · 已全部勾账 2026-10-17）",
               "done": false,
               "level": "danger"
             }
@@ -123,7 +123,7 @@
         ],
         "todo": {
           "id": 1,
-          "content": "Debug（3 项）",
+          "content": "Debug（0 项 · 已全部勾账 2026-10-17）",
           "done": false,
           "level": "danger"
         }
@@ -172,8 +172,8 @@
                 "children": [],
                 "todo": {
                   "id": 30,
-                  "content": "FEA-M4-02 真取消：HTTP 可中断 + 节点协作检查点，运行中点停止 1 秒内生效 ｜ §4.1 PB-02 ｜ 🟢 保留要做（2026-10-11）",
-                  "done": false,
+                  "content": "FEA-M4-02 真取消：HTTP 可中断 + 节点协作检查点，运行中点停止 1 秒内生效 ｜ §4.1 PB-02 ｜ 🟢 保留要做（2026-10-11） ｜ 2026-10-17 勾账：✅ 批 3（2026-10-11）已落地（M_patchAB_rest §2.1）—— `ai/cancel_token.{h,cpp}` `run_cancellable` + `CancelWatch` + `sleep_interruptible`；官方 API 路径整段接入；执行器换新令牌 + 归因 `Skipped`；**V-12 取消与超时语义 17/0**（取消（请求中）实测 < 1.5 s 判据 · 发起前取消 0 ms 且服务器未收到请求；2026-10-17 `--selftest` 复测 exit 0）｜ ⛔ GUI「■ 停止」1 秒内生效（状态栏 + 日志取消记录）待真人点一次",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -205,8 +205,8 @@
                 "children": [],
                 "todo": {
                   "id": 40,
-                  "content": "FEA-M4-12 自检扩展：V-11 无 Key 请求构造、V-12 取消/超时语义、--run-selftest --official ｜ §4.1 PB-09",
-                  "done": false,
+                  "content": "FEA-M4-12 自检扩展：V-11 无 Key 请求构造、V-12 取消/超时语义、--run-selftest --official ｜ §4.1 PB-09 ｜ 2026-10-17 勾账：✅ 批 3（2026-10-11）已落地（M_patchAB_rest §2.4 PB-09）—— **V-11 无 Key 请求构造 6/0** + **V-12 取消/超时（回环）17/0**，`--selftest` 七组 → 十三组（2026-10-17 复测 exit 0 全 PASS · `api_probe.cpp`）｜ ⛔ `--run-selftest --official` 需有 Key（人关卡）",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
                 }
@@ -225,7 +225,7 @@
             ],
             "todo": {
               "id": 28,
-              "content": "M4（2 项）",
+              "content": "M4（0 项 · 已全部勾账 2026-10-17）",
               "done": false,
               "level": "secondary"
             }
@@ -238,7 +238,7 @@
                 "children": [],
                 "todo": {
                   "id": 52,
-                  "content": "FEA-M6-06 打包与分发（M6-08）：便携/安装包 + 是否随包附带 Evergreen Bootstrapper ｜ M6-08",
+                  "content": "FEA-M6-06 打包与分发（M6-08）：便携/安装包 + 是否随包附带 Evergreen Bootstrapper ｜ M6-08 ｜ 进度（2026-10-17 批 ③）：**payload 流水线实证 + 入闸** —— `package.ps1 -SkipBuild -SkipInstaller` 实测 **19 文件 / 34.6 MB**（2026-10-17 批 ⑤：PQ-02 Bootstrapper 已随包附带） · Python 摘钩 `*.py=0` · `.iss↔payload` 一致性锁 4 通配 PASS（exit 2）；`check_all.ps1` 新增 **⑦ 打包 payload 自检**（判据 exit∈{0,2} + manifest 存在 · ISCC 缺失不是失败）⇒ 一键自检 **15→16 项**（2026-10-17 完整 check_all **16/16 · exit 0**）；Bootstrapper 口径 = `PQ-02` 已拍板「**可选附带**」（有 `MicrosoftEdgeWebview2Setup.exe` 才进包 · 向导默认不勾选 · 无则回落官方下载页）｜ **⛔ 剩人工**：**干净机器冒烟**（`TST-M6-01`；2026-10-17 批 ⑥：ISCC 6.7.3 已装 · 安装包已编译 `AIwrite-Setup-0.2.0.exe` 9.1 MB · Bootstrapper 已随包 1.78 MB）",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M6.md"
@@ -282,7 +282,7 @@
                 "children": [],
                 "todo": {
                   "id": 158,
-                  "content": "FEA-M_patchB-29…30 L4 站点数据落地 + 自助闭环：内置站点选择器逐站实测回填（verified:true + 附录 E 两列）+ --run-selftest --web --provider <id> + 面板「测试选择器」+ PB2-24 并入（新建条目 / 重新加载配置表 / 下拉即时刷新） ｜ §3 PB2-29/PB2-30 · 验收 AB2-21/AB2-22 · 清单见附录 E ｜ 进度：v15 已完成 **12/12 逐站直连实测**（登录窗口都打开各自站点；3 条域名修正为最终域：kimi→www.kimi.com、tongyi→www.qianwen.com、ernie→wenxin.baidu.com）+ **4 条输入框选择器实测回填**（kimi/qwen/yuanbao/ernie，已进 assets/providers.json；--provider-dump 确认只剩 answer_selector）+ --run-selftest --web --provider <id> ✅ + 新工具 --web-dom-dump（只读枚举候选+建议）；剩余：11 条 answer_selector 需人工登录并手动发一条消息后取回（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环 ｜ 进度（2026-09-28 复核）：维持原文结论 —— 12/12 逐站直连 + 4 条输入框选择器已实测回填；剩余 = 11 条 answer_selector（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环 ｜ 进度（2026-10-10）：**PB2-24 自助闭环 ✅ 已落地**（设置面板「新建网页版站点…」写 `~/.brain-ai/providers.d/<id>.json` + 「重新加载配置表」+ 下拉/运行前校验即时刷新 + 配置表错误/警告界面可见；离线断言 `api_probe --site-assert` = 纯函数 47/0 + 端到端全绿 · 已进 `check_all.ps1`（本项落地时 13/13 · 现行全量 14/14）；**界面点选回路待真人点一次**）⇒ 剩余 = 11 条 answer_selector（唯一人工关卡，现行清单 10 条）+ 面板「测试选择器」",
+                  "content": "FEA-M_patchB-29…30 L4 站点数据落地 + 自助闭环：内置站点选择器逐站实测回填（verified:true + 附录 E 两列）+ --run-selftest --web --provider <id> + 面板「测试选择器」+ PB2-24 并入（新建条目 / 重新加载配置表 / 下拉即时刷新） ｜ §3 PB2-29/PB2-30 · 验收 AB2-21/AB2-22 · 清单见附录 E ｜ 进度：v15 已完成 **12/12 逐站直连实测**（登录窗口都打开各自站点；3 条域名修正为最终域：kimi→www.kimi.com、tongyi→www.qianwen.com、ernie→wenxin.baidu.com）+ **4 条输入框选择器实测回填**（kimi/qwen/yuanbao/ernie，已进 assets/providers.json；--provider-dump 确认只剩 answer_selector）+ --run-selftest --web --provider <id> ✅ + 新工具 --web-dom-dump（只读枚举候选+建议）；剩余：11 条 answer_selector 需人工登录并手动发一条消息后取回（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环 ｜ 进度（2026-09-28 复核）：维持原文结论 —— 12/12 逐站直连 + 4 条输入框选择器已实测回填；剩余 = 11 条 answer_selector（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环 ｜ 进度（2026-10-10）：**PB2-24 自助闭环 ✅ 已落地**（设置面板「新建网页版站点…」写 `~/.brain-ai/providers.d/<id>.json` + 「重新加载配置表」+ 下拉/运行前校验即时刷新 + 配置表错误/警告界面可见；离线断言 `api_probe --site-assert` = 纯函数 47/0 + 端到端全绿 · 已进 `check_all.ps1`（本项落地时 13/13 · 现行全量 14/14）；**界面点选回路待真人点一次**）⇒ 剩余 = 11 条 answer_selector（唯一人工关卡，现行清单 10 条）+ 面板「测试选择器」 ｜ 进度（2026-10-17 复核）：**PB2-30② 面板「测试选择器」✅ 已落地（2026-10-11 批 2 · ui/connection_test.{h,cpp} `request_selector_check` + 参数面板「测试选择器（只读诊断）」按钮，命中数 / 登录判据 / 建议进面板结果区 + Console；码语义 0/1/2/3 与 CLI 一致）** ⇒ 剩余唯一人工关卡 = 11 条 answer_selector 逐站实测回填（需人工登录 + 发一条消息后 `--web-dom-dump` 取回，走 loop_dev §3 S5/S6）+ 界面点选回路真人点一次",
                   "done": false,
                   "level": "default",
                   "fileLink": "docs/actionPlan/M_patchAB_rest.md"
@@ -301,16 +301,16 @@
             "children": [],
             "todo": {
               "id": 347,
-              "content": "CN-01… 上级节点（Composite Node）实施 —— 组合层 L4 重启（CN-D20）· 设计依据 docs/actionPlan/Composition_node.md（🆕 2026-10-16 批 CN-0 登记 · 设计定稿 · **实施完成**（代码 2026-10-16：模型 / 注册表 / 独立文件存储 / 展开执行 / 编辑器（打包·新建·独立标签页·撤销重做）/ 节点库「上级节点」分类 / 紫条视觉 / 新建草稿保存修正 / `composite_selftest` **51 断言** · exec **681/0** · graph **151/0** · 构建 0/0）· **⛔ 待人工验收**：新建 → 编辑 → 打包 → 父画布运行 → 展开执行结果正确；验收通过后勾 done + 另决定是否补 `VCN-*`/`ACN-*` 验收框架、程序化生成规则、调试设施去留）",
-              "done": false,
+              "content": "CN-01… 上级节点（Composite Node）实施 —— 组合层 L4 重启（CN-D20）· 设计依据 docs/Archive/actionPlan/Composition_node.md（🆕 2026-10-16 批 CN-0 登记 · 设计定稿 · **实施完成**（代码 2026-10-16：模型 / 注册表 / 独立文件存储 / 展开执行 / 编辑器（打包·新建·独立标签页·撤销重做）/ 节点库「上级节点」分类 / 紫条视觉 / 新建草稿保存修正 / `composite_selftest` **51 断言** · exec **681/0** · graph **151/0** · 构建 0/0）· ✅ **2026-10-18 归档**（指令式 · Archive/README §三 5 · 实施完成、仅剩人工验收）· ⏳ **人工验收 + 待拍板项已迁 docs/actionPlan/ToVerify.todo**）",
+              "done": true,
               "level": "default",
-              "fileLink": "docs/actionPlan/Composition_node.md"
+              "fileLink": "docs/Archive/actionPlan/Composition_node.md"
             }
           }
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（5 项）",
+          "content": "Feature（3 项）",
           "done": false,
           "level": "default"
         }
@@ -557,8 +557,8 @@
                 "children": [],
                 "todo": {
                   "id": 235,
-                  "content": "TST-L03 物证目录与报告模板（🟡 部分落地 2026-10-09 · 批 8）：三块固定契约（本轮数字表 / 11 行站点矩阵 / needs_login[] 与待人工清单 + 附录物证索引）已由 TST-L01 逐轮生成（report.md 与 report.json 同数据）；**首份循环基线 = build/loop/R1-20261009-2055/**（S2 可用 6 / 需登录 1 / 失败 4 · exit 1；S3 可用 5 / 失败 1）—— 待办：跨轮 diff 段（对齐 --json-diff 口径）与「待人工清单」成熟化 ｜ loop_dev.md §6.1",
-                  "done": false,
+                  "content": "TST-L03 物证目录与报告模板（🟡 部分落地 2026-10-09 · 批 8）：三块固定契约（本轮数字表 / 11 行站点矩阵 / needs_login[] 与待人工清单 + 附录物证索引）已由 TST-L01 逐轮生成（report.md 与 report.json 同数据）；**首份循环基线 = build/loop/R1-20261009-2055/**（S2 可用 6 / 需登录 1 / 失败 4 · exit 1；S3 可用 5 / 失败 1）—— 待办：跨轮 diff 段（对齐 --json-diff 口径）与「待人工清单」成熟化 ｜ loop_dev.md §6.1 ｜ 2026-10-17 勾账：✅ 批 4 收口 —— loop_verify.ps1 新增 ①′ 跨轮 diff 段（对齐 `--json-diff` 口径：对比上一份 build/loop/*/report.json 的 matrix[].state，输出 状态变化（prev→cur）/ 新增 / 消失 + URL 变化提示；report.md 段 + report.json `diff{}` 块）+ ③ 待人工清单成熟化（每条 S3 失败 / 未测项补「复现 + 只读诊断」命令）；算法四分支独立测试 ALL PASS · 空轮端到端（-SkipGates -SkipProbe）exit 0 ⇒ 勾账 done",
+                  "done": true,
                   "level": "default",
                   "fileLink": "docs/loop_dev.md · §6.1"
                 }
@@ -566,7 +566,7 @@
             ],
             "todo": {
               "id": 232,
-              "content": "Loop Dev · 网页站循环（1 项 · 仅余 TST-L03 🟡 部分 · TST-L01 / TST-L05 已于 2026-10-13 移入 Archive）",
+              "content": "Loop Dev · 网页站循环（0 项 · 已全部勾账 2026-10-17 · TST-L01 / TST-L05 已落地 2026-10-13 移入 Archive）",
               "done": false,
               "level": "default"
             }
@@ -574,7 +574,7 @@
         ],
         "todo": {
           "id": 54,
-          "content": "Test（15 项）",
+          "content": "Test（14 项）",
           "done": false,
           "level": "warning"
         }
@@ -621,7 +621,7 @@
             ],
             "todo": {
               "id": 81,
-              "content": "M4（1 项）",
+              "content": "M4（0 项 · 已全部勾账 2026-10-17）",
               "done": false,
               "level": "secondary"
             }
@@ -654,7 +654,7 @@
             ],
             "todo": {
               "id": 85,
-              "content": "M6（2 项）",
+              "content": "M6（0 项 · 已全部勾账 2026-10-17）",
               "done": false,
               "level": "secondary"
             }
@@ -662,7 +662,411 @@
         ],
         "todo": {
           "id": 74,
-          "content": "Docs（4 项）",
+          "content": "Docs（1 项）",
+          "done": false,
+          "level": "secondary"
+        }
+      },
+      {
+        "key": 400,
+        "children": [
+          {
+            "key": 401,
+            "children": [
+              {
+                "key": 411,
+                "children": [],
+                "todo": {
+                  "id": 411,
+                  "content": "安装 Inno Setup 6（ISCC.exe）→ 重跑 source\\tools\\package.ps1（期望 exit 0 = payload 19 文件 / 34.6 MB（含随包 Bootstrapper）+ AIwrite-Setup-<版本>.exe；winget install JRSoftware.InnoSetup 现可自动装）｜ FEA-M6-06｜✅ 2026-10-17 批 ⑥：winget 装 Inno Setup **6.7.3** · `package.ps1` 全流程 **exit 0** · 产出 `build/dist/AIwrite-Setup-0.2.0.exe` **9.1 MB**（payload 19 文件 / 34.6 MB · .iss 一致性 4/4 PASS）",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "packaging/PACKAGING.md"
+                }
+              },
+              {
+                "key": 412,
+                "children": [],
+                "todo": {
+                  "id": 412,
+                  "content": "干净机器冒烟 TST-M6-01：新机装安装包 → 首启引导（缺 WebView2 → 官方下载页/随包安装/重新检测）→ 载入示例工作流跑通 ｜ FEA-M6-06 · PACKAGING.md §干净机器冒烟",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "packaging/PACKAGING.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 401,
+              "content": "打包与分发 · FEA-M6-06 / M6-08（2 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 402,
+            "children": [
+              {
+                "key": 413,
+                "children": [],
+                "todo": {
+                  "id": 413,
+                  "content": "★ kimi-web 回填 answer_selector（输入框 div.chat-input-editor 已就绪）｜ 本批 D-32 ①",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 414,
+                "children": [],
+                "todo": {
+                  "id": 414,
+                  "content": "★ qwen-web 回填 answer_selector（输入框 textarea[placeholder=\"Ask Qwen\"] + 发送按钮已就绪）｜ 本批 D-32 ①",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 415,
+                "children": [],
+                "todo": {
+                  "id": 415,
+                  "content": "★ doubao-web 回填 answer_selector（输入框 div.tiptap.ProseMirror 已回填 · 兼网页版图片理解首个目标站）｜ 本批 D-32 ①",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 416,
+                "children": [],
+                "todo": {
+                  "id": 416,
+                  "content": "★ yuanbao-web 回填 answer_selector（输入框 div.ql-editor.ql-blank 已就绪）｜ 本批 D-32 ①",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 417,
+                "children": [],
+                "todo": {
+                  "id": 417,
+                  "content": "★ ernie-web 回填 answer_selector（输入框 #chat-textarea 已就绪）｜ 本批 D-32 ①",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 418,
+                "children": [],
+                "todo": {
+                  "id": 418,
+                  "content": "★ spark-web 回填 answer_selector（需登录后取输入框 + 回答容器）｜ 本批 D-32 ①",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 419,
+                "children": [],
+                "todo": {
+                  "id": 419,
+                  "content": "◯ chatglm-web 回填 answer_selector（WAF 挑战页 · 需人工过验证 · 不在本批）｜ D-32",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 420,
+                "children": [],
+                "todo": {
+                  "id": 420,
+                  "content": "◯ chatgpt-web 回填 answer_selector（境外 · 不在本批 · 窄窗移动版 #mobile-composer-prompt）｜ D-32",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 421,
+                "children": [],
+                "todo": {
+                  "id": 421,
+                  "content": "◯ claude-web 回填 answer_selector（境外 · 不在本批 · 登录/注册前无 composer）｜ D-32",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 422,
+                "children": [],
+                "todo": {
+                  "id": 422,
+                  "content": "◯ gemini-web 回填 answer_selector（境外 · 不在本批 · 需 Google 账号登录）｜ D-32",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              },
+              {
+                "key": 423,
+                "children": [],
+                "todo": {
+                  "id": 423,
+                  "content": "PB2-24 界面点选回路真人点一次：设置面板「新建网页版站点…」→ 写 providers.d/<id>.json → 「重新加载配置表」→ 下拉/运行前校验即时刷新 ｜ FEA-M_patchB-29…30",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 402,
+              "content": "网页版站点回填 · FEA-M_patchB-29…30（11 项 · 单站流程 = 人工登录 → 手动发一条消息 → --web-dom-dump 取回 answer_selector → 回填 → --web-adapter-selftest 复核 → --run-selftest --web 端到端 → verified:true + 附录 E 两列）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 403,
+            "children": [
+              {
+                "key": 424,
+                "children": [],
+                "todo": {
+                  "id": 424,
+                  "content": "TST-M1-01：设 DEEPSEEK_API_KEY → api_probe.exe --chat 实测官方 API 生成 → 取证 V-06/A-06 ｜ Test > M1",
+                  "done": false,
+                  "level": "default"
+                }
+              },
+              {
+                "key": 425,
+                "children": [],
+                "todo": {
+                  "id": 425,
+                  "content": "TST-M4-02：V-03 官方 API 生成 / V-08 官方 SSE / V-09 流式输出 三项实测 ｜ Test > M4",
+                  "done": false,
+                  "level": "default"
+                }
+              },
+              {
+                "key": 426,
+                "children": [],
+                "todo": {
+                  "id": 426,
+                  "content": "DOC-M1-01：V-06/A-06 取证后更新 M1.md 验收表与遗留登记表（依赖 TST-M1-01）｜ Docs > M1",
+                  "done": false,
+                  "level": "default"
+                }
+              }
+            ],
+            "todo": {
+              "id": 403,
+              "content": "API Key 门 · 需 DEEPSEEK_API_KEY（3 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 404,
+            "children": [
+              {
+                "key": 427,
+                "children": [],
+                "todo": {
+                  "id": 427,
+                  "content": "TST-M1-02：人工确认后勾选 A-03（画布交互）/ A-04（WebView2 登录）/ A-05（Cookie 提取）｜ Test > M1",
+                  "done": false,
+                  "level": "default"
+                }
+              },
+              {
+                "key": 428,
+                "children": [],
+                "todo": {
+                  "id": 428,
+                  "content": "TST-M2-01：使用说明 §8 的 22 项画布交互逐项确认（可选/多选/框选/连线/右键菜单）｜ Test > M2",
+                  "done": false,
+                  "level": "default"
+                }
+              },
+              {
+                "key": 429,
+                "children": [],
+                "todo": {
+                  "id": 429,
+                  "content": "TST-M3-02：结果呈现三处一致（节点内摘要 / 参数面板「运行结果」/ 输出面板）+ 输出面板复制全文·该节点、导出到文件 ｜ Test > M3",
+                  "done": false,
+                  "level": "default"
+                }
+              },
+              {
+                "key": 430,
+                "children": [],
+                "todo": {
+                  "id": 430,
+                  "content": "TST-M4-01：VB-01…VB-09（重点 VB-02「■ 停止」1 秒内生效；流式拼接一致 / 凭据三优先级 / 会话失效引导 / 线程安全）｜ Test > M4",
+                  "done": false,
+                  "level": "default"
+                }
+              },
+              {
+                "key": 431,
+                "children": [],
+                "todo": {
+                  "id": 431,
+                  "content": "TST-M5-01：VLM 生成 + 图片预览 + Output 窗口历史/自动打开 ｜ Test > M5",
+                  "done": false,
+                  "level": "default"
+                }
+              },
+              {
+                "key": 432,
+                "children": [],
+                "todo": {
+                  "id": 432,
+                  "content": "TST-M6-02：归档与保留策略人工确认（§10.6 · keep_history/max_history/ttl_days 生效）｜ Test > M6",
+                  "done": false,
+                  "level": "default"
+                }
+              },
+              {
+                "key": 433,
+                "children": [],
+                "todo": {
+                  "id": 433,
+                  "content": "TST-M7-02：GUI 端到端（E-02 智谱 glm-4v-flash + 4 类错误路径 + --vlm-selftest --image <WebP>）｜ Test > M7",
+                  "done": false,
+                  "level": "default"
+                }
+              }
+            ],
+            "todo": {
+              "id": 404,
+              "content": "GUI 点选验收（7 项 · id=434 已迁 docs/actionPlan/ToVerify.todo）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 405,
+            "children": [
+              {
+                "key": 435,
+                "children": [],
+                "todo": {
+                  "id": 435,
+                  "content": "VM-01（⏸ 待立 · 未入 Test 分支）：模拟缺失 WebView2 Runtime 环境 → 首启引导三路探测 + 依赖自检区红字 + --dep-check exit 1 ｜ DBG-M1-01",
+                  "done": false,
+                  "level": "default"
+                }
+              }
+            ],
+            "todo": {
+              "id": 405,
+              "content": "环境模拟 · DBG-M1-01（1 项 · ⏸ VM-01 待立）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 406,
+            "children": [
+              {
+                "key": 436,
+                "children": [],
+                "todo": {
+                  "id": 436,
+                  "content": "TST-M8-01：真机 Gate M8-14 + AW-01/AW-03/AW-04/AW-06（豆包端到端 + Kimi 侦察 · 需真实登录态）｜ M8 网页通道",
+                  "done": false,
+                  "level": "default"
+                }
+              }
+            ],
+            "todo": {
+              "id": 406,
+              "content": "真机 / 真实登录态 · M8 / Pydoll（1 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 407,
+            "children": [
+              {
+                "key": 437,
+                "children": [],
+                "todo": {
+                  "id": 437,
+                  "content": "R1-20261009-2055 基线结论人审（§7 权威位 · 首份基线固化）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/loop_dev.md"
+                }
+              },
+              {
+                "key": 438,
+                "children": [],
+                "todo": {
+                  "id": 438,
+                  "content": "每轮新 R 报告结论人审（R2 起逐轮执行）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/loop_dev.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 407,
+              "content": "循环轮次结论人审 · loop_dev §7（2 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 408,
+            "children": [
+              {
+                "key": 439,
+                "children": [],
+                "todo": {
+                  "id": 439,
+                  "content": "审阅本批未提交变更（⛔ 不提交 · 协作契约 §6）",
+                  "done": false,
+                  "level": "default"
+                }
+              },
+              {
+                "key": 440,
+                "children": [],
+                "todo": {
+                  "id": 440,
+                  "content": "TST-M2-02 过程项：每次提交重跑回归基线并回填数字（当前基线：七组 PASS / 111-0 / 73-0+72-0 / --run-selftest PASS / --web 5/5）｜ Test > M2",
+                  "done": false,
+                  "level": "default"
+                }
+              }
+            ],
+            "todo": {
+              "id": 408,
+              "content": "协作契约 / 过程约定 · 每批常设（2 项）",
+              "done": false,
+              "level": "secondary"
+            }
+          }
+        ],
+        "todo": {
+          "id": 400,
+          "content": "Human（29 项 · 人工关卡 · 需真人执行 · 2026-10-17 建 · id=434 已迁 docs/actionPlan/ToVerify.todo）",
           "done": false,
           "level": "secondary"
         }
@@ -3176,28 +3580,33 @@
       }
     ],
     "expandKeys": [
+      1,
       2,
       4,
       6,
       12,
       14,
+      17,
       18,
       22,
       28,
       41,
       46,
+      54,
       55,
       58,
       62,
       65,
       69,
       71,
+      74,
       75,
       77,
       79,
       81,
       83,
       85,
+      88,
       89,
       91,
       95,
@@ -3206,18 +3615,51 @@
       104,
       132,
       136,
+      139,
+      153,
       157,
       163,
       169,
+      172,
       174,
+      189,
       202,
       203,
       207,
       213,
       218,
       222,
+      227,
       232,
-      239
+      236,
+      239,
+      249,
+      250,
+      252,
+      300,
+      320,
+      332,
+      333,
+      334,
+      335,
+      336,
+      337,
+      338,
+      339,
+      341,
+      342,
+      343,
+      344,
+      345,
+      400,
+      401,
+      402,
+      403,
+      404,
+      405,
+      406,
+      407,
+      408
     ],
     "add_mode": "bottom",
     "virtual": false,

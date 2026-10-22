@@ -1,11 +1,16 @@
-# Composite_Node_Design：上级节点设计文档
+﻿# Composite_Node_Design：上级节点设计文档
 
-> 类型：**架构设计文档**（不占用 M1–M8 编号；与 [M_node_expansion.md](M_node_expansion.md) / [Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md) / [M_8nodes_extension.md](M_8nodes_extension.md) 平级互链）
+> 📦 **已归档（2026-10-18 · 指令式归档）** —— 实施完成、仅剩**人工验收**，按 `Archive/README.md` §三 5 直接归档。
+> **人工验证 / 待拍板承接位** → [../../actionPlan/ToVerify.todo](../../actionPlan/ToVerify.todo)（CN-01 人工验收十项清单 + §14 待拍板项）
+> **后续实施承接位** → [../../draft/M_preset_library.md](../../draft/M_preset_library.md)（官方预设节点库 · 组合层落地 · PS-01…）
+> 归档原则：**只增不改** —— 除本标记行与相对链接层级修正外，正文保持原样。
+
+> 类型：**架构设计文档**（不占用 M1–M8 编号；与 [M_node_expansion.md](../../actionPlan/M_node_expansion.md) / [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) / [M_8nodes_extension.md](../../actionPlan/M_8nodes_extension.md) 平级互链）
 > 定位：定义「**上级节点（Composite Node）**」——由基础节点有机组合形成的迷你工作流，可命名、可自定义、可放入其他工作流。
 > 上游依据：开发者 2026-10-16 拍板（可组合节点思路 + 10 项设计决策 + `CN-D20` L4 重启）
-> 编号空间：`CN-*`（Composite Node 任务）· `CN-D*`（决议）· `CN-Q*`（待确认）—— 已登记 [../../AI_README.md](../../AI_README.md) §5
-> 状态：🟢 **设计定稿（2026-10-16）· 实施完成（代码 2026-10-16）· ⛔ 待人工验收**
-> 相关：[M_node_expansion.md](M_node_expansion.md) · [Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md) · [M_8nodes_extension.md](M_8nodes_extension.md) · [../ai_writer_nodes.md](../ai_writer_nodes.md) · [../roadmap.md](../roadmap.md)
+> 编号空间：`CN-*`（Composite Node 任务）· `CN-D*`（决议）· `CN-Q*`（待确认）—— 已登记 [../../../AI_README.md](../../../AI_README.md) §5
+> 状态：✅ **已归档（2026-10-18 · 指令式）** —— 设计定稿 + 实施完成（代码 2026-10-16）；⏳ **人工验收 → [ToVerify.todo](../../actionPlan/ToVerify.todo)**
+> 相关：[M_node_expansion.md](../../actionPlan/M_node_expansion.md) · [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) · [M_8nodes_extension.md](../../actionPlan/M_8nodes_extension.md) · [../../ai_writer_nodes.md](../../ai_writer_nodes.md) · [../../roadmap.md](../../roadmap.md)
 > 建立：**2026-10-16**（v1）
 
 ---
@@ -37,8 +42,8 @@
 ### 0.1 定位
 
 - **本文是上级节点的设计依据**：定义上级节点的概念、端口规则、参数暴露、执行语义、创建方式、存储、UI、禁止嵌套。
-- **本文是节点扩展的架构补充**：与 [M_node_expansion.md](M_node_expansion.md) 的四层框架互补 —— 上级节点是「节点层」之上的「组合层」。
-- **不改他文**：本文对 [`M_node_expansion.md`](M_node_expansion.md) / [`Creation_Roadmap_Guideline.md`](Creation_Roadmap_Guideline.md) / [`../ai_writer_nodes.md`](../ai_writer_nodes.md) 等**只单向引用**。
+- **本文是节点扩展的架构补充**：与 [M_node_expansion.md](../../actionPlan/M_node_expansion.md) 的四层框架互补 —— 上级节点是「节点层」之上的「组合层」。
+- **不改他文**：本文对 [`M_node_expansion.md`](../../actionPlan/M_node_expansion.md) / [`Creation_Roadmap_Guideline.md`](../../actionPlan/Creation_Roadmap_Guideline.md) / [`../../ai_writer_nodes.md`](../../ai_writer_nodes.md) 等**只单向引用**。
 
 ### 0.2 本文要解决的那一个问题
 
@@ -49,7 +54,7 @@
 1. **组合优于新增**：能用基础节点组合出来的，不新增基础节点。
 2. **一层封顶**：上级节点**禁止嵌套**其他上级节点。
 3. **用户自定义权**：可命名、可编辑、可组合。
-4. **创作逻辑驱动**：上级节点的组合服务于创作过程（[Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md) 的 8 阶段）。
+4. **创作逻辑驱动**：上级节点的组合服务于创作过程（[Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) 的 8 阶段）。
 
 ### 0.4 本轮范围
 
@@ -543,7 +548,7 @@
 
 | 层 | 职责 |
 |---|---|
-| **创作逻辑层** | 定义「需要什么能力」（[Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md)） |
+| **创作逻辑层** | 定义「需要什么能力」（[Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md)） |
 | **上级节点层** | 定义「能力如何组合」 |
 | **基础节点层** | 定义「能力的实现」 |
 
@@ -628,8 +633,9 @@
 | 2026-10-16 | v1 | **建立本文**：上级节点设计定稿 —— 核心定义 + 端口规则 + 参数暴露 + 预览编辑 + 10 项设计决策 + 执行语义 + 创建方式 + 存储 + UI + 禁止嵌套 + 与创作逻辑的关系 + 与 CR-GAP 的关系 + 待细化项 + 决策记录 `CN-D1`~`CN-D19`。**零代码改动。** |
 | 2026-10-16 | v2 | **批 CN-0 文档收口（零代码）**：修正基础节点计数 **20 → 14**（§0.5 / §1.3 / §12.1 三处 · 实测 14 = MVP 8 + L2 6）· **五处登记完成**（AI_README §5 · DocMAP · CHANGELOG · 变量术语对照表 §11.2 · DevPlan.todo）· 新增 `CN-D20`（**L4 重启** · 覆盖 `M_node_expansion`「L4 不做」）· 头部状态 / 上游依据 / 文末状态更新。 |
 | 2026-10-16 | v3 | **实施完成登记（代码批）**：状态「设计定稿 · 待实施」→「实施完成 · ⛔ 待人工验收」；§14 十项逐条回填（**7 项已落地 / 1 项未建** = 验收框架 `VCN-*`/`ACN-*` / **2 项待定** = 预览增强 · 程序化生成）；登记实施批（CHANGELOG · DevPlan.todo · AI_Status · DocMAP · source/README）。 | ① 待人工验收 ② 是否补 `VCN-*`/`ACN-*` 框架 ③ 程序化生成是否拍板 |
+| 2026-10-18 | v4（📦 归档标记） | **指令式归档（零代码）**：仅剩人工验收 ⇒ 按 `Archive/README.md` §三 5 直接归档（`git mv` → `docs/Archive/actionPlan/`）· 顶部加 `📦 已归档` 标记行 + 承接位（`ToVerify.todo` / `M_preset_library.md`）· 状态行改 ✅ · 相对链接层级修正 · 人工验收 + 待拍板项迁 `docs/actionPlan/ToVerify.todo` · 看板 id=347 勾 done · id=434 迁出。 | ⏳ 人工验收 → `ToVerify.todo`（新建 → 编辑 → 打包 → 父画布运行 → 展开执行结果正确） |
 
 ---
 
 **文档结束。**
-**状态：🟢 设计定稿（2026-10-16）· 实施完成（代码 2026-10-16）· ⛔ 待人工验收。**
+**状态：✅ 已归档（2026-10-18 · 指令式）—— 设计定稿（2026-10-16）· 实施完成（代码 2026-10-16）· ⏳ 人工验收 → [../../actionPlan/ToVerify.todo](../../actionPlan/ToVerify.todo)。**

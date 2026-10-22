@@ -5861,18 +5861,21 @@ int execution_selftest()
                            web::ResetAction::None,
                "PW-08 本次新建窗口 ⇒ **不复位**（新开 = 已在 login_url 新会话页，避免重复导航）");
         expect(check, web::plan_reset(false, /*reused_external=*/true, false, 0) ==
-                           web::ResetAction::CloseAndReopen,
-               "PW-08 **首次**使用早于本轮存在的窗口 ⇒ 关窗重开（回到新会话页）");
+                           web::ResetAction::NavigateToSession,
+               "PW-08 **首次**使用早于本轮存在的窗口 ⇒ 同一控制器**导航回新会话页**"
+               "（不关窗重开 —— 关窗后同毫秒重开撞 0x802A000C 竞态，D-35③ 修订）");
         expect(check, web::plan_reset(false, false, /*failed_before=*/true, 0) ==
-                           web::ResetAction::CloseAndReopen,
-               "PW-08 上一次**未就绪** ⇒ 复位一次后重试");
+                           web::ResetAction::NavigateToSession,
+               "PW-08 上一次**未就绪** ⇒ 复位一次后重试（导航回新会话页）");
         expect(check, web::plan_reset(false, false, true, web::kMaxResetsPerWindow) ==
                            web::ResetAction::None,
                "PW-08 重试用尽 ⇒ 不复位（交给归因文案，不再空转）");
         expect(check, web::plan_reset(false, false, false, 0) == web::ResetAction::None,
                "PW-08 非首次、未失败 ⇒ 不复位（不打扰用户会话）");
+        expect_eq(check, web::reset_action_name(web::ResetAction::NavigateToSession),
+                  "导航回新会话页（同控制器）", "PW-08 复位动作可读名（日志可 grep）");
         expect_eq(check, web::reset_action_name(web::ResetAction::CloseAndReopen),
-                  "关窗重开（窗口级）", "PW-08 复位动作可读名（日志可 grep）");
+                  "关窗重开（兜底）", "PW-08 关窗重开保留为兜底（可读名）");
 
         // ---- ⑦ `PW-04`（`I26`）：证据归属准入 —— **跨 owner 回执被拒** ----
         web::WebResourceRecord record;

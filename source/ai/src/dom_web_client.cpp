@@ -26,6 +26,13 @@ constexpr int kMinPolls     = 10;
 constexpr int kMaxPolls     = 600;
 constexpr int kStableRounds = 3; // 未配 done_when 时：文本连续 N 轮不变即完成
 
+// ---- 批 3 串行化（2026-10-17 R2-navfix；2026-10-18 `D-35④` 修订根因）----
+//  * 9/10 站「控制器未就绪」的真正根因：**跨窗口线程复用同一 environment**（WebView2 线程
+//    亲和违反 ⇒ `CreateCoreWebView2Controller` 同步 0x802A000C），已在 webview_host.cpp
+//    改为每窗口线程自建环境。此处仍保留「每站关窗 + 避让」：同 profile 串行 + 给上一站
+//    浏览器进程释放留时间（新环境创建前旧浏览器可能仍在退出，见 `D-35③` / `kReopenSettleMs`）。
+constexpr int kProbeSiteSettleMs = 800;
+
 // ---- M8-37（零开关）：运行期**自动识别**的站点无关口径 ----
 //  * 缺 input_selector / answer_selector 时不再拦路：脚本先试声明值，未命中就自动识别
 //  * 答案容器**不猜类名**：发送前记录候选池基线，发送后取「新出现 / 文本增长」者
@@ -1825,6 +1832,16 @@ int dom_probe_all(int timeout_ms, nlohmann::json* report, std::vector<DomSitePro
             again.attempts = 2;
             p              = again;
         }
+        // ---- 批 3 串行化（2026-10-17 R2-navfix；2026-10-18 `D-35④` 修订根因）----
+        //  * 全部 DOM 站共享**同一个默认 profile**（providers.json 未填 profile_dir ⇒ 空 = 默认目录）。
+        //    此前「同 profile 复用同一 environment」被**别的窗口线程**跨线程使用 ⇒
+        //    `CreateCoreWebView2Controller` 同步 0x802A000C（线程亲和违反，9/10 站失败的
+        //    真正根因；webview_host.cpp 已改为每窗口线程自建环境）。
+        //  * 这里仍**每站完全销毁本站窗口**（`close_owner_window` 等待窗口线程结束 ⇒ 控制器 Close +
+        //    浏览器进程退出），再按 `kReopenSettleMs` 同口径避让后探下一站 ⇒ 全程只存活一个窗口，
+        //    给下一站新环境创建留出浏览器侧释放时间（`D-35③`），同时消除 10 窗并存的资源风暴。
+        web::close_owner_window(web::WebOwner{}, web::site_key_of(spec->web.login_url));
+        std::this_thread::sleep_for(std::chrono::milliseconds(kProbeSiteSettleMs));
         print_probe_block(++index, static_cast<int>(targets.size()), p);
 
         const std::string state = probe_state_of(p);

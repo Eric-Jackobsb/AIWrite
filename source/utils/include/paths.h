@@ -19,7 +19,10 @@ const std::filesystem::path& outputs_dir();       // ~/.brain-ai/outputs
 const std::filesystem::path& workflows_dir();     // ~/.brain-ai/workflows
 const std::filesystem::path& snapshots_dir();     // ~/.brain-ai/snapshots
 // CN-实施（Composition_node）：上级节点独立文件存储目录（每规格一文件，见设计文档 §9.3）
-const std::filesystem::path& composites_dir();    // ~/.brain-ai/composites
+// PS-D9：存储双源 —— composites_dir() 仅作旧目录迁移来源（首次 reload 并入用户源后删除）
+const std::filesystem::path& composites_dir();    // ~/.brain-ai/composites（旧目录 · 迁移来源）
+const std::filesystem::path& builtin_composites_dir(); // <source>/workflows/compositeNodes（内置 · 只读）
+const std::filesystem::path& user_composites_dir();    // ~/.brain-ai/workflows/compositeNodes（用户 · 可读写）
 const std::filesystem::path& logs_dir();          // ~/.brain-ai/logs
 const std::filesystem::path& config_file();       // ~/.brain-ai/config.toml
 const std::filesystem::path& app_log_file();      // ~/.brain-ai/logs/app.log

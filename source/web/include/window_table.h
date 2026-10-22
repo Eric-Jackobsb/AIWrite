@@ -172,14 +172,18 @@ private:
 //    * 首次：本轮第一次用到该站点 ⇒ 复位到「新会话页」并等 L2 / L3；
 //    * 失败：上一次使用以「未就绪」失败 ⇒ **再复位一次**，仍失败则按归因报错（不空转）。
 //
-//  复位动作（实现事实 —— 见 `M_patchC` §4.4，**不新增导航 API**）：
-//    ① 窗口级（首选）：「回新会话页」= **关该窗口 + 重开**（`login_url` 天然就是新会话页）；
-//    ② 交互态级（可接受）：只做 `wait_ready(L1→L2→L3)` —— 不重开、不动用户会话。
+//  复位动作（`D-35③` 修订 2026-10-17 —— 实现事实变化，见 `M_patchC` §4.4）：
+//    干净 profile 上确定性复现：关窗后**同一毫秒**重开 ⇒ 第二个 `CreateCoreWebView2Controller`
+//    同步返回 `0x802A000C`（浏览器侧瞬时竞态）⇒ 「关窗重开」从首选降级为**兜底**；
+//    首选改为 **同一控制器 `navigate_and_wait` 回新会话页**（§4.4 预留的 `navigate_and_wait()`
+//    原语于 2026-10-17 落地，`login_url` 天然就是新会话页）；
+//    交互态级仍只做 `wait_ready(L1→L2→L3)` —— 不重开、不动用户会话。
 //  **不允许**：在用户可见的共享窗口里静默改导航（`location.href=…` 式）。
 enum class ResetAction {
-    None,           // 不复位
-    CloseAndReopen, // 窗口级：关窗重开
-    WaitReady,      // 交互态级：不重开、只等就绪
+    None,              // 不复位
+    NavigateToSession, // 窗口级：同一控制器「导航回新会话页」（login_url 即新会话页；首选）
+    CloseAndReopen,    // 兜底：关窗重开（仅当导航不可行；需带 `kReopenSettleMs` 避让竞态）
+    WaitReady,         // 交互态级：不重开、只等就绪
 };
 
 inline constexpr int kMaxResetsPerWindow = 1; // 单次重试（重试用尽 ⇒ 按归因报错）
@@ -187,9 +191,10 @@ inline constexpr int kMaxResetsPerWindow = 1; // 单次重试（重试用尽 ⇒
 inline std::string reset_action_name(ResetAction action)
 {
     switch (action) {
-    case ResetAction::None:           return "不复位";
-    case ResetAction::CloseAndReopen: return "关窗重开（窗口级）";
-    case ResetAction::WaitReady:      return "等就绪（交互态级）";
+    case ResetAction::None:              return "不复位";
+    case ResetAction::NavigateToSession: return "导航回新会话页（同控制器）";
+    case ResetAction::CloseAndReopen:    return "关窗重开（兜底）";
+    case ResetAction::WaitReady:         return "等就绪（交互态级）";
     }
     return "?";
 }
@@ -206,10 +211,10 @@ inline ResetAction plan_reset(bool opened_now, bool reused_external, bool failed
         return ResetAction::None;
     }
     if (reused_external) {
-        return ResetAction::CloseAndReopen;
+        return ResetAction::NavigateToSession;
     }
     if (failed_before) {
-        return resets_done < kMaxResetsPerWindow ? ResetAction::CloseAndReopen : ResetAction::None;
+        return resets_done < kMaxResetsPerWindow ? ResetAction::NavigateToSession : ResetAction::None;
     }
     return ResetAction::None;
 }

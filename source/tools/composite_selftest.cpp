@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 namespace {
@@ -246,6 +247,24 @@ int composite_selftest()
         expect(check, bad.addCompositeNode("c_missing", 0, 0, &bad_error).empty() &&
                           bad_error.find("规格不存在") != std::string::npos,
                "图集成：缺规格实例化失败并报错", bad_error);
+
+        // 2026-10-18 回归：空草稿（内部图为空）也能拖入画布实例化 —— 实例化只做结构守卫，
+        // 运行态校验在**展开后**由 validateBeforeRun 拦截（此前 build_composite_node 走严格
+        // validate_composite_spec ⇒ 「新建上级节点」的空白草稿永远无法添加到画布）。
+        {
+            eng::CompositeSpec draft;
+            draft.id   = "c_draft";
+            draft.name = "草稿节点";
+            std::string draft_save_error;
+            expect(check, eng::CompositeRegistry::instance().save(draft, &draft_save_error,
+                                                                  /*allow_incomplete_draft=*/true),
+                   "图集成：空草稿保存成功", draft_save_error);
+            eng::Graph draft_graph;
+            std::string draft_add_error;
+            expect(check,
+                   !draft_graph.addCompositeNode("c_draft", 0, 0, &draft_add_error).empty(),
+                   "图集成：空草稿可拖入画布实例化", draft_add_error);
+        }
     }
 
     // ---------------------------------------------------- 5. 展开执行 ----
@@ -359,6 +378,72 @@ int composite_selftest()
         expect(check, !executor.start(graph, &error) &&
                           error.find("规格不存在") != std::string::npos,
                "缺规格：start 失败并报规格不存在", error);
+    }
+
+    // ----------------------------------------- 8. 双源（PS-D9）--------
+    {
+        std::error_code ec8;
+        const auto builtin_root8 =
+            std::filesystem::temp_directory_path(ec8) / "aiwrite_dual_builtin";
+        const auto user_root8 = std::filesystem::temp_directory_path(ec8) / "aiwrite_dual_user";
+        std::filesystem::remove_all(builtin_root8, ec8);
+        std::filesystem::remove_all(user_root8, ec8);
+        std::filesystem::create_directories(builtin_root8, ec8);
+        std::filesystem::create_directories(user_root8, ec8);
+
+        // 先放好内置资产，再 set_roots（其内部 reload 会扫到）
+        const eng::CompositeSpec builtin_spec = make_selftest_spec();
+        {
+            std::ofstream out(builtin_root8 / "c1.json", std::ios::binary | std::ios::trunc);
+            out << eng::composite_to_json(builtin_spec).dump(4);
+        }
+        eng::CompositeRegistry::instance().set_roots(builtin_root8, user_root8);
+
+        std::string error8;
+        expect(check, eng::CompositeRegistry::instance().find("c1") != nullptr,
+               "双源：内置源扫描命中");
+        expect(check, eng::CompositeRegistry::instance().source_of("c1") ==
+                          eng::CompositeSource::Builtin,
+               "双源：内置来源标记 = Builtin");
+
+        // 内置只读：直接 save / remove 被拒
+        eng::CompositeSpec modified = builtin_spec;
+        modified.name              = "改名后的官方预设";
+        expect(check, !eng::CompositeRegistry::instance().save(modified, &error8) &&
+                          error8.find("只读") != std::string::npos,
+               "双源：内置源 save 被拒（只读）", error8);
+        expect(check, !eng::CompositeRegistry::instance().remove("c1", &error8) &&
+                          error8.find("只读") != std::string::npos,
+               "双源：内置源 remove 被拒（只读）", error8);
+
+        // 「复制到我的节点库」→ 用户源落盘 + 来源切 User + 可编辑
+        expect(check, eng::CompositeRegistry::instance().copy_to_user("c1", &error8),
+               "双源：copy_to_user 成功", error8);
+        expect(check, std::filesystem::exists(user_root8 / "c1.json"), "双源：用户源文件已落盘");
+        expect(check, eng::CompositeRegistry::instance().source_of("c1") ==
+                          eng::CompositeSource::User,
+               "双源：复制后来源 = User");
+        expect(check, eng::CompositeRegistry::instance().save(modified, &error8),
+               "双源：用户源 save 成功（可编辑）", error8);
+        expect(check, eng::CompositeRegistry::instance().find("c1")->name == "改名后的官方预设",
+               "双源：用户源覆盖生效（find 取用户内容）");
+
+        // 删除用户副本 → 来源回落 Builtin（官方预设恢复，只读回归）
+        expect(check, eng::CompositeRegistry::instance().remove("c1", &error8),
+               "双源：删除用户副本成功", error8);
+        expect(check, eng::CompositeRegistry::instance().source_of("c1") ==
+                          eng::CompositeSource::Builtin,
+               "双源：删除后来源回落 Builtin");
+        expect(check, eng::CompositeRegistry::instance().find("c1")->name == "自检上级",
+               "双源：回落的内置规格恢复（名称还原）");
+        expect(check, !eng::CompositeRegistry::instance().save(modified, &error8) &&
+                          error8.find("只读") != std::string::npos,
+               "双源：回落后 save 再次被拒（只读回归）", error8);
+
+        // 回到单源临时根（后续清理按 temp_root 进行）
+        eng::CompositeRegistry::instance().set_root(temp_root);
+        std::filesystem::remove_all(builtin_root8, ec8);
+        std::filesystem::remove_all(user_root8, ec8);
     }
 
     // 清理临时目录

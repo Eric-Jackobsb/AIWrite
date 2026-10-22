@@ -28,5 +28,5 @@ packaging/webview2/MicrosoftEdgeWebview2Setup.exe
 **没有**这个文件时的行为：安装包照常生成（`.iss` 里那行带 `skipifsourcedoesntexist`），
 程序与文档都只给官方下载页 —— 不会假装「已附带」。
 
-> ⚠ 现状（2026-10-10 本机）：**未附带** —— 本机 winget 取不到网络（`0x80072efd`），
-> 该 exe 未取得，安装包编译也未在本机验证（无 ISCC）。见 `docs/CHANGELOG.md` `[Unreleased]`。
+> ✅ 现状（2026-10-17 本机）：**已附带** —— 网络恢复（go.microsoft.com 200）后自动下载放入本目录
+> （约 1.78 MB · 批 ⑤ · 见 `docs/CHANGELOG.md` `[Unreleased]`）；安装包编译仍未在本机验证（无 ISCC）。

@@ -42,8 +42,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [
 2. 首次启动应弹出「首次使用引导」：第 1 步**环境检查**（WebView2 缺失 → 官方下载页 / 随包安装 / 重新检测）；
 3. 载入示例工作流 → 点「运行」跑通（不配 Key 的节点失败是**预期**，错误文案可操作）。
 
-## 当前状态（2026-10-16）
+## 当前状态（2026-10-17）
 
-- payload 阶段与 `.iss ↔ payload` 一致性锁（4 条 Source 通配逐条核对）**已实测**；
-- ⚠ 本机**未编译出安装包**（开发机无 ISCC 且离线，winget `0x80072efd`）⇒ 上面「干净机器冒烟」挂在你的环境；
-- 本机**未附带** WebView2 Bootstrapper（同上网络原因）⇒ 安装包界面回落到官方下载页（如实登记，不假装已附带）。
+- payload 阶段与 `.iss ↔ payload` 一致性锁（4 条 Source 通配逐条核对）**已实测**（2026-10-17 复核：**19 文件 / 34.6 MB** · 含随包 Bootstrapper · `*.py=0`）；
+- **打包流水线已入 `check_all` 第 ⑦ 项**（2026-10-17 · 批 ③）：`package.ps1 -SkipBuild -SkipInstaller` 判据 = 退出码 ∈ {0, 2} 且 manifest 存在 ⇒ 一键自检 **16 项**门禁；
+- ✅ **安装包已编译**（2026-10-17 批 ⑥ · winget 装 Inno Setup **6.7.3** → `package.ps1` 全流程 exit 0）：`build\dist\AIwrite-Setup-0.2.0.exe` **9.1 MB**（payload 19 文件 / 34.6 MB · `.iss↔payload` 一致性锁 4/4 PASS）⇒ 上面「干净机器冒烟」待新机执行（`TST-M6-01` · Human ①-2）；
+- ✅ 本机**已附带** WebView2 Bootstrapper（2026-10-17 批 ⑤ · 网络恢复后自动下载 1.78 MB ⇒ 安装向导出现**可选**「安装 WebView2 运行时（需联网）」勾选项，默认不勾选 · `PQ-02` 可选件口径不变）。

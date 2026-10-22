@@ -51,8 +51,17 @@ constexpr UINT           kLogoutMessage   = WM_APP + 3; // 请求按站点注销
 constexpr UINT           kRunScriptMessage = WM_APP + 4; // L3：请求在页面内执行一段脚本并回传原始 JSON（任意线程 Post）
 constexpr UINT           kSetFilesMessage  = WM_APP + 5; // M8-14：请求把本地文件交给 input[type=file]（任意线程 Post）
 constexpr UINT           kCdpInputMessage = WM_APP + 6; // PW-07f：请求 CDP 真实输入 / 发送（任意线程 Post）
+constexpr UINT           kNavigateMessage = WM_APP + 7; // PW-08（D-35③ 修订）：请求「同控制器导航回新会话页」（任意线程 Post）
 // 页面加载完成后到开始协议探测的等待（给 SPA 一点就绪时间）
 constexpr DWORD kProbeDelayMs = 1500;
+// `PW-08`（D-35③ 修订 2026-10-17）：复位导航完成等待预算 + 关窗重开兜底的避让间隔
+//  * 干净 profile 确定性复现：关窗后**同一毫秒**重开 ⇒ 第二个 CreateCoreWebView2Controller
+//    同步失败 0x802A000C（浏览器侧瞬时竞态）⇒ 复位首选 = 导航；关窗重开降级为兜底且必须避让
+//  * `D-35④`（2026-10-18）补充：批量探测的 0x802A000C 是**另一个**成因 —— 跨窗口线程复用
+//    同一 environment（线程亲和违反），已改为每窗口线程自建环境（见 `ensure_environment`）。
+//    这里的 `kReopenSettleMs` 仍用于兜底重开的浏览器侧释放避让。
+constexpr DWORD kResetNavigateTimeoutMs = 15000;
+constexpr DWORD kReopenSettleMs         = 800;
 
 // 页面内求解 PoW：分两段执行（注入→轮询取回），避免部分运行时 ExecuteScript 不等待 Promise
 //  1) 找 main.*.js（页面已加载的主包）
@@ -300,6 +309,21 @@ struct WindowCtx {
     std::string             script_result;
     std::string             script_error;
 
+    // ---- `PW-08` 修订（`D-35③` 评审 2026-10-17）：复位 = **同一控制器「导航回新会话页」** ----
+    //  * 干净 profile 确定性复现：关窗后同毫秒重开 ⇒ 第二个 CreateCoreWebView2Controller
+    //    同步失败 0x802A000C（浏览器侧瞬时竞态）⇒ 复位首选改为导航（login_url 即新会话页），
+    //    关窗重开降级为兜底（带 `kReopenSettleMs` 避让）。
+    //  * 跨线程协议照抄「脚本槽」：调用方 PostMessage(kNavigateMessage) + 等 nav_cv；
+    //    NavigationCompleted 回调（窗口线程，见 `on_controller_ready`）置 nav_pending=false 并 notify。
+    std::mutex              nav_mutex;
+    std::condition_variable nav_cv;
+    std::string             nav_url;
+    bool                    nav_pending = false; // true = 正在等一次导航完成
+    bool                    nav_done    = false; // 完成（成功或失败均置位）
+    bool                    nav_ok      = false;
+    std::string             nav_error;
+    std::mutex              nav_call_mutex;      // 并发调用方串行（同窗口同时只允许一次复位导航）
+
     // 按站点注销（PB2-19）：跨线程同步（调用方等待，窗口线程删 Cookie + 清 localStorage）
     std::mutex              logout_mutex;
     std::condition_variable logout_cv;
@@ -383,16 +407,18 @@ std::mutex                                        g_table_mutex;
 WindowTable                                       g_table;
 std::map<std::string, std::shared_ptr<WindowCtx>> g_windows;
 
-// ---- 浏览器**环境**缓存（官方约束：一个 user data folder 同时只能有一个 environment）----
-//  * 一个 environment 可创建**多个** controller（多窗口）⇒ 多窗口共享登录态
-//    （= 既有产品语义：每个站点只需登录一次；窗口之间互不干扰的是**页面 / 槽位**，不是 Cookie）
-//  * `g_env_creating` 标记「哪个 profile 正在被哪个窗口线程创建」：同 profile 的第二个窗口**等**
-//    第一个建好（否则第二次创建必然失败：user data folder 已被占用）
-std::mutex                                              g_env_mutex;
-std::condition_variable                                 g_env_cv;
-std::map<std::string, ComPtr<ICoreWebView2Environment>> g_envs;      // profile 目录 → 环境
-std::map<std::string, HRESULT>                          g_env_fail;  // profile 目录 → 创建失败码
-std::string                                             g_env_creating; // 正在创建该 profile
+// ---- 浏览器**环境**（`D-35④` 修订 2026-10-18：**每窗口线程各建一个**，不再跨线程共享）----
+//  * WebView2 对象有**线程亲和性**（必须在创建它的线程上使用，见官方「Threading model」文档）。
+//    此前把第一个窗口线程创建的环境缓存进 `g_envs`、交给**别的**窗口线程
+//    `CreateCoreWebView2Controller` ⇒ 跨线程调用同步失败 `0x802A000C`
+//    （`--web-adapter-selftest --provider all` 9/10 站失败的根因，真机 2026-10-17 日志实证）。
+//  * 现在每个窗口线程在自己的线程上创建并独占自己的环境：本线程建、本线程用、窗口关闭即释放。
+//    同 profile 的**并发创建**仍由 `g_env_creating` 串行化（首建时 user data folder 被占用）。
+//  * `g_env_fail` = 创建失败码缓存：同一 profile 不反复重试空转（如实报错）。
+std::mutex                      g_env_mutex;
+std::condition_variable         g_env_cv;
+std::map<std::string, HRESULT>  g_env_fail;  // profile 目录 → 创建失败码
+std::string                     g_env_creating; // 正在创建该 profile
 
 // ---- 「当前窗口」上下文（`thread_local`）----
 //  * 窗口线程：线程启动时绑定**自己**的窗口 ⇒ 窗口线程内所有 `st()` 都指自己（含 COM 回调）
@@ -916,6 +942,96 @@ void run_script_in_window()
     if (FAILED(hr)) {
         finish_run_script({}, "调用 ExecuteScript 失败");
     }
+}
+
+// ---- `PW-08`（`D-35③` 修订 2026-10-17）：复位 = 同一控制器「导航回新会话页」----
+//  * 跨线程协议同「脚本槽」：调用方线程 `navigate_now`（PostMessage + 等 nav_cv）；
+//    窗口线程 `run_navigate_in_window` 执行 Navigate；`NavigationCompleted` 回调
+//    （见 `on_controller_ready`）置完成信号 —— 回调经窗口线程消息循环派发，不锁消息泵。
+
+// 结束一次「复位导航」（窗口线程调用；ok = NavigationCompleted 成功）
+void finish_navigate(bool ok, std::string error)
+{
+    {
+        std::lock_guard<std::mutex> lock(st().nav_mutex);
+        st().nav_ok      = ok;
+        st().nav_error   = std::move(error);
+        st().nav_pending = false;
+        st().nav_done    = true;
+    }
+    st().nav_cv.notify_all();
+}
+
+// 窗口线程：执行 `st().nav_url` 的导航（login_url 即新会话页；完成 = NavigationCompleted）
+void run_navigate_in_window()
+{
+    if (st().webview == nullptr) {
+        finish_navigate(false, "WebView2 未就绪（无法导航复位）");
+        return;
+    }
+    std::string url;
+    {
+        std::lock_guard<std::mutex> lock(st().nav_mutex);
+        url = st().nav_url;
+    }
+    if (url.empty()) {
+        finish_navigate(false, "导航目标为空");
+        return;
+    }
+    log::info("[网页版窗口] 复位导航发起: " + st().key + " → " + url);
+    const HRESULT hr = st().webview->Navigate(to_wide(url).c_str());
+    if (FAILED(hr)) {
+        finish_navigate(false, "Navigate 调用失败（HRESULT " + std::to_string(hr) + "）");
+    }
+    // 成功 ⇒ 等 NavigationCompleted（现有回调会置完成信号 + 提取 Cookie）
+}
+
+// 调用方线程：请窗口线程导航回新会话页并**同步等待**完成（镜像 `run_script_now`）
+//  * 用 `ctx` 而非 `st()`：`prepare_window` 在 `CtxScope` 绑定前调用，st() 不可用
+bool navigate_now(WindowCtx* ctx, const std::string& url, int timeout_ms, std::string* error)
+{
+    if (ctx == nullptr) {
+        if (error != nullptr) {
+            *error = "窗口上下文为空";
+        }
+        return false;
+    }
+    if (url.empty()) {
+        if (error != nullptr) {
+            *error = "导航目标为空";
+        }
+        return false;
+    }
+    std::lock_guard<std::mutex> call_lock(ctx->nav_call_mutex); // 同窗口并发调用方串行
+    const HWND window = ctx->window.load();
+    if (window == nullptr || ctx->webview == nullptr) {
+        if (error != nullptr) {
+            *error = "窗口 / 页面尚未创建完成（" + ctx->key + "）";
+        }
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(ctx->nav_mutex);
+        ctx->nav_url     = url;
+        ctx->nav_pending = true;
+        ctx->nav_done    = false;
+        ctx->nav_ok      = false;
+        ctx->nav_error.clear();
+    }
+    ::PostMessageW(window, kNavigateMessage, 0, 0);
+
+    std::unique_lock<std::mutex> lock(ctx->nav_mutex);
+    const auto wait_ms = std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 15000);
+    if (!ctx->nav_cv.wait_for(lock, wait_ms, [ctx] { return !ctx->nav_pending && ctx->nav_done; })) {
+        if (error != nullptr) {
+            *error = "复位导航超时（页面未完成加载：" + ctx->key + "）";
+        }
+        return false;
+    }
+    if (error != nullptr) {
+        *error = ctx->nav_error;
+    }
+    return ctx->nav_ok;
 }
 
 // ---- M8-14：把本地文件交给页面（CDP）--------------------------------------------------
@@ -1466,6 +1582,20 @@ HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
                 else {
                     log::warn("[网页版登录] 页面导航失败（可检查网络后重试）");
                 }
+                // `PW-08`（D-35③ 修订 2026-10-17）：复位导航的完成信号 —— 只在「有导航在等」时消费
+                //（同控制器回新会话页；窗口线程消息循环派发，不锁消息泵）
+                {
+                    std::lock_guard<std::mutex> lock(st().nav_mutex);
+                    if (st().nav_pending) {
+                        st().nav_ok      = success ? true : false;
+                        st().nav_error   = success
+                                               ? std::string()
+                                               : std::string("导航完成但页面加载失败（IsSuccess=false）");
+                        st().nav_pending = false;
+                        st().nav_done    = true;
+                    }
+                }
+                st().nav_cv.notify_all();
                 return S_OK;
             })
             .Get(),
@@ -1476,24 +1606,39 @@ HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
     return S_OK;
 }
 
-// ---- 浏览器环境：**按 profile 缓存**（WebView2 官方约束：一个 user data folder 只能有一个 environment）----
-//  * 一个 environment 可创建**多个** controller ⇒ 多窗口并存的**前提**（`PW-06`）
-//  * `g_env_creating` = 「该 profile 正在被某个窗口线程创建」：同 profile 的第二个窗口**等它建好**
-//    （否则第二次创建必然失败：folder 已被占用 —— 真机报错一般不可读，故这里先等）
-//  * 失败码也进缓存（`g_env_fail`）：同一 profile 不反复重试空转（如实报错）
+// ---- 浏览器环境：**每窗口线程私有**（`D-35④` 修订 2026-10-18）----
+//  * WebView2 官方线程模型：环境 / 控制器都必须在其创建线程上使用（「Threading model」文档）。
+//    此前「按 profile 缓存、跨窗口线程共享」⇒ 第二个窗口用**别人线程**的环境创建控制器，
+//    同步失败 `0x802A000C`（真机批量探测 9/10 站失败根因）。现改为每个窗口线程自建自用。
+//  * `g_env_creating` = 「该 profile 正在被某个窗口线程创建」：同 profile 的并发创建**等它建好**
+//    （首建时 user data folder 被占用，同时创建会失败）。
+//  * 失败码进缓存（`g_env_fail`）：同一 profile 不反复重试空转（如实报错）
 void create_controller_for_window(ICoreWebView2Environment* environment)
 {
-    const HRESULT hr = environment->CreateCoreWebView2Controller(
-        st().window.load(),
-        Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(&on_controller_ready)
-            .Get());
-    if (FAILED(hr)) {
-        // 同步返回失败时回调不会触发（典型：HWND 无效 → E_INVALIDARG），必须显式报错
-        log::error("[网页版登录] CreateCoreWebView2Controller 同步返回失败 HRESULT=" +
-                   std::to_string(hr) + "（窗口 " + st().key + "）");
-        st().result = 1;
-        ::PostMessageW(st().window.load(), WM_CLOSE, 0, 0);
+    // `D-35③` 修订 2026-10-17：同步返回失败是**浏览器侧瞬时竞态**的信号
+    //（干净 profile 复现 0x802A000C：上一控制器 Close 后浏览器侧未完全释放）⇒ 短退避重试。
+    //  * 同步失败时回调不会触发（典型：HWND 无效 → E_INVALIDARG），必须显式报错；
+    //    0x802A000C 属瞬时竞态，重试可过；最多 3 次 × 300ms（兜底，窗口线程短暂阻塞可接受）。
+    constexpr int   kCreateRetries = 3;
+    constexpr DWORD kCreateRetryGapMs = 300;
+    for (int attempt = 1; attempt <= kCreateRetries; ++attempt) {
+        const HRESULT hr = environment->CreateCoreWebView2Controller(
+            st().window.load(),
+            Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(&on_controller_ready)
+                .Get());
+        if (SUCCEEDED(hr)) {
+            return;
+        }
+        log::warn("[网页版登录] CreateCoreWebView2Controller 同步返回失败 HRESULT=" +
+                  std::to_string(hr) + "（窗口 " + st().key + "，第 " + std::to_string(attempt) +
+                  "/" + std::to_string(kCreateRetries) + " 次；300ms 后重试）");
+        if (attempt < kCreateRetries) {
+            ::Sleep(kCreateRetryGapMs);
+        }
     }
+    log::error("[网页版登录] CreateCoreWebView2Controller 重试耗尽仍失败（窗口 " + st().key + "）");
+    st().result = 1;
+    ::PostMessageW(st().window.load(), WM_CLOSE, 0, 0);
 }
 
 HRESULT on_environment_ready(HRESULT result, ICoreWebView2Environment* environment)
@@ -1515,10 +1660,11 @@ HRESULT on_environment_ready(HRESULT result, ICoreWebView2Environment* environme
         return S_OK;
     }
 
-    // ① 进缓存（后续窗口直接复用 ⇒ 登录态共享、页面/槽位各自独立）
+    // ① 环境归**本窗口线程**私有（`D-35④` 修订 2026-10-18）：**不进**进程级 `g_envs` 缓存。
+    //    跨线程复用环境 ⇒ 第二个窗口 `CreateCoreWebView2Controller` 同步失败 0x802A000C
+    //    （线程亲和性违反，真机 2026-10-17 批量探测实证）。环境随窗口关闭一并释放。
     {
         std::lock_guard<std::mutex> lock(g_env_mutex);
-        g_envs[profile_dir] = environment;
         g_env_fail.erase(profile_dir);
         if (g_env_creating == profile_dir) {
             g_env_creating.clear();
@@ -1526,36 +1672,33 @@ HRESULT on_environment_ready(HRESULT result, ICoreWebView2Environment* environme
     }
     g_env_cv.notify_all();
 
-    // ② 本窗口**自己**的 controller（不是抢别人的）
+    // ② 本窗口**自己**的 controller（创建线程 = 环境线程 ⇒ 满足线程亲和）
     st().environment = environment;
     create_controller_for_window(environment);
     return S_OK;
 }
 
 // 取（必要时建）**本窗口**要用的环境；失败 → false + 可操作 `error`
+//  * `D-35④`（2026-10-18）：**每个窗口线程都自己创建环境**（本线程用，不跨线程复用）——
+//    跨线程复用会撞 0x802A000C（线程亲和）。同 profile 的并发创建由 `g_env_creating` 串行化。
 bool ensure_environment(HWND window, std::string* error)
 {
-    const std::string                profile_dir = st().request.profile_dir;
-    constexpr DWORD                  kEnvWaitMs  = 30000; // 等「同 profile 的创建者」完成（首次可能较慢）
-    const DWORD                      deadline    = ::GetTickCount() + kEnvWaitMs;
-    bool                             create_now  = false;
-    bool                             env_timeout = false;
-    HRESULT                          fail_code   = S_OK;
-    ComPtr<ICoreWebView2Environment> cached;
+    const std::string profile_dir = st().request.profile_dir;
+    constexpr DWORD   kEnvWaitMs  = 30000; // 等「同 profile 的创建者」完成（首次可能较慢）
+    const DWORD       deadline    = ::GetTickCount() + kEnvWaitMs;
+    bool              create_now  = false;
+    bool              env_timeout = false;
+    HRESULT           fail_code   = S_OK;
 
     {
         std::unique_lock<std::mutex> lock(g_env_mutex);
         for (;;) {
-            if (const auto it = g_envs.find(profile_dir); it != g_envs.end()) {
-                cached = it->second;
-                break;
-            }
             if (const auto it = g_env_fail.find(profile_dir); it != g_env_fail.end()) {
                 fail_code = it->second;
                 break;
             }
             if (g_env_creating.empty()) {
-                g_env_creating = profile_dir; // 本线程来建（同 profile 只允许一个创建者）
+                g_env_creating = profile_dir; // 本线程来建（同 profile 同时只允许一个创建者）
                 create_now     = true;
                 break;
             }
@@ -1597,12 +1740,6 @@ bool ensure_environment(HWND window, std::string* error)
         return true; // 环境回调里会创建**本窗口**的 controller
     }
 
-    if (cached != nullptr) {
-        st().environment = cached.Get();
-        create_controller_for_window(cached.Get());
-        return true;
-    }
-
     if (error != nullptr) {
         *error = env_timeout ? ("等待 WebView2 环境超时（profile " + profile_dir +
                                 "；另一个窗口正在创建同一 profile 的环境）")
@@ -1621,8 +1758,8 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         // 【关键】异步回调可能在 CreateWindowExW 返回前（嵌套消息泵）触发，必须先赋值 st().window
         st().window = window;
 
-        // 环境**按 profile 缓存 / 共享**（一个 user data folder 只能一个 environment；
-        // 多窗口共享它 ⇒ 登录态共享，而页面 / 槽位各自独立）—— `PW-02` / `PW-06`
+        // 环境**每窗口线程私有**（`D-35④` 修订 2026-10-18：WebView2 线程亲和，跨线程复用
+        // 会 0x802A000C）——本线程建、本线程用，窗口关闭即释放
         std::string env_error;
         if (!ensure_environment(window, &env_error)) {
             log::error("[网页版登录] " + st().key + " 环境不可用：" + env_error);
@@ -1692,6 +1829,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
 
     case kRunScriptMessage: // L3：DOM 适配器 / 选择器探测
         run_script_in_window();
+        return 0;
+
+    case kNavigateMessage: // PW-08（D-35③ 修订 2026-10-17）：同控制器「导航回新会话页」
+        run_navigate_in_window();
         return 0;
 
     case kSetFilesMessage: // M8-14：把本地文件交给页面（CDP 三步）
@@ -1900,6 +2041,7 @@ bool LoginWindow::start(const LoginRequest& request, std::string* error)
             return false;
         }
         ctx_close(current, -1, /*wait=*/true); // 收尾旧壳（线程已结束）
+        ::Sleep(kReopenSettleMs); // 旧 controller 浏览器侧可能仍在释放（避 0x802A000C）
     }
 
     LoginRequest owned_request = request;
@@ -2061,6 +2203,7 @@ bool prepare_window(const LoginRequest& site_request, std::shared_ptr<WindowCtx>
     if (!ctx_alive(ctx)) {
         if (ctx != nullptr) {
             ctx_close(ctx, -1, /*wait=*/true); // 旧壳（线程已结束）先收尾
+            ::Sleep(kReopenSettleMs); // 旧 controller 浏览器侧可能仍在释放（避 0x802A000C）
         }
         ctx = start_own_window();
         if (ctx == nullptr) {
@@ -2081,11 +2224,31 @@ bool prepare_window(const LoginRequest& site_request, std::shared_ptr<WindowCtx>
                                           /*reused_external=*/!ctx->used_before,
                                           /*failed_before=*/ctx->failed_before,
                                           /*resets_done=*/ctx->resets_done);
-    if (action == ResetAction::CloseAndReopen) {
+    if (action == ResetAction::NavigateToSession) {
+        // `PW-08`（`D-35③` 修订 2026-10-17）：**首选** = 同一控制器「导航回新会话页」
+        //（login_url 即新会话页；关窗后同毫秒重开会撞 0x802A000C 竞态，故不复用关窗重开）
+        const bool failure_driven = ctx->failed_before;
+        log::info("[网页版窗口] 复位 " + reset_action_name(action) + "：" + ctx->key +
+                  (failure_driven ? "（上一次未就绪 ⇒ 重试前复位）" : "（首次使用 ⇒ 回到新会话页）"));
+        ctx->resets_done = resets_before + 1; // 单次重试预算：跨「复位」也要记账
+        std::string nav_error;
+        if (navigate_now(ctx.get(), ctx->request.url, kResetNavigateTimeoutMs, &nav_error)) {
+            log::info("[网页版窗口] 复位导航完成：" + ctx->key +
+                      "（已回到新会话页；就绪确认由调用方 wait_ready(L1→L2→L3) 完成）");
+        }
+        else {
+            log::warn("[网页版窗口] 复位导航失败：" + ctx->key + "（" + nav_error +
+                      "；记 failed_before，下一次调用再复位一次）");
+            ctx->failed_before = true;
+        }
+    }
+    else if (action == ResetAction::CloseAndReopen) {
+        // 兜底（罕见：导航不可行 / 窗口需真正重建）—— 带 `kReopenSettleMs` 避让 0x802A000C 竞态
         const bool failure_driven = ctx->failed_before;
         log::info("[网页版窗口] 复位 " + reset_action_name(action) + "：" + ctx->key +
                   (failure_driven ? "（上一次未就绪 ⇒ 重试前复位）" : "（首次使用 ⇒ 回到新会话页）"));
         ctx_close(ctx, -1, /*wait=*/true);
+        ::Sleep(kReopenSettleMs); // 等旧 controller 浏览器侧完全释放（否则重开撞 0x802A000C）
         ctx = start_own_window();
         if (ctx == nullptr) {
             return false;
@@ -2243,6 +2406,7 @@ bool ensure_session(const LoginRequest& site_request, int timeout_ms, std::strin
     if (!window_ready) {
         if (ctx != nullptr) {
             ctx_close(ctx, -1, /*wait=*/true); // 旧壳（线程已结束）先收尾
+            ::Sleep(kReopenSettleMs); // 旧 controller 浏览器侧可能仍在释放（避 0x802A000C）
         }
         // 起（或重建）**本归属自己的**离屏窗口；`probe_after_load` 会刷新 Cookie 与 userToken
         LoginRequest request     = site_request;
@@ -3314,10 +3478,9 @@ void stop_login_window()
 {
     // `PW-02`：收尾 = **逐窗口**（顺序由窗口表给出：后开的先关）—— 不再只关「那一个窗口」
     ctx_close_all();
-    // 环境 / 失败缓存一并释放（同进程内再开窗会重新创建环境）
+    // 失败缓存一并释放（同进程内再开窗会重新尝试创建环境）
     {
         std::lock_guard<std::mutex> lock(g_env_mutex);
-        g_envs.clear();
         g_env_fail.clear();
         g_env_creating.clear();
     }

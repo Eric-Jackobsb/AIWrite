@@ -5,6 +5,7 @@
 #include "log.h"
 #include "node_registry.h"
 #include "paths.h"
+#include "property_panel.h" // PS-09-G1：复用公共参数控件 draw_param_widget
 #include "theme.h"
 
 #include <imgui.h>
@@ -12,10 +13,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace aiwrite::ui {
@@ -126,6 +130,377 @@ void ce_draw_node(const engine::Node& node)
     ed::EndNode();
 }
 
+// ------------------------------------------------- G2/G6 内部节点改名 ----
+// 重命名弹窗状态（跨帧存活）
+std::string              g_ce_rename_id;
+std::array<char, 128>    g_ce_rename_buf;
+
+// 打开「重命名内部节点」弹窗（预填当前标题；须在 ed 上下文内调用）
+void ce_open_rename(const std::string& node_id)
+{
+    g_ce_rename_id = node_id;
+    const engine::Node* node =
+        composite_editor_state().working.internal_graph.findNode(node_id);
+    const std::string& title = (node != nullptr) ? node->title : std::string();
+    const std::size_t  n     = std::min<std::size_t>(title.size(), g_ce_rename_buf.size() - 1);
+    title.copy(g_ce_rename_buf.data(), n);
+    g_ce_rename_buf[n] = '\0';
+    ImGui::OpenPopup("##ce_rename_menu");
+}
+
+// 应用改名（先压快照再改值；可撤销）
+void ce_apply_rename()
+{
+    CompositeEditorState& state = composite_editor_state();
+    engine::Node* node = state.working.internal_graph.findNode(g_ce_rename_id);
+    const std::string  new_title(g_ce_rename_buf.data());
+    if (node != nullptr && new_title != node->title) {
+        composite_editor_snapshot("重命名内部节点 " + g_ce_rename_id);
+        node->title = new_title;
+    }
+    g_ce_rename_id.clear();
+    ImGui::CloseCurrentPopup();
+}
+
+// ----------------------------------------------- G3 添加节点搜索/分类 ----
+// 大小写不敏感子串匹配（ASCII 折叠；中文原样字节比较；与节点库 find_ci 同语义）
+std::size_t ce_find_ci(const std::string& haystack, const std::string& needle)
+{
+    if (needle.empty()) {
+        return 0;
+    }
+    if (needle.size() > haystack.size()) {
+        return std::string::npos;
+    }
+    const auto lower = [](char c) {
+        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    };
+    for (std::size_t i = 0; i + needle.size() <= haystack.size(); ++i) {
+        bool ok = true;
+        for (std::size_t j = 0; j < needle.size(); ++j) {
+            if (lower(haystack[i + j]) != lower(needle[j])) {
+                ok = false;
+                break;
+            }
+        }
+        if (ok) {
+            return i;
+        }
+    }
+    return std::string::npos;
+}
+
+// 「添加内部节点」菜单的搜索过滤缓冲（打开菜单时清空）
+char g_ce_add_filter[64] = "";
+
+// ------------------------------------------- G4/G5/G7 画布辅助（L3 移植）----
+bool g_ce_show_minimap = true;  // G4：小地图（左下角）
+bool g_ce_align_snap   = true;  // G5：对齐吸附 + 辅助线
+bool g_ce_grid_snap    = true;  // G7：网格 16px 吸附
+bool g_ce_show_grid    = true;  // G7：网格显示
+bool g_ce_request_fit  = false; // G8：「适配视图」请求（ed::Begin 内执行 NavigateToContent）
+
+// 小地图输入屏蔽快照（鼠标进入小地图区域 → 事件只归小地图，画布不得参与）
+bool   g_ce_minimap_blocking = false;
+bool   g_ce_minimap_clicked  = false;
+bool   g_ce_minimap_down     = false;
+ImVec2 g_ce_minimap_mouse    = ImVec2(0.0f, 0.0f);
+
+void ce_minimap_rect(ImVec2& out_min, ImVec2& out_max)
+{
+    const ImVec2 window_pos  = ImGui::GetWindowPos();
+    const ImVec2 window_size = ImGui::GetWindowSize();
+    const float  margin      = 10.0f;
+    out_min = ImVec2(window_pos.x + window_size.x - 190.0f - margin,
+                     window_pos.y + window_size.y - 130.0f - margin);
+    out_max = ImVec2(out_min.x + 190.0f, out_min.y + 130.0f);
+}
+
+bool ce_minimap_hit(const ImVec2& mouse, const ImVec2& min, const ImVec2& max)
+{
+    return mouse.x >= min.x && mouse.x <= max.x && mouse.y >= min.y && mouse.y <= max.y;
+}
+
+// 在 ed::Begin 之前调用（主画布 L3 同款：先快照、再清空，保证小地图拿到完整输入）
+void ce_block_minimap_input()
+{
+    g_ce_minimap_blocking = false;
+    g_ce_minimap_clicked  = false;
+    g_ce_minimap_down     = false;
+    if (!g_ce_show_minimap) {
+        return;
+    }
+    ImVec2 map_min, map_max;
+    ce_minimap_rect(map_min, map_max);
+    ImGuiIO&     io    = ImGui::GetIO();
+    const ImVec2 mouse = io.MousePos;
+    if (!ce_minimap_hit(mouse, map_min, map_max)) {
+        return;
+    }
+    g_ce_minimap_blocking = true;
+    g_ce_minimap_mouse    = mouse;
+    g_ce_minimap_clicked  = io.MouseClicked[0];
+    g_ce_minimap_down     = io.MouseDown[0];
+    for (int i = 0; i < 5; ++i) {
+        io.MouseClicked[i]  = false;
+        io.MouseDown[i]     = false;
+        io.MouseReleased[i] = false;
+    }
+    io.MouseWheel  = 0.0f;
+    io.MouseWheelH = 0.0f;
+    io.MouseDelta  = ImVec2(0.0f, 0.0f);
+}
+
+// 小地图（左下角缩略图；点击 / 按住拖动 → 视口中心平移到对应画布位置；右上角 ✕ 关闭）
+// 纯导航：绝不选中 / 移动节点 —— 输入已在 ce_block_minimap_input 中与画布隔离。
+// 在 ed::Begin 内、ed::End 前调用（需当前编辑器上下文：GetNodeSize / NavigateToCenter）。
+void ce_draw_minimap(const engine::Graph& graph)
+{
+    if (!g_ce_show_minimap) {
+        return;
+    }
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+    ImVec2 map_min, map_max;
+    ce_minimap_rect(map_min, map_max);
+    draw_list->AddRectFilled(map_min, map_max, IM_COL32(18, 20, 26, 215), 4.0f);
+    draw_list->AddRect(map_min, map_max, IM_COL32(130, 130, 145, 210), 4.0f, 0, 1.0f);
+    draw_list->AddText(map_min + ImVec2(6.0f, 3.0f), IM_COL32(200, 200, 210, 235), "小地图");
+
+    const ImVec2 close_pos(map_max.x - 18.0f, map_min.y + 2.0f);
+    if (g_ce_minimap_blocking && g_ce_minimap_clicked && g_ce_minimap_mouse.x >= close_pos.x &&
+        g_ce_minimap_mouse.x <= close_pos.x + 14.0f && g_ce_minimap_mouse.y >= close_pos.y &&
+        g_ce_minimap_mouse.y <= close_pos.y + 14.0f) {
+        g_ce_show_minimap = false;
+        return;
+    }
+    draw_list->AddText(close_pos, IM_COL32(225, 90, 90, 235), "✕");
+
+    const ImVec2 area_min(map_min.x + 6.0f, map_min.y + 20.0f);
+    const ImVec2 area_max(map_max.x - 6.0f, map_max.y - 6.0f);
+    if (graph.nodes.empty()) {
+        draw_list->AddText(area_min, IM_COL32(120, 120, 135, 200), "空画布");
+        return;
+    }
+
+    ImVec2 bbox_min(FLT_MAX, FLT_MAX);
+    ImVec2 bbox_max(-FLT_MAX, -FLT_MAX);
+    for (const engine::Node& node : graph.nodes) {
+        const ImVec2 sz = ed::GetNodeSize(ce_node_handle(node.id));
+        const float  w  = (sz.x > 1.0f) ? sz.x : 80.0f;
+        const float  h  = (sz.y > 1.0f) ? sz.y : 40.0f;
+        bbox_min.x = std::min(bbox_min.x, node.x);
+        bbox_min.y = std::min(bbox_min.y, node.y);
+        bbox_max.x = std::max(bbox_max.x, node.x + w);
+        bbox_max.y = std::max(bbox_max.y, node.y + h);
+    }
+    const ImVec2 bbox_size(std::max(bbox_max.x - bbox_min.x, 1.0f),
+                           std::max(bbox_max.y - bbox_min.y, 1.0f));
+    const ImVec2 area_size(area_max.x - area_min.x, area_max.y - area_min.y);
+    const float  scale = std::min(area_size.x / bbox_size.x, area_size.y / bbox_size.y);
+
+    for (const engine::Node& node : graph.nodes) {
+        const ImVec2 sz = ed::GetNodeSize(ce_node_handle(node.id));
+        const float  w  = std::max((sz.x > 1.0f ? sz.x : 80.0f) * scale, 3.0f);
+        const float  h  = std::max((sz.y > 1.0f ? sz.y : 40.0f) * scale, 3.0f);
+        const ImVec2 p(area_min.x + (node.x - bbox_min.x) * scale,
+                       area_min.y + (node.y - bbox_min.y) * scale);
+        draw_list->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + w, p.y + h),
+                                 IM_COL32(190, 195, 220, 200), 1.0f);
+        draw_list->AddRect(ImVec2(p.x, p.y), ImVec2(p.x + w, p.y + h),
+                           IM_COL32(0, 0, 0, 190), 1.0f);
+    }
+
+    if (g_ce_minimap_blocking && (g_ce_minimap_clicked || g_ce_minimap_down) &&
+        ce_minimap_hit(g_ce_minimap_mouse, area_min, area_max)) {
+        const float cx = (g_ce_minimap_mouse.x - area_min.x) / scale + bbox_min.x;
+        const float cy = (g_ce_minimap_mouse.y - area_min.y) / scale + bbox_min.y;
+        ed::NavigateToCenter(ImVec2(cx, cy), 0.0f);
+    }
+}
+
+// ---- G5/G7：拖动中的对齐吸附（辅助线）+ 网格 16px 吸附 ----
+constexpr float kCeSnapDistance = 8.0f;  // 对齐吸附距离（屏幕像素，换算画布坐标用当前缩放）
+constexpr float kCeGridSize     = 16.0f; // 网格步长（画布坐标）
+
+// 上一帧节点位置（判断「谁在拖动」：imgui-node-editor 无公开拖动查询 API）
+std::unordered_map<std::string, ImVec2> g_ce_prev_positions;
+
+std::string ce_find_dragged_node(const engine::Graph& graph)
+{
+    if (!ImGui::IsMouseDown(0)) {
+        g_ce_prev_positions.clear();
+        return {};
+    }
+    for (const engine::Node& node : graph.nodes) {
+        const auto it = g_ce_prev_positions.find(node.id);
+        if (it == g_ce_prev_positions.end()) {
+            continue;
+        }
+        const ImVec2 pos = ed::GetNodePosition(ce_node_handle(node.id));
+        if (std::fabs(pos.x - it->second.x) > 0.5f || std::fabs(pos.y - it->second.y) > 0.5f) {
+            return node.id;
+        }
+    }
+    return {};
+}
+
+struct CeSnapResult {
+    bool   applied = false; // 本帧执行了吸附（写回模型会据此标脏）
+    bool   line_v  = false; // 垂直辅助线（屏幕坐标）
+    bool   line_h  = false; // 水平辅助线
+    ImVec2 v_a, v_b, h_a, h_b;
+};
+
+// 对齐吸附（G5）：把拖动中的节点吸附到其它节点的左/右/中心X、上/下/中心Y。
+// 返回 true = 本帧已应用对齐；辅助线端点写入 out（屏幕坐标，供 ce_draw_snap_lines 绘制）。
+bool ce_apply_alignment_snap(const engine::Graph& graph, const std::string& dragged,
+                             const ImVec2& dpos, float dw, float dh, float snap_canvas,
+                             CeSnapResult& out)
+{
+    const float dleft   = dpos.x;
+    const float dright  = dpos.x + dw;
+    const float dcx     = dpos.x + dw * 0.5f;
+    const float dtop    = dpos.y;
+    const float dbottom = dpos.y + dh;
+    const float dcy     = dpos.y + dh * 0.5f;
+
+    float  dx      = 0.0f;
+    float  dy      = 0.0f;
+    bool   have_x  = false;
+    bool   have_y  = false;
+    ImVec2 v_a, v_b, h_a, h_b;
+    for (const engine::Node& other : graph.nodes) {
+        if (other.id == dragged) {
+            continue;
+        }
+        const ImVec2 pos  = ed::GetNodePosition(ce_node_handle(other.id));
+        const ImVec2 size = ed::GetNodeSize(ce_node_handle(other.id));
+        const float  w    = size.x > 1.0f ? size.x : 80.0f;
+        const float  h    = size.y > 1.0f ? size.y : 40.0f;
+        const float  left   = pos.x;
+        const float  right  = pos.x + w;
+        const float  cx     = pos.x + w * 0.5f;
+        const float  top    = pos.y;
+        const float  bottom = pos.y + h;
+        const float  cy     = pos.y + h * 0.5f;
+
+        // X：左/右/中心 三对边取 |delta| 最小者
+        const float dx_left  = left - dleft;
+        const float dx_right = right - dright;
+        const float dx_cx    = cx - dcx;
+        float       dx_best  = dx_left;
+        if (std::fabs(dx_right) < std::fabs(dx_best)) {
+            dx_best = dx_right;
+        }
+        if (std::fabs(dx_cx) < std::fabs(dx_best)) {
+            dx_best = dx_cx;
+        }
+        if (std::fabs(dx_best) <= snap_canvas && (!have_x || std::fabs(dx_best) < std::fabs(dx))) {
+            dx     = dx_best;
+            have_x = true;
+            const float align_x = dleft + dx_best;
+            v_a = ed::CanvasToScreen(ImVec2(align_x, std::min(dtop, top)));
+            v_b = ed::CanvasToScreen(ImVec2(align_x, std::max(dbottom, bottom)));
+        }
+
+        // Y：上/下/中心 三对边
+        const float dy_top    = top - dtop;
+        const float dy_bottom = bottom - dbottom;
+        const float dy_cy     = cy - dcy;
+        float       dy_best   = dy_top;
+        if (std::fabs(dy_bottom) < std::fabs(dy_best)) {
+            dy_best = dy_bottom;
+        }
+        if (std::fabs(dy_cy) < std::fabs(dy_best)) {
+            dy_best = dy_cy;
+        }
+        if (std::fabs(dy_best) <= snap_canvas && (!have_y || std::fabs(dy_best) < std::fabs(dy))) {
+            dy     = dy_best;
+            have_y = true;
+            const float align_y = dtop + dy_best;
+            h_a = ed::CanvasToScreen(ImVec2(std::min(dleft, left), align_y));
+            h_b = ed::CanvasToScreen(ImVec2(std::max(dright, right), align_y));
+        }
+    }
+
+    if (have_x || have_y) {
+        ImVec2 new_pos = dpos;
+        if (have_x) {
+            new_pos.x    = dpos.x + dx;
+            out.line_v = true;
+            out.v_a    = v_a;
+            out.v_b    = v_b;
+        }
+        if (have_y) {
+            new_pos.y    = dpos.y + dy;
+            out.line_h = true;
+            out.h_a    = h_a;
+            out.h_b    = h_b;
+        }
+        ed::SetNodePosition(ce_node_handle(dragged), new_pos);
+        out.applied = true;
+        return true;
+    }
+    return false;
+}
+
+// 吸附入口（G5/G7）：找拖动中的节点 → 对齐吸附优先，未命中再就近吸附 16px 网格。
+// 每次调用更新 g_ce_prev_positions（供 ce_find_dragged_node 下一帧判断）。
+CeSnapResult ce_apply_snap(const engine::Graph& graph)
+{
+    CeSnapResult result;
+    if (!g_ce_align_snap && !g_ce_grid_snap) {
+        g_ce_prev_positions.clear();
+        return result;
+    }
+    const std::string dragged = ce_find_dragged_node(graph);
+    if (dragged.empty()) {
+        return result;
+    }
+    const engine::Node* node = graph.findNode(dragged);
+    if (node == nullptr) {
+        return result;
+    }
+
+    const float zoom        = ed::GetCurrentZoom();
+    const float snap_canvas = (zoom > 1e-6f) ? kCeSnapDistance / zoom : kCeSnapDistance;
+
+    const ImVec2 dpos  = ed::GetNodePosition(ce_node_handle(dragged));
+    const ImVec2 dsize = ed::GetNodeSize(ce_node_handle(dragged));
+    const float  dw    = dsize.x > 1.0f ? dsize.x : 80.0f;
+    const float  dh    = dsize.y > 1.0f ? dsize.y : 40.0f;
+
+    // ① 对齐吸附（G5）：命中即应用（辅助线一并产出）
+    const bool aligned = ce_apply_alignment_snap(graph, dragged, dpos, dw, dh, snap_canvas, result);
+
+    // ② 网格 16px 吸附（G7）：未命中对齐时才生效，避免两种吸附互相拉扯
+    if (!aligned && g_ce_grid_snap) {
+        const float gx = std::round(dpos.x / kCeGridSize) * kCeGridSize;
+        const float gy = std::round(dpos.y / kCeGridSize) * kCeGridSize;
+        if (std::fabs(gx - dpos.x) > 0.001f || std::fabs(gy - dpos.y) > 0.001f) {
+            ed::SetNodePosition(ce_node_handle(dragged), ImVec2(gx, gy));
+            result.applied = true;
+        }
+    }
+
+    for (const engine::Node& n : graph.nodes) {
+        g_ce_prev_positions[n.id] = ed::GetNodePosition(ce_node_handle(n.id));
+    }
+    return result;
+}
+
+// 对齐辅助线（G5）：紫色实线，仅拖动中显示；需在 ed 上下文内（屏幕坐标已由吸附函数换算）
+void ce_draw_snap_lines(const CeSnapResult& snap, ImDrawList* draw_list)
+{
+    if (snap.line_v) {
+        draw_list->AddLine(snap.v_a, snap.v_b, IM_COL32(200, 80, 220, 255), 1.0f);
+    }
+    if (snap.line_h) {
+        draw_list->AddLine(snap.h_a, snap.h_b, IM_COL32(200, 80, 220, 255), 1.0f);
+    }
+}
+
 } // namespace
 
 // ==================================================== 会话状态（全局单例）====
@@ -204,6 +579,15 @@ void composite_editor_open(const std::string& composite_id)
     CompositeEditorState& state = composite_editor_state();
     const engine::CompositeSpec* existing =
         engine::CompositeRegistry::instance().find(composite_id);
+
+    // PS-D9：内置官方预设只读 —— 拦截打开（须先「复制到我的节点库」）
+    if (engine::CompositeRegistry::instance().is_builtin(composite_id)) {
+        state.active = false;
+        state.ask_close = false;
+        state.error     = "官方预设为只读：请先在节点库「复制到我的节点库」再编辑";
+        log::warn("[上级节点] 拒绝打开内置只读规格 " + composite_id + "（须先复制到用户源）");
+        return;
+    }
 
     state.active    = true;
     state.ask_close = false;
@@ -564,6 +948,23 @@ void draw_composite_editor(const char* title, bool* open)
         composite_editor_redo_once();
     }
     ImGui::SameLine();
+    if (ImGui::Button("适配视图")) { // G8：ed::Begin 内执行 NavigateToContent
+        g_ce_request_fit = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("画布辅助")) { // G4/G5/G7：小地图 / 对齐吸附 / 网格
+        ImGui::OpenPopup("##ce_canvas_assist");
+    }
+    if (ImGui::BeginPopup("##ce_canvas_assist")) {
+        ImGui::TextDisabled("画布辅助（会话级设置）");
+        ImGui::Separator();
+        ImGui::Checkbox("小地图（左下角）", &g_ce_show_minimap);
+        ImGui::Checkbox("对齐吸附 + 辅助线", &g_ce_align_snap);
+        ImGui::Checkbox("网格 16px 吸附", &g_ce_grid_snap);
+        ImGui::Checkbox("网格显示", &g_ce_show_grid);
+        ImGui::EndPopup();
+    }
+    ImGui::SameLine();
     if (ImGui::Button("保存")) {
         std::string error;
         if (composite_editor_save(&error)) {
@@ -588,6 +989,7 @@ void draw_composite_editor(const char* title, bool* open)
 
     // ---- 主体布局：左侧画布 + 右侧规格面板 ----
     const float spec_panel_w = 320.0f;
+    std::string ce_selected_node; // PS-09-G1：本帧选中的内部节点（单选），供右侧参数编辑区使用
     ImGui::BeginChild("##ce_canvas_host",
                       ImVec2(ImGui::GetContentRegionAvail().x - spec_panel_w, 0.0f));
     {
@@ -599,7 +1001,16 @@ void draw_composite_editor(const char* title, bool* open)
             ed::SetNodePosition(ce_node_handle(n.id), ImVec2(n.x, n.y));
         }
 
+        ce_block_minimap_input(); // G4：小地图区域输入与画布隔离（ed::Begin 之前）
+
         ed::Begin("##CeCanvas", ImVec2(0.0f, 0.0f));
+        if (g_ce_request_fit) { // G8：适配视图
+            ed::NavigateToContent(0.0f);
+            g_ce_request_fit = false;
+        }
+        if (!g_ce_show_grid) { // G7：隐藏网格（透明网格色）
+            ed::PushStyleColor(ed::StyleColor_Grid, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        }
         for (const engine::Node& n : state.working.internal_graph.nodes) {
             ce_draw_node(n);
         }
@@ -680,24 +1091,122 @@ void draw_composite_editor(const char* title, bool* open)
         }
         ed::EndDelete(); // 与 BeginDelete 无条件配对（契约同 BeginCreate）
 
-        // 右键背景 → 添加内部节点
+        // 右键菜单（节点 > 背景；G2 节点菜单：删除内部节点 / 改名）
         ed::Suspend();
+        static ed::NodeId ce_context_node_handle; // static：避免每帧重置
+        static ImVec2     ce_spawn_position;      // 背景右键时的落点（画布坐标）
+        std::string       ce_context_node;
+        if (ed::ShowNodeContextMenu(&ce_context_node_handle)) {
+            ce_context_node = "n" + std::to_string(ce_context_node_handle.Get());
+            ImGui::OpenPopup("##ce_node_menu");
+        }
         if (ed::ShowBackgroundContextMenu()) {
+            ce_spawn_position  = ed::ScreenToCanvas(ImGui::GetMousePos());
+            g_ce_add_filter[0] = '\0'; // G3：重新打开时清空搜索
             ImGui::OpenPopup("##ce_add_node_menu");
+        }
+        if (ImGui::BeginPopup("##ce_node_menu")) {
+            ImGui::TextDisabled("内部节点 %s", ce_context_node.c_str());
+            ImGui::Separator();
+            if (ImGui::MenuItem("改名")) {
+                ce_open_rename(ce_context_node);
+            }
+            if (ImGui::MenuItem("删除内部节点")) {
+                composite_editor_delete_node(ce_context_node);
+                ed::ClearSelection(); // 删除后清空选中，参数编辑区回落「未选中」
+            }
+            ImGui::EndPopup();
         }
         if (ImGui::BeginPopup("##ce_add_node_menu")) {
             ImGui::TextDisabled("添加内部节点");
             ImGui::Separator();
-            const ImVec2 spawn = ed::ScreenToCanvas(ImGui::GetMousePos());
+            // G3：搜索过滤（打开时已清空；输入即时过滤）
+            if (ImGui::IsWindowAppearing()) {
+                ImGui::SetKeyboardFocusHere(); // 打开即可直接键入
+            }
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::InputTextWithHint("##ce_add_filter", "搜索节点…", g_ce_add_filter,
+                                     sizeof(g_ce_add_filter));
+            ImGui::Separator();
             engine::registerAllNodes();
-            for (const engine::Definition* def : engine::NodeRegistry::instance().listTypes()) {
-                if (ImGui::MenuItem(def->display_name.c_str())) {
-                    composite_editor_add_node(def->type, spawn.x, spawn.y);
+            engine::NodeRegistry& registry  = engine::NodeRegistry::instance();
+            const std::string     query     = g_ce_add_filter;
+            const bool            searching = !query.empty();
+
+            // 搜索模式：跨分类平铺命中项；否则按分类分组（与节点库一致）
+            ImGui::BeginChild("##ce_add_scroll", ImVec2(340.0f, 320.0f), false,
+                              ImGuiWindowFlags_AlwaysVerticalScrollbar);
+            bool any = false;
+            if (searching) {
+                for (const engine::Definition* def : registry.listTypes()) {
+                    if (ce_find_ci(def->display_name, query) == std::string::npos &&
+                        ce_find_ci(def->type, query) == std::string::npos) {
+                        continue;
+                    }
+                    any = true;
+                    if (ImGui::MenuItem(def->display_name.c_str())) {
+                        composite_editor_add_node(def->type, ce_spawn_position.x,
+                                                  ce_spawn_position.y);
+                    }
                 }
+                if (!any) {
+                    ImGui::TextDisabled("（无匹配节点）");
+                }
+            }
+            else {
+                static const engine::NodeCategory kCeCategories[] = {
+                    engine::NodeCategory::Input,     engine::NodeCategory::Process,
+                    engine::NodeCategory::Config,    engine::NodeCategory::Inference,
+                    engine::NodeCategory::Output,    engine::NodeCategory::Auxiliary};
+                for (engine::NodeCategory category : kCeCategories) {
+                    const std::vector<const engine::Definition*> items =
+                        registry.listByCategory(category);
+                    if (items.empty()) {
+                        continue;
+                    }
+                    any = true;
+                    if (ImGui::CollapsingHeader(engine::categoryName(category),
+                                                ImGuiTreeNodeFlags_DefaultOpen)) {
+                        for (const engine::Definition* def : items) {
+                            if (ImGui::MenuItem(def->display_name.c_str())) {
+                                composite_editor_add_node(def->type, ce_spawn_position.x,
+                                                          ce_spawn_position.y);
+                            }
+                        }
+                    }
+                }
+            }
+            ImGui::EndChild();
+            ImGui::EndPopup();
+        }
+        if (ImGui::BeginPopup("##ce_rename_menu")) {
+            ImGui::TextDisabled("重命名内部节点 %s", g_ce_rename_id.c_str());
+            ImGui::SetNextItemWidth(220.0f);
+            const bool enter_pressed = ImGui::InputText(
+                "##ce_rename_input", g_ce_rename_buf.data(), g_ce_rename_buf.size(),
+                ImGuiInputTextFlags_EnterReturnsTrue);
+            if (enter_pressed) {
+                ce_apply_rename(); // 回车确认
+            }
+            if (ImGui::Button("确定")) {
+                ce_apply_rename();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("取消")) {
+                g_ce_rename_id.clear();
+                ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
         }
+        // G6：双击内部节点标题 → 改名弹窗
+        const ed::NodeId ce_double_clicked = ed::GetDoubleClickedNode();
+        if (ce_double_clicked.Get() != 0) {
+            ce_open_rename("n" + std::to_string(ce_double_clicked.Get()));
+        }
         ed::Resume();
+
+        // G5/G7：拖动中的对齐吸附（辅助线）+ 网格 16px 吸附
+        const CeSnapResult ce_snap = ce_apply_snap(state.working.internal_graph);
 
         // 位置写回（有变化才标记 dirty）
         for (engine::Node& n : state.working.internal_graph.nodes) {
@@ -707,6 +1216,26 @@ void draw_composite_editor(const char* title, bool* open)
                 n.y          = p.y;
                 state.dirty  = true;
             }
+        }
+
+        // PS-09-G1：同步内部节点选中（单选 → 右侧「参数编辑」区显示该节点参数）
+        ce_selected_node.clear();
+        {
+            const int sel_count = ed::GetSelectedObjectCount();
+            if (sel_count > 0) {
+                std::vector<ed::NodeId> sel_nodes(static_cast<std::size_t>(sel_count));
+                const int node_count = ed::GetSelectedNodes(sel_nodes.data(), sel_count);
+                if (node_count == 1) {
+                    ce_selected_node = "n" + std::to_string(sel_nodes[0].Get());
+                }
+            }
+        }
+
+        // G4 小地图 + G5 辅助线（ed::Begin 内、ed::End 前绘制；主画布 L3 同款时序）
+        ce_draw_minimap(state.working.internal_graph);
+        ce_draw_snap_lines(ce_snap, ImGui::GetWindowDrawList());
+        if (!g_ce_show_grid) {
+            ed::PopStyleColor(); // 与 ed::Begin 后的 PushStyleColor 配对
         }
 
         ed::End();
@@ -859,6 +1388,46 @@ void draw_composite_editor(const char* title, bool* open)
         }
         if (state.working.inputs.empty() && state.working.outputs.empty()) {
             ImGui::TextDisabled("（尚无对外端口）");
+        }
+
+        // ---- PS-09-G1：参数编辑区（选中内部节点 → 复用公共 draw_param_widget）----
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.75f, 0.9f, 0.7f, 1.0f), "参数编辑");
+        ImGui::TextDisabled("在画布中单击一个内部节点，在此编辑其参数值。");
+        if (ce_selected_node.empty()) {
+            ImGui::TextDisabled("（未选中节点）");
+        }
+        else {
+            engine::Node* sel = state.working.internal_graph.findNode(ce_selected_node);
+            if (sel == nullptr) {
+                ImGui::TextDisabled("（选中节点不存在）");
+            }
+            else {
+                ImGui::TextDisabled("%s（%s）", sel->title.c_str(), sel->id.c_str());
+                if (sel->params.empty()) {
+                    ImGui::TextDisabled("该节点没有参数");
+                }
+                for (engine::Param& param : sel->params) {
+                    ImGui::PushID(param.id.c_str());
+                    ImGui::TextUnformatted(param.display_name.c_str());
+                    if (param.is_secret) {
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("（密钥：仅存内存、不写盘）");
+                    }
+                    ImGui::PopID();
+
+                    bool param_begin  = false;
+                    bool param_change = false;
+                    draw_param_widget(*sel, param, param_begin, param_change);
+                    if (param_begin) {
+                        composite_editor_snapshot("修改内部节点参数 " + sel->id + "." + param.id);
+                    }
+                    if (param_change) {
+                        state.dirty = true; // 参数值已写回工作副本（ce_push_snapshot 亦置 dirty）
+                    }
+                    ImGui::Spacing();
+                }
+            }
         }
     }
     ImGui::EndChild();

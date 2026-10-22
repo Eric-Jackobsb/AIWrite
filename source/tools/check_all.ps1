@@ -204,6 +204,27 @@ else {
     Add-Result 'check_links（文档断链）' $false "脚本缺失：$linksScript"
 }
 
+# ---- ⑦ 打包 payload 自检（FEA-M6-06 · 打包流水线入闸；DBG-L01 同款「离线可验证」口径） ----
+#  * 跑 package.ps1 -SkipBuild -SkipInstaller：重建 payload + manifest + `.iss ↔ payload` 一致性锁
+#  * 判据：退出码 ∈ {0, 2}（0 = payload+安装包都成功 / 2 = payload 成功、安装包未编译）**且**
+#    `build\dist\payload` 与 manifest.txt 都存在；ISCC 缺失**不是**失败（本机无 Inno Setup 亦可入闸）
+Write-Both "`n== ⑦ 打包 payload（package.ps1 -SkipBuild -SkipInstaller） =="
+$packageScript = Join-Path $sourceDir 'tools\package.ps1'
+if (Test-Path $packageScript) {
+    $outFile = Join-Path $logDir "check_all_$stamp`_package.txt"
+    Push-Location $repoRoot
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $packageScript -SkipBuild -SkipInstaller *> $outFile
+    $pkgCode = $LASTEXITCODE
+    Pop-Location
+    $pkgText = if (Test-Path $outFile) { Get-Content $outFile -Raw -ErrorAction SilentlyContinue } else { '' }
+    $pkgLine = (($pkgText -split "`n") | Where-Object { $_ -match 'payload：' } | Select-Object -Last 1)
+    $pkgDetail = if ($pkgLine) { $pkgLine.Trim() } else { '' }
+    $manifestPath = Join-Path $repoRoot 'build\dist\manifest.txt'
+    $pkgOk = ($pkgCode -eq 0 -or $pkgCode -eq 2) -and (Test-Path $manifestPath)
+    Add-Result 'package（payload + 一致性锁）' $pkgOk "exit=$pkgCode · $pkgDetail"
+} else {
+    Add-Result 'package（payload + 一致性锁）' $false "脚本缺失：$packageScript"
+}
 # ---- 汇总 ----
 $failed = @($results | Where-Object { -not $_.Ok })
 Write-Both "`n=== check_all 汇总：共 $($results.Count) 项 · 失败 $($failed.Count) 项 ==="

@@ -87,6 +87,29 @@ const std::filesystem::path& composites_dir()
     return value;
 }
 
+// PS-D9：上级节点存储双源
+//  内置源：<source>/workflows/compositeNodes（仓库内 · 随分发 · 只读）
+//    * 开发 / 源码树直跑 → AIWRITE_SOURCE_DIR（CMake 注入 aiwrite_core）
+//    * 打包部署（无该宏）→ <exe>/assets/workflows/compositeNodes
+const std::filesystem::path& builtin_composites_dir()
+{
+    static const std::filesystem::path value = []() {
+#ifdef AIWRITE_SOURCE_DIR
+        return std::filesystem::path(AIWRITE_SOURCE_DIR) / "workflows" / "compositeNodes";
+#else
+        return assets_dir() / "workflows" / "compositeNodes";
+#endif
+    }();
+    return value;
+}
+
+// 用户源：~/.brain-ai/workflows/compositeNodes（用户工作流同级 · 可读写）
+const std::filesystem::path& user_composites_dir()
+{
+    static const std::filesystem::path value = workflows_dir() / "compositeNodes";
+    return value;
+}
+
 const std::filesystem::path& config_file()
 {
     static const std::filesystem::path value = data_root() / "config.toml";
@@ -186,7 +209,7 @@ int ensure_data_dirs()
                                           snapshots_dir(),     logs_dir(),
                                           assets_images_dir(), // P7a-04：统一资源目录
                                           user_providers_dir(), // 配置表用户目录（PB2-02）
-                                          composites_dir()}; // CN：上级节点独立存储目录
+                                          user_composites_dir()}; // PS-D9：上级节点用户源目录
 
     for (const auto& dir : dirs) {
         std::error_code ec;

@@ -6,8 +6,8 @@
     ② S2 探测   → <轮次目录>\probe.txt / probe.json（10 站批量只读）
     ③ S3 逐站   → <轮次目录>\raw\<id>.run<N>.txt（rc + stdout）· raw\<id>.run<N>.workflow.json（保存的工作流 JSON 物证）
                   · raw\<id>.run<N>.archive\（板上 PC-05 归档：n3-LLMGenerate.txt 的「状态:」= n3 判据权威来源）
-    ④ 报告      → <轮次目录>\report.md（四块：① 数字表 ② 站点矩阵 ③ needs_login[] + 待人工清单 ④ 站点台账）
-                  + report.json（机器读版，供与上轮 diff）
+    ④ 报告      → <轮次目录>\report.md（四块：① 数字表（含 ①′ 跨轮 diff 段 · TST-L03）② 站点矩阵 ③ needs_login[] + 待人工清单 ④ 站点台账）
+                  + report.json（机器读版：含 diff{} 块，供程序与上轮对比；口径对齐 --json-diff）
     ⑤ 台账      → build\loop\SITE_STATUS.json（**跨轮累积**：每站 history[] + latest + 能力两列「文字理解 / 图片理解」）
                    · build\loop\SITE_STATUS.md / <轮次目录>\site_status.md（人读快照）
                    · 四个「人读位」哨兵块（**同一次调用写入 ⇒ 同源不漂移**）：
@@ -68,6 +68,15 @@ $report = [ordered]@{}
 $report.round = $Round; $report.started = (Get-Date).ToString('s'); $report.dir = $dir
 $report.gates = @(); $report.sites = @(); $report.needs_login = @(); $report.notes = @()
 
+function Read-TextNoLock {           # 读「子进程重定向」产物：WebView2 孙进程（浏览器进程）可能
+    param([string]$Path)             # 继承 stdout 写句柄且比子进程活得久 ⇒ 默认 FileShare.Read 会被
+    if (-not (Test-Path $Path)) { return '' }   # 「写句柄仍开」拒掉（ReadAllText 崩溃根因，R2 实测）⇒
+    try {                            # 用 FileShare.ReadWrite 共享读 + 失败容错（返回空串）
+        $fs = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read,
+                                     [System.IO.FileShare]::ReadWrite)
+        try { return [System.IO.StreamReader]::new($fs, $true).ReadToEnd() } finally { $fs.Dispose() }
+    } catch { return '' }
+}
 function Invoke-Capture {           # 统一「重定向到文件」口径（AI_README §3：管道会吞输出）
     param([string]$File, [string]$Exe, [string[]]$Arg, [string]$Work = $Root, [int]$TimeoutSec = 0)
     $out = Join-Path $File ''
@@ -79,7 +88,7 @@ function Invoke-Capture {           # 统一「重定向到文件」口径（AI_
         catch { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; $rc = 124 }
     } else { $p | Wait-Process }
     try { $p.Refresh(); $rc = $p.ExitCode } catch { if ($rc -ne 124) { $rc = 125 } }
-    $text = if (Test-Path ($File + '.out.txt')) { [System.IO.File]::ReadAllText($File + '.out.txt') } else { '' }
+    $text = Read-TextNoLock ($File + '.out.txt')
     Set-Content -Path $File -Value $text -Encoding UTF8
     Remove-Item ($File + '.out.txt'), ($File + '.err.txt') -Force -ErrorAction SilentlyContinue
     return [pscustomobject]@{ Rc = $rc; Text = $text }
@@ -204,7 +213,7 @@ foreach ($id in $targets) {
             Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
             Copy-Item $arcDir.FullName $dest -Recurse -Force -ErrorAction SilentlyContinue
         }
-        $text = if (Test-Path $out) { [System.IO.File]::ReadAllText($out) } else { '' }
+        $text = Read-TextNoLock $out
         $va07 = ([regex]::Match($text, '(?m)^.*VA-07 诊断：.*$') | Select-Object -First 1).Value.Trim()
         $n3Stdout = ([regex]::Match($text, '(?m)^\[运行自检\] n3\s+LLMGenerate\s+(?<s>\w+)') | Select-Object -First 1).Groups['s'].Value
         $fin  = ([regex]::Match($text, '(?m)^\[运行自检\] 完成 \d+/\d+.*$') | Select-Object -First 1).Value.Trim()
@@ -770,6 +779,44 @@ $report.summary = [ordered]@{
 }
 $report.probe_exit = $(if ($report.Contains('probe_exit')) { $report.probe_exit } else { $null })
 
+# --------------------------------------------- ①′ 跨轮 diff（TST-L03 · 对齐 --json-diff 口径）----
+# 对比 = build/loop/*/report.json 的 matrix[].state（与台账 history[] 同一口径）：
+#   状态变化（prev → cur）/ 新增（上一份无此站）/ 消失（本轮未探测）。
+# 上一份 = 时间戳最新的那份；首次跑（无上一份）⇒ 本轮即基线，不产生 diff 行。
+$report.diff = [ordered]@{ prev_dir = ''; prev_has = $false; changed = @(); added = @(); gone = @() }
+$loopRoot = Join-Path $Root 'build\loop'
+if (Test-Path $loopRoot) {
+    $prev = @(Get-ChildItem $loopRoot -Directory -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -match '-\d{8}-\d{4}$' -and $_.FullName -ne $dir } |
+              Sort-Object { $_.Name.Substring($_.Name.Length - 13) } |
+              Select-Object -Last 1)
+    if ($prev.Count -gt 0) {
+        $report.diff.prev_dir = $prev[0].Name
+        $prevJsonPath = Join-Path $prev[0].FullName 'report.json'
+        if (Test-Path $prevJsonPath) {
+            try {
+                $prevByState = @{}
+                foreach ($pm in @(([System.IO.File]::ReadAllText($prevJsonPath) | ConvertFrom-Json).matrix)) {
+                    $prevByState[[string]$pm.id] = [string]$pm.state
+                }
+                if ($prevByState.Count -gt 0) {
+                    $report.diff.prev_has = $true
+                    $curIds = @($matrix | ForEach-Object { [string]$_.id })
+                    foreach ($m in $matrix) {
+                        $id = [string]$m.id
+                        if ($prevByState.ContainsKey($id) -and $prevByState[$id] -ne [string]$m.state) {
+                            $report.diff.changed += [ordered]@{ id = $id; prev = $prevByState[$id]; state = [string]$m.state; url = [string]$m.url }
+                        }
+                    }
+                    $report.diff.added = @($matrix | Where-Object { -not $prevByState.ContainsKey([string]$_.id) } | ForEach-Object { [string]$_.id })
+                    $report.diff.gone  = @($prevByState.Keys | Where-Object { $curIds -notcontains [string]$_ } | ForEach-Object { [string]$_ })
+                }
+            } catch { Write-Host "[loop] ⚠ 跨轮 diff 跳过：上一份报告无法解析 $prevJsonPath" }
+        }
+    }
+}
+
+
 # --------------------------------------------- ⑤ 台账数据（先算，④ 块引用）----
 $siteStatus = New-SiteStatus -Root $Root -IncludeCurrent $true -CurMatrix $matrix -CurSites $report.sites -RoundLabel $Round -Stamp $report.started
 
@@ -777,7 +824,7 @@ $md = @()
 $md += "# 循环报告 · $Round（$stamp）"
 $md += ''
 $md += "> 物证目录：``$dir``（易失；结论权威位见 docs/loop_dev.md §7）"
-$md += '> 生成：``source/tools/loop_verify.ps1``（TST-L01 · 三块契约见 loop_dev §6.1）'
+$md += '> 生成：``source/tools/loop_verify.ps1``（TST-L01 · 报告契约见 loop_dev §6.1：四块 + ①′ 跨轮 diff）'
 $md += ''
 $md += '## ① 本轮数字表'
 $md += ''
@@ -790,6 +837,22 @@ $md += "| ⚠ rc=0 但 n3≠done（退出码未区分） | $($fakePass.Count) �
 $md += "| ⚠ n3=done 但正文＝站侧错误串（未真生成 ⇒ 判失败） | $($busySites.Count) 站 | loop_dev §10.1 陷阱 6 |"
 $md += "| stdout 丢失的轮次 | $(@($report.sites | Where-Object { $_.stdout_lost }).Count) 站（**不影响退出码判据**） | 见 §10.1 陷阱 2 |"
 $md += "| 站点台账（跨轮） | 覆盖 $($siteStatus.summary.rounds) 轮 · 文字理解 ✅ $($siteStatus.summary.text_tested) · 图片理解 ✅ $($siteStatus.summary.image_tested) · ⚠ 声明不一致 $($siteStatus.summary.conflict) | ``site_status.md`` / ``build/loop/SITE_STATUS.json`` / ``docs/AI_Status.md`` |"
+
+$md += ''
+$md += '## ①′ 跨轮 diff（对齐 ``--json-diff`` 口径 · 状态变化 / 新增 / 消失）'
+$md += ''
+if ($report.diff.prev_has) {
+    $md += "> 上一份：``$($report.diff.prev_dir)``（report.json 的 ``matrix[].state``；无变化不列出）"
+    if (@($report.diff.changed).Count -eq 0 -and @($report.diff.added).Count -eq 0 -and @($report.diff.gone).Count -eq 0) {
+        $md += '- 与本轮**逐站一致**（无状态变化 · 无新增 · 无消失）'
+    } else {
+        foreach ($d in @($report.diff.changed)) { $md += "- 状态变化 ``$($d.id)``：$($d.prev) → $($d.state)$(if ($d.url) { '（URL 变化：' + $d.url + '）' })" }
+        foreach ($a in @($report.diff.added))    { $md += "- 新增 ``$a``（上一份无此站）" }
+        foreach ($g in @($report.diff.gone))     { $md += "- 消失 ``$g``（本轮未探测；历史物证仍在 ``build/loop/<轮次>/report.json``）" }
+    }
+} else {
+    $md += '- 无上一份报告（build/loop 下未找到可对比的 report.json）⇒ 本轮即基线，下一轮起输出跨轮 diff'
+}
 
 $md += ''
 $md += '## ② 站点矩阵（探测态 → S3 端到端 → 最终态）'
@@ -810,10 +873,10 @@ foreach ($n in $needLogin) {
     $md += "- ``$($n.id)``：探测判据 = 输入区候选 $($n.probe_candidates) · 登录控件证据 ``$($n.login_evidence)`` ⇒ **人工在窗口内登录一次后重跑**：``aiwrite.exe --run-selftest --web --provider $($n.id)``"
 }
 foreach ($f in $report.sites | Where-Object { $_.state -like '失败*' }) {
-    $md += "- ``$($f.id)``（S3 rc=$($f.rc) · n3=$($f.n3)$(if ($f.n3_source) { " · 来源=$($f.n3_source)" })$(if ($f.stdout_lost) { ' · stdout 丢失' })）：$($f.state) —— 按 loop_dev §5.1 归类后再决定动作"
+    $md += "- ``$($f.id)``（S3 rc=$($f.rc) · n3=$($f.n3)$(if ($f.n3_source) { " · 来源=$($f.n3_source)" })$(if ($f.stdout_lost) { ' · stdout 丢失' })）：$($f.state) —— 复现 ``aiwrite.exe --run-selftest --web --provider $($f.id)`` · 只读诊断 ``aiwrite.exe --web-adapter-selftest --provider $($f.id)`` / ``--web-dom-dump --provider $($f.id)`` · 按 loop_dev §5.1 归类后再决定动作"
 }
 foreach ($f in $s3Untested) {
-    $md += "- ``$($f.id)``（S3 rc=$($f.rc)）：$($f.state)"
+    $md += "- ``$($f.id)``（S3 rc=$($f.rc)）：$($f.state) —— 复现 ``aiwrite.exe --run-selftest --web --provider $($f.id)``"
 }
 foreach ($n in $report.notes) { $md += "- 备注：$n" }
 $md += ''

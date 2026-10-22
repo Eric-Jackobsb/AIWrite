@@ -258,7 +258,16 @@ bool build_composite_node(Node* node, const CompositeSpec& spec, std::string* er
     if (node == nullptr) {
         return false;
     }
-    if (!validate_composite_spec(spec, error)) {
+    // 实例化只做**结构**守卫（id/name 非空），不做运行态严格校验：
+    //  * 端口/参数按规格尽力构建：内部引用缺失时端口回退 ref.type、参数直接跳过
+    //  * 内部图「可运行」与否由运行前校验在**展开后**的图上拦截（executor start →
+    //    expand_composites → validateBeforeRun）；添加实例时提前拒绝会让「草稿 / 待完善」
+    //    规格永远无法拖入画布 —— 与下方「暴露输入恒可选：是否必接由内部端口决定
+    //   （展开后校验）」同一口径（2026-10-18 修复）。
+    if (spec.id.empty() || spec.name.empty()) {
+        if (error != nullptr) {
+            *error = "上级节点规格缺少 id 或 name：无法实例化";
+        }
         return false;
     }
 
@@ -434,21 +443,49 @@ CompositeRegistry& CompositeRegistry::instance()
 
 void CompositeRegistry::set_root(std::filesystem::path root)
 {
-    root_   = std::move(root);
-    loaded_ = false;
+    builtin_root_     = root;
+    user_root_        = std::move(root);
+    roots_overridden_ = true; // 测试隔离：跳过旧目录迁移（不触碰用户真实数据）
     specs_.clear();
+    source_.clear();
     reload();
+}
+
+void CompositeRegistry::set_roots(std::filesystem::path builtin_root,
+                                  std::filesystem::path user_root)
+{
+    builtin_root_     = std::move(builtin_root);
+    user_root_        = std::move(user_root);
+    roots_overridden_ = true;
+    specs_.clear();
+    source_.clear();
+    reload();
+}
+
+const std::filesystem::path& CompositeRegistry::builtin_root() const
+{
+    return builtin_root_.empty() ? paths::builtin_composites_dir() : builtin_root_;
+}
+
+const std::filesystem::path& CompositeRegistry::user_root() const
+{
+    return user_root_.empty() ? paths::user_composites_dir() : user_root_;
 }
 
 std::filesystem::path CompositeRegistry::root() const
 {
-    return root_.empty() ? paths::composites_dir() : root_;
+    return user_root(); // 兼容旧调用：用户根 = 写入口
 }
 
 void CompositeRegistry::reload()
 {
     specs_.clear();
-    loadFromDir(root());
+    source_.clear();
+    loadFromDir(builtin_root(), CompositeSource::Builtin);
+    loadFromDir(user_root(), CompositeSource::User); // 用户源后扫 ⇒ 覆盖内置源
+    if (!roots_overridden_) {
+        migrateLegacy(); // 旧 ~/.brain-ai/composites 首次并入用户源
+    }
     loaded_ = true;
 }
 
@@ -484,7 +521,7 @@ void CompositeRegistry::ensureLoaded() const
     }
 }
 
-void CompositeRegistry::loadFromDir(const std::filesystem::path& dir)
+void CompositeRegistry::loadFromDir(const std::filesystem::path& dir, CompositeSource source)
 {
     std::error_code ec;
     if (!std::filesystem::exists(dir, ec)) {
@@ -516,7 +553,12 @@ void CompositeRegistry::loadFromDir(const std::filesystem::path& dir)
             log::warn("[上级节点] 跳过无效规格 " + entry.path().string() + "：" + parse_error);
             continue;
         }
+        // PS-D9：后扫覆盖前扫 —— 用户源覆盖内置源（同 id 只保留最后加载的一份）
+        specs_.erase(std::remove_if(specs_.begin(), specs_.end(),
+                                    [&spec](const CompositeSpec& s) { return s.id == spec.id; }),
+                     specs_.end());
         specs_.push_back(std::move(spec));
+        source_[specs_.back().id] = source;
     }
     std::sort(specs_.begin(), specs_.end(),
               [](const CompositeSpec& a, const CompositeSpec& b) { return a.id < b.id; });
@@ -537,7 +579,12 @@ bool CompositeRegistry::save(const CompositeSpec& spec, std::string* error,
         return fail(validate_error);
     }
 
-    const std::filesystem::path dir = root();
+    // PS-D9：内置源只读 —— 直接覆盖内置 id 被拒（须先「复制到我的节点库」）
+    if (source_of(spec.id) == CompositeSource::Builtin) {
+        return fail("内置官方预设为只读：请先「复制到我的节点库」再编辑");
+    }
+
+    const std::filesystem::path dir = user_root();
     std::error_code             ec;
     std::filesystem::create_directories(dir, ec);
     if (ec) {
@@ -555,7 +602,7 @@ bool CompositeRegistry::save(const CompositeSpec& spec, std::string* error,
         return fail("写入文件失败: " + file.string());
     }
 
-    // 写盘成功 → 更新内存副本（同 id 覆盖）
+    // 写盘成功 → 更新内存副本（同 id 覆盖；来源 = 用户）
     auto it = std::find_if(specs_.begin(), specs_.end(),
                            [&spec](const CompositeSpec& s) { return s.id == spec.id; });
     if (it != specs_.end()) {
@@ -566,6 +613,7 @@ bool CompositeRegistry::save(const CompositeSpec& spec, std::string* error,
         std::sort(specs_.begin(), specs_.end(),
                   [](const CompositeSpec& a, const CompositeSpec& b) { return a.id < b.id; });
     }
+    source_[spec.id] = CompositeSource::User;
 
     if (error != nullptr) {
         error->clear();
@@ -582,21 +630,171 @@ bool CompositeRegistry::remove(const std::string& id, std::string* error)
         return false;
     };
 
-    const std::filesystem::path file = root() / (id + ".json");
+    const CompositeSource source = source_of(id);
+    if (source == CompositeSource::None) {
+        if (error != nullptr) {
+            error->clear();
+        }
+        return true; // 幂等：不存在视为删除成功
+    }
+    if (source == CompositeSource::Builtin) {
+        return fail("内置官方预设为只读：不能删除");
+    }
+
+    const std::filesystem::path file = user_root() / (id + ".json");
     std::error_code             ec;
     if (std::filesystem::exists(file, ec)) {
         if (!std::filesystem::remove(file, ec) || ec) {
             return fail("删除文件失败: " + file.string());
         }
     }
-    specs_.erase(std::remove_if(specs_.begin(), specs_.end(),
-                                [&id](const CompositeSpec& s) { return s.id == id; }),
-                 specs_.end());
+    // 重新扫描双源：用户副本删除后，若内置仍有同 id ⇒ 来源回落 Builtin（PS-D9 §2.2）
+    reload();
 
     if (error != nullptr) {
         error->clear();
     }
     return true;
+}
+
+CompositeSource CompositeRegistry::source_of(const std::string& id) const
+{
+    ensureLoaded();
+    const auto it = source_.find(id);
+    return (it != source_.end()) ? it->second : CompositeSource::None;
+}
+
+bool CompositeRegistry::copy_to_user(const std::string& id, std::string* error)
+{
+    const auto fail = [error](const std::string& text) {
+        if (error != nullptr) {
+            *error = text;
+        }
+        return false;
+    };
+
+    const CompositeSpec* spec = find(id);
+    if (spec == nullptr) {
+        return fail("找不到上级节点规格: " + id);
+    }
+    if (source_of(id) == CompositeSource::User) {
+        if (error != nullptr) {
+            error->clear();
+        }
+        return true; // 已是用户源，无需复制
+    }
+
+    // 写入用户源（同 id 覆盖官方资产是有意为之：用户接管后来源切 User、可编辑）
+    const std::filesystem::path dir = user_root();
+    std::error_code             ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) {
+        return fail("无法创建上级节点目录: " + dir.string());
+    }
+    const std::filesystem::path file = dir / (id + ".json");
+    std::ofstream               out(file, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        return fail("无法写入文件: " + file.string());
+    }
+    out << composite_to_json(*spec).dump(4);
+    out.close();
+    if (!out.good()) {
+        return fail("写入文件失败: " + file.string());
+    }
+
+    // 内存：同 id 覆盖为当前规格内容，来源切 User
+    auto it = std::find_if(specs_.begin(), specs_.end(),
+                           [&id](const CompositeSpec& s) { return s.id == id; });
+    if (it != specs_.end()) {
+        *it = *spec;
+    }
+    else {
+        specs_.push_back(*spec);
+        std::sort(specs_.begin(), specs_.end(),
+                  [](const CompositeSpec& a, const CompositeSpec& b) { return a.id < b.id; });
+    }
+    source_[id] = CompositeSource::User;
+
+    if (error != nullptr) {
+        error->clear();
+    }
+    return true;
+}
+
+// PS-D9：旧目录迁移 —— 首次 reload 把 ~/.brain-ai/composites/ 遗留文件并入用户源
+//（复制后删除原文件，用户节点不丢失）；进程内只尝试一次，成功后旧目录清空 ⇒ 幂等。
+//  * 仅在默认用户根（未 set_root/set_roots 覆盖）时执行，避免测试误触碰用户真实数据。
+void CompositeRegistry::migrateLegacy()
+{
+    static bool attempted = false;
+    if (attempted) {
+        return;
+    }
+    attempted = true;
+
+    const std::filesystem::path legacy = paths::composites_dir();
+    std::error_code             ec;
+    if (!std::filesystem::is_directory(legacy, ec)) {
+        return;
+    }
+    int migrated = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(legacy, ec)) {
+        if (ec) {
+            break;
+        }
+        if (!entry.is_regular_file(ec) || entry.path().extension() != ".json") {
+            continue;
+        }
+        nlohmann::json document;
+        try {
+            std::ifstream in(entry.path());
+            if (!in.is_open()) {
+                continue;
+            }
+            in >> document;
+        }
+        catch (const nlohmann::json::parse_error&) {
+            log::warn("[上级节点] 旧目录迁移：跳过无法解析的文件 " + entry.path().string());
+            continue;
+        }
+        CompositeSpec spec;
+        std::string   parse_error;
+        if (!composite_from_json(document, spec, &parse_error)) {
+            log::warn("[上级节点] 旧目录迁移：跳过无效规格 " + entry.path().string() + "：" +
+                      parse_error);
+            continue;
+        }
+        // 复制到用户源（同 id 覆盖语义）
+        const std::filesystem::path dst = user_root() / (spec.id + ".json");
+        std::filesystem::create_directories(dst.parent_path(), ec);
+        std::ofstream out(dst, std::ios::binary | std::ios::trunc);
+        if (!out.is_open()) {
+            log::error("[上级节点] 旧目录迁移：无法写入 " + dst.string());
+            continue;
+        }
+        out << composite_to_json(spec).dump(4);
+        out.close();
+        if (!out.good()) {
+            log::error("[上级节点] 旧目录迁移：写入失败 " + dst.string());
+            continue;
+        }
+        // 写入成功 → 删除原文件；内存并入（来源 = User，覆盖内置）
+        const std::string id = spec.id;
+        std::error_code   rm_ec;
+        std::filesystem::remove(entry.path(), rm_ec);
+        specs_.erase(std::remove_if(specs_.begin(), specs_.end(),
+                                    [&id](const CompositeSpec& s) { return s.id == id; }),
+                     specs_.end());
+        specs_.push_back(std::move(spec));
+        source_[id] = CompositeSource::User;
+        ++migrated;
+    }
+    std::sort(specs_.begin(), specs_.end(),
+              [](const CompositeSpec& a, const CompositeSpec& b) { return a.id < b.id; });
+    if (migrated > 0) {
+        log::info("[上级节点] 旧目录迁移完成：已并入用户源 " + std::to_string(migrated) +
+                  " 个规格（" + legacy.string() + "）");
+    }
 }
 
 std::string CompositeRegistry::make_id() const

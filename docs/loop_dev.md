@@ -3,7 +3,7 @@
 > **定位**：本文 = **循环开发的唯一规则** —— 什么时候才能开跑、一轮怎么跑、什么算失败、结果记在哪、什么时候必须停。
 > **适用对象**：`source/assets/providers.json` 里 `kind = "web"` 且 `web.adapter = "dom"` 的 **10 条网页版站点**（清单见 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §8 附录 E）。
 > **权威边界**：站点数据（选择器 / 登录页 / `verified`）以 `source/assets/providers.json` 为准；命令开关以 [../source/README.md](../source/README.md) §4 为准；回归基线数字以 [../AI_README.md](../AI_README.md) §2 为准；**本文只管循环纪律**（怎么跑、记什么、何时停）。
-> **状态**：✅ **规则已落盘（2026-10-09）**；前置模块 `FEA-L01`~`FEA-L05` / `TST-L01` / `TST-L02` **已落地**，`TST-L03`（报告模板 + 首份基线）**部分落地**（模板由 `TST-L01` 生成，首份基线 = R1）⇒ **现在是「可自动跑一轮」**（`.\source\tools\loop_verify.ps1`），不再是「只能手工跑单站」；一轮的**结论人审**仍是硬要求（§6.1 三块 + §7 权威位）。
+> **状态**：✅ **规则已落盘（2026-10-09）**；前置模块 `FEA-L01`~`FEA-L05` / `TST-L01` / `TST-L02` **已落地**，`TST-L03`（报告模板 + ①′ 跨轮 diff 段）**已落地**（2026-10-17 · 批 4 收口）⇒ **现在是「可自动跑一轮」**（`.\source\tools\loop_verify.ps1`），不再是「只能手工跑单站」；一轮的**结论人审**仍是硬要求（§6.1 三块 + §7 权威位）。
 
 ---
 
@@ -55,7 +55,7 @@
 > 完整台账（含每站 `history[]` 跨轮轨迹）：`build/loop/SITE_STATUS.json`（机器读）· `build/loop/SITE_STATUS.md`（人读，随 `build/` 易失）。
 > **长期保留的人读位** = [AI_Status.md](AI_Status.md) §二（总览）+ [AI_Status_web.md](AI_Status_web.md) §二 / [AI_Status_api.md](AI_Status_api.md) §二（**两份分通道台账**）—— 都在 `docs/` 里、随版本库走，不会被清 `build/` 带走。
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-16 · 覆盖轮次 0：
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-17 · 覆盖轮次 0：
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > **判据**：**文字理解** = 「文本 → 取回文本」S3 三口径通过（``rc=0`` + ``n3=done`` + 正文非站侧错误串）；**图片理解** = 「图片 → 取回文本」链路（站点上传双证据 + 取回正文）。
 > 两列是**链路**、不是模型强弱；来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。
@@ -270,9 +270,9 @@ Start-Process -FilePath .\build\bin\aiwrite.exe -ArgumentList '--web-dom-dump','
 
 ```
 build/loop/<轮次>-<时间戳>/         例：build/loop/R1-20261009-2055/
-├── report.md        人读版（**四块**：① 本轮数字表 ② 站点矩阵 ③ needs_login[] + 待人工清单 ④ 站点台账摘要（TST-L05））
+├── report.md        人读版（**四块**：① 本轮数字表（含 ①′ 跨轮 diff 段）② 站点矩阵 ③ needs_login[] + 待人工清单 ④ 站点台账摘要（TST-L05））
 ├── site_status.md   站点状态台账人读快照（TST-L05 · 与 build/loop/SITE_STATUS.md 同源 · 跨轮两张表）
-├── report.json      机器读版（供与上一轮 diff）
+├── report.json      机器读版（含 diff{} 块：prev_dir / changed[] / added[] / gone[]；口径对齐 --json-diff）
 ├── raw/             原始输出：每站 `<id>.run<N>.txt`（stdout + rc）+ `<id>.run<N>.err.txt`
 │                                + `<id>.run<N>.workflow.json`（**运行前** JSON 基线，S3 判据用）
 │                                + `<id>.run<N>.archive/`（PC-05 板上归档：`n3-LLMGenerate.txt` 的「状态:」= **n3 判据权威来源**，stdout 丢失时仍可得）
@@ -384,7 +384,7 @@ build/loop/<轮次>-<时间戳>/         例：build/loop/R1-20261009-2055/
 | `FEA-L05` | **目录再规范化（取代 `FEA-L04` 的两棵镜像树形态）**：每个模块自带 `src/` + `include/`（头文件模块内**拍平**；引用改**裸名** `#include "graph.h"`）；入口 → `source/app/src/main.cpp`；CMake 头文件根 **1 → 6** | Feature | ✅ 已落地（2026-10-09 · 104 文件搬迁 · 回归数字逐项不变） |
 | `TST-L01` | `source/tools/loop_verify.ps1` 总驱动（门禁 + S2 探测 + S3 逐站 + 报告落盘） | Test | ✅ 已落地（2026-10-09 · R1 + SMOKE1~SMOKE9 实测；**绿判据 = 三口径 `rc=0` 且 `n3=done` 且归档正文非站侧错误串**，见 §10.1 陷阱 3 / 陷阱 6） |
 | `TST-L02` | `source/tools/dom_gate_test.js` 夹具 + `--old` 负向打假 | Test | ✅ 已落地（2026-10-09 · **15 / 0**；`--old` **9 / 6** 如实 FAIL · exit 1） |
-| `TST-L03` | 物证目录 + 报告三块模板 + 首份循环基线报告 | Test | 🟡 部分落地（2026-10-09 · 目录 + 三块模板**已由 `TST-L01` 生成**；首份基线 = **R1-20261009-2055**，人工固化中） |
+| `TST-L03` | 物证目录 + 报告模板（**四块 + ①′ 跨轮 diff 段**）+ 首份循环基线报告 | Test | ✅ 已落地（2026-10-17 · 批 4 收口：①′ 跨轮 diff 段对齐 `--json-diff`（状态变化 / 新增 / 消失）+ ③ 待人工清单成熟化（复现/诊断命令）· 算法四分支测试 ALL PASS · 空轮端到端 exit 0） |
 | `TST-L05` | **站点状态台账**：`source/assets/site_capability_evidence.json`（实测证据唯一人工维护点）+ `providers.json`（声明）× `build/loop/*/report.json`（轮次物证）⇒ 生成「20 站 × 文字理解 / 图片理解」两列表 + `history[]`，回写 §2.2 哨兵块；`-StatusOnly` 零副作用重建 | Test | ✅ 已落地（2026-10-10 · 覆盖 12 轮累积 · 21 站 · 文字理解 ✅ 9 / 图片理解 ✅ 3 · ⚠ 声明不一致 1） |
 
 | `DOC-L01` | 本文（循环规则）+ `AI_README` §6/§7 + `DocMAP` 登记 | Docs | ✅ 已落地（2026-10-09） |
