@@ -94,6 +94,19 @@ bool expand_composites(Graph& graph,
 //    状态按内部 id 映射回编辑器画布；UI 负责构建/泵事件，见 composite_editor.cpp）
 bool buildCompositeTestGraph(const CompositeSpec& spec, Graph* out, std::string* error);
 
+// 依据「选区」打包生成上级节点规格（选区 = 源图中选中的节点 id 集合）
+//  * 内部图 = 选中节点（深拷贝，保持 id 与坐标；运行态清零）+ 选区内部连线
+//  * 输入 = 选区边界输入端口（有来自选区外的入边；外部输入 id 按序 in1..inN）
+//  * 输出 = 边界输出端口（唯一）；无边界输出时取选区第一个输出端口；再无可报错
+//  * 暴露参数 = 选中节点全部非密钥参数（外部参数 id = 内部参数 id，重复取首）
+//  * 自动修正（打包-校验同源）：暴露输入端口在内部图中有内部入边时（variadic 端口
+//    内外并存场景），该内部边不纳入内部图 —— 外部输入在展开时接管该端口；
+//    生成产物保证通过 validate_composite_spec 严格校验（ARCH-E6 · 修暴露节点保存）
+//  * 用途：主画布「打包为上级节点」（ce_pack.cpp）—— 打包逻辑唯一入口（§4 判据 4）
+bool buildCompositeSpecFromSelection(const Graph& source,
+                                     const std::vector<std::string>& selected_nodes,
+                                     const std::string& name, CompositeSpec* out, std::string* error);
+
 // ------------------------------------------------------------ 注册表 ----
 // PS-D9：规格来源（双源）—— 内置只读官方资产 / 用户节点
 enum class CompositeSource { None, Builtin, User };

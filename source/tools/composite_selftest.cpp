@@ -7,6 +7,7 @@
 #include "validate.h"
 #include "workflow_io.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -609,6 +610,124 @@ int composite_selftest()
                done_tsp10 != nullptr ? eng::nodeStateName(done_tsp10->state) : "missing");
         expect(check, ex10.outputs().find(tsp10, "texts") != nullptr,
                "试运行：TextSplit 已产出输出值 texts");
+    }
+
+    // ------------------------------- 11. 打包（buildCompositeSpecFromSelection）----
+    // ARCH-E6：选区 → 上级节点规格（自动识别边界输入/输出/暴露参数 + variadic 冲突自动修正）
+    {
+        // 11.1 基础打包：TextInput(选区外) → PromptTemplate(选区内) → TextOutput(选区外)
+        eng::Graph pg;
+        const std::string ext_in  = pg.addNode("TextInput", 0.0f, 0.0f, nullptr);
+        const std::string pt      = pg.addNode("PromptTemplate", 0.0f, 0.0f, nullptr);
+        const std::string ext_out = pg.addNode("TextOutput", 0.0f, 0.0f, nullptr);
+        std::string       perr;
+        pg.addEdge(ext_in, "text", pt, "vars", &perr);
+        pg.addEdge(pt, "text", ext_out, "text", &perr);
+        // TextInput.text 是必填参数：打包产物要过严格校验，源图需为合法工作流
+        if (eng::Param* p = pg.findNode(ext_in)->findParam("text")) {
+            p->value = "打包输入";
+        }
+
+        // 少于 2 个节点被拒绝
+        eng::CompositeSpec p1;
+        const std::vector<std::string> sel1 = {pt};
+        expect(check, !eng::buildCompositeSpecFromSelection(pg, sel1, "打包自检", &p1, &perr) &&
+                          perr.find("2 个节点") != std::string::npos,
+               "打包：少于 2 个节点被拒绝", perr);
+
+        // 选区 {ext_in, pt}：内部边 ext_in→pt.vars；无暴露输入（vars 入边来自选区内）；
+        // 边界输出 = pt.text（到选区外 TextOutput）；暴露参数 = pt 非密钥参数
+        const std::vector<std::string> sel_ab = {ext_in, pt};
+        eng::CompositeSpec pack_ab;
+        expect(check, eng::buildCompositeSpecFromSelection(pg, sel_ab, "打包自检", &pack_ab, &perr),
+               "打包：基础打包成功", perr);
+        expect(check, pack_ab.internal_graph.nodes.size() == 2, "打包：内部图 = 选中 2 节点",
+               std::to_string(pack_ab.internal_graph.nodes.size()));
+        expect(check, pack_ab.internal_graph.edges.size() == 1, "打包：内部边 = 选区内 1 条",
+               std::to_string(pack_ab.internal_graph.edges.size()));
+        expect(check, pack_ab.inputs.empty(), "打包：无暴露输入（vars 入边来自选区内）");
+        expect(check, pack_ab.outputs.size() == 1 && pack_ab.outputs[0].internal_node == pt &&
+                          pack_ab.outputs[0].internal_port == "text",
+               "打包：边界输出 = pt.text（到选区外 TextOutput）");
+        expect(check, !pack_ab.exposed_params.empty(), "打包：暴露参数非空");
+        // 密钥参数不暴露（PromptTemplate 有 api_key is_secret=true）
+        const bool has_secret =
+            std::any_of(pack_ab.exposed_params.begin(), pack_ab.exposed_params.end(),
+                        [](const eng::CompositeParamRef& r) { return r.param_id == "api_key"; });
+        expect(check, !has_secret, "打包：密钥参数（api_key）不暴露");
+        pack_ab.id = "c_pack1";
+        std::string pab_err;
+        expect(check, eng::validate_composite_spec(pack_ab, &pab_err), "打包：基础产物通过严格校验",
+               pab_err);
+
+        // 运行态清零：源节点 Running + 错误 → 打包产物应为 Idle + 无错误
+        {
+            eng::Node* pt_node = pg.findNode(pt);
+            pt_node->state     = eng::NodeState::Running;
+            pt_node->error_message = "打包测试错误";
+            eng::CompositeSpec pack_run;
+            expect(check, eng::buildCompositeSpecFromSelection(pg, sel_ab, "打包自检", &pack_run, &perr),
+                   "打包：运行态节点重打包成功", perr);
+            const eng::Node* inner = pack_run.internal_graph.findNode(pt);
+            expect(check, inner != nullptr && inner->state == eng::NodeState::Idle &&
+                              inner->error_message.empty(),
+                   "打包：内部节点运行态清零（Idle + 无错误）");
+            pt_node->state         = eng::NodeState::Idle;
+            pt_node->error_message.clear();
+        }
+
+        // 11.2 暴露输入识别：选区 {pt, ext_out}（ext_in 在选区外）→ pt.vars 成为暴露输入
+        const std::vector<std::string> sel_bc = {pt, ext_out};
+        eng::CompositeSpec pack_bc;
+        expect(check, eng::buildCompositeSpecFromSelection(pg, sel_bc, "打包自检", &pack_bc, &perr),
+               "打包：选区含输出节点成功", perr);
+        expect(check, pack_bc.inputs.size() == 1 && pack_bc.inputs[0].internal_node == pt &&
+                          pack_bc.inputs[0].internal_port == "vars",
+               "打包：暴露输入 = pt.vars（ext_in 在选区外）");
+        expect(check, pack_bc.internal_graph.findEdgeIntoInput(pt, "vars") == nullptr,
+               "打包：暴露输入端口无内部入边（ext_in 在选区外）");
+        pack_bc.id = "c_pack2";
+        std::string pbc_err;
+        expect(check, eng::validate_composite_spec(pack_bc, &pbc_err), "打包：暴露输入产物通过严格校验",
+               pbc_err);
+    }
+
+
+    // ---- 11.3 variadic 冲突自动修正（修暴露节点保存 · audit §4.2 问题 2）----
+    // VLMGenerate.image（variadic）同时有选区内入边（img_in）与选区外入边（img_ext）：
+    // 打包旧逻辑会生成「暴露输入带内部入边」的非法规格 → 保存被拒；ARCH-E6 在生成阶段
+    // 剔除指向暴露输入的内边（外部输入接管）→ 产物必然通过严格校验、可直接保存。
+    {
+        eng::Graph vg;
+        const std::string img_in  = vg.addNode("ImageInput", 0.0f, 0.0f, nullptr);
+        const std::string vlm     = vg.addNode("VLMGenerate", 0.0f, 0.0f, nullptr);
+        const std::string img_ext = vg.addNode("ImageInput", 0.0f, 0.0f, nullptr);
+        const std::string out_ext = vg.addNode("TextOutput", 0.0f, 0.0f, nullptr);
+        std::string       verr;
+        vg.addEdge(img_in, "image", vlm, "image", &verr);   // 选区内
+        vg.addEdge(img_ext, "image", vlm, "image", &verr);  // 选区外
+        vg.addEdge(vlm, "text", out_ext, "text", &verr);    // 选区外
+
+        const std::vector<std::string> sel_vlm = {img_in, vlm};
+        eng::CompositeSpec pv;
+        expect(check, eng::buildCompositeSpecFromSelection(vg, sel_vlm, "打包图片", &pv, &verr),
+               "打包：variadic 冲突场景打包成功", verr);
+        expect(check, pv.inputs.size() == 1 && pv.inputs[0].internal_node == vlm &&
+                          pv.inputs[0].internal_port == "image",
+               "打包：vlm.image 有选区外入边 → 暴露输入");
+        expect(check, pv.internal_graph.findEdgeIntoInput(vlm, "image") == nullptr,
+               "打包：暴露输入端口内部入边被自动剔除（外部输入接管）");
+        expect(check, pv.outputs.size() == 1 && pv.outputs[0].internal_node == vlm &&
+                          pv.outputs[0].internal_port == "text",
+               "打包：边界输出 = vlm.text（到选区外 TextOutput）");
+        pv.id = "c_pack_vlm";
+        std::string pv_err;
+        expect(check, eng::validate_composite_spec(pv, &pv_err), "打包：冲突修正后通过严格校验", pv_err);
+        // 问题 2 修复：修正后的规格可直接保存（不再被「暴露输入已有内部连线」拒绝）
+        std::string save_err;
+        expect(check, eng::CompositeRegistry::instance().save(pv, &save_err),
+               "打包：修正后可直接保存（修暴露节点保存）", save_err);
+        eng::CompositeRegistry::instance().remove(pv.id, nullptr);
     }
 
     // 清理临时目录

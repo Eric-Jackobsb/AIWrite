@@ -10,6 +10,7 @@
 #include <fstream>
 #include <map>
 #include <set>
+#include <utility>
 
 namespace aiwrite::engine {
 namespace {
@@ -516,6 +517,162 @@ bool buildCompositeTestGraph(const CompositeSpec& spec, Graph* out, std::string*
     }
     return true;
 }
+
+// ------------------------------------------------------------------ 打包 ----
+// ARCH-E6：打包下沉 —— 主画布「打包为上级节点」的规格构建从 UI 层（ce_pack.cpp）迁入
+// engine 单一函数；与 validate_composite_spec 同源（§4 验收判据 4）。
+//  * 自动修正：暴露输入端口有内部入边（variadic 端口内外并存）时，该内部边不纳入
+//    内部图 —— 外部输入在展开时接管该端口 ⇒ 生成产物必然通过严格校验（问题 2）。
+bool buildCompositeSpecFromSelection(const Graph& source, const std::vector<std::string>& selected_nodes,
+                                     const std::string& name, CompositeSpec* out, std::string* error)
+{
+    const auto fail = [error](const std::string& text) {
+        if (error != nullptr) {
+            *error = text;
+        }
+        return false;
+    };
+    if (out == nullptr) {
+        return fail("输出规格指针为空");
+    }
+    if (selected_nodes.size() < 2) {
+        return fail("打包需要至少选中 2 个节点");
+    }
+    const auto is_selected = [&selected_nodes](const std::string& node_id) {
+        return std::find(selected_nodes.begin(), selected_nodes.end(), node_id) != selected_nodes.end();
+    };
+
+    CompositeSpec spec;
+    spec.name = name.empty() ? "组合节点" : name;
+
+    // ---- 1) internal_graph：选中节点（深拷贝，保持 id 与坐标）+ 选区内部连线 ----
+    for (const std::string& nid : selected_nodes) {
+        const Node* n = source.findNode(nid);
+        if (n == nullptr) {
+            continue;
+        }
+        if (!n->composite_id.empty()) {
+            return fail("选区内不能包含上级节点（不支持嵌套）");
+        }
+        Node copy = *n;
+        copy.state         = NodeState::Idle;
+        copy.error_message.clear();
+        spec.internal_graph.nodes.push_back(std::move(copy));
+    }
+
+    // ---- 2) 暴露输入：选区节点的输入端口，有来自选区外的入边 ----
+    //  （variadic 端口可与内部入边并存 ⇒ 生成阶段落实「暴露输入不得有内部入边」：
+    //    指向暴露输入端口的内边不纳入内部图 = 打包-校验同源）
+    std::vector<CompositePortRef> inputs;
+    std::vector<std::pair<std::string, std::string>> exposed_in_ports; // (internal_node, internal_port)
+    for (const Node& n : spec.internal_graph.nodes) {
+        for (const Port& p : n.inputs) {
+            bool exposed = false;
+            for (const Edge& e : source.edges) {
+                if (e.to_node == n.id && e.to_port == p.id && !is_selected(e.from_node)) {
+                    exposed = true;
+                    break;
+                }
+            }
+            if (!exposed) {
+                continue;
+            }
+            CompositePortRef ref;
+            ref.internal_node = n.id;
+            ref.internal_port = p.id;
+            ref.display_name  = p.display_name;
+            ref.type          = p.type;
+            inputs.push_back(std::move(ref));
+            exposed_in_ports.emplace_back(n.id, p.id);
+        }
+    }
+
+    for (const Edge& edge : source.edges) {
+        if (!is_selected(edge.from_node) || !is_selected(edge.to_node)) {
+            continue; // 只有两端都在选区内的边才进内部图
+        }
+        // 暴露输入端口的内部入边不纳入（外部输入在展开时接管该端口；问题 2 自动修正）
+        const bool targets_exposed_input = std::any_of(
+            exposed_in_ports.begin(), exposed_in_ports.end(),
+            [&edge](const std::pair<std::string, std::string>& kv) {
+                return kv.first == edge.to_node && kv.second == edge.to_port;
+            });
+        if (targets_exposed_input) {
+            continue;
+        }
+        spec.internal_graph.edges.push_back(edge);
+    }
+    spec.internal_graph.refreshSequences();
+    spec.inputs = std::move(inputs);
+
+    // ---- 3) 暴露输出：边界输出端口（唯一；编辑器可再调整）----
+    {
+        std::vector<CompositePortRef> boundary;
+        for (const Node& n : spec.internal_graph.nodes) {
+            for (const Port& p : n.outputs) {
+                for (const Edge& e : source.edges) {
+                    if (e.from_node == n.id && e.from_port == p.id && !is_selected(e.to_node)) {
+                        CompositePortRef ref;
+                        ref.internal_node = n.id;
+                        ref.internal_port = p.id;
+                        ref.display_name  = p.display_name;
+                        ref.type          = p.type;
+                        boundary.push_back(std::move(ref));
+                        break;
+                    }
+                }
+            }
+        }
+        if (boundary.empty()) {
+            // 无边界输出：退而取选区第一个输出端口（若选区整体是端到端内部流程）
+            for (const Node& n : spec.internal_graph.nodes) {
+                if (n.outputs.empty()) {
+                    continue;
+                }
+                const Port& p = n.outputs.front();
+                CompositePortRef ref;
+                ref.internal_node = n.id;
+                ref.internal_port = p.id;
+                ref.display_name  = p.display_name;
+                ref.type          = p.type;
+                boundary.push_back(std::move(ref));
+                break;
+            }
+        }
+        if (boundary.empty()) {
+            return fail("选区内没有任何可对外输出的端口（至少需要一个输出端口）");
+        }
+        spec.outputs.push_back(std::move(boundary.front()));
+    }
+
+    // ---- 4) 暴露参数：选中节点全部非密钥参数（外部参数 id = 内部参数 id）----
+    for (const Node& n : spec.internal_graph.nodes) {
+        for (const Param& p : n.params) {
+            if (p.is_secret) {
+                continue; // 密钥（如 API Key）不暴露
+            }
+            const bool dup = std::any_of(spec.exposed_params.begin(), spec.exposed_params.end(),
+                                         [&p](const CompositeParamRef& r) {
+                                             return r.param_id == p.id;
+                                         });
+            if (dup) {
+                continue; // 外部参数 id 唯一：重复的只暴露首个
+            }
+            CompositeParamRef ref;
+            ref.internal_node = n.id;
+            ref.param_id      = p.id;
+            ref.display_name  = p.display_name;
+            spec.exposed_params.push_back(std::move(ref));
+        }
+    }
+
+    *out = std::move(spec);
+    if (error != nullptr) {
+        error->clear();
+    }
+    return true;
+}
+
 
 
 // ------------------------------------------------------------ 展开执行 ----
