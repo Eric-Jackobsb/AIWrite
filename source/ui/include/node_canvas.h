@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "readonly_view.h"
+
 // ============================================================================
 //  节点画布（设计文档 §6.1 / §6.2 / §14）
 //
@@ -9,6 +11,7 @@
 //  * 鼠标交互：右键画布分类新建、右键节点复制/删除、右键连线删除、
 //    单击/Ctrl+单击/框选、拖拽移动、拖出端口连线（类型校验）、双击标题重命名
 //  * 所有修改都会通过 EditorState 先压撤销快照
+//  * ARCH-R3：渲染读取统一走 `const ReadOnlyView&`（ARCH-D33），交互写仍走 editor()
 // ============================================================================
 
 namespace aiwrite::ui {
@@ -20,7 +23,7 @@ struct CanvasOptions {
     int  link_count = 0;                // 输出
 };
 
-void drawNodeCanvas(const char* title, CanvasOptions& options);
+void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyView& view);
 
 // 在画布可视中心创建节点（节点库点击 / 粘贴 使用）；返回新节点 id
 std::string canvasAddNodeAtCenter(const std::string& type);

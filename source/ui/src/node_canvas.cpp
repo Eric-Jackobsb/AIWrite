@@ -853,7 +853,7 @@ void draw_canvas_assist_popup()
 
 
 
-void drawNodeCanvas(const char* title, CanvasOptions& options)
+void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyView& view)
 {
     ensure_context();
     EditorState& state = editor();
@@ -916,26 +916,27 @@ void drawNodeCanvas(const char* title, CanvasOptions& options)
     diag_zoom = ed::GetCurrentZoom(); // CS-01：视图自愈之后再取，避免拿到被重置前的旧值
 
     // 位置同步：新建 / 粘贴的节点在这里落到 Graph 记录的位置
-    for (const Node& node : state.graph.nodes) {
+    // ARCH-R3：渲染读取走 view（nodes_for_render 零拷贝返回 graph 内部数组 const 引用）
+    for (const Node& node : view.nodes_for_render()) {
         ed::SetNodePosition(nodeHandle(node.id), ImVec2(node.x, node.y));
     }
     // 宽度自适应 + 节点卡片绘制：走共享 canvas_view 只读绘制层（CEA-01 / CEA-02）
-    //   —— 主题 = 主画布默认主题；运行读模型 = editor().run_snapshot_view()
-    g_canvas.graph        = &state.graph;
+    //   —— 主题 = 主画布默认主题；运行读模型 = view.snapshot（ARCH-R3 渲染只读 ReadOnlyView）
+    g_canvas.graph        = &view.graph();
     g_canvas.theme        = &canvasThemeMain();
-    g_canvas.run_snapshot = [&state]() -> const engine::RunSnapshot& { return state.run_snapshot_view(); };
+    g_canvas.run_snapshot = [&view]() -> const engine::RunSnapshot& { return view.snapshot; };
     const auto diag_t0 = std::chrono::steady_clock::now();
-    updateContentWidth(state.graph, g_canvas);
+    updateContentWidth(view.graph(), g_canvas);
     const auto diag_t1 = std::chrono::steady_clock::now();
-    for (const Node& node : state.graph.nodes) {
+    for (const Node& node : view.nodes_for_render()) {
         drawNodeBody(g_canvas, node);
     }
     const auto diag_t2 = std::chrono::steady_clock::now();
-    log_wrap_selftest();                   // 折行自检（一次性：每条输出行都必须放得下）
-    check_uniform_node_width(state.graph); // 固定宽度自检（不变量：全部节点等宽）
-    for (const Edge& edge : state.graph.edges) {
-        const Node* from = state.graph.findNode(edge.from_node);
-        const Node* to   = state.graph.findNode(edge.to_node);
+    log_wrap_selftest();                     // 折行自检（一次性：每条输出行都必须放得下）
+    check_uniform_node_width(view.graph());  // 固定宽度自检（不变量：全部节点等宽）
+    for (const Edge& edge : view.edges_for_render()) {
+        const Node* from = view.find_node(edge.from_node);
+        const Node* to   = view.find_node(edge.to_node);
         if (from == nullptr || to == nullptr) {
             continue;
         }
@@ -1057,11 +1058,13 @@ void drawNodeCanvas(const char* title, CanvasOptions& options)
 
     // 视图跟随前先确认坐标正常（历史卡死根因：异常坐标 + NavigateToContent 会让视图落到天文数字区间）
     const bool positions_sane =
-        state.graph.nodes.empty() ||
-        std::all_of(state.graph.nodes.begin(), state.graph.nodes.end(), [](const Node& node) {
-            return std::isfinite(node.x) && std::isfinite(node.y) &&
-                   std::fabs(node.x) < kPositionLimit && std::fabs(node.y) < kPositionLimit;
-        });
+        view.nodes_for_render().empty() ||
+        std::all_of(view.nodes_for_render().begin(), view.nodes_for_render().end(),
+                    [](const Node& node) {
+                        return std::isfinite(node.x) && std::isfinite(node.y) &&
+                               std::fabs(node.x) < kPositionLimit &&
+                               std::fabs(node.y) < kPositionLimit;
+                    });
 
     if (g_first_frame || state.request_navigate_to_content) {
         if (positions_sane) {
@@ -1093,7 +1096,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options)
         if (snap.applied) {
             drawSnapLines(snap, ImGui::GetWindowDrawList(), canvasThemeMain().snap_line, 1.6f);
         }
-        draw_minimap(state.graph, canvasThemeMain(), g_show_minimap, g_minimap,
+        draw_minimap(view.graph(), canvasThemeMain(), g_show_minimap, g_minimap,
                      [](const Node& n) { return state_color(n.state); });
     }
 
@@ -1103,7 +1106,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options)
                           ms_between(diag_t2, diag_t3));
 
     // P7a-14：空画布引导（新用户第一眼就知道下一步做什么）
-    if (state.graph.nodes.empty()) {
+    if (view.nodes_for_render().empty()) {
         ImDrawList*  draw_list   = ImGui::GetWindowDrawList();
         const ImVec2 window_pos  = ImGui::GetWindowPos();
         const ImVec2 window_size = ImGui::GetWindowSize();
@@ -1126,8 +1129,8 @@ void drawNodeCanvas(const char* title, CanvasOptions& options)
     sync_positions(state);
     ed::SetCurrentEditor(nullptr);
 
-    options.node_count = static_cast<int>(state.graph.nodes.size());
-    options.link_count = static_cast<int>(state.graph.edges.size());
+    options.node_count = static_cast<int>(view.nodes_for_render().size());
+    options.link_count = static_cast<int>(view.edges_for_render().size());
 
     ImGui::End();
 }

@@ -10,6 +10,7 @@
 #include "app.h"
 #include "editor_state.h"
 #include "output_panel.h"
+#include "readonly_view.h"   // ARCH-R3：ReadOnlyView 渲染视图断言（零拷贝 / 同源）
 #include "deepseek_official_provider.h"
 #include "provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）
 #include "provider_factory.h"    // L2（B2-b · PB2-09）：按表 protocol 分派
@@ -875,10 +876,37 @@ int runSelftest(bool use_web, const std::string& provider_id)
                     empty_ok ? "OK" : "失败");
     }
 
+    // ---- ARCH-R3：ReadOnlyView 渲染视图断言（ARCH-D18 行为等价量化）----
+    //  * 零拷贝：nodes_for_render / edges_for_render 返回 **graph 内部数组的同一份引用**
+    //  * find_node 与 graph.findNode 同源命中
+    //  * snapshot / config 与底层对象同源（视图不复制数据）
+    bool readonly_view_ok = false;
+    {
+        const aiwrite::ui::SelectionReadView sel_view{state.selected_nodes, state.selected_links,
+                                                      state.selected_node};
+        const aiwrite::ui::ReadOnlyView rv{state.graph, sel_view, state.run_snapshot_view(),
+                                           aiwrite::appConfig()};
+        const bool nodes_same = (&rv.nodes_for_render() == &state.graph.nodes);
+        const bool edges_same = (&rv.edges_for_render() == &state.graph.edges);
+        const bool find_same  = (rv.find_node("n1") == state.graph.findNode("n1")) &&
+                                (rv.find_node("zz_missing") == nullptr);
+        const bool snap_same  = (&rv.snapshot == &state.run_snapshot_view());
+        const bool cfg_same   = (&rv.config == &aiwrite::appConfig());
+        const bool sel_same   = (&rv.selection.nodes == &state.selected_nodes) &&
+                                (&rv.selection.links == &state.selected_links) &&
+                                (rv.selection.single == state.selected_node);
+        readonly_view_ok = nodes_same && edges_same && find_same && snap_same && cfg_same &&
+                           sel_same;
+        std::printf("[运行自检] ReadOnlyView：%s（节点零拷贝=%s / 连线零拷贝=%s / find_node=%s / "
+                    "快照同源=%s / 配置同源=%s / 选中同源=%s）\n",
+                    readonly_view_ok ? "OK" : "失败", nodes_same ? "是" : "否",
+                    edges_same ? "是" : "否", find_same ? "是" : "否", snap_same ? "是" : "否",
+                    cfg_same ? "是" : "否", sel_same ? "是" : "否");
+    }
+
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
                       consistency_ok && param_driven_ok && async_ok && session_ok && sink_ok && seed_ok &&
-                      param_range_ok &&
-                      paste_ok;
+                      param_range_ok && paste_ok && readonly_view_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

@@ -12,6 +12,8 @@
 
 #include <string>
 
+#include "readonly_view.h"
+
 namespace aiwrite::engine {
 class Executor;
 class Graph;
@@ -41,6 +43,7 @@ std::string runOutputText(const engine::Graph& graph, const engine::RunSnapshot&
 //  * 正文与预览同源（node_output_text）；路径由保存对话框给出；失败写状态栏
 bool exportNodeDocument(EditorState& state, const std::string& node_id);
 
-void drawOutputPanel(const char* title, bool* open, EditorState& state);
+void drawOutputPanel(const char* title, bool* open, const ReadOnlyView& view,
+                     EditorState& state);
 
 } // namespace aiwrite::ui

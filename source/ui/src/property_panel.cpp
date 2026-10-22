@@ -52,7 +52,8 @@ std::string param_error(const Param& param)
 // P7a-15：「输入」分组的端口连通清单
 //  * 判据与运行前校验一致：非 optional 且连接数 0 → 必填未连（红字）
 //  * 变长端口显示已连条数（P7a-01 起「图片理解」的 image 为变长）
-void draw_input_port_summary(const Node& node)
+// ARCH-R3：渲染读取走 `const engine::Graph&`（调用方从 view 传入）
+void draw_input_port_summary(const Node& node, const engine::Graph& graph)
 {
     if (node.inputs.empty()) {
         ImGui::TextDisabled("本节点没有输入端口");
@@ -61,7 +62,7 @@ void draw_input_port_summary(const Node& node)
     ImGui::Separator();
     ImGui::TextDisabled("输入端口（%d）", static_cast<int>(node.inputs.size()));
     for (const engine::Port& port : node.inputs) {
-        const int   connections = editor().graph.inputConnectionCount(node.id, port.id);
+        const int   connections = graph.inputConnectionCount(node.id, port.id);
         std::string text        = port.display_name;
         if (port.is_variadic) {
             text += "（变长）";
@@ -157,7 +158,7 @@ void draw_prompt_generate_button(engine::Node& node, PropertyEditResult& result)
 }
 } // namespace
 void draw_property_panel(const char* window_title, bool* open, Node* node,
-                         PropertyEditResult& result)
+                         const ReadOnlyView& view, PropertyEditResult& result)
 {
     if (open != nullptr && !*open) {
         return;
@@ -211,7 +212,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         }
 
         // P7a-15：输入端口连通清单（必填未连 → 红字）
-        draw_input_port_summary(*node);
+        draw_input_port_summary(*node, view.graph());
     }
 
     // ---- P7a-15：「参数」分组（可折叠）----
@@ -221,7 +222,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     // 解决"改了节点「模式」却不生效"的困惑；official（官方 API）与图片理解（M5-02）给出红字与提示
     if (engine::usesProvider(node->type)) {
         const engine::EffectiveProvider effective =
-            engine::resolveEffectiveProvider(editor().graph, *node);
+            engine::resolveEffectiveProvider(view.graph(), *node);
         if (node->type == "LLMGenerate") {
             if (effective.from_edge) {
                 ImGui::TextDisabled("生效：%s（来自 提供商配置 %s）· 模型 %s", effective.mode.c_str(),
@@ -244,7 +245,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
             ImGui::TextDisabled("选择器未回填：运行时会**自动识别**输入框 / 答案容器（结果打印在 Console）；"
                                 "如需固化为数据，见 --web-dom-dump");
         }
-        const std::string reason = engine::unwiredReason(editor().graph, *node);
+        const std::string reason = engine::unwiredReason(view.graph(), *node);
         if (!reason.empty()) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
             ImGui::TextWrapped("%s：本次运行该节点必定失败，下游会被跳过。", reason.c_str());
@@ -329,7 +330,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     const bool                is_provider_node = node->type == "ProviderConfig";
     engine::EffectiveProvider provider_effective;
     if (is_provider_node) {
-        provider_effective = engine::resolveDisplayProvider(editor().graph, *node);
+        provider_effective = engine::resolveDisplayProvider(view.graph(), *node);
     }
 
     if (node->params.empty()) {
@@ -512,7 +513,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     // ---- 网页版（web 模式）：会话状态 + 登录入口（PB2-17/18/19）----
     if (node->type == "ProviderConfig") {
         if (isWebMode(*node)) {
-            if (drawWebSessionSection(*node, editor().graph)) {
+            if (drawWebSessionSection(*node, view.graph())) {
                 result.begin_edit = true; // 先压快照（可撤销）
                 result.changed    = true;
             }
@@ -540,7 +541,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         ImGui::Separator();
         // 生效条目：本区在「参数」分组**之外**，故就地再解析一次（`resolve_display_provider` 是纯函数）
         const engine::EffectiveProvider diag_effective =
-            engine::resolveDisplayProvider(editor().graph, *node);
+            engine::resolveDisplayProvider(view.graph(), *node);
         const std::string diag_provider =
             diag_effective.provider.empty() ? std::string() : diag_effective.provider;
         ImGui::TextUnformatted("诊断（只读 · 异步）");
@@ -636,7 +637,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     // ---- 运行状态（PA-03）：只读展示 + 复制（与输出面板 / 画布节点摘要同源）----
     ImGui::Separator();
     if (ImGui::CollapsingHeader("运行状态", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const engine::RunSnapshot& snapshot = editor().run_snapshot_view();
+        const engine::RunSnapshot& snapshot = view.snapshot;   // ARCH-R3：渲染读取走 view
         const engine::RunNodeView* run      = snapshot.find(node->id);
 
         if (run == nullptr) {
@@ -677,7 +678,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                 }
             }
 
-            const std::string body = node_output_text(editor().graph, snapshot, node->id);
+            const std::string body = node_output_text(view.graph(), snapshot, node->id);
             if (!body.empty()) {
                 draw_readonly_text("##prop_run_result", body, 8.0f);
                 if (ImGui::Button("复制运行结果")) {
@@ -772,7 +773,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
 
     ImGui::Separator();
     int same_type_others = 0;
-    for (const engine::Node& other : editor().graph.nodes) {
+    for (const engine::Node& other : view.nodes_for_render()) {
         if (other.id != node->id && other.type == node->type) {
             ++same_type_others;
         }

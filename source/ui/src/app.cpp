@@ -8,6 +8,7 @@
 #include "node_library.h"
 #include "output_panel.h"
 #include "property_panel.h"
+#include "readonly_view.h"      // ARCH-R3：渲染只读视图（主循环统一构建一次）
 #include "texture_cache.h"
 #include "toolbar.h"
 #include "config.h"
@@ -252,9 +253,10 @@ void build_default_layout(ImGuiID dockspace_id, const ImVec2& size)
 // 工作流使用的推理后端模式（取第一个 ProviderConfig 节点）+ 网页版会话状态
 //  * L4（PB2-27③ / 不变量 I15）：状态栏按**生效条目自己的站点键**判登录态
 //    （不再读「默认槽」会话，也不再以 `userToken` 为判据 → 多站点下不再显示别的站点状态）
-std::string provider_mode_text(const EditorState& state)
+// ARCH-R3：渲染读取走 ReadOnlyView（graph 数据经 nodes_for_render）
+std::string provider_mode_text(const ReadOnlyView& view)
 {
-    for (const engine::Node& node : state.graph.nodes) {
+    for (const engine::Node& node : view.nodes_for_render()) {
         if (node.type != "ProviderConfig") {
             continue;
         }
@@ -281,9 +283,10 @@ std::string provider_mode_text(const EditorState& state)
 }
 
 // P7a-18：状态栏「提供商」文本（生效条目的显示名 + 模型；取第一个「提供商配置」节点）
-std::string provider_summary_text(const EditorState& state)
+// ARCH-R3：渲染读取走 ReadOnlyView（graph 数据经 nodes_for_render）
+std::string provider_summary_text(const ReadOnlyView& view)
 {
-    for (const engine::Node& node : state.graph.nodes) {
+    for (const engine::Node& node : view.nodes_for_render()) {
         if (node.type != "ProviderConfig") {
             continue;
         }
@@ -298,27 +301,30 @@ std::string provider_summary_text(const EditorState& state)
 }
 
 // P7a-18：状态栏「最后耗时」（最慢节点 = 关键路径近似；另给累计）
-std::string last_run_duration_text(const EditorState& state)
+// ARCH-R3：渲染读取走 ReadOnlyView（快照）
+std::string last_run_duration_text(const ReadOnlyView& view)
 {
-    const engine::RunSnapshot& snapshot = state.run_snapshot_view();
+    const engine::RunSnapshot& snapshot = view.snapshot;
     if (snapshot.nodes.empty()) {
         return {};
     }
     double longest = 0.0;
     double total   = 0.0;
-    for (const engine::RunNodeView& view : snapshot.nodes) {
-        if (view.duration_ms > longest) {
-            longest = view.duration_ms;
+    for (const engine::RunNodeView& node_view : snapshot.nodes) {
+        if (node_view.duration_ms > longest) {
+            longest = node_view.duration_ms;
         }
-        total += view.duration_ms;
+        total += node_view.duration_ms;
     }
     return "耗时 " + std::to_string(static_cast<long long>(longest)) + " ms（累计 " +
            std::to_string(static_cast<long long>(total)) + " ms / " +
            std::to_string(static_cast<int>(snapshot.nodes.size())) + " 节点）";
 }
 
-// 工作流信息面板（环境 + 当前工作流统计；数据来自 EditorState）
-void draw_info_panel(const char* title, bool* open)
+// 工作流信息面板（环境 + 当前工作流统计；数据来自 ReadOnlyView）
+// ARCH-R3：graph / 选中读取走 view；撤销栈深度仍读 state（undo 不在 ReadOnlyView 字段内，
+//          E3 拆出 WorkflowModel 后归入文档级对象）
+void draw_info_panel(const char* title, bool* open, const ReadOnlyView& view)
 {
     if (open != nullptr && !*open) {
         return;
@@ -354,9 +360,9 @@ void draw_info_panel(const char* title, bool* open)
 
     const EditorState& state = editor();
     if (ImGui::CollapsingHeader("当前工作流", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("节点     : %d", static_cast<int>(state.graph.nodes.size()));
-        ImGui::Text("连线     : %d", static_cast<int>(state.graph.edges.size()));
-        ImGui::Text("选中     : %d", static_cast<int>(state.selected_nodes.size()));
+        ImGui::Text("节点     : %d", static_cast<int>(view.nodes_for_render().size()));
+        ImGui::Text("连线     : %d", static_cast<int>(view.edges_for_render().size()));
+        ImGui::Text("选中     : %d", static_cast<int>(view.selection.nodes.size()));
         ImGui::Text("撤销栈   : %d（可重做 %d）", static_cast<int>(state.undo.undoDepth()),
                     static_cast<int>(state.undo.redoDepth()));
         if (!state.status.empty()) {
@@ -873,6 +879,13 @@ int run(const AppOptions& options)
         const float status_height     = ImGui::GetFrameHeight();
         EditorState& state            = editor();
 
+        // ARCH-R3：主循环**统一构建一次**渲染只读视图（ARCH-D30），传给所有渲染模块
+        //  * 字段 = 三个核心 + 配置（ARCH-D31）：工作流数据 / 选中 / 运行快照 / 配置
+        //  * 只存引用、零拷贝（ARCH-D34）；快照空对象 = 未运行（ARCH-D32）
+        const SelectionReadView selection_view{state.selected_nodes, state.selected_links,
+                                               state.selected_node};
+        const ReadOnlyView view{state.graph, selection_view, state.run_snapshot_view(), config};
+
         // ---- 全屏 DockSpace 宿主窗口 ----
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -1158,7 +1171,7 @@ int run(const AppOptions& options)
 
         // ---- 面板 ----
         ImGui::PushFont(fonts.ui);
-        drawNodeCanvas(kWindowCanvas, canvas_options);
+        drawNodeCanvas(kWindowCanvas, canvas_options, view);
         ImGui::PopFont();
 
         if (show_library) {
@@ -1173,7 +1186,7 @@ int run(const AppOptions& options)
                 state.selected_node.empty() ? nullptr : state.graph.findNode(state.selected_node);
 
             PropertyEditResult edit;
-            draw_property_panel(kWindowParams, &show_params, selected, edit);
+            draw_property_panel(kWindowParams, &show_params, selected, view, edit);
 
             // begin_edit 在控件被激活、值尚未变化时置位 → 此时压快照可正确回退
             if (edit.begin_edit) {
@@ -1197,12 +1210,12 @@ int run(const AppOptions& options)
         }
         if (show_output) { // PA-02：输出面板（结果全文 / 复制全文·该节点 / 导出）
             ImGui::PushFont(fonts.ui);
-            drawOutputPanel(kWindowOutput, &show_output, state);
+            drawOutputPanel(kWindowOutput, &show_output, view, state);
             ImGui::PopFont();
         }
         if (show_info) {
             ImGui::PushFont(fonts.ui);
-            draw_info_panel(kWindowInfo, &show_info);
+            draw_info_panel(kWindowInfo, &show_info, view);
             ImGui::PopFont();
         }
 
@@ -1257,15 +1270,15 @@ int run(const AppOptions& options)
                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking)) {
             ImGui::PushFont(fonts.console);
             ImGui::Text("节点 %d  连线 %d  选中 %d  |  %.1f FPS",
-                        static_cast<int>(state.graph.nodes.size()),
-                        static_cast<int>(state.graph.edges.size()),
-                        static_cast<int>(state.selected_nodes.size()), io.Framerate);
+                        static_cast<int>(view.nodes_for_render().size()),
+                        static_cast<int>(view.edges_for_render().size()),
+                        static_cast<int>(view.selection.nodes.size()), io.Framerate);
             ImGui::SameLine();
             // P7a-18：状态栏四项 —— 提供商 / 模式（含站点）/ 最后耗时（+ 节点统计）
-            ImGui::TextDisabled("  %s", provider_summary_text(state).c_str());
+            ImGui::TextDisabled("  %s", provider_summary_text(view).c_str());
             ImGui::SameLine();
-            ImGui::TextDisabled("  %s", provider_mode_text(state).c_str());
-            const std::string duration_text = last_run_duration_text(state);
+            ImGui::TextDisabled("  %s", provider_mode_text(view).c_str());
+            const std::string duration_text = last_run_duration_text(view);
             if (!duration_text.empty()) {
                 ImGui::SameLine();
                 ImGui::TextDisabled("  %s", duration_text.c_str());

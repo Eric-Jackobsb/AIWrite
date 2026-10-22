@@ -321,7 +321,7 @@ SettingsPanel settings(ctx.config());
 |---|---|---|---|
 | **ARCH-R1** | `RunSession` 对象化：Executor + 快照从 `editor()` 拆出 | `RunSession` 独立 | 构建 + `--exec-selftest` 713/0 |
 | **ARCH-R2** | ~~RunEvent 订阅化：输出面板/状态栏改为订阅 `RunEvent`~~ ✅ **已落地（2026-10-22）** | UI 不再主动 `pumpEvents()`（`rg pumpRunEvents` = 0） | 构建 0/0 + `--exec-selftest` 713/0 + `--run-selftest`（新增订阅断言）+ check_links 1768/0 |
-| **ARCH-R3** | `ReadOnlyView` 落地：渲染只读 `ReadOnlyView` | 渲染与状态解耦 | 构建 + 人工确认渲染正常 |
+| **ARCH-R3** | ~~`ReadOnlyView` 落地：渲染只读 `ReadOnlyView`~~ ✅ **已落地（2026-10-22）** | 渲染与状态解耦（`render(const ReadOnlyView&)` 覆盖全部渲染模块） | 构建 0/0 + `--run-selftest`（新增 ReadOnlyView 零拷贝/同源断言）+ exec 713/0 + graph 151/0 + check_links 1768/0 |
 | **ARCH-R4** | 命令路由层：`ui/commands.h/.cpp`（AppCommand + 快捷键表 + dispatchCommand） | 三入口收敛 + 修 Ctrl+S | 构建 + 人工确认 Ctrl+S |
 
 ### 阶段 2：编辑侧事件化（ARCH-E）
@@ -452,13 +452,14 @@ SettingsPanel settings(ctx.config());
 |---|---|---|
 | 2026-10-21 | v0.1 | **建立本文（讨论稿）**：分层纪律 + 状态管理 + 双画布收敛 + 打包-校验同源 + 命令路由 + 职责边界 + 8 批迁移路线 + 5 个待拍板事项 |
 | 2026-10-22 | v1.0 | **用户拍板全部决策** —— ① 增量式重构；② 6 个对象拆分；③ CeSession 对称拆分；④ 先运行后编辑；⑤ 调用方直接持有对象；⑥ 工具+流程双保险；⑦ 事件形态 1（通知）；⑧ 渲染直接读；⑨ 保留 WorkflowModel；⑩ 复用 RunEvent；⑪ ReadOnlyView；⑫ 8 种 EditEvent；⑬ RunEvent 订阅化；⑭ `editor()` 完全退场；⑮ 删除 TextureCache 例外；⑯ 补依赖图；⑰ 补差异盘点；⑱ 补对象交互断言；⑲ 回归基线只升不降。**迁移路线重组为 ARCH-R / E / A / Z 四阶段。** |
-| 2026-10-22 | **v1.1（当前）** | **补充 §1.8 对象定义总表** —— ① `EventBus` / `RunSession` / `WorkflowModel` / `SelectionState` / `ReadOnlyView` / `AutosaveService` / `Diagnostics` / `Clipboard` / `WorkflowFile` / `AppContext` **10 个对象全部定稿**（一句话定义 + 维度表 + 限制 + 依赖图 + 注入示例 + `rg` 断言）；② 新增 `ARCH-D20`~`ARCH-D44`（25 条对象级决策）；③ §4 验收判据新增第 8 条（`AppContext` 运行时不可访问）；④ §5 风险表新增「`AppContext` 重新长成上帝对象」对策；⑤ §1.6 状态生命周期表 `RunSession` 改为「启动（常驻）」。 |
+| 2026-10-22 | **v1.1** | **补充 §1.8 对象定义总表** —— ① `EventBus` / `RunSession` / `WorkflowModel` / `SelectionState` / `ReadOnlyView` / `AutosaveService` / `Diagnostics` / `Clipboard` / `WorkflowFile` / `AppContext` **10 个对象全部定稿**（一句话定义 + 维度表 + 限制 + 依赖图 + 注入示例 + `rg` 断言）；② 新增 `ARCH-D20`~`ARCH-D44`（25 条对象级决策）；③ §4 验收判据新增第 8 条（`AppContext` 运行时不可访问）；④ §5 风险表新增「`AppContext` 重新长成上帝对象」对策；⑤ §1.6 状态生命周期表 `RunSession` 改为「启动（常驻）」。 |
+| 2026-10-22 | **v1.2（当前）** | **ARCH-R3 落地** —— ① 新增 `ReadOnlyView`（`readonly_view.h`）：每帧主循环统一构建一次（`ARCH-D30`）、字段 = 三个核心 + 配置（`ARCH-D31`）、快照空对象 = 未运行（`ARCH-D32`）、渲染签名 `render(const ReadOnlyView&)`（`ARCH-D33`）、零拷贝访问器 `nodes_for_render` / `edges_for_render`（`ARCH-D34`）、使用者 = 画布/参数面板/输出面板/状态栏/信息面板（`ARCH-D35`）；② 画布 / 输出面板 / 参数面板 / 状态栏 / 信息面板渲染读取统一走 view，交互写仍走 `editor()`（E3/E4 拆分后收敛）；③ `--run-selftest` 新增 ReadOnlyView 零拷贝/同源断言（`ARCH-D18`）。验证：构建 0/0 · run-selftest PASS · exec 713/0 · graph 151/0 · check_links 1768/0。 |
 
 ---
 
-**文档结束 · v1.1 定稿。**
-**下一步：按 ARCH-R3 实施（ReadOnlyView 落地；等用户启动）。**
-**已完成：ARCH-R1（RunSession 对象化）· ARCH-R2（RunEvent 订阅化）—— 审计见 docs/audit/audit_arch_r1.md / audit_arch_r2.md。**
+**文档结束 · v1.2 定稿。**
+**下一步：按 ARCH-R4 实施（命令路由层；等用户启动）。**
+**已完成：ARCH-R1（RunSession 对象化）· ARCH-R2（RunEvent 订阅化）· ARCH-R3（ReadOnlyView 渲染视图）—— 审计见 docs/audit/audit_arch_r1.md / audit_arch_r2.md / audit_arch_r3.md。**
 
 
 

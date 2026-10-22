@@ -269,7 +269,8 @@ bool exportNodeDocument(EditorState& state, const std::string& node_id)
     return true;
 }
 
-void drawOutputPanel(const char* title, bool* open, EditorState& state)
+void drawOutputPanel(const char* title, bool* open, const ReadOnlyView& view,
+                     EditorState& state)
 {
     if (!ImGui::Begin(title, open)) {
         ImGui::End();
@@ -277,27 +278,27 @@ void drawOutputPanel(const char* title, bool* open, EditorState& state)
     }
 
     const engine::Executor& executor = state.executor();
-    const engine::RunSnapshot& snapshot = state.run_snapshot_view();
+    const engine::RunSnapshot& snapshot = view.snapshot;   // ARCH-R3：渲染读取走 view
     const auto&             infos    = snapshot.nodes;
 
     // M_textio P3：最终输出（TextOutput）置顶（其余保持原顺序）
     std::vector<engine::RunNodeView> ordered;
     ordered.reserve(infos.size());
     for (const engine::RunNodeView& info : infos) {
-        const engine::Node* node = state.graph.findNode(info.node_id);
+        const engine::Node* node = view.find_node(info.node_id);
         if (node != nullptr && node->type == "TextOutput") {
             ordered.push_back(info);
         }
     }
     for (const engine::RunNodeView& info : infos) {
-        const engine::Node* node = state.graph.findNode(info.node_id);
+        const engine::Node* node = view.find_node(info.node_id);
         if (node == nullptr || node->type != "TextOutput") {
             ordered.push_back(info);
         }
     }
 
     // ---- 顶部工具条 ----
-    const std::string all_text = runOutputText(state.graph, snapshot);
+    const std::string all_text = runOutputText(view.graph(), snapshot);
     const bool        has_text = !all_text.empty();
 
     ImGui::BeginDisabled(!has_text);
@@ -326,9 +327,9 @@ void drawOutputPanel(const char* title, bool* open, EditorState& state)
     {
         std::string final_node;
         for (const engine::RunNodeView& info : ordered) {
-            const engine::Node* node = state.graph.findNode(info.node_id);
+            const engine::Node* node = view.find_node(info.node_id);
             if (node != nullptr && node->type == "TextOutput" &&
-                !node_output_text(state.graph, snapshot, info.node_id).empty()) {
+                !node_output_text(view.graph(), snapshot, info.node_id).empty()) {
                 final_node = info.node_id;
                 break;
             }
@@ -369,8 +370,8 @@ void drawOutputPanel(const char* title, bool* open, EditorState& state)
 
     // ---- 逐节点分段（M_textio P3：最终输出置顶 + 高亮 + 导出为文档）----
     for (const engine::RunNodeView& info : ordered) {
-        const std::string   body     = node_output_text(state.graph, snapshot, info.node_id);
-        const engine::Node* node     = state.graph.findNode(info.node_id);
+        const std::string   body     = node_output_text(view.graph(), snapshot, info.node_id);
+        const engine::Node* node     = view.find_node(info.node_id);
         const bool          is_final = (node != nullptr && node->type == "TextOutput");
         std::string         header   = node_header(info);
         if (is_final) {
