@@ -16,15 +16,15 @@
 namespace aiwrite::utils::diagnostics {
 
 // 安装首异常计数器（进程内只安装一次）
-void install_exception_counter();
+void installExceptionCounter();
 
 // 异常计数（自安装以来累计）
-long exception_total();
+long exceptionTotal();
 
 // 输出异常汇总（仅当计数变化时输出；内部限流，例如首条 + 每 100 条）
-void log_exception_summary();
+void logExceptionSummary();
 
 // 内存采样：工作集 / 私有字节 / 峰值（MB），tag 为业务侧补充信息（如节点/连线数）
-void log_memory_sample(const std::string& tag);
+void logMemorySample(const std::string& tag);
 
 } // namespace aiwrite::utils::diagnostics

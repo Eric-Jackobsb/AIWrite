@@ -22,9 +22,9 @@ struct RecentEntry {
 
 constexpr std::size_t kMaxRecentFiles = 10;
 
-std::vector<RecentEntry> load_recent_files();
-void                     push_recent_file(const std::string& path, const std::string& name);
-void                     clear_recent_files();
+std::vector<RecentEntry> loadRecentFiles();
+void                     pushRecentFile(const std::string& path, const std::string& name);
+void                     clearRecentFiles();
 
 // ---- M_patchAB §4（`PC-03` / `FEA-M2-02`）：最近列表**治理** ----
 //  * 打开前**校验存在性**：失效项在菜单里灰显（不可点）
@@ -35,8 +35,8 @@ struct RecentStatus {
     bool        exists = false; // 文件当前是否存在（目录不算）
 };
 
-std::vector<RecentStatus> recent_with_status();
-std::size_t               count_missing_recent();
-std::size_t               prune_missing_recent();
+std::vector<RecentStatus> recentWithStatus();
+std::size_t               countMissingRecent();
+std::size_t               pruneMissingRecent();
 
 } // namespace aiwrite::engine

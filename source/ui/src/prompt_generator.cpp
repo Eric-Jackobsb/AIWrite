@@ -38,13 +38,13 @@ PromptGenState& gen()
 bool resolve_generate_target(const json& params, ai::OfficialChatRequest* request, std::string* error)
 {
     const std::string      provider_id = params.value("provider", std::string("deepseek"));
-    const ai::ProviderSpec* spec       = ai::provider_specs().find(provider_id);
+    const ai::ProviderSpec* spec       = ai::providerSpecs().find(provider_id);
     if (spec != nullptr) {
-        request->options = ai::provider_options_from(*spec);
+        request->options = ai::providerOptionsFrom(*spec);
     }
     request->api_base = params.value("api_base", std::string());
     if (spec != nullptr) {
-        request->api_base = ai::resolve_api_base(*spec, request->api_base);
+        request->api_base = ai::resolveApiBase(*spec, request->api_base);
     }
     request->options.api_base = request->api_base;
 
@@ -59,15 +59,15 @@ bool resolve_generate_target(const json& params, ai::OfficialChatRequest* reques
 
     const std::string key_ref = params.value("api_key_ref", std::string());
     const std::string key     = params.value("api_key", std::string());
-    request->api_key = ai::resolve_api_key(key, spec != nullptr ? spec->env_names
+    request->api_key = ai::resolveApiKey(key, spec != nullptr ? spec->env_names
                                                                 : std::vector<std::string>());
     if (request->api_key.empty() && !key.empty()) {
         request->api_key = key;
     }
     if (request->api_key.empty() && spec != nullptr) {
-        const std::string ref = ai::resolve_key_ref(*spec, key_ref);
+        const std::string ref = ai::resolveKeyRef(*spec, key_ref);
         std::string       load_error;
-        request->api_key = utils::load_credential(ref, &load_error);
+        request->api_key = utils::loadCredential(ref, &load_error);
     }
     if (request->api_key.empty()) {
         const std::string env_hint = (spec != nullptr && !spec->env_names.empty())
@@ -106,7 +106,7 @@ void run_generation(const std::string& node_id, const json& params)
             request.stop           = params.value("stop", std::vector<std::string>{});
             request.seed           = params.value("seed", 0);
             if (resolve_generate_target(params, &request, &error_text)) {
-                const ai::OfficialChatResult result = ai::official_chat(request);
+                const ai::OfficialChatResult result = ai::officialChat(request);
                 if (result.ok && !result.text.empty()) {
                     result_text = result.text;
                 }
@@ -131,7 +131,7 @@ void run_generation(const std::string& node_id, const json& params)
 
 } // namespace
 
-void request_prompt_generation(const std::string& node_id, const json& params)
+void requestPromptGeneration(const std::string& node_id, const json& params)
 {
     std::lock_guard<std::mutex> lock(gen().mutex);
     if (gen().running) {
@@ -144,13 +144,13 @@ void request_prompt_generation(const std::string& node_id, const json& params)
     gen().worker = std::thread([node_id, params]() { run_generation(node_id, params); });
 }
 
-bool prompt_generation_running()
+bool promptGenerationRunning()
 {
     std::lock_guard<std::mutex> lock(gen().mutex);
     return gen().running;
 }
 
-bool prompt_generation_consume(const std::string& node_id, std::string* result, std::string* error)
+bool promptGenerationConsume(const std::string& node_id, std::string* result, std::string* error)
 {
     std::lock_guard<std::mutex> lock(gen().mutex);
     if (gen().running || gen().node_id != node_id || (gen().result.empty() && gen().error.empty())) {
@@ -168,7 +168,7 @@ bool prompt_generation_consume(const std::string& node_id, std::string* result, 
     return true;
 }
 
-void stop_prompt_generation(int wait_ms)
+void stopPromptGeneration(int wait_ms)
 {
     std::thread worker;
     {
@@ -182,7 +182,7 @@ void stop_prompt_generation(int wait_ms)
         return;
     }
     // running 但线程句柄已被分离的极端情况：轮询等待至超时
-    for (int waited = 0; prompt_generation_running() && waited < wait_ms; waited += 10) {
+    for (int waited = 0; promptGenerationRunning() && waited < wait_ms; waited += 10) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }

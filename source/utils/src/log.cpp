@@ -127,8 +127,8 @@ void init(bool attach_console)
         }
     }
 
-    paths::ensure_data_dirs();
-    const std::filesystem::path log_file = paths::app_log_file();
+    paths::ensureDataDirs();
+    const std::filesystem::path log_file = paths::appLogFile();
 
     std::vector<spdlog::sink_ptr> sinks;
     sinks.push_back(std::make_shared<RingBufferSink>());
@@ -158,7 +158,7 @@ void init(bool attach_console)
     // ---- workflow.log：独立文件 sink（设计 §11.1；M4-13 只补事件，不再新建 sink）----
     try {
         auto workflow_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-            paths::workflow_log_file().string(), 10 * 1024 * 1024, 5);
+            paths::workflowLogFile().string(), 10 * 1024 * 1024, 5);
         workflow_sink->set_formatter(std::make_unique<AppFormatter>());
 
         std::vector<spdlog::sink_ptr> workflow_sinks{workflow_sink};
@@ -170,7 +170,7 @@ void init(bool attach_console)
     }
     catch (const spdlog::spdlog_ex& ex) {
         std::fprintf(stderr, "[log] 无法创建工作流日志 %s: %s\n",
-                     paths::workflow_log_file().string().c_str(), ex.what());
+                     paths::workflowLogFile().string().c_str(), ex.what());
     }
 
     // 周期性落盘，便于用外部工具 tail app.log
@@ -232,15 +232,15 @@ std::vector<Entry> filter(Level min_level, bool use_level_filter, const std::str
     return result;
 }
 
-void clear_entries()
+void clearEntries()
 {
     std::lock_guard<std::mutex> lock(entries_mutex());
     mutable_entries().clear();
 }
 
-std::string file_path_string()
+std::string filePathString()
 {
-    return paths::app_log_file().string();
+    return paths::appLogFile().string();
 }
 
 // ---- M6：旧日志清理（接线 `advanced.log_ttl_days`；归口 PD-06）----
@@ -248,7 +248,7 @@ std::string file_path_string()
 //   * 只在 logs/ 里找**常规文件**，跳过正在写的 app.log / workflow.log
 //   * 年龄判据 = `last_write_time` 早于 (now - ttl_days)
 //   * 目录不存在 / ttl<=0 → 直接返回 0（**不创建目录**：清理不该有副作用）
-int purge_old_files(int ttl_days, std::string* error)
+int purgeOldFiles(int ttl_days, std::string* error)
 {
     if (error != nullptr) {
         error->clear();
@@ -257,14 +257,14 @@ int purge_old_files(int ttl_days, std::string* error)
         return 0; // 0 = 不清理（用户显式关闭）
     }
 
-    const std::filesystem::path dir        = paths::logs_dir();
+    const std::filesystem::path dir        = paths::logsDir();
     std::error_code             probe_code;
     if (!std::filesystem::is_directory(dir, probe_code)) {
         return 0; // 目录不存在：无需清理，也不是错误
     }
 
-    const std::filesystem::path keep_app      = paths::app_log_file();
-    const std::filesystem::path keep_workflow = paths::workflow_log_file();
+    const std::filesystem::path keep_app      = paths::appLogFile();
+    const std::filesystem::path keep_workflow = paths::workflowLogFile();
     const auto                  now           = std::filesystem::file_time_type::clock::now();
     const auto                  limit         = now - std::chrono::hours(24 * ttl_days);
 
@@ -303,9 +303,9 @@ int purge_old_files(int ttl_days, std::string* error)
     return removed;
 }
 
-std::string workflow_file_path_string()
+std::string workflowFilePathString()
 {
-    return paths::workflow_log_file().string();
+    return paths::workflowLogFile().string();
 }
 
 } // namespace aiwrite::log

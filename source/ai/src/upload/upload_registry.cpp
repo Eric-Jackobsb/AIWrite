@@ -84,11 +84,11 @@ std::string file_name_of(const std::string& path)
 
 } // namespace
 
-const std::vector<SiteUpload>& site_uploads()
+const std::vector<SiteUpload>& siteUploads()
 {
     static const std::vector<SiteUpload> units = [] {
         std::vector<SiteUpload> out;
-        const SiteUpload* const registrars[] = {site_upload_doubao(), site_upload_kimi()};
+        const SiteUpload* const registrars[] = {siteUploadDoubao(), siteUploadKimi()};
         for (const SiteUpload* unit : registrars) {
             if (unit != nullptr && unit->id != nullptr) {
                 out.push_back(*unit);
@@ -99,21 +99,21 @@ const std::vector<SiteUpload>& site_uploads()
     return units;
 }
 
-std::vector<std::string> implemented_site_uploads()
+std::vector<std::string> implementedSiteUploads()
 {
     std::vector<std::string> ids;
-    for (const SiteUpload& unit : site_uploads()) {
+    for (const SiteUpload& unit : siteUploads()) {
         ids.push_back(unit.id);
     }
     return ids;
 }
 
-const SiteUpload* site_upload_for(const std::string& id)
+const SiteUpload* siteUploadFor(const std::string& id)
 {
     if (id.empty()) {
         return nullptr;
     }
-    for (const SiteUpload& unit : site_uploads()) {
+    for (const SiteUpload& unit : siteUploads()) {
         if (id == unit.id) {
             return &unit;
         }
@@ -121,24 +121,24 @@ const SiteUpload* site_upload_for(const std::string& id)
     return nullptr;
 }
 
-std::string site_upload_error(const std::string& id)
+std::string siteUploadError(const std::string& id)
 {
     if (id.empty()) {
         return "该站点条目未声明 `web.upload_adapter`（图片上传需要它）—— 请在 assets/providers.json"
                " 的该条目 `web` 段加上 `upload_adapter`（已实现：" +
-               join_id_list(implemented_site_uploads()) + "）";
+               join_id_list(implementedSiteUploads()) + "）";
     }
-    if (site_upload_for(id) != nullptr) {
+    if (siteUploadFor(id) != nullptr) {
         return {};
     }
     return "web.upload_adapter=" + id + " 本版本尚未实现（已实现：" +
-           join_id_list(implemented_site_uploads()) +
+           join_id_list(implementedSiteUploads()) +
            "）—— 该站点暂不能自动上传图片：可先在浏览器里手动上传，或改用纯文本链路";
 }
 
-const SiteUpload* site_upload_of(const ProviderWebSpec& site)
+const SiteUpload* siteUploadOf(const ProviderWebSpec& site)
 {
-    return site_upload_for(site.upload_adapter);
+    return siteUploadFor(site.upload_adapter);
 }
 
 UploadPrepareOptions resolve_prepare_options(const SiteUpload& unit, const ProviderWebSpec& site,
@@ -150,7 +150,7 @@ UploadPrepareOptions resolve_prepare_options(const SiteUpload& unit, const Provi
     }
     if (!site.upload_accept.empty()) {
         // 表字段 = **可覆盖项**（站点 accept 串随版本变，不必改代码）
-        const std::vector<std::string> from_table = image_exts_from_accept(site.upload_accept);
+        const std::vector<std::string> from_table = imageExtsFromAccept(site.upload_accept);
         if (!from_table.empty()) {
             options.accept = from_table;
         }
@@ -159,12 +159,12 @@ UploadPrepareOptions resolve_prepare_options(const SiteUpload& unit, const Provi
         options.max_bytes = max_bytes;
     }
     if (options.tmp_dir.empty()) {
-        options.tmp_dir = default_upload_tmp_dir();
+        options.tmp_dir = defaultUploadTmpDir();
     }
     return options;
 }
 
-UploadResult upload_images(const UploadPlan& plan)
+UploadResult uploadImages(const UploadPlan& plan)
 {
     const auto start = std::chrono::steady_clock::now();
     const auto elapsed = [&start] {
@@ -174,9 +174,9 @@ UploadResult upload_images(const UploadPlan& plan)
     };
 
     UploadResult       result;
-    const SiteUpload* unit = site_upload_of(plan.site);
+    const SiteUpload* unit = siteUploadOf(plan.site);
     if (unit == nullptr) {
-        result.error = site_upload_error(plan.site.upload_adapter);
+        result.error = siteUploadError(plan.site.upload_adapter);
         result.steps = "未找到站点上传单元（web.upload_adapter=" + plan.site.upload_adapter + "）";
         return result;
     }
@@ -190,7 +190,7 @@ UploadResult upload_images(const UploadPlan& plan)
     // ① 图片值 → 本地路径（`aiwrite-asset:` 令牌 + 旧绝对路径，`I19`）
     std::vector<std::string> problems;
     const std::vector<std::string> values =
-        aiwrite::asset::to_local_paths(plan.image_values, &problems);
+        aiwrite::asset::toLocalPaths(plan.image_values, &problems);
     if (values.empty()) {
         result.error = "没有可用的图片值（" + join_values(plan.image_values) +
                        "）—— 请在图片节点选择图片，或在面板里把旧路径迁移到资源目录";
@@ -251,18 +251,18 @@ UploadResult upload_images(const UploadPlan& plan)
     for (const std::string& path : delivered) {
         file_names.push_back(file_name_of(path));
     }
-    web::begin_resource_capture(site_request.owner, site_key);
+    web::beginResourceCapture(site_request.owner, site_key);
 
     // 交件前的页面基线（供「页面新增」自动判据；采样失败静默 —— 诊断绝不干扰上传）
     PageState baseline_page;
     bool      have_baseline = false;
-    const std::string probe_script = page_state_script({expect.page_selector}, file_names);
+    const std::string probe_script = pageStateScript({expect.page_selector}, file_names);
     {
         std::string base_json;
         std::string base_error;
         if (web::run_script_sync(site_request, probe_script, kScriptPollMs, &base_json, &base_error)) {
             std::string parse_error;
-            have_baseline = parse_page_state(base_json, &baseline_page, &parse_error);
+            have_baseline = parsePageState(base_json, &baseline_page, &parse_error);
         }
     }
 
@@ -331,9 +331,9 @@ UploadResult upload_images(const UploadPlan& plan)
              web::take_resource_capture(site_request.owner, site_key)) {
             network.records.push_back(NetRecord{record.url, record.method, record.status});
         }
-        net_evidence = network.evidence_for(expect);
+        net_evidence = network.evidenceFor(expect);
         if (net_evidence.empty()) {
-            net_evidence = network.evidence_for_auto(); // 站点无关兜底（写请求 + 通用特征词）
+            net_evidence = network.evidenceForAuto(); // 站点无关兜底（写请求 + 通用特征词）
         }
 
         // 页面证据（只读采样；失败只记录，不中断 —— 页面可能刚好在重渲染）
@@ -343,11 +343,11 @@ UploadResult upload_images(const UploadPlan& plan)
                                  &script_error)) {
             PageState   state;
             std::string parse_error;
-            if (parse_page_state(state_json, &state, &parse_error)) {
-                page_evidence = match_page_evidence(state, expect);
+            if (parsePageState(state_json, &state, &parse_error)) {
+                page_evidence = matchPageEvidence(state, expect);
                 if (page_evidence.empty()) {
                     page_evidence =
-                        match_page_evidence_auto(state, have_baseline ? &baseline_page : nullptr);
+                        matchPageEvidenceAuto(state, have_baseline ? &baseline_page : nullptr);
                 }
                 last_issue.clear();
             }
@@ -388,7 +388,7 @@ UploadResult upload_images(const UploadPlan& plan)
     return result;
 }
 
-int upload_registry_selftest(int* passed_out)
+int uploadRegistrySelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
@@ -404,7 +404,7 @@ int upload_registry_selftest(int* passed_out)
     };
 
     // ① 注册表
-    const std::vector<std::string> ids = implemented_site_uploads();
+    const std::vector<std::string> ids = implementedSiteUploads();
     bool has_doubao = false;
     bool has_kimi   = false;
     for (const std::string& id : ids) {
@@ -412,15 +412,15 @@ int upload_registry_selftest(int* passed_out)
         has_kimi   = has_kimi || id == "builtin:kimi";
     }
     check(has_doubao && has_kimi, "注册表含 builtin:doubao 与 builtin:kimi");
-    check(site_upload_for(std::string("builtin:doubao")) != nullptr, "按 id 取单元（doubao）");
-    check(site_upload_for(std::string()) == nullptr, "空 id → nullptr");
-    check(site_upload_for(std::string("builtin:nope")) == nullptr, "未知 id → nullptr");
+    check(siteUploadFor(std::string("builtin:doubao")) != nullptr, "按 id 取单元（doubao）");
+    check(siteUploadFor(std::string()) == nullptr, "空 id → nullptr");
+    check(siteUploadFor(std::string("builtin:nope")) == nullptr, "未知 id → nullptr");
 
     // ② 未实现 / 未声明 → 可操作文案
-    check(site_upload_error(std::string("builtin:doubao")).empty(), "已实现 → 无错误文案");
-    check(site_upload_error(std::string()).find("upload_adapter") != std::string::npos,
+    check(siteUploadError(std::string("builtin:doubao")).empty(), "已实现 → 无错误文案");
+    check(siteUploadError(std::string()).find("upload_adapter") != std::string::npos,
           "未声明 upload_adapter → 文案指向该字段");
-    const std::string unknown_error = site_upload_error(std::string("builtin:nope"));
+    const std::string unknown_error = siteUploadError(std::string("builtin:nope"));
     check(unknown_error.find("尚未实现") != std::string::npos &&
               unknown_error.find("已实现") != std::string::npos &&
               unknown_error.find("手动上传") != std::string::npos,
@@ -428,8 +428,8 @@ int upload_registry_selftest(int* passed_out)
 
     // ③ 契约完整性（每个单元四件事都要有；页面/网络期望都要能判）
     ProviderWebSpec      blank_site;
-    const SiteUpload* const units[] = {site_upload_for(std::string("builtin:doubao")),
-                                       site_upload_for(std::string("builtin:kimi"))};
+    const SiteUpload* const units[] = {siteUploadFor(std::string("builtin:doubao")),
+                                       siteUploadFor(std::string("builtin:kimi"))};
     for (const SiteUpload* unit : units) {
         if (unit == nullptr) {
             check(false, "单元缺失（内部错误）");
@@ -446,7 +446,7 @@ int upload_registry_selftest(int* passed_out)
     }
 
     // ④ 准备参数合并（表覆盖 → 调用方限额 → 临时目录兜底）
-    if (const SiteUpload* doubao = site_upload_for(std::string("builtin:doubao"))) {
+    if (const SiteUpload* doubao = siteUploadFor(std::string("builtin:doubao"))) {
         ProviderWebSpec site;
         const UploadPrepareOptions defaults = resolve_prepare_options(*doubao, site, 0);
         check(!defaults.accept.empty() && !defaults.tmp_dir.empty(),
@@ -462,18 +462,18 @@ int upload_registry_selftest(int* passed_out)
     {
         UploadPlan plan;
         plan.image_values = {"aiwrite-asset:deadbeef"};
-        const UploadResult no_adapter = upload_images(plan);
+        const UploadResult no_adapter = uploadImages(plan);
         check(!no_adapter.ok && no_adapter.error.find("upload_adapter") != std::string::npos,
               "未声明 adapter → 早期失败 + 指名该字段");
 
         plan.site.upload_adapter = "builtin:nope";
-        const UploadResult unknown = upload_images(plan);
+        const UploadResult unknown = uploadImages(plan);
         check(!unknown.ok && unknown.error.find("尚未实现") != std::string::npos,
               "未实现 adapter → 早期失败 + 可操作文案");
 
         plan.site.upload_adapter = "builtin:doubao";
         plan.image_values.clear();
-        const UploadResult no_image = upload_images(plan);
+        const UploadResult no_image = uploadImages(plan);
         check(!no_image.ok && no_image.error.find("没有可用的图片值") != std::string::npos,
               "无图片值 → 早期失败（不起窗口、不注入）");
     }

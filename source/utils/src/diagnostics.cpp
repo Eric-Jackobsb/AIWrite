@@ -73,7 +73,7 @@ LONG WINAPI first_chance_exception_handler(EXCEPTION_POINTERS* info)
 
 } // namespace
 
-void install_exception_counter()
+void installExceptionCounter()
 {
     if (g_counter_installed) {
         return;
@@ -84,14 +84,14 @@ void install_exception_counter()
     log::info("[诊断] 首异常计数器已安装（VEH；汇总输出见下）");
 }
 
-long exception_total()
+long exceptionTotal()
 {
     return g_exception_total.load(std::memory_order_relaxed);
 }
 
-void log_exception_summary()
+void logExceptionSummary()
 {
-    const long total = exception_total();
+    const long total = exceptionTotal();
     const long logged = g_logged_total.load(std::memory_order_relaxed);
     if (total == logged) {
         return; // 无新异常
@@ -112,7 +112,7 @@ void log_exception_summary()
               "最近一次于 " + describe_address(g_last_address.load()) + "（限流输出）");
 }
 
-void log_memory_sample(const std::string& tag)
+void logMemorySample(const std::string& tag)
 {
     PROCESS_MEMORY_COUNTERS_EX counters{};
     counters.cb = sizeof(counters);

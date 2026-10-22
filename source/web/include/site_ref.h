@@ -77,7 +77,7 @@ inline LoginRequest with_owner(LoginRequest request, const WebOwner& owner)
 // 登录请求所属站点键（origin）—— 会话归档 / 窗口归属判定（与 SessionStore 同源）
 inline std::string login_request_site(const LoginRequest& request)
 {
-    return site_key_of(request.url);
+    return siteKeyOf(request.url);
 }
 
 // 由配置表条目的 `web` 段构造请求（空字段回落内置默认 → 与改造前行为一致）
@@ -103,7 +103,7 @@ inline LoginRequest login_request_of(const ai::ProviderWebSpec& site, const std:
     request.token_expr       = site.token_expr;
     request.cookie_names     = site.cookie_names;
     // L4（PB2-27 / I15）：协议探测**只对内置协议站点适用**；DOM 站点 → false（不等 userToken、不注入端点）
-    request.probe_applicable = ai::probe_is_applicable(site);
+    request.probe_applicable = ai::probeIsApplicable(site);
     request.attach           = site.attach;  // M7B（B12-C2）：只携带，运行期不消费
     return request;
 }
@@ -169,9 +169,9 @@ enum class SessionBoot {
     StartAndProbe,  // 无可用窗口：离屏起一个（probe_after_load=true 自动探测）
 };
 
-inline SessionBoot plan_session_boot(bool has_token, bool window_open)
+inline SessionBoot plan_session_boot(bool hasToken, bool window_open)
 {
-    if (has_token) {
+    if (hasToken) {
         return SessionBoot::HaveToken;
     }
     // 只看「窗口是否开着」，**不**看浏览器是否已就绪：已开窗口时再 start() 会因

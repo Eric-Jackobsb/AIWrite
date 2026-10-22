@@ -3,6 +3,7 @@
 #include "log.h"
 #include "node_registry.h"
 #include "paths.h"
+#include "string_util.h"   // CLN-05：nowString 收敛
 #include "workflow_io.h"
 
 #include <chrono>
@@ -26,16 +27,6 @@ constexpr const char* kMetaKey = "autosave";
 
 // 历史轮转的最大扫描数（`autosave_clear()` 用它兜底清理，与 `ui.autosave_keep` 解耦）
 constexpr int kHistoryScanLimit = 64;
-
-std::string now_string()
-{
-    const std::time_t now = std::time(nullptr);
-    std::tm           local{};
-    localtime_s(&local, &now);
-    char buffer[32] = {};
-    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &local);
-    return buffer;
-}
 
 bool read_text(const std::filesystem::path& file, std::string* out)
 {
@@ -93,11 +84,11 @@ bool write_text_atomic(const std::filesystem::path& file, const std::string& bod
 
 } // namespace
 
-AutosavePaths autosave_paths(const std::filesystem::path& dir)
+AutosavePaths autosavePaths(const std::filesystem::path& dir)
 {
     AutosavePaths layout;
     // 默认落点 = `~/.brain-ai/snapshots`（复用 utils::paths::snapshots_dir()，不新增目录语义）
-    layout.dir    = dir.empty() ? aiwrite::paths::snapshots_dir() : dir;
+    layout.dir    = dir.empty() ? aiwrite::paths::snapshotsDir() : dir;
     layout.latest = layout.dir / "autosave.json";
     layout.temp   = layout.dir / "autosave.json.tmp";
     return layout;
@@ -108,18 +99,18 @@ std::filesystem::path AutosavePaths::history(int index) const
     return dir / ("autosave_" + std::to_string(index) + ".json");
 }
 
-std::string graph_content_signature(const Graph& graph)
+std::string graphContentSignature(const Graph& graph)
 {
-    nlohmann::json document = graph_to_json(graph);
+    nlohmann::json document = graphToJson(graph);
     // 视口（平移 / 缩放）不算「工作流变更」⇒ 不动画布也会被节流判为「无变化」
     document.erase("version");
     document.erase("viewport");
     return document.dump();
 }
 
-AutosaveInfo autosave_probe(const std::filesystem::path& dir)
+AutosaveInfo autosaveProbe(const std::filesystem::path& dir)
 {
-    const AutosavePaths layout = autosave_paths(dir);
+    const AutosavePaths layout = autosavePaths(dir);
 
     AutosaveInfo info;
     info.file = layout.latest;
@@ -172,14 +163,14 @@ AutosaveInfo autosave_probe(const std::filesystem::path& dir)
 bool autosave_write(const Graph& graph, const std::string& workflow_path, int keep,
                     AutosaveInfo* info, std::string* error, const std::filesystem::path& dir)
 {
-    const AutosavePaths layout = autosave_paths(dir);
+    const AutosavePaths layout = autosavePaths(dir);
     std::error_code     code;
 
-    nlohmann::json document = graph_to_json(graph);
+    nlohmann::json document = graphToJson(graph);
     nlohmann::json meta;
     meta["workflow_path"] = workflow_path;
     meta["name"]          = graph.name;
-    meta["saved_at"]      = now_string();
+    meta["saved_at"]      = utils::nowString();
     meta["saved_at_epoch"] = static_cast<long long>(std::time(nullptr)); // 仅便于排查（判定用文件 mtime）
     meta["nodes"]          = static_cast<int>(graph.nodes.size());
     meta["edges"]          = static_cast<int>(graph.edges.size());
@@ -226,9 +217,9 @@ bool autosave_write(const Graph& graph, const std::string& workflow_path, int ke
     return true;
 }
 
-bool autosave_load(Graph& graph, std::string* error, const std::filesystem::path& dir)
+bool autosaveLoad(Graph& graph, std::string* error, const std::filesystem::path& dir)
 {
-    const AutosavePaths layout = autosave_paths(dir);
+    const AutosavePaths layout = autosavePaths(dir);
 
     const auto fail = [error](const std::string& text) {
         if (error != nullptr) {
@@ -242,16 +233,16 @@ bool autosave_load(Graph& graph, std::string* error, const std::filesystem::path
         return fail("无法读取快照：" + layout.latest.string());
     }
     try {
-        return graph_from_json(nlohmann::json::parse(raw), graph, error);
+        return graphFromJson(nlohmann::json::parse(raw), graph, error);
     }
     catch (const std::exception& ex) {
         return fail(std::string("快照 JSON 解析失败：") + ex.what());
     }
 }
 
-bool autosave_clear(std::string* error, const std::filesystem::path& dir)
+bool autosaveClear(std::string* error, const std::filesystem::path& dir)
 {
-    const AutosavePaths layout = autosave_paths(dir);
+    const AutosavePaths layout = autosavePaths(dir);
     std::error_code     code;
     std::filesystem::remove(layout.latest, code);
     code.clear();
@@ -268,7 +259,7 @@ bool autosave_clear(std::string* error, const std::filesystem::path& dir)
 
 int autosave_cleanup_temp(std::string* error, const std::filesystem::path& dir)
 {
-    const AutosavePaths layout = autosave_paths(dir);
+    const AutosavePaths layout = autosavePaths(dir);
     std::error_code     code;
     int                 removed = 0;
     if (std::filesystem::exists(layout.temp, code)) {
@@ -286,7 +277,7 @@ int autosave_cleanup_temp(std::string* error, const std::filesystem::path& dir)
     return removed;
 }
 
-bool autosave_should_offer_restore(const AutosaveInfo& info, std::string* reason)
+bool autosaveShouldOfferRestore(const AutosaveInfo& info, std::string* reason)
 {
     const auto answer = [reason](bool value, const std::string& text) {
         if (reason != nullptr) {
@@ -383,7 +374,7 @@ Graph make_selftest_graph(std::string* node_id, std::string* error)
 
 } // namespace
 
-int autosave_selftest(int* passed_out)
+int autosaveSelftest(int* passed_out)
 {
     std::printf("[PC-01/02] 自动保存 / 崩溃恢复自检（场景全部在系统临时目录内构造）\n");
     CheckCounter counter;
@@ -394,7 +385,7 @@ int autosave_selftest(int* passed_out)
     std::filesystem::remove_all(dir, code);
     std::filesystem::create_directories(dir, code);
 
-    const AutosavePaths layout = autosave_paths(dir);
+    const AutosavePaths layout = autosavePaths(dir);
     counter.check(layout.latest.filename() == "autosave.json" && layout.dir == dir,
                   "路径：快照落在 <dir>/autosave.json（历史 autosave_<N>.json）");
 
@@ -402,7 +393,7 @@ int autosave_selftest(int* passed_out)
     std::string error;
     std::string input_id;
     const Graph graph           = make_selftest_graph(&input_id, &error);
-    const std::string signature = graph_content_signature(graph);
+    const std::string signature = graphContentSignature(graph);
     counter.check(!input_id.empty() && graph.nodes.size() == 2 && graph.edges.size() == 1,
                   "构造：测试图 2 节点 / 1 连线", error);
 
@@ -421,15 +412,15 @@ int autosave_selftest(int* passed_out)
     counter.check(info.saved_at.size() == 19, "写：元信息带本地时间戳（YYYY-MM-DD HH:MM:SS）",
                   info.saved_at);
 
-    const AutosaveInfo probed = autosave_probe(dir);
+    const AutosaveInfo probed = autosaveProbe(dir);
     counter.check(probed.ok && probed.workflow_path == workflow_file.string() && probed.nodes == 2,
                   "读：autosave_probe 读出元信息（不解析整图）", probed.error);
 
     // ---- ② VC-02：恢复后图内容与快照一致 ----
     Graph      restored;
-    const bool loaded = autosave_load(restored, &error, dir);
+    const bool loaded = autosaveLoad(restored, &error, dir);
     counter.check(loaded, "恢复：autosave_load 成功", error);
-    counter.check(graph_content_signature(restored) == signature,
+    counter.check(graphContentSignature(restored) == signature,
                   "恢复：图内容与快照一致（内容指纹逐字相同）");
     {
         const Node*  node  = restored.findNode(input_id);
@@ -442,8 +433,8 @@ int autosave_selftest(int* passed_out)
                   "恢复：视口（平移 / 缩放）一并恢复");
     {
         Graph direct;
-        counter.check(load_workflow(layout.latest, direct, &error) &&
-                          graph_content_signature(direct) == signature,
+        counter.check(loadWorkflow(layout.latest, direct, &error) &&
+                          graphContentSignature(direct) == signature,
                       "兼容：快照本身是可打开的普通工作流 JSON（autosave 节不影响解析）", error);
     }
 
@@ -452,7 +443,7 @@ int autosave_selftest(int* passed_out)
         Graph panned         = graph;
         panned.viewport_x    = graph.viewport_x + 500.0f;
         panned.viewport_zoom = 2.0f;
-        counter.check(graph_content_signature(panned) == signature,
+        counter.check(graphContentSignature(panned) == signature,
                       "指纹：平移 / 缩放不算变更（不会触发写盘）");
 
         Graph edited = graph;
@@ -463,7 +454,7 @@ int autosave_selftest(int* passed_out)
                 param->value = std::string("改过的文本（内容指纹应随之变化）");
             }
         }
-        counter.check(graph_content_signature(edited) != signature, "指纹：参数变化算变更");
+        counter.check(graphContentSignature(edited) != signature, "指纹：参数变化算变更");
     }
 
     // ---- ④ VC-01：模拟「写到一半进程被杀」----
@@ -473,7 +464,7 @@ int autosave_selftest(int* passed_out)
         half.close();
     }
     counter.check(std::filesystem::exists(layout.temp), "中断：已构造半截 JSON 的残留 .tmp");
-    const AutosaveInfo after_crash = autosave_probe(dir);
+    const AutosaveInfo after_crash = autosaveProbe(dir);
     counter.check(after_crash.ok && after_crash.nodes == 2,
                   "中断：恢复来源仍是**完整**快照（永不读 .tmp）", after_crash.error);
 
@@ -483,14 +474,39 @@ int autosave_selftest(int* passed_out)
                   "中断：残留 .tmp 可被清理（返回删除个数）", cleanup_error);
     {
         Graph after_cleanup;
-        counter.check(autosave_load(after_cleanup, &error, dir) &&
-                          graph_content_signature(after_cleanup) == signature,
+        counter.check(autosaveLoad(after_cleanup, &error, dir) &&
+                          graphContentSignature(after_cleanup) == signature,
                       "中断：清理后快照仍可正常加载（没产生半个 JSON）", error);
     }
     counter.check(autosave_write(graph, workflow_file.string(), kAutosaveKeepDefault, nullptr,
                                  &error, dir) &&
                       !std::filesystem::exists(layout.temp),
                   "中断后重写：成功且不留 .tmp", error);
+
+    // ---- ④b POL-C-02：原子写失败路径（写失败 → 原快照位置不动 + .tmp 自清理）----
+    //  模拟 rename 失败：把 autosave.json 换成同名**目录**（Windows 文件→目录 rename 必失败）
+    {
+        std::filesystem::remove(layout.latest, code);
+        code.clear();
+        std::filesystem::create_directory(layout.latest, code);
+        const bool fail_wrote = autosave_write(graph, workflow_file.string(),
+                                               kAutosaveKeepDefault, nullptr, &error, dir);
+        counter.check(!fail_wrote && !error.empty(),
+                      "写失败路径：rename 目标被目录顶替 ⇒ autosave_write 返回 false + 有错误信息",
+                      error);
+        counter.check(!std::filesystem::exists(layout.temp),
+                      "写失败路径：失败后 .tmp 被自清理（不留半成品）");
+        counter.check(std::filesystem::exists(layout.latest) &&
+                          std::filesystem::is_directory(layout.latest),
+                      "写失败路径：原快照位置未被破坏（rename 失败不产生半截覆盖）");
+        // 恢复现场：移除目录 → 重写恢复正常（证明失败非永久）
+        std::filesystem::remove(layout.latest, code);
+        code.clear();
+        counter.check(autosave_write(graph, workflow_file.string(), kAutosaveKeepDefault,
+                                     nullptr, &error, dir) &&
+                          !std::filesystem::exists(layout.temp),
+                      "写失败路径：清理后重写恢复正常（快照可继续写）", error);
+    }
 
     // ---- ⑤ 历史轮转（保留最近 N 份）----
     for (int round = 1; round <= 3; ++round) {
@@ -503,7 +519,7 @@ int autosave_selftest(int* passed_out)
                       !std::filesystem::exists(layout.history(3)),
                   "轮转：keep=2 ⇒ 只有 autosave_1 / autosave_2（最旧的被丢弃）");
 
-    autosave_clear(&error, dir);
+    autosaveClear(&error, dir);
     counter.check(!std::filesystem::exists(layout.latest) &&
                       !std::filesystem::exists(layout.history(1)) &&
                       !std::filesystem::exists(layout.history(2)),
@@ -515,30 +531,30 @@ int autosave_selftest(int* passed_out)
 
     // ---- ⑥ VC-02：恢复判定（4 种场景）----
     std::string reason;
-    autosave_clear(&error, dir);
-    const AutosaveInfo none = autosave_probe(dir);
-    counter.check(!none.ok && !autosave_should_offer_restore(none, &reason),
+    autosaveClear(&error, dir);
+    const AutosaveInfo none = autosaveProbe(dir);
+    counter.check(!none.ok && !autosaveShouldOfferRestore(none, &reason),
                   "判定：无快照 ⇒ 不提示（不打扰用户）");
 
     autosave_write(graph, "", 0, nullptr, &error, dir);
-    counter.check(autosave_should_offer_restore(autosave_probe(dir), &reason),
+    counter.check(autosaveShouldOfferRestore(autosaveProbe(dir), &reason),
                   "判定：未命名工作流 + 有快照 ⇒ 提示恢复", reason);
 
     const std::filesystem::path missing = dir / "不存在的工作流.json";
     autosave_write(graph, missing.string(), 0, nullptr, &error, dir);
-    counter.check(autosave_should_offer_restore(autosave_probe(dir), &reason),
+    counter.check(autosaveShouldOfferRestore(autosaveProbe(dir), &reason),
                   "判定：原工作流文件不存在 ⇒ 提示恢复", reason);
 
     const auto now = std::filesystem::file_time_type::clock::now();
-    save_workflow(graph, workflow_file, &error);
+    saveWorkflow(graph, workflow_file, &error);
     std::filesystem::last_write_time(workflow_file, now - std::chrono::hours(1), code);
     autosave_write(graph, workflow_file.string(), 0, nullptr, &error, dir);
-    counter.check(autosave_should_offer_restore(autosave_probe(dir), &reason),
+    counter.check(autosaveShouldOfferRestore(autosaveProbe(dir), &reason),
                   "判定：快照比工作流新 ⇒ 提示恢复", reason);
 
     std::filesystem::last_write_time(layout.latest, now - std::chrono::hours(2), code);
     std::filesystem::last_write_time(workflow_file, now, code);
-    counter.check(!autosave_should_offer_restore(autosave_probe(dir), &reason),
+    counter.check(!autosaveShouldOfferRestore(autosaveProbe(dir), &reason),
                   "判定：工作流比快照新（已保存）⇒ 不提示", reason);
 
     // ---- ⑦ 自清理（零残留）----

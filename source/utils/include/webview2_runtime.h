@@ -33,7 +33,7 @@ struct WebView2RuntimeInfo {
 };
 
 // 探测一次（纯读取；快，可在界面每帧之外调用一次后缓存）
-WebView2RuntimeInfo detect_webview2_runtime();
+WebView2RuntimeInfo detectWebview2Runtime();
 
 // 一行结论（界面 / 日志 / 诊断报告共用同一措辞）
 //  已装：`WebView2 运行时 126.0.2592.87（api）`
@@ -51,6 +51,6 @@ const char* webview2_download_url();
 //  * 返回**空串** = 本包未附带（此时界面/文档只给官方下载页 —— 不假装有）
 //  * 返回非空 = 文件确实存在（界面可提供「随包安装」按钮；是否需要管理员由该程序自己决定）
 //  * 注意：本机**不**代为下载、**不**静默安装（对方是第三方安装程序，须用户点击同意）
-std::string bundled_bootstrapper_path();
+std::string bundledBootstrapperPath();
 
 } // namespace aiwrite::utils

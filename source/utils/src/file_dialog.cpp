@@ -51,7 +51,7 @@ std::string to_string(const NFD::UniquePathU8& path)
 
 } // namespace
 
-bool file_dialog_available()
+bool fileDialogAvailable()
 {
     NfdSession session;
     return session.ok();
@@ -143,7 +143,7 @@ std::vector<std::string> open_files(const std::vector<FileFilter>& filters,
     return picked;
 }
 
-std::string pick_folder(const std::string& default_path)
+std::string pickFolder(const std::string& default_path)
 {
     NfdSession session;
     if (!session.ok()) {
@@ -202,7 +202,7 @@ std::string save_file(const std::vector<FileFilter>& filters, const std::string&
 }
 
 // M5-03：在资源管理器中定位文件（文件不存在时打开其所在目录）
-bool open_in_explorer(const std::string& path)
+bool openInExplorer(const std::string& path)
 {
     if (path.empty()) {
         return false;
@@ -237,7 +237,7 @@ bool open_in_explorer(const std::string& path)
 
 // M6：打开目录（自动打开归档目录用）
 //  * 目录 → 直接打开；文件 → 打开其所在目录；两者都不存在 → 报错返回 false
-bool open_folder(const std::string& path)
+bool openFolder(const std::string& path)
 {
     if (path.empty()) {
         return false;

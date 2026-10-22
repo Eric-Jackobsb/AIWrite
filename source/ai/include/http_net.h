@@ -35,7 +35,7 @@ namespace aiwrite::ai {
 // 环境变量取值（默认 = `std::getenv`；自检可注入假环境 ⇒ 断言不依赖开发机环境）
 using EnvLookup = std::function<std::string(const char* name)>;
 
-EnvLookup default_env_lookup();
+EnvLookup defaultEnvLookup();
 
 struct HttpNetOptions {
     std::string proxy;         // 空 = 不代理；否则形如 `http://host:port`（可含 `user:pass@`）
@@ -46,10 +46,10 @@ struct HttpNetOptions {
 // ---- 纯函数（离线断言用）----
 
 // URL 的**主机名**（去 scheme / userinfo / 端口 / 路径；小写）—— `NO_PROXY` 判据与日志共用
-std::string host_of_url(const std::string& url);
+std::string hostOfUrl(const std::string& url);
 
 // `NO_PROXY` 是否命中该 URL（`*` / 精确 / 后缀 `.corp.com` / `host:port` / 逗号分隔 / 大小写不敏感）
-bool no_proxy_matches(const std::string& url, const std::string& no_proxy);
+bool noProxyMatches(const std::string& url, const std::string& no_proxy);
 
 // 解析代理（返回空串 = 不代理）；`source` 回传命中来源（可为 nullptr）
 //  * `explicit_no_proxy` 非空 ⇒ **覆盖**环境变量 `NO_PROXY`（否则读环境变量）
@@ -58,17 +58,17 @@ std::string resolve_proxy(const std::string& url, const std::string& explicit_pr
                           const EnvLookup& env, std::string* source);
 
 // 由配置 + 环境解析本次调用的网络选项
-HttpNetOptions resolve_http_net(const std::string& url, const Config& config, const EnvLookup& env);
+HttpNetOptions resolveHttpNet(const std::string& url, const Config& config, const EnvLookup& env);
 // 便捷重载：进程配置缓存（`app_config()`）+ 真实环境
-HttpNetOptions resolve_http_net(const std::string& url);
+HttpNetOptions resolveHttpNet(const std::string& url);
 
 // ---- 应用点（唯一副作用处）----
 
 // 把结论应用到客户端：`set_proxy`（含 `user:pass@` 的 basic 认证）+ 证书校验开关
 //  * `auth_style` 之类无关；**不**改任何超时（超时归 `PB2-04` 表驱动 / `timeout.*`）
-void apply_http_net(httplib::Client& client, const HttpNetOptions& options);
+void applyHttpNet(httplib::Client& client, const HttpNetOptions& options);
 
 // 诊断一行（**口令打码**）：例 `代理 = http://127.0.0.1:7890（来源 配置）；证书校验 = 严格`
-std::string describe_http_net(const HttpNetOptions& options);
+std::string describeHttpNet(const HttpNetOptions& options);
 
 } // namespace aiwrite::ai

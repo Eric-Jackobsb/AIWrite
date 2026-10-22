@@ -72,7 +72,7 @@ void draw_result_images(const engine::RunNodeView& info, float image_height)
     for (std::size_t index = 0; index < info.images.size(); ++index) {
         const std::string& path = info.images[index];
         ImGui::PushID(static_cast<int>(index));
-        const TextureInfo texture = texture_for(path);
+        const TextureInfo texture = textureFor(path);
         if (texture.texture != 0) {
             const float available = ImGui::GetContentRegionAvail().x;
             float       width     = static_cast<float>(texture.width);
@@ -104,7 +104,7 @@ void draw_result_images(const engine::RunNodeView& info, float image_height)
             ImGui::PopStyleColor();
         }
         if (ImGui::SmallButton("打开所在文件夹")) {
-            utils::open_in_explorer(path);
+            utils::openInExplorer(path);
         }
         ImGui::SameLine();
         ImGui::TextDisabled("%s（%d×%d）", path.c_str(), texture.width, texture.height);
@@ -124,7 +124,7 @@ void draw_image_preview_modal()
         return;
     }
 
-    const TextureInfo texture = texture_for(g_preview_path);
+    const TextureInfo texture = textureFor(g_preview_path);
     ImGui::TextUnformatted(g_preview_path.c_str());
     if (texture.texture != 0) {
         const ImVec2 viewport = ImGui::GetMainViewport()->Size;
@@ -153,7 +153,7 @@ void draw_image_preview_modal()
     }
 
     if (ImGui::Button("打开所在文件夹", ImVec2(140.0f, 0.0f))) {
-        utils::open_in_explorer(g_preview_path);
+        utils::openInExplorer(g_preview_path);
     }
     ImGui::SameLine();
     if (ImGui::Button("关闭", ImVec2(100.0f, 0.0f))) {
@@ -171,10 +171,10 @@ std::string node_output_text(const engine::Graph& graph, const engine::Executor&
     return engine::nodeOutputText(graph, executor.outputs(), node_id);
 }
 
-std::string run_output_text(const engine::Graph& graph, const engine::Executor& executor)
+std::string runOutputText(const engine::Graph& graph, const engine::Executor& executor)
 {
     // PB-01：单一实现 —— 走快照重载（快照文本由 makeSnapshot 用同一规则落定）
-    return run_output_text(graph, engine::makeSnapshot(graph, executor));
+    return runOutputText(graph, engine::makeSnapshot(graph, executor));
 }
 
 std::string node_output_text(const engine::Graph& graph, const engine::RunSnapshot& snapshot,
@@ -185,7 +185,7 @@ std::string node_output_text(const engine::Graph& graph, const engine::RunSnapsh
     return view != nullptr ? view->text : std::string();
 }
 
-std::string run_output_text(const engine::Graph& graph, const engine::RunSnapshot& snapshot)
+std::string runOutputText(const engine::Graph& graph, const engine::RunSnapshot& snapshot)
 {
     (void)graph;
     std::string text;
@@ -207,7 +207,7 @@ std::string run_output_text(const engine::Graph& graph, const engine::RunSnapsho
     return text;
 }
 
-bool export_node_document(EditorState& state, const std::string& node_id)
+bool exportNodeDocument(EditorState& state, const std::string& node_id)
 {
     const engine::Node* node = state.graph.findNode(node_id);
     if (node == nullptr) {
@@ -217,7 +217,7 @@ bool export_node_document(EditorState& state, const std::string& node_id)
     const engine::RunNodeView* view     = snapshot.find(node_id);
     const std::string body = node_output_text(state.graph, snapshot, node_id);
     if (body.empty()) {
-        state.set_status("该节点暂无可导出的运行结果（请先运行）");
+        state.setStatus("该节点暂无可导出的运行结果（请先运行）");
         return false;
     }
     std::string label = "输出";
@@ -227,8 +227,8 @@ bool export_node_document(EditorState& state, const std::string& node_id)
             label = text;
         }
     }
-    const std::string stamp = utils::document_stamp_now();
-    std::string stem = state.workflow_display_name(); // M_textio P5：文件名主干可由参数覆盖
+    const std::string stamp = utils::documentStampNow();
+    std::string stem = state.workflowDisplayName(); // M_textio P5：文件名主干可由参数覆盖
     if (const engine::Param* name_param = node->findParam("file_name")) {
         const std::string text = name_param->text();
         if (!text.empty()) {
@@ -239,7 +239,7 @@ bool export_node_document(EditorState& state, const std::string& node_id)
     if (const engine::Param* dir_param = node->findParam("export_dir")) {
         default_dir = dir_param->text();
     }
-    const std::string default_name = utils::render_document_name(stem, stamp, "md");
+    const std::string default_name = utils::renderDocumentName(stem, stamp, "md");
     const std::string path =
         utils::save_file({{"Markdown", "md"}, {"文本", "txt"}}, default_dir, default_name);
     if (path.empty()) {
@@ -251,25 +251,25 @@ bool export_node_document(EditorState& state, const std::string& node_id)
     request.include_meta  = true;
     request.overwrite     = true; // 已在保存对话框确认
     request.path          = path;
-    request.meta.workflow = state.workflow_display_name();
-    request.meta.stamp    = utils::document_time_text();
+    request.meta.workflow = state.workflowDisplayName();
+    request.meta.stamp    = utils::documentTimeText();
     if (view != nullptr) {
         request.meta.node_id     = view->node_id;
         request.meta.state       = engine::nodeStateName(view->state);
         request.meta.duration_ms = view->duration_ms;
     }
-    const utils::ExportResult result = utils::export_text_document(request);
+    const utils::ExportResult result = utils::exportTextDocument(request);
     if (!result.ok) {
-        state.set_status("导出文档失败：" + result.error);
+        state.setStatus("导出文档失败：" + result.error);
         log::error("[输出面板] 导出文档失败：" + result.error);
         return false;
     }
-    state.set_status("已导出文档：" + result.path);
+    state.setStatus("已导出文档：" + result.path);
     log::info("[输出面板] 已导出文档：" + result.path);
     return true;
 }
 
-void draw_output_panel(const char* title, bool* open, EditorState& state)
+void drawOutputPanel(const char* title, bool* open, EditorState& state)
 {
     if (!ImGui::Begin(title, open)) {
         ImGui::End();
@@ -297,12 +297,12 @@ void draw_output_panel(const char* title, bool* open, EditorState& state)
     }
 
     // ---- 顶部工具条 ----
-    const std::string all_text = run_output_text(state.graph, snapshot);
+    const std::string all_text = runOutputText(state.graph, snapshot);
     const bool        has_text = !all_text.empty();
 
     ImGui::BeginDisabled(!has_text);
     if (ImGui::Button("复制全文")) {
-        copy_text(all_text, "[输出面板] 全文");
+        copyText(all_text, "[输出面板] 全文");
     }
     ImGui::SameLine();
     if (ImGui::Button("导出到文件…")) {
@@ -336,7 +336,7 @@ void draw_output_panel(const char* title, bool* open, EditorState& state)
         ImGui::SameLine();
         ImGui::BeginDisabled(final_node.empty());
         if (ImGui::Button("导出最终输出为文档…")) {
-            export_node_document(state, final_node);
+            exportNodeDocument(state, final_node);
         }
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -401,12 +401,12 @@ void draw_output_panel(const char* title, bool* open, EditorState& state)
                 const std::string view_id = "##result_" + info.node_id;
                 draw_readonly_text(view_id.c_str(), body, 10.0f, kDisplayLimit);
                 if (ImGui::Button("复制该节点")) {
-                    copy_text(body, "[输出面板] " + info.node_id);
+                    copyText(body, "[输出面板] " + info.node_id);
                 }
                 if (is_final) {
                     ImGui::SameLine();
                     if (ImGui::Button("导出为文档…")) {
-                        export_node_document(state, info.node_id);
+                        exportNodeDocument(state, info.node_id);
                     }
                     if (ImGui::IsItemHovered()) {
                         ImGui::SetTooltip("把该节点的最终输出导出为 .md/.txt（与预览同源，含元信息头）");

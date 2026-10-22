@@ -41,7 +41,7 @@ struct ProviderOptions {
 };
 
 // 由配置表条目生成请求参数（纯函数；节点 / 自检共用）
-ProviderOptions provider_options_from(const ProviderSpec& spec);
+ProviderOptions providerOptionsFrom(const ProviderSpec& spec);
 
 struct OfficialChatRequest {
     std::string api_base = "https://api.deepseek.com";
@@ -90,46 +90,46 @@ struct OfficialChatResult {
 };
 
 // ---- 纯函数（离线断言用）----
-std::string    build_endpoint(const std::string& api_base);
+std::string    buildEndpoint(const std::string& api_base);
 // M_patchB L1 / PB2-04：可指定请求路径（如 /v1/messages、含 {model} 占位）
-std::string    build_endpoint(const std::string& api_base, const std::string& chat_path);
-std::string    resolve_api_key(const std::string& param_key);
+std::string    buildEndpoint(const std::string& api_base, const std::string& chat_path);
+std::string    resolveApiKey(const std::string& param_key);
 // M_patchB L1 / PB2-04：环境变量名按序尝试（空列表 = 仅 DEEPSEEK_API_KEY）
-std::string    resolve_api_key(const std::string& param_key,
+std::string    resolveApiKey(const std::string& param_key,
                                const std::vector<std::string>& env_names);
 // M_patchB L1 / PB2-04：按认证风格生成认证头（bearer/api-key/x-api-key/none）
 std::vector<std::pair<std::string, std::string>> build_auth_headers(const ProviderOptions& options,
                                                                     const std::string& api_key);
 // M_patchB L1 / PB2-04：把 {model} 占位替换为实际模型名
-std::string    resolve_chat_path(const std::string& chat_path, const std::string& model);
+std::string    resolveChatPath(const std::string& chat_path, const std::string& model);
 
 // M7 / P7a-11：HTTP 错误分类（**公开纯函数** → 可离线断言「参数 / 内容策略 / 鉴权 / 限流 / 服务端」文案）
-std::string    classify_http_error(int status, const std::string& body);
+std::string    classifyHttpError(int status, const std::string& body);
 
 // M7 / P7a-10：字节数 → 便于阅读的体积文本（< 1 MB 用 KB，否则用 MB；1 位小数）
-std::string    human_bytes(std::size_t bytes);
+std::string    humanBytes(std::size_t bytes);
 
 // M7-05：内容（魔数）→ MIME；认不出来返回空串
-std::string    image_mime_from_bytes(const unsigned char* data, std::size_t size);
+std::string    imageMimeFromBytes(const unsigned char* data, std::size_t size);
 // M5-02 / M7-05：路径 → MIME（**内容优先**，扩展名回退；未知扩展名仍是 image/png）
-std::string    image_mime_from_path(const std::string& path);
+std::string    imageMimeFromPath(const std::string& path);
 // M5-02：读文件 → "data:<mime>;base64,<...>"；失败返回空串并把原因写入 *error
 std::string    encode_image_data_url(const std::string& path, std::size_t max_bytes,
                                      std::string* error);
 
-nlohmann::json build_request_body(const OfficialChatRequest& request);
+nlohmann::json buildRequestBody(const OfficialChatRequest& request);
 // M5-02：已编码图片版本的请求体（official_chat 用它避免重复编码；失败图不应出现在列表里）
-nlohmann::json build_request_body(const OfficialChatRequest& request,
+nlohmann::json buildRequestBody(const OfficialChatRequest& request,
                                   const std::vector<std::string>& image_data_urls);
 
 // 实际调用（阻塞）
-OfficialChatResult official_chat(const OfficialChatRequest& request);
+OfficialChatResult officialChat(const OfficialChatRequest& request);
 
 // ---- M7 / P7a-08：图片编码缓存与计数（自检用）----
 //  * 缓存键 = **路径 + 修改时间 + 文件大小**（文件一变就重编码，不会用到过期内容）
 //  * `image_encode_count()` = 本进程内**真正执行 base64 编码**的张数（缓存命中不计数）
 //  * 缓存有上限（超出即整体清空）—— 避免大图 data URL 长期占内存
-std::size_t image_encode_count();
-void        reset_image_encode_cache();
+std::size_t imageEncodeCount();
+void        resetImageEncodeCache();
 
 } // namespace aiwrite::ai

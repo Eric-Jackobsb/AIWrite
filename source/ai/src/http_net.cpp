@@ -1,6 +1,7 @@
 #include "http_net.h"
 
 #include "log.h"
+#include "string_util.h"   // CLN-05：trim/toLower 收敛
 
 #include <algorithm>
 #include <cctype>
@@ -10,24 +11,6 @@
 namespace aiwrite::ai {
 namespace {
 
-std::string lower(std::string text)
-{
-    for (char& ch : text) {
-        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    }
-    return text;
-}
-
-std::string trim(const std::string& text)
-{
-    const auto begin = text.find_first_not_of(" \t\r\n");
-    if (begin == std::string::npos) {
-        return {};
-    }
-    const auto end = text.find_last_not_of(" \t\r\n");
-    return text.substr(begin, end - begin + 1);
-}
-
 // 逗号分隔切分（空项丢弃）
 std::vector<std::string> split_commas(const std::string& text)
 {
@@ -35,7 +18,7 @@ std::vector<std::string> split_commas(const std::string& text)
     std::size_t              begin = 0;
     while (begin <= text.size()) {
         const std::size_t comma = text.find(',', begin);
-        const std::string part   = trim(text.substr(
+        const std::string part   = utils::trim(text.substr(
             begin, comma == std::string::npos ? std::string::npos : comma - begin));
         if (!part.empty()) {
             items.push_back(part);
@@ -76,7 +59,7 @@ std::string strip_port(const std::string& host, bool* has_port)
 
 } // namespace
 
-EnvLookup default_env_lookup()
+EnvLookup defaultEnvLookup()
 {
     return [](const char* name) {
         if (name == nullptr) {
@@ -87,7 +70,7 @@ EnvLookup default_env_lookup()
     };
 }
 
-std::string host_of_url(const std::string& url)
+std::string hostOfUrl(const std::string& url)
 {
     std::string       rest   = url;
     const std::size_t scheme = rest.find("://");
@@ -102,17 +85,17 @@ std::string host_of_url(const std::string& url)
     if (at != std::string::npos) {
         rest = rest.substr(at + 1);
     }
-    return lower(strip_port(rest, nullptr));
+    return utils::toLower(strip_port(rest, nullptr));
 }
 
-bool no_proxy_matches(const std::string& url, const std::string& no_proxy)
+bool noProxyMatches(const std::string& url, const std::string& no_proxy)
 {
-    const std::string host = host_of_url(url);
-    if (host.empty() || trim(no_proxy).empty()) {
+    const std::string host = hostOfUrl(url);
+    if (host.empty() || utils::trim(no_proxy).empty()) {
         return false;
     }
     for (const std::string& raw : split_commas(no_proxy)) {
-        const std::string item = lower(raw);
+        const std::string item = utils::toLower(raw);
         if (item == "*") {
             return true;
         }
@@ -136,7 +119,7 @@ bool no_proxy_matches(const std::string& url, const std::string& no_proxy)
             if (at != std::string::npos) {
                 url_host = url_host.substr(at + 1);
             }
-            if (lower(url_host) == item) {
+            if (utils::toLower(url_host) == item) {
                 return true;
             }
             continue;
@@ -170,18 +153,18 @@ std::string resolve_proxy(const std::string& url, const std::string& explicit_pr
             *source = text;
         }
     };
-    const EnvLookup lookup = env ? env : default_env_lookup();
+    const EnvLookup lookup = env ? env : defaultEnvLookup();
 
     // `[network].no_proxy` 非空 ⇒ 覆盖环境变量（口径：显式配置 > 环境）
-    const std::string no_proxy = !trim(explicit_no_proxy).empty() ? trim(explicit_no_proxy)
-                                                                  : trim(lookup("NO_PROXY"));
-    if (!no_proxy.empty() && no_proxy_matches(url, no_proxy)) {
+    const std::string no_proxy = !utils::trim(explicit_no_proxy).empty() ? utils::trim(explicit_no_proxy)
+                                                                  : utils::trim(lookup("NO_PROXY"));
+    if (!no_proxy.empty() && noProxyMatches(url, no_proxy)) {
         set_source("NO_PROXY");
         return {};
     }
-    if (!trim(explicit_proxy).empty()) {
+    if (!utils::trim(explicit_proxy).empty()) {
         set_source("配置");
-        return trim(explicit_proxy);
+        return utils::trim(explicit_proxy);
     }
     if (!proxy_from_env) {
         set_source("无");
@@ -192,7 +175,7 @@ std::string resolve_proxy(const std::string& url, const std::string& explicit_pr
                                        https_target ? "https_proxy" : "http_proxy", "ALL_PROXY",
                                        "all_proxy"};
     for (const char* name : names) {
-        const std::string value = trim(lookup(name));
+        const std::string value = utils::trim(lookup(name));
         if (!value.empty()) {
             set_source(name);
             return value;
@@ -202,7 +185,7 @@ std::string resolve_proxy(const std::string& url, const std::string& explicit_pr
     return {};
 }
 
-HttpNetOptions resolve_http_net(const std::string& url, const Config& config, const EnvLookup& env)
+HttpNetOptions resolveHttpNet(const std::string& url, const Config& config, const EnvLookup& env)
 {
     HttpNetOptions options;
     options.proxy = resolve_proxy(url, config.network.proxy, config.network.proxy_from_env,
@@ -214,12 +197,12 @@ HttpNetOptions resolve_http_net(const std::string& url, const Config& config, co
     return options;
 }
 
-HttpNetOptions resolve_http_net(const std::string& url)
+HttpNetOptions resolveHttpNet(const std::string& url)
 {
-    return resolve_http_net(url, app_config(), default_env_lookup());
+    return resolveHttpNet(url, appConfig(), defaultEnvLookup());
 }
 
-void apply_http_net(httplib::Client& client, const HttpNetOptions& options)
+void applyHttpNet(httplib::Client& client, const HttpNetOptions& options)
 {
     // 证书校验：显式设置（默认严格；只有 `insecure_tls=true` 才关）
     client.enable_server_certificate_verification(options.verify_tls);
@@ -259,7 +242,7 @@ void apply_http_net(httplib::Client& client, const HttpNetOptions& options)
         }
     }
     if (host.empty()) {
-        log::warn("[网络] 代理地址解析失败，已忽略：" + describe_http_net(options));
+        log::warn("[网络] 代理地址解析失败，已忽略：" + describeHttpNet(options));
         return;
     }
     client.set_proxy(host, port);
@@ -268,7 +251,7 @@ void apply_http_net(httplib::Client& client, const HttpNetOptions& options)
     }
 }
 
-std::string describe_http_net(const HttpNetOptions& options)
+std::string describeHttpNet(const HttpNetOptions& options)
 {
     std::string proxy_text = "直连（未走代理）";
     if (!options.proxy.empty()) {

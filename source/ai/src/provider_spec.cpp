@@ -2,6 +2,7 @@
 
 #include "log.h"
 #include "paths.h"
+#include "string_util.h"   // CLN-05：trim/toLower 收敛
 
 #include <algorithm>
 #include <cctype>
@@ -21,24 +22,6 @@ namespace {
 using nlohmann::json;
 
 constexpr int kSchemaVersion = 1;
-
-std::string trim(const std::string& text)
-{
-    const auto begin = text.find_first_not_of(" \t\r\n");
-    if (begin == std::string::npos) {
-        return {};
-    }
-    const auto end = text.find_last_not_of(" \t\r\n");
-    return text.substr(begin, end - begin + 1);
-}
-
-std::string lower(std::string text)
-{
-    for (char& ch : text) {
-        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    }
-    return text;
-}
 
 bool starts_with(const std::string& text, const std::string& prefix)
 {
@@ -132,7 +115,7 @@ bool read_string_map(const json& node, const char* key,
 // ---- 明文密钥检测（键名 + 值双重；`token_expr` 是表达式，允许）----
 bool looks_like_secret_value(const std::string& value)
 {
-    const std::string text = trim(value);
+    const std::string text = utils::trim(value);
     if (starts_with(text, "sk-") && text.size() >= 12) {
         return true;
     }
@@ -154,7 +137,7 @@ bool looks_like_secret_value(const std::string& value)
 
 bool is_secret_key(const std::string& key)
 {
-    const std::string name = lower(key);
+    const std::string name = utils::toLower(key);
     if (name == "token_expr" || name == "cookie_names" || name == "notes" ||
         name == "docs_url" || name == "key_ref_default") {
         return false; // 表达式 / Cookie 名清单 / 引用名 / 说明，不是密钥本体
@@ -262,14 +245,14 @@ void collect_unknown(const json& node, const std::set<std::string>& allowed,
 
 } // namespace
 
-const ProviderWebEndpoints& default_deepseek_web_endpoints()
+const ProviderWebEndpoints& defaultDeepseekWebEndpoints()
 {
     static const ProviderWebEndpoints endpoints; // 与改造前常量逐字一致
     return endpoints;
 }
 
 // M_patchB L1 续（PB2-17）：生效条目 → 网页版站点参数（web 条目用自己；否则回落表内第一个 web 条目）
-ProviderWebSpec web_spec_for(const ProviderSpec* spec, const ProviderSpecs* table)
+ProviderWebSpec webSpecFor(const ProviderSpec* spec, const ProviderSpecs* table)
 {
     if (spec != nullptr && spec->kind == "web") {
         return spec->web;
@@ -285,7 +268,7 @@ ProviderWebSpec web_spec_for(const ProviderSpec* spec, const ProviderSpecs* tabl
     return ProviderWebSpec{};
 }
 
-std::string web_provider_id_for(const ProviderSpec* spec, const ProviderSpecs* table)
+std::string webProviderIdFor(const ProviderSpec* spec, const ProviderSpecs* table)
 {
     if (spec != nullptr && spec->kind == "web") {
         return spec->id;
@@ -302,7 +285,7 @@ std::string web_provider_id_for(const ProviderSpec* spec, const ProviderSpecs* t
 }
 
 // ---- M_patchB L1 修订（PB2-22 / D-22② / I14）：**严格**站点解析（不回落）----
-ProviderWebSpec strict_web_spec_for(const ProviderSpec* spec)
+ProviderWebSpec strictWebSpecFor(const ProviderSpec* spec)
 {
     if (spec == nullptr || spec->kind != "web") {
         return {}; // 非网页版条目**没有**站点（绝不回落到「表内第一个 web 条目」）
@@ -310,7 +293,7 @@ ProviderWebSpec strict_web_spec_for(const ProviderSpec* spec)
     return spec->web;
 }
 
-std::string strict_web_provider_id_for(const ProviderSpec* spec)
+std::string strictWebProviderIdFor(const ProviderSpec* spec)
 {
     if (spec == nullptr || spec->kind != "web") {
         return {};
@@ -329,7 +312,7 @@ std::string web_site_guidance()
 }
 
 // 字段名 / Cookie 名清单拼接（界面与警告文案共用）
-std::string join_names(const std::vector<std::string>& items)
+std::string joinNames(const std::vector<std::string>& items)
 {
     std::string joined;
     for (const std::string& item : items) {
@@ -343,7 +326,7 @@ std::string join_names(const std::vector<std::string>& items)
 
 } // namespace
 
-std::string web_site_error(const ProviderSpec* spec)
+std::string webSiteError(const ProviderSpec* spec)
 {
     if (spec == nullptr) {
         return "配置表里没有该提供商条目，无法确定网页版站点" + web_site_guidance();
@@ -362,7 +345,7 @@ std::string web_site_error(const ProviderSpec* spec)
     return {};
 }
 
-std::string web_site_field_warnings(const ProviderSpec* spec)
+std::string webSiteFieldWarnings(const ProviderSpec* spec)
 {
     if (spec == nullptr || spec->kind != "web") {
         return {};
@@ -394,14 +377,14 @@ std::string web_site_field_warnings(const ProviderSpec* spec)
     if (!login_missing.empty()) {
         // M_patchB L4（PB2-27④ / 不变量 I16）：DOM 站点**不适用**协议探测 →
         // 不得写成「无法自动探测凭证」（那是 DeepSeek 协议站点的语义，会被读作「登录失败」）
-        if (!probe_is_applicable(spec->web)) {
-            text = "条目缺 " + join_names(login_missing) +
+        if (!probeIsApplicable(spec->web)) {
+            text = "条目缺 " + joinNames(login_missing) +
                    "：**协议探测不适用**（DOM 站点：登录态由浏览器 profile 维持，"
                    "登录 / 生成不受影响；探测仅做只读诊断）";
         }
         else {
             // 决策 D-26 / PB2-26：这些字段**可以**回落默认值，但对非 DeepSeek 站点是**误导** → 点明后果
-            text = "条目缺 " + join_names(login_missing) +
+            text = "条目缺 " + joinNames(login_missing) +
                    "：该站点**无法自动探测凭证**（登录仍可用）";
         }
     }
@@ -409,7 +392,7 @@ std::string web_site_field_warnings(const ProviderSpec* spec)
         if (!text.empty()) {
             text += "；";
         }
-        text += "生成未就绪（缺 " + join_names(gen_missing) + "）";
+        text += "生成未就绪（缺 " + joinNames(gen_missing) + "）";
     }
     return text;
 }
@@ -417,7 +400,7 @@ std::string web_site_field_warnings(const ProviderSpec* spec)
 // M_patchB L1 修订（PB2-26）：**登录型站点条目** —— 生成字段（选择器 / 发送 / 取答案）未就绪
 //  * 登录 / 协议探测**可用**；生成会在运行时因「适配器未实现 / 生成字段未就绪」**明确报错**
 //  * 不新增 schema 字段：L3 落地后把字段补齐即**自动**变为就绪
-bool web_login_only(const ProviderSpec* spec)
+bool webLoginOnly(const ProviderSpec* spec)
 {
     if (spec == nullptr || spec->kind != "web" || spec->web.adapter != "dom") {
         return false;
@@ -428,7 +411,7 @@ bool web_login_only(const ProviderSpec* spec)
 
 // ---- M_patchB L4（PB2-27）：站点无关的登录态判定 / 显示条件 / 探测适用性（纯函数）----
 // 说明：三条都**不含**任何 DeepSeek 专有物（不读 userToken / ds_session_id / /api/v0/*，不变量 I15）
-WebSessionVerdict web_session_state(const ProviderSpec* spec, const WebSessionEvidence& evidence)
+WebSessionVerdict webSessionState(const ProviderSpec* spec, const WebSessionEvidence& evidence)
 {
     WebSessionVerdict verdict;
     if (spec == nullptr || spec->kind != "web") {
@@ -442,7 +425,7 @@ WebSessionVerdict web_session_state(const ProviderSpec* spec, const WebSessionEv
         for (const std::string& name : evidence.cookie_names) {
             for (const std::string& wanted : spec->web.cookie_names) {
                 if (name == wanted) {
-                    verdict.state  = WebSessionState::logged_in;
+                    verdict.state  = WebSessionState::loggedIn;
                     verdict.reason = "该站点 Cookie「" + name + "」已就位（判据：条目 cookie_names 命中）";
                     return verdict;
                 }
@@ -454,15 +437,15 @@ WebSessionVerdict web_session_state(const ProviderSpec* spec, const WebSessionEv
             return verdict;
         }
         verdict.state  = WebSessionState::logged_out;
-        verdict.reason = "该站点 Cookie 里没有 " + join_names(spec->web.cookie_names) +
+        verdict.reason = "该站点 Cookie 里没有 " + joinNames(spec->web.cookie_names) +
                          "（未登录，或会话已失效）";
         return verdict;
     }
 
     // ② 未配 cookie_names → 该 origin 只要有 Cookie 即视为已登录（D-27「并集」）
-    if (evidence.cookie_count > 0) {
-        verdict.state  = WebSessionState::logged_in;
-        verdict.reason = "该站点已有 " + std::to_string(evidence.cookie_count) +
+    if (evidence.cookieCount > 0) {
+        verdict.state  = WebSessionState::loggedIn;
+        verdict.reason = "该站点已有 " + std::to_string(evidence.cookieCount) +
                          " 条 Cookie（判据：该 origin Cookie 非空；条目未配 cookie_names）";
         return verdict;
     }
@@ -476,10 +459,10 @@ WebSessionVerdict web_session_state(const ProviderSpec* spec, const WebSessionEv
     return verdict;
 }
 
-std::string web_session_state_label(WebSessionState state)
+std::string webSessionStateLabel(WebSessionState state)
 {
     switch (state) {
-    case WebSessionState::logged_in:
+    case WebSessionState::loggedIn:
         return "已登录";
     case WebSessionState::logged_out:
         return "未登录";
@@ -488,12 +471,12 @@ std::string web_session_state_label(WebSessionState state)
     }
 }
 
-bool web_shows_user_token(const ProviderSpec* spec)
+bool webShowsUserToken(const ProviderSpec* spec)
 {
     return spec != nullptr && spec->kind == "web" && !spec->web.token_expr.empty();
 }
 
-bool probe_is_applicable(const ProviderWebSpec& web)
+bool probeIsApplicable(const ProviderWebSpec& web)
 {
     if (web.adapter.empty() || starts_with(web.adapter, "builtin:")) {
         return true; // 内置适配器：协议探测（站点端点 / PoW / token）就是为它设计的
@@ -502,18 +485,18 @@ bool probe_is_applicable(const ProviderWebSpec& web)
     return !web.probe_paths.empty() || !web.token_expr.empty();
 }
 
-bool probe_is_applicable(const ProviderSpec* spec)
+bool probeIsApplicable(const ProviderSpec* spec)
 {
-    return spec != nullptr && spec->kind == "web" && probe_is_applicable(spec->web);
+    return spec != nullptr && spec->kind == "web" && probeIsApplicable(spec->web);
 }
 
 
-bool web_adapter_implemented(const std::string& adapter)
+bool webAdapterImplemented(const std::string& adapter)
 {
     if (adapter.empty()) {
         return true; // 空 = 用内置默认适配器行为
     }
-    for (const std::string& candidate : implemented_web_adapters()) {
+    for (const std::string& candidate : implementedWebAdapters()) {
         if (candidate == adapter) {
             return true;
         }
@@ -521,7 +504,7 @@ bool web_adapter_implemented(const std::string& adapter)
     return false;
 }
 
-const ProviderModelSpec* ProviderSpec::find_model(const std::string& model_id) const
+const ProviderModelSpec* ProviderSpec::findModel(const std::string& model_id) const
 {
     for (const ProviderModelSpec& model : models) {
         if (model.id == model_id) {
@@ -531,7 +514,7 @@ const ProviderModelSpec* ProviderSpec::find_model(const std::string& model_id) c
     return nullptr;
 }
 
-std::string default_chat_path(const std::string& protocol)
+std::string defaultChatPath(const std::string& protocol)
 {
     if (protocol == "anthropic") {
         return "/v1/messages";
@@ -542,7 +525,7 @@ std::string default_chat_path(const std::string& protocol)
     return "/chat/completions";
 }
 
-std::string default_auth_style(const std::string& protocol)
+std::string defaultAuthStyle(const std::string& protocol)
 {
     if (protocol == "anthropic") {
         return "x-api-key";
@@ -553,7 +536,7 @@ std::string default_auth_style(const std::string& protocol)
     return "bearer";
 }
 
-std::string default_auth_header(const std::string& auth_style)
+std::string defaultAuthHeader(const std::string& auth_style)
 {
     if (auth_style == "api-key") {
         return "api-key";
@@ -570,7 +553,7 @@ std::string default_auth_header(const std::string& auth_style)
     return "Authorization";
 }
 
-std::vector<std::string> implemented_protocols()
+std::vector<std::string> implementedProtocols()
 {
     // L1 已接线：openai 兼容（含智谱 / 硅基流动 / Ollama / 任意用户条目）
     //            + 内置网页版适配器 deepseek-web（现有 web_chat/PoW）
@@ -581,13 +564,13 @@ std::vector<std::string> implemented_protocols()
     return {"openai", "anthropic", "gemini", "deepseek-web", "dom"};
 }
 
-std::vector<std::string> implemented_web_adapters()
+std::vector<std::string> implementedWebAdapters()
 {
     // L3（PB2-13）：通用 DOM 适配器（选择器驱动）已实现（站点=纯数据；缺选择器 → 登录型条目）
     return {"builtin:deepseek", "dom"};
 }
 
-std::string protocol_display(const std::string& protocol)
+std::string protocolDisplay(const std::string& protocol)
 {
     if (protocol == "openai") {
         return "OpenAI 兼容";
@@ -622,7 +605,7 @@ std::string SpecLoadReport::summary() const
     return text;
 }
 
-std::string SpecLoadReport::error_of(const std::string& id) const
+std::string SpecLoadReport::errorOf(const std::string& id) const
 {
     for (const std::string& error : errors) {
         if (error.find(id) != std::string::npos) {
@@ -654,7 +637,7 @@ std::vector<std::string> ProviderSpecs::ids(const std::string& kind) const
     return result;
 }
 
-std::size_t ProviderSpecs::count_kind(const std::string& kind) const
+std::size_t ProviderSpecs::countKind(const std::string& kind) const
 {
     return ids(kind).size();
 }
@@ -667,7 +650,7 @@ namespace {
 
 bool is_implemented_protocol(const std::string& protocol)
 {
-    for (const std::string& candidate : implemented_protocols()) {
+    for (const std::string& candidate : implementedProtocols()) {
         if (candidate == protocol) {
             return true;
         }
@@ -677,7 +660,7 @@ bool is_implemented_protocol(const std::string& protocol)
 
 bool is_implemented_adapter(const std::string& adapter)
 {
-    for (const std::string& candidate : implemented_web_adapters()) {
+    for (const std::string& candidate : implementedWebAdapters()) {
         if (candidate == adapter) {
             return true;
         }
@@ -854,7 +837,7 @@ void parse_web(const json& entry, ProviderSpec* out, const std::string& where,
 bool apply_entry(const json& entry, const std::string& layer, ProviderSpec* out,
                  SpecLoadReport* report)
 {
-    const std::string id  = trim(entry["id"].get<std::string>());
+    const std::string id  = utils::trim(entry["id"].get<std::string>());
     const std::string tag = "「" + layer + "」" + id;
 
     // ---- 明文密钥（键名 / 值双重检测）----
@@ -924,7 +907,7 @@ bool apply_entry(const json& entry, const std::string& layer, ProviderSpec* out,
 
     // ---- 必填（official 与 web 同一套）----
     out->id = id;
-    if (trim(out->display).empty() || trim(out->kind).empty() || trim(out->protocol).empty()) {
+    if (utils::trim(out->display).empty() || utils::trim(out->kind).empty() || utils::trim(out->protocol).empty()) {
         report->errors.push_back(tag + " 缺少必填字段（display / kind / protocol；已跳过该条）");
         return false;
     }
@@ -932,24 +915,24 @@ bool apply_entry(const json& entry, const std::string& layer, ProviderSpec* out,
         report->errors.push_back(tag + " kind 非法（应为 official 或 web；已跳过该条）");
         return false;
     }
-    if (out->kind == "web" && trim(out->web.login_url).empty()) {
+    if (out->kind == "web" && utils::trim(out->web.login_url).empty()) {
         report->errors.push_back(tag + " kind=web 缺少 web.login_url（登录页；已跳过该条）");
         return false;
     }
 
     // ---- 默认值补全（保持内置条目与改造前常量一致）----
     if (out->kind == "official") {
-        if (trim(out->chat_path).empty()) {
-            out->chat_path = default_chat_path(out->protocol);
+        if (utils::trim(out->chat_path).empty()) {
+            out->chat_path = defaultChatPath(out->protocol);
         }
-        if (trim(out->auth_style).empty()) {
-            out->auth_style = default_auth_style(out->protocol);
+        if (utils::trim(out->auth_style).empty()) {
+            out->auth_style = defaultAuthStyle(out->protocol);
         }
-        if (trim(out->auth_header).empty() && out->auth_style != "none") {
-            out->auth_header = default_auth_header(out->auth_style);
+        if (utils::trim(out->auth_header).empty() && out->auth_style != "none") {
+            out->auth_header = defaultAuthHeader(out->auth_style);
         }
     }
-    if (trim(out->key_ref_default).empty()) {
+    if (utils::trim(out->key_ref_default).empty()) {
         out->key_ref_default = "brain-ai/" + out->id;
     }
     if (out->kind == "web") {
@@ -979,7 +962,7 @@ void validate_final(std::vector<ProviderSpec>* items, SpecLoadReport* report)
             if (!is_implemented_protocol(spec.protocol)) {
                 report->warnings.push_back(tag + " protocol=" + spec.protocol +
                                            " 本版本尚未实现（已实现：" +
-                                           join_list(implemented_protocols()) +
+                                           join_list(implementedProtocols()) +
                                            "）——选中它会在运行时明确报错");
             }
             continue;
@@ -1013,11 +996,11 @@ void validate_final(std::vector<ProviderSpec>* items, SpecLoadReport* report)
             else if (!implemented) {
                 report->warnings.push_back(tag + " web.adapter=" + spec.web.adapter +
                                            " 本版本尚未实现（已实现：" +
-                                           join_list(implemented_web_adapters()) +
+                                           join_list(implementedWebAdapters()) +
                                            "）——选中它会在运行时明确报错");
             }
             if (!spec.web.endpoints.host.empty() &&
-                spec.web.endpoints.host != default_deepseek_web_endpoints().host) {
+                spec.web.endpoints.host != defaultDeepseekWebEndpoints().host) {
                 report->warnings.push_back(tag + " web.adapter=dom 不支持 web.endpoints"
                                                  "（已忽略该字段）");
             }
@@ -1027,7 +1010,7 @@ void validate_final(std::vector<ProviderSpec>* items, SpecLoadReport* report)
             if (!is_implemented_adapter(spec.web.adapter)) {
                 report->warnings.push_back(tag + " web.adapter=" + spec.web.adapter +
                                            " 本版本尚未实现（已实现：" +
-                                           join_list(implemented_web_adapters()) +
+                                           join_list(implementedWebAdapters()) +
                                            "）——选中它会在运行时明确报错");
             }
             std::vector<std::string> unsupported;
@@ -1122,7 +1105,7 @@ ProviderSpecs merge_provider_specs(
 
     for (const auto& layer : layers) {
         const std::string& label = layer.first;
-        if (trim(layer.second).empty()) {
+        if (utils::trim(layer.second).empty()) {
             continue; // 文件不存在（loader 不传）或空文件
         }
         rep.files.push_back(label);
@@ -1176,11 +1159,11 @@ ProviderSpecs merge_provider_specs(
                 continue;
             }
             if (!entry.contains("id") || !entry["id"].is_string() ||
-                trim(entry["id"].get<std::string>()).empty()) {
+                utils::trim(entry["id"].get<std::string>()).empty()) {
                 rep.errors.push_back("「" + label + "」providers[] 条目缺少 id（已跳过）");
                 continue;
             }
-            const std::string id = trim(entry["id"].get<std::string>());
+            const std::string id = utils::trim(entry["id"].get<std::string>());
 
             ProviderSpec working;
             const auto   found = index.find(id);
@@ -1218,7 +1201,7 @@ ProviderSpecs merge_provider_specs(
 }
 
 
-ProviderSpecs load_provider_specs()
+ProviderSpecs loadProviderSpecs()
 {
     std::vector<std::pair<std::string, std::string>> layers;
 
@@ -1233,14 +1216,14 @@ ProviderSpecs load_provider_specs()
         }
         std::string text((std::istreambuf_iterator<char>(stream)),
                          std::istreambuf_iterator<char>());
-        if (trim(text).empty()) {
+        if (utils::trim(text).empty()) {
             return;
         }
         layers.emplace_back(label, std::move(text));
     };
 
     // ① 随程序发布的内置表（权威默认）
-    add_file(paths::providers_asset_file(), "builtin");
+    add_file(paths::providersAssetFile(), "builtin");
     // ② 开发态兜底（源码树直跑 / 自检）
 #ifdef AIWRITE_SOURCE_DIR
     add_file(std::filesystem::path(AIWRITE_SOURCE_DIR) / "assets" / "providers.json", "source");
@@ -1248,7 +1231,7 @@ ProviderSpecs load_provider_specs()
     // ③ 用户新增条目（文件名升序）
     std::error_code                    ec;
     std::vector<std::filesystem::path> user_files;
-    const std::filesystem::path        user_dir = paths::user_providers_dir();
+    const std::filesystem::path        user_dir = paths::userProvidersDir();
     if (std::filesystem::is_directory(user_dir, ec)) {
         for (const std::filesystem::directory_entry& entry :
              std::filesystem::directory_iterator(user_dir, ec)) {
@@ -1262,7 +1245,7 @@ ProviderSpecs load_provider_specs()
         add_file(file, "user.d/" + file.filename().string());
     }
     // ④ 用户字段级覆盖
-    add_file(paths::user_providers_file(), "user");
+    add_file(paths::userProvidersFile(), "user");
 
     return merge_provider_specs(layers, nullptr);
 }
@@ -1283,11 +1266,11 @@ std::shared_ptr<const ProviderSpecs>& specs_holder()
 
 } // namespace
 
-std::shared_ptr<const ProviderSpecs> provider_specs_snapshot()
+std::shared_ptr<const ProviderSpecs> providerSpecsSnapshot()
 {
     std::lock_guard<std::mutex> lock(specs_mutex());
     if (!specs_holder()) {
-        specs_holder() = std::make_shared<const ProviderSpecs>(load_provider_specs());
+        specs_holder() = std::make_shared<const ProviderSpecs>(loadProviderSpecs());
         const SpecLoadReport& report = specs_holder()->report;
         log::info("[配置表] " + report.summary() + "，条目 " +
                   std::to_string(specs_holder()->items.size()) + " 条");
@@ -1301,22 +1284,22 @@ std::shared_ptr<const ProviderSpecs> provider_specs_snapshot()
     return specs_holder();
 }
 
-const ProviderSpecs& provider_specs()
+const ProviderSpecs& providerSpecs()
 {
-    return *provider_specs_snapshot();
+    return *providerSpecsSnapshot();
 }
 
-void reload_provider_specs()
+void reloadProviderSpecs()
 {
     std::shared_ptr<const ProviderSpecs> fresh =
-        std::make_shared<const ProviderSpecs>(load_provider_specs());
+        std::make_shared<const ProviderSpecs>(loadProviderSpecs());
     {
         std::lock_guard<std::mutex> lock(specs_mutex());
         specs_holder() = fresh;
     }
     log::info("[配置表] 已重新加载：" + fresh->report.summary() + "，条目 " +
               std::to_string(fresh->items.size()) + " 条（含网页版站点 " +
-              std::to_string(fresh->count_kind("web")) + " 个）");
+              std::to_string(fresh->countKind("web")) + " 个）");
     for (const std::string& warning : fresh->report.warnings) {
         log::warn("[配置表] " + warning);
     }
@@ -1330,19 +1313,19 @@ void reload_provider_specs()
 //  解析辅助（纯函数；节点 / 提示 / 自检共用）
 // ============================================================================
 
-std::string resolve_api_base(const ProviderSpec& spec, const std::string& param_value)
+std::string resolveApiBase(const ProviderSpec& spec, const std::string& param_value)
 {
-    const std::string value = trim(param_value);
+    const std::string value = utils::trim(param_value);
     return value.empty() ? spec.api_base : value;
 }
 
-std::string resolve_key_ref(const ProviderSpec& spec, const std::string& param_value)
+std::string resolveKeyRef(const ProviderSpec& spec, const std::string& param_value)
 {
-    const std::string value = trim(param_value);
+    const std::string value = utils::trim(param_value);
     return value.empty() ? spec.key_ref_default : value;
 }
 
-std::string resolve_env_name(const ProviderSpec& spec)
+std::string resolveEnvName(const ProviderSpec& spec)
 {
     return spec.env_names.empty() ? std::string() : spec.env_names.front();
 }
@@ -1350,12 +1333,12 @@ std::string resolve_env_name(const ProviderSpec& spec)
 std::string resolve_model(const ProviderSpec& spec, const std::string& param_model,
                           const std::string& model_custom, bool for_vision)
 {
-    const std::string custom = trim(model_custom);
+    const std::string custom = utils::trim(model_custom);
     if (!custom.empty()) {
         return custom; // M5-02：自定义模型名优先
     }
-    const std::string node_model = trim(param_model);
-    if (!node_model.empty() && spec.find_model(node_model) != nullptr) {
+    const std::string node_model = utils::trim(param_model);
+    if (!node_model.empty() && spec.findModel(node_model) != nullptr) {
         return node_model; // 节点模型属于该条目 → 用它
     }
     if (for_vision) {
@@ -1377,7 +1360,7 @@ std::string resolve_model(const ProviderSpec& spec, const std::string& param_mod
 bool spec_model_supports_vision(const ProviderSpec& spec, const std::string& model,
                                 bool* declared)
 {
-    const ProviderModelSpec* found = spec.find_model(model);
+    const ProviderModelSpec* found = spec.findModel(model);
     if (declared != nullptr) {
         *declared = found != nullptr;
     }
@@ -1457,7 +1440,7 @@ std::string base_layer_json()
 
 } // namespace
 
-int provider_spec_selftest(int* passed_out)
+int providerSpecSelftest(int* passed_out)
 {
     CheckCounter counter;
     std::printf("[配置表自检] Provider 规格表（M_patchB L1 / PB2-01）\n");
@@ -1481,8 +1464,8 @@ int provider_spec_selftest(int* passed_out)
         counter.check(alpha != nullptr && alpha->limits.read_timeout_s == 42,
                       "limits 读入（read_timeout_s=42）");
         counter.check(alpha != nullptr && alpha->models.size() == 2 &&
-                          alpha->find_model("alpha-vision") != nullptr &&
-                          alpha->find_model("alpha-vision")->vision,
+                          alpha->findModel("alpha-vision") != nullptr &&
+                          alpha->findModel("alpha-vision")->vision,
                       "models 解析（含逐模型 vision）");
         counter.check(report.errors.empty(), "基础层无 error");
     }
@@ -1622,7 +1605,7 @@ int provider_spec_selftest(int* passed_out)
         const ProviderSpecs specs = merge_provider_specs({{"user", web_layer}}, &report);
         // M_patchB L1 修订（PB2-26）：dom 缺生成字段 → **登录型站点条目**（警告，**不**丢弃）
         const ProviderSpec* login_only = specs.find("dom-site");
-        counter.check(login_only != nullptr && web_login_only(login_only) &&
+        counter.check(login_only != nullptr && webLoginOnly(login_only) &&
                           !has_text(report.errors, "dom-site") &&
                           has_text(report.warnings, "登录型站点条目"),
                       "dom 缺生成字段 → 登录型站点条目（警告，不丢弃；生成未就绪）");
@@ -1630,7 +1613,7 @@ int provider_spec_selftest(int* passed_out)
         counter.check(partial != nullptr &&
                           partial->web.endpoints.host == "https://s2.example.com" &&
                           partial->web.endpoints.completion_path ==
-                              default_deepseek_web_endpoints().completion_path,
+                              defaultDeepseekWebEndpoints().completion_path,
                       "builtin 端点缺字段 → 沿用内置默认");
         counter.check(has_text(report.warnings, "web.endpoints"), "缺端点有警告");
         const ProviderSpec* extra = specs.find("builtin-with-selector");
@@ -1656,7 +1639,7 @@ int provider_spec_selftest(int* passed_out)
         SpecLoadReport      report;
         const ProviderSpecs specs = merge_provider_specs({{"user", nested_layer}}, &report);
         const ProviderSpec* nested = specs.find("nested-dom");
-        counter.check(nested != nullptr && !web_login_only(nested) &&
+        counter.check(nested != nullptr && !webLoginOnly(nested) &&
                           nested->web.send_kind == "key" && nested->web.send_value == "Enter" &&
                           nested->web.done_kind == "selector_gone" &&
                           nested->web.done_selector == "button[aria-label*='停止']" &&
@@ -1676,7 +1659,7 @@ int provider_spec_selftest(int* passed_out)
         const ProviderSpec* flat       = flat_specs.find("flat-dom");
         // 现行口径（`PB2-26` 修订后）：缺 `send` 的 `dom` 条目**保留**但降级为
         // 「登录型站点条目」（生成未就绪）—— 即「照抄也建不出站点」，但**当场说清原因**
-        counter.check(flat != nullptr && web_login_only(flat) &&
+        counter.check(flat != nullptr && webLoginOnly(flat) &&
                           has_text(flat_report.warnings, "send_kind") &&
                           has_text(flat_report.warnings, "登录型站点条目"),
                       "扁平字段名（错误写法）：条目仍在，但降级为**登录型站点条目**"
@@ -1707,14 +1690,14 @@ int provider_spec_selftest(int* passed_out)
         const ProviderSpec* alpha = fixture.find("alpha");
         counter.check(alpha != nullptr, "解析辅助夹具就绪");
         if (alpha != nullptr) {
-            counter.check(resolve_api_base(*alpha, "https://mine.example.com") ==
+            counter.check(resolveApiBase(*alpha, "https://mine.example.com") ==
                               "https://mine.example.com",
                           "resolve_api_base：节点参数优先");
-            counter.check(resolve_api_base(*alpha, "  ") == "https://alpha.example.com/v1",
+            counter.check(resolveApiBase(*alpha, "  ") == "https://alpha.example.com/v1",
                           "resolve_api_base：空 → 表默认");
-            counter.check(resolve_key_ref(*alpha, "") == "brain-ai/alpha",
+            counter.check(resolveKeyRef(*alpha, "") == "brain-ai/alpha",
                           "resolve_key_ref：空 → 表内引用名");
-            counter.check(resolve_env_name(*alpha) == "ALPHA_API_KEY",
+            counter.check(resolveEnvName(*alpha) == "ALPHA_API_KEY",
                           "resolve_env_name：取表内首个");
             counter.check(resolve_model(*alpha, "", "my-model", false) == "my-model",
                           "resolve_model：自定义优先");
@@ -1739,7 +1722,7 @@ int provider_spec_selftest(int* passed_out)
 
     // ---------- 10) 真实配置表可加载（磁盘缺失 → 兜底） ----------
     {
-        const ProviderSpecs& specs = provider_specs();
+        const ProviderSpecs& specs = providerSpecs();
         counter.check(!specs.items.empty(), "provider_specs() 至少 1 条");
         counter.check(specs.find("deepseek") != nullptr, "真实表中存在 deepseek");
         const ProviderSpec* real = specs.find("deepseek");

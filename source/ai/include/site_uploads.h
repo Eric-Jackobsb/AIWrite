@@ -14,8 +14,8 @@
 namespace aiwrite::ai {
 
 // 豆包（doubao-web）：B1/B2 实测已拿到入口形态与上传链物证（`M8-` 记录见 docs）
-const SiteUpload* site_upload_doubao();
+const SiteUpload* siteUploadDoubao();
 // Kimi（kimi-web）：第二站，用于验证「模板只加一个站点单元即可通」
-const SiteUpload* site_upload_kimi();
+const SiteUpload* siteUploadKimi();
 
 } // namespace aiwrite::ai

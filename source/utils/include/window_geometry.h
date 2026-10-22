@@ -18,7 +18,7 @@ struct WindowRect {
 };
 
 // 是否记录了位置（-1 = 未记录）
-bool has_position(const WindowRect& rect);
+bool hasPosition(const WindowRect& rect);
 
 struct FitResult {
     WindowRect rect;

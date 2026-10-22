@@ -142,7 +142,7 @@ PreprocessOutcome preprocess_image(const std::string& local_path,
     }
 
     // ---- 3) 写临时 PNG ----
-    const std::string dir = default_upload_tmp_dir();
+    const std::string dir = defaultUploadTmpDir();
     {
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
@@ -187,7 +187,7 @@ std::string make_test_png(const std::string& dir, const std::string& stem, int s
 
 } // namespace
 
-int image_preprocess_selftest(int* passed_out)
+int imagePreprocessSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
@@ -202,7 +202,7 @@ int image_preprocess_selftest(int* passed_out)
         }
     };
 
-    const std::string dir = default_upload_tmp_dir();
+    const std::string dir = defaultUploadTmpDir();
     std::error_code   ec;
     std::filesystem::create_directories(dir, ec);
     const std::string src = make_test_png(dir, "preprocess-selftest-src", 40, 200, 40, 40);

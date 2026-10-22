@@ -17,6 +17,6 @@ namespace aiwrite::utils {
 
 // 返回**首个**错误的中文说明（面向非技术用户：说清「哪一项、该填多少、当前多少」）
 //  * 空串 = 通过
-std::string validate_settings(const Config& config);
+std::string validateSettings(const Config& config);
 
 } // namespace aiwrite::utils

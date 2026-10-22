@@ -111,7 +111,7 @@ UploadPrepareOptions doubao_prepare_options(const ProviderWebSpec& /*site*/)
 
 } // namespace
 
-const SiteUpload* site_upload_doubao()
+const SiteUpload* siteUploadDoubao()
 {
     static const SiteUpload unit = {"builtin:doubao",   "豆包网页版（doubao.com）",
                                     doubao_prepare,     doubao_deliver,

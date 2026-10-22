@@ -32,26 +32,26 @@ enum class DiagnosticKind {
     Selector,   // 「测试选择器」
 };
 
-DiagnosticKind diagnostic_running_kind();
-bool           diagnostic_running();
+DiagnosticKind diagnosticRunningKind();
+bool           diagnosticRunning();
 
 // 最近一次结果：`report` = 多行明细（面板结果区）；`summary` = 一行结论（状态栏）
-std::string diagnostic_report();
-std::string diagnostic_summary();
-int         diagnostic_code(); // 最近一次的码（0/1/2/3；无记录 = -1）
-std::string diagnostic_title();// 最近一次是谁的结果（面板标题用）
+std::string diagnosticReport();
+std::string diagnosticSummary();
+int         diagnosticCode(); // 最近一次的码（0/1/2/3；无记录 = -1）
+std::string diagnosticTitle();// 最近一次是谁的结果（面板标题用）
 
 // ① 面板「测试连接」（`PB2-07`）—— 异步；`provider_id` 空 ⇒ 只跑离线部分
-void request_connection_check(const std::string& provider_id);
+void requestConnectionCheck(const std::string& provider_id);
 
 // ② 面板「测试选择器」（`PB2-30②`）—— 异步；只读探测（不写入、不发送）
-void request_selector_check(const std::string& provider_id);
+void requestSelectorCheck(const std::string& provider_id);
 
 // ③ 打开该条目的登录窗口（`PB-07`）；成功/失败都写 Console 与状态栏
-void open_web_login_window(const std::string& provider_id);
+void openWebLoginWindow(const std::string& provider_id);
 
 // 退出前收尾：等待后台诊断结束（最长 wait_ms；超时则分离线程并如实记日志）
 //  * 由 `main.cpp` 在 `log::shutdown()` **之前**调用（避免退出期写日志竞态）
-void stop_diagnostics(int wait_ms = 4000);
+void stopDiagnostics(int wait_ms = 4000);
 
 } // namespace aiwrite::ui

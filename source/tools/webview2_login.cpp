@@ -105,7 +105,7 @@ std::wstring to_wide(const std::string& text)
 }
 
 // 脱敏：只保留前 4 位与后 4 位
-std::string mask_value(const std::string& value)
+std::string maskValue(const std::string& value)
 {
     const std::size_t length = value.size();
     if (length == 0) {
@@ -118,7 +118,7 @@ std::string mask_value(const std::string& value)
            "(len=" + std::to_string(length) + ")";
 }
 
-void print_usage()
+void printUsage()
 {
     std::printf("webview2_login - AIwrite M1 技术验证工具（M1-04 / V-03）\n");
     std::printf("用法:\n");
@@ -217,7 +217,7 @@ void extract_cookies_impl(const char* reason)
 
                     const std::string name = to_utf8(raw_name != nullptr ? raw_name : L"");
                     const std::string value =
-                        mask_value(to_utf8(raw_value != nullptr ? raw_value : L""));
+                        maskValue(to_utf8(raw_value != nullptr ? raw_value : L""));
 
                     std::printf("  %-34s %-34s httpOnly=%d session=%d\n", name.c_str(), value.c_str(),
                                 http_only ? 1 : 0, session ? 1 : 0);
@@ -478,12 +478,12 @@ int main(int argc, char** argv)
             g_options.timeout_seconds = std::atoi(next("--timeout").c_str());
         }
         else if (arg == "--help" || arg == "-h") {
-            print_usage();
+            printUsage();
             return 0;
         }
         else {
             std::fprintf(stderr, "未知参数: %s\n", arg.c_str());
-            print_usage();
+            printUsage();
             return 2;
         }
     }
@@ -500,7 +500,7 @@ int main(int argc, char** argv)
                        (g_options.timeout_seconds > 0 ? std::to_string(g_options.timeout_seconds) + " 秒"
                                                       : std::string("不自动退出")));
 
-    if (aiwrite::paths::ensure_data_dirs() != 0) {
+    if (aiwrite::paths::ensureDataDirs() != 0) {
         aiwrite::log::warn("部分数据目录创建失败，请检查权限");
     }
 

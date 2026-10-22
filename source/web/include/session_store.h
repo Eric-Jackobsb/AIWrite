@@ -55,10 +55,10 @@ struct ProbeResult {
 //  * 无法解析（无 `://`）时**原样返回**（空串 → 空串）
 //  * 用途：会话归档键、登录窗口归属判定、按站点注销 —— 与浏览器 cookie/localStorage 的
 //    「按 origin 隔离」语义一致（决策 D-19）
-std::string site_key_of(const std::string& url);
+std::string siteKeyOf(const std::string& url);
 
 struct Session {
-    bool                logged_in = false;
+    bool                loggedIn = false;
     std::string         url;            // 会话来源（登录页地址）
     std::string         updated_at;     // "YYYY-MM-DD HH:MM:SS"
     std::vector<Cookie> cookies;
@@ -71,19 +71,19 @@ struct Session {
     std::string         site;           // 站点键（origin）；空 = 默认槽（legacy 单站点路径）
     std::string         provider_id;    // 配置表条目 id（诊断 / 界面显示）
 
-    std::size_t    cookie_count() const { return cookies.size(); }
+    std::size_t    cookieCount() const { return cookies.size(); }
     bool           has(const std::string& name) const;
     const Cookie*  find(const std::string& name) const;
 };
 
 // 脱敏：≤8 位全星号 + 长度；>8 位保留前 4 后 4（与 webview2_login 工具一致）
-std::string mask_value(const std::string& value);
+std::string maskValue(const std::string& value);
 
 // ---- M_patchB L4（PB2-27）：会话 → **站点无关**的登录证据 ----
 //  * 供 `ai::web_session_state()` 判定「已登录 / 未登录 / 未确认」（判据见决策 `D-27`）
 //  * 只暴露「是否读过 Cookie / 条数 / 名字」——**不含** `userToken`（不变量 `I15`：判据不得依赖厂商专有物）
 //  * `cookies_known` = 该站点写过会话快照（登录窗口每次提取都会写，含空快照）
-ai::WebSessionEvidence web_session_evidence(const Session& session);
+ai::WebSessionEvidence webSessionEvidence(const Session& session);
 
 // 多站点会话存储（M_patchB L1 续 / PB2-18）
 //
@@ -98,22 +98,22 @@ public:
 
     // ---- 兼容 API（默认槽）----
     void    set(Session session);   // 覆盖写入（按 session.site 归档；空 = 默认槽）
-    void    set_probe(ProbeResult probe); // 只更新协议探测结果（保留 Cookie 会话）
+    void    setProbe(ProbeResult probe); // 只更新协议探测结果（保留 Cookie 会话）
     void    clear();                // 注销默认槽：清空并销毁
     Session snapshot() const;       // 拷贝快照（线程安全）
-    bool    logged_in() const;
-    std::size_t cookie_count() const;
+    bool    loggedIn() const;
+    std::size_t cookieCount() const;
 
     // ---- 多站点 API（PB2-18）----
-    void        set_current_site(const std::string& site); // 指定默认槽指向（空 = 默认槽本身）
-    std::string current_site() const;                      // 默认槽当前指向的站点
+    void        setCurrentSite(const std::string& site); // 指定默认槽指向（空 = 默认槽本身）
+    std::string currentSite() const;                      // 默认槽当前指向的站点
     Session     snapshot(const std::string& site) const;
-    void        set_probe(ProbeResult probe, const std::string& site);
-    bool        has_token(const std::string& site) const;  // 该站点是否已有内存凭证
-    bool        logged_in(const std::string& site) const;
-    std::size_t cookie_count(const std::string& site) const;
+    void        setProbe(ProbeResult probe, const std::string& site);
+    bool        hasToken(const std::string& site) const;  // 该站点是否已有内存凭证
+    bool        loggedIn(const std::string& site) const;
+    std::size_t cookieCount(const std::string& site) const;
     void        clear(const std::string& site);            // 按站点注销（不动其他站点）
-    void        clear_all();                               // 清全部（高级：删除整个 profile 时）
+    void        clearAll();                               // 清全部（高级：删除整个 profile 时）
     std::vector<std::string> sites() const;                // 已归档站点键（按字典序稳定）
 
 private:
@@ -122,7 +122,7 @@ private:
     SessionStore& operator=(const SessionStore&) = delete;
 
     // 站点键归一：空串 → 默认槽当前指向
-    std::string resolve_key(const std::string& site) const;
+    std::string resolveKey(const std::string& site) const;
 
     mutable std::mutex             mutex_;
     std::map<std::string, Session> sessions_;   // 站点键 → 会话

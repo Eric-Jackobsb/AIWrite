@@ -114,18 +114,18 @@ CapabilityGate capability_gate(const ProviderCaps& caps, const GenerateParams& p
 // 表 capabilities → 运行期能力快照
 //  * `spec == nullptr`（无表条目，例：临时自定义地址）⇒ **宽松默认**（不拦任何能力，
 //    与改造前行为一致：老工作流不受影响）——不变量 `I19`
-ProviderCaps caps_from_spec(const ProviderSpec* spec);
-ProviderCaps permissive_caps();
+ProviderCaps capsFromSpec(const ProviderSpec* spec);
+ProviderCaps permissiveCaps();
 
 // 本次调用的能力快照（节点 / 界面统一入口 `PB2-12`）：
 //  * `spec != nullptr` → 用**本条**的 `capabilities`
 //  * `spec == nullptr` + `web_mode` → 内置网页版协议（`deepseek-web`）的能力
 //    （守 `I2`：老工作流「mode=web 无表条目」的系统提示词前置拼接行为不变）
 //  * 其它 → 宽松默认
-ProviderCaps caps_for_call(const ProviderSpec* spec, bool web_mode);
+ProviderCaps capsForCall(const ProviderSpec* spec, bool web_mode);
 
 // 该协议是否需要 API Key（`auth_style=none` ⇒ 不需要）
-bool protocol_needs_key(const ProviderOptions& options);
+bool protocolNeedsKey(const ProviderOptions& options);
 
 // ---------------------------------------------------------------- 共用请求件 --
 
@@ -136,7 +136,7 @@ common_json_headers(const ProviderOptions& options, const std::string& api_key);
 // `data:<mime>;base64,<...>` → (mime, base64)；非 data URL / 缺 base64 / 空 mime ⇒ false
 //  * 各协议的图片块形状不同（Anthropic `source{type:base64,media_type,data}`；
 //    Gemini `inline_data{mime_type,data}`）⇒ 拆一次、各自组装（纯函数 → `V-13`）
-bool split_data_url(const std::string& data_url, std::string* mime, std::string* base64);
+bool splitDataUrl(const std::string& data_url, std::string* mime, std::string* base64);
 
 // ---------------------------------------------------------------- 内置实现 --
 
@@ -152,7 +152,7 @@ public:
 
 private:
     ProviderRuntimeConfig config_;
-    ProviderCaps          caps_ = permissive_caps();
+    ProviderCaps          caps_ = permissiveCaps();
 };
 
 // 内置网页版站点（`deepseek-web`）：收编既有 `web_chat()`（PoW 求解 + SSE 解析）
@@ -167,7 +167,7 @@ public:
 
 private:
     ProviderRuntimeConfig config_;
-    ProviderCaps          caps_ = permissive_caps();
+    ProviderCaps          caps_ = permissiveCaps();
 };
 
 } // namespace aiwrite::ai

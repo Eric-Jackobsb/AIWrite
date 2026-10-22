@@ -119,7 +119,7 @@ Add-Result 'api_probe --selftest' ($r.Code -eq 0 -and ($summary -notmatch 'FAIL'
 
 $r = Invoke-Capture $apiProbe '--exec-selftest' 'exec'
 # 注：`--exec-selftest` 会打印**两行**「执行器自检结果」（executor 与 execution 各一行）
-# ⇒ 取**最后**一行 = 汇总（实测：73 / 464）
+# ⇒ 取**最后**一行 = 汇总（实测：94 / 713 · POL-C-01 后 executor 83→94 · POL-C-02 归档 TTL/保留边界 +7 = 706→713）
 $execLine = (($r.Text -split "`n") | Where-Object { $_ -match '执行器自检结果' } | Select-Object -Last 1)
 $execPass = 0; $execFail = 0
 if ($execLine -match '(\d+) 通过 / (\d+) 失败') { $execPass = [int]$Matches[1]; $execFail = [int]$Matches[2] }
@@ -148,10 +148,32 @@ $r = Invoke-Capture $apiProbe '--site-assert' 'site'
 $siteLine = (($r.Text -split "`n") | Where-Object { $_ -match '纯函数 .* 进表=' } | Select-Object -First 1)
 Add-Result 'api_probe --site-assert' ($r.Code -eq 0) ($siteLine -replace '^\s+', '')
 
+# 自定义 AI 收口：自建官方 API 提供商闭环（纯函数 + 真实落盘 → 重载 → 枚举/校验即时可用；**自清理**）
+$r = Invoke-Capture $apiProbe '--official-assert' 'official'
+$officialLine = (($r.Text -split "`n") | Where-Object { $_ -match '纯函数 .* 写盘=' } | Select-Object -First 1)
+Add-Result 'api_probe --official-assert' ($r.Code -eq 0) ($officialLine -replace '^\s+', '')
+
 # PC-01/02：自动保存 / 崩溃恢复（场景在系统临时目录内构造；**不碰用户数据与快照**；自清理）
 $r = Invoke-Capture $apiProbe '--autosave-assert' 'autosave'
 $autosaveLine = (($r.Text -split "`n") | Where-Object { $_ -match '场景 .* 默认落点=' } | Select-Object -First 1)
 Add-Result 'api_probe --autosave-assert' ($r.Code -eq 0) ($autosaveLine -replace '^\s+', '')
+
+# ---- ②b DEBT-C3（测试资产完善 · M_code_cleanup §4.1 方向 5）：CLI 自检 + ce_repro 窗口栈回归 ----
+#  * aiuwrite --run-selftest = CLN-15 拆出的 cli_selftest.cpp 入口（此前 check_all 未覆盖）；
+#  * ce_repro.exe 0      = 上级编辑器「新建 → 首帧」窗口栈平衡回归（mode 0 忠实模拟 draw_composite_editor；
+#    mode 4 故意不平衡场景 / mode 5 小地图 headless 已知 FAIL——均**不**纳入，mode 5 待真实 GUI 复核）。
+$r = Invoke-Capture $aiwrite '--run-selftest' 'run'
+$runLine = (($r.Text -split "`n") | Where-Object { $_ -match '\[运行自检\] PASS|\[运行自检\] FAIL' } | Select-Object -Last 1)
+Add-Result 'aiwrite --run-selftest（CLI 自检）' ($r.Code -eq 0 -and $runLine -match 'PASS') ($runLine -replace '^\s+', '')
+
+$ceRepro = Join-Path $binDir 'ce_repro.exe'
+if (Test-Path $ceRepro) {
+    $r = Invoke-Capture $ceRepro '0' 'ce_repro'
+    $ceLine = (($r.Text -split "`n") | Where-Object { $_ -match 'ALL FRAMES OK' } | Select-Object -Last 1)
+    Add-Result 'ce_repro（mode 0 窗口栈回归）' ($r.Code -eq 0 -and $ceLine -match 'mode=0') ($ceLine.Trim())
+} else {
+    Add-Result 'ce_repro（mode 0 窗口栈回归）' $false "产物缺失：$ceRepro"
+}
 
 # ---- ③ node 夹具（离线；直接读源码脚本）----
 Write-Both "`n== ③ 夹具（node） =="

@@ -45,12 +45,12 @@ struct UploadNetwork {
     std::size_t size() const { return records.size(); }
     void        clear() { records.clear(); }
     // URL 是否含任一子串（needles 空 → false）
-    static bool url_matches_any(const std::string& url, const std::vector<std::string>& needles);
+    static bool urlMatchesAny(const std::string& url, const std::vector<std::string>& needles);
     // 命中期望里的任一子串 → 证据文案（"POST 200 tos-hl-x…（命中 1/3 条）"）；未命中 → 空
-    std::string evidence_for(const UploadExpectations& expect) const;
+    std::string evidenceFor(const UploadExpectations& expect) const;
     // M8-37：**站点无关**的自动判据 —— 交件后的 POST/PUT 且 URL 含通用上传特征词（未命中 → 空）
     //  * 供「站点单元未声明网络特征 / 声明特征未命中」时兜底（不新增开关；口径见 .cpp）
-    std::string evidence_for_auto() const;
+    std::string evidenceForAuto() const;
     // 全部记录的摘要（进报告：把「采集到几条」讲清楚，0 条也要讲出来）
     std::string summary() const;
 };
@@ -72,24 +72,24 @@ struct PageState {
 //  * 只读 document（不点击、不输入、不改 DOM）；`ExecuteScript` 会把返回值序列化为 JSON
 //  * 选择器非法（`querySelectorAll` 抛错）→ 该条计数记 -1（如实反映，不静默当 0）
 //  * M8-37：`file_names` 非空时一并采样「文件名是否出现在页面」（站点无关的页面证据兜底）
-std::string page_state_script(const std::vector<std::string>& selectors);
-std::string page_state_script(const std::vector<std::string>& selectors,
+std::string pageStateScript(const std::vector<std::string>& selectors);
+std::string pageStateScript(const std::vector<std::string>& selectors,
                               const std::vector<std::string>& file_names);
 
 // 解析脚本结果（`json` = `web::run_script_sync` 回传的原始 JSON）
 //  * 形态不符 → false + `*error` 含原因与原始片段（便于人工核对）
-bool parse_page_state(const std::string& json, PageState* out, std::string* error);
+bool parsePageState(const std::string& json, PageState* out, std::string* error);
 
 // 某选择器的命中数（没采到过 → 0）
-int page_count(const PageState& state, const std::string& selector);
+int pageCount(const PageState& state, const std::string& selector);
 
 // 命中页面期望 → 证据文案（"命中 2 个（<selector>）"）；未命中 → 空
-std::string match_page_evidence(const PageState& state, const UploadExpectations& expect);
+std::string matchPageEvidence(const PageState& state, const UploadExpectations& expect);
 
 // M8-37：**站点无关**的页面自动判据（声明值未命中时的兜底；不新增开关）
 //  * ① 交付文件名出现在页面 ② 附件候选池节点数 > 交件前基线 ③ blob/data 缩略图数 > 基线
 //  * `baseline == nullptr` → 只保留 ①（不臆造「新增」）；未取到 → 空串（调用方判「缺页面证据」）
-std::string match_page_evidence_auto(const PageState& state, const PageState* baseline);
+std::string matchPageEvidenceAuto(const PageState& state, const PageState* baseline);
 
 // ------------------------------------------------------------------ 组合判定 --
 
@@ -98,6 +98,6 @@ bool upload_evidence_ready(const std::string& page_evidence, const std::string& 
                            std::string* error);
 
 // 离线自检（返回失败项数；`passed_out` 回传通过项数）
-int upload_evidence_selftest(int* passed_out = nullptr);
+int uploadEvidenceSelftest(int* passed_out = nullptr);
 
 } // namespace aiwrite::ai

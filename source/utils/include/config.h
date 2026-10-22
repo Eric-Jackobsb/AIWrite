@@ -143,7 +143,7 @@ struct Config {
 };
 
 // 读取配置；文件不存在时生成默认配置并落盘。返回是否成功。
-bool load_config(const std::filesystem::path& file, Config& out);
+bool loadConfig(const std::filesystem::path& file, Config& out);
 
 // ---- M_patchAB §4（`PC-04` / `DBG-M6-02`）：配置文件**版本迁移**（纯逻辑，可离线断言）----
 //  * 版本缺失（老文件）⇒ 补为当前支持版本（`migrated=true` + 说明）
@@ -159,19 +159,19 @@ struct ConfigMigrationOutcome {
     std::string              error;
 };
 
-ConfigMigrationOutcome migrate_config(Config& config);
+ConfigMigrationOutcome migrateConfig(Config& config);
 // 当前支持的配置版本（`Config::config_version` 上限的单一来源）
-int                     current_config_version();
+int                     currentConfigVersion();
 
 // 写入配置（自动创建父目录）
-bool save_config(const std::filesystem::path& file, const Config& config);
+bool saveConfig(const std::filesystem::path& file, const Config& config);
 
 // 进程级配置缓存（PA-07：地基补丁 A）
 //  * 启动时由 app / api_probe 以 set_app_config(load_config(...)) 灌入一次
 //  * 供非 UI 代码（provider / 工具 / 自检）读取；未设置时返回默认构造值
 //  * 只读约定：返回引用；set_app_config 仅发生在启动/显式保存时，不要在读取期间并发写入
-const Config& app_config();
-void          set_app_config(Config config);
+const Config& appConfig();
+void          setAppConfig(Config config);
 
 // PA-08：**尚未接线**的配置字段清单（消除"改了 config 却没效果"的困惑）
 //  * 已接线：ui.show_grid / ui.console_height / ui.running_animation /
@@ -185,6 +185,6 @@ void          set_app_config(Config config);
 //  * 已移除（`PQ-18②` · 2026-10-09）：general.language / general.startup —— 界面语言 / 启动行为不做
 //  * 节点参数为准：providers.deepseek.*（仅作默认值来源，实际以 ProviderConfig 节点参数为准）
 //  * 其余字段在加载时写 `[配置] 以下字段尚未生效：…` 日志，并在使用说明中标注归口补丁
-std::vector<std::string> unwired_config_fields();
+std::vector<std::string> unwiredConfigFields();
 
 } // namespace aiwrite

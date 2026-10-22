@@ -114,7 +114,7 @@ std::string base64_encode(const std::string& bytes)
 } // namespace
 
 // M7 / P7a-11：错误分类（PB-05 起就在用）—— 提为**公开纯函数**，供离线断言直接覆盖三类文案
-std::string classify_http_error(int status, const std::string& body)
+std::string classifyHttpError(int status, const std::string& body)
 {
     std::ostringstream stream;
     stream << "HTTP " << status;
@@ -146,7 +146,7 @@ std::string classify_http_error(int status, const std::string& body)
 }
 
 // M7 / P7a-10：体积文本（自适应单位；小图不再显示成 "0.00 MB"）
-std::string human_bytes(std::size_t bytes)
+std::string humanBytes(std::size_t bytes)
 {
     std::ostringstream stream;
     stream.precision(1);
@@ -160,14 +160,14 @@ std::string human_bytes(std::size_t bytes)
     return stream.str();
 }
 
-std::string image_mime_from_bytes(const unsigned char* data, std::size_t size)
+std::string imageMimeFromBytes(const unsigned char* data, std::size_t size)
 {
     const utils::ImageMagic magic = utils::sniffImageBytes(data, size);
     const char*             mime  = utils::imageFormatMime(magic.format);
     return mime[0] != '\0' ? std::string(mime) : std::string();
 }
 
-std::string image_mime_from_path(const std::string& path)
+std::string imageMimeFromPath(const std::string& path)
 {
     // M7-05：**内容优先**（魔数嗅探）—— 扩展名可能骗人（实测：WebP 存成 .png 时
     // 旧实现会贴 image/png 标签，后端可能因此拒图）；读不到文件头 / 格式不认识时
@@ -182,13 +182,13 @@ std::string image_mime_from_path(const std::string& path)
     return utils::mimeFromExtension(path);
 }
 
-std::size_t image_encode_count()
+std::size_t imageEncodeCount()
 {
     std::lock_guard<std::mutex> lock(image_cache_mutex());
     return image_encode_counter();
 }
 
-void reset_image_encode_cache()
+void resetImageEncodeCache()
 {
     std::lock_guard<std::mutex> lock(image_cache_mutex());
     image_cache().clear();
@@ -257,7 +257,7 @@ std::string encode_image_data_url(const std::string& path, std::size_t max_bytes
     if (encoded.empty()) {
         return fail("图片 base64 编码失败（**格式**类错误）: " + path);
     }
-    std::string data_url = "data:" + image_mime_from_path(path) + ";base64," + encoded;
+    std::string data_url = "data:" + imageMimeFromPath(path) + ";base64," + encoded;
 
     {
         std::lock_guard<std::mutex> lock(image_cache_mutex());
@@ -270,7 +270,7 @@ std::string encode_image_data_url(const std::string& path, std::size_t max_bytes
     return data_url;
 }
 
-nlohmann::json build_request_body(const OfficialChatRequest& request)
+nlohmann::json buildRequestBody(const OfficialChatRequest& request)
 {
     // M5-02：纯函数重载 —— 内部编码图片（失败图跳过），供离线断言与单调用方使用
     std::vector<std::string> data_urls;
@@ -281,10 +281,10 @@ nlohmann::json build_request_body(const OfficialChatRequest& request)
             data_urls.push_back(std::move(data_url));
         }
     }
-    return build_request_body(request, data_urls);
+    return buildRequestBody(request, data_urls);
 }
 
-nlohmann::json build_request_body(const OfficialChatRequest& request,
+nlohmann::json buildRequestBody(const OfficialChatRequest& request,
                                   const std::vector<std::string>& image_data_urls)
 {
     nlohmann::json body;
@@ -335,7 +335,7 @@ nlohmann::json build_request_body(const OfficialChatRequest& request,
     return body;
 }
 
-std::string resolve_chat_path(const std::string& chat_path, const std::string& model)
+std::string resolveChatPath(const std::string& chat_path, const std::string& model)
 {
     std::string path = chat_path.empty() ? std::string("/chat/completions") : chat_path;
     if (!model.empty()) {
@@ -348,19 +348,19 @@ std::string resolve_chat_path(const std::string& chat_path, const std::string& m
     return path;
 }
 
-std::string build_endpoint(const std::string& api_base, const std::string& chat_path)
+std::string buildEndpoint(const std::string& api_base, const std::string& chat_path)
 {
     const std::string base =
         trim_right_slashes(api_base.empty() ? "https://api.deepseek.com" : api_base);
-    return base + resolve_chat_path(chat_path, std::string());
+    return base + resolveChatPath(chat_path, std::string());
 }
 
-std::string build_endpoint(const std::string& api_base)
+std::string buildEndpoint(const std::string& api_base)
 {
-    return build_endpoint(api_base, "/chat/completions"); // 与改造前逐字一致
+    return buildEndpoint(api_base, "/chat/completions"); // 与改造前逐字一致
 }
 
-std::string resolve_api_key(const std::string& param_key,
+std::string resolveApiKey(const std::string& param_key,
                             const std::vector<std::string>& env_names)
 {
     if (!param_key.empty()) {
@@ -382,9 +382,9 @@ std::string resolve_api_key(const std::string& param_key,
     return {};
 }
 
-std::string resolve_api_key(const std::string& param_key)
+std::string resolveApiKey(const std::string& param_key)
 {
-    return resolve_api_key(param_key, std::vector<std::string>());
+    return resolveApiKey(param_key, std::vector<std::string>());
 }
 
 std::vector<std::pair<std::string, std::string>> build_auth_headers(const ProviderOptions& options,
@@ -410,7 +410,7 @@ std::vector<std::pair<std::string, std::string>> build_auth_headers(const Provid
     return headers;
 }
 
-ProviderOptions provider_options_from(const ProviderSpec& spec)
+ProviderOptions providerOptionsFrom(const ProviderSpec& spec)
 {
     ProviderOptions options;
     options.api_base         = spec.api_base;
@@ -425,7 +425,7 @@ ProviderOptions provider_options_from(const ProviderSpec& spec)
     return options;
 }
 
-OfficialChatResult official_chat(const OfficialChatRequest& request)
+OfficialChatResult officialChat(const OfficialChatRequest& request)
 {
     OfficialChatResult result;
 
@@ -464,7 +464,7 @@ OfficialChatResult official_chat(const OfficialChatRequest& request)
     const std::string      raw_base = options.api_base.empty() ? request.api_base : options.api_base;
     const std::string      base =
         trim_right_slashes(raw_base.empty() ? "https://api.deepseek.com" : raw_base);
-    std::string path = resolve_chat_path(options.chat_path, request.model);
+    std::string path = resolveChatPath(options.chat_path, request.model);
     if (options.auth_style == "query" && !request.api_key.empty()) {
         path = apply_query_key(
             path, options.auth_header.empty() ? std::string("key") : options.auth_header,
@@ -481,7 +481,7 @@ OfficialChatResult official_chat(const OfficialChatRequest& request)
     }
     headers.emplace("Accept", "application/json");
 
-    const std::string body_text = build_request_body(request, image_data_urls).dump();
+    const std::string body_text = buildRequestBody(request, image_data_urls).dump();
 
     // ---- M_patchAB §2.1（PB-02 真取消）：**可取消执行**（主路径）----
     //  * 实测（2026-10-11 · httplib 0.15.3）：`Client::stop()` **不能**唤醒阻塞中的读
@@ -511,17 +511,17 @@ OfficialChatResult official_chat(const OfficialChatRequest& request)
     job->connect_timeout_s = options.connect_timeout_s;
     job->read_timeout_s    = options.read_timeout_s;
     {
-        const HttpNetOptions net_options = resolve_http_net(base + path);
+        const HttpNetOptions net_options = resolveHttpNet(base + path);
         job->proxy                       = net_options.proxy;
         job->verify_tls                  = net_options.verify_tls;
     }
 
     const auto started = std::chrono::steady_clock::now();
-    const bool aborted = run_cancellable(request.cancel.get(), [job] {
+    const bool aborted = runCancellable(request.cancel.get(), [job] {
         httplib::Client client(job->base);
         client.set_connection_timeout(job->connect_timeout_s, 0);
         client.set_read_timeout(job->read_timeout_s, 0);
-        apply_http_net(client, HttpNetOptions{job->proxy, std::string(), job->verify_tls});
+        applyHttpNet(client, HttpNetOptions{job->proxy, std::string(), job->verify_tls});
         const auto begin    = std::chrono::steady_clock::now();
         auto       response = client.Post(job->path, job->headers, job->body, "application/json");
         const double ms =
@@ -559,7 +559,7 @@ OfficialChatResult official_chat(const OfficialChatRequest& request)
     result.http_status = response->status;
     result.raw_head    = response->body.substr(0, 240);
     if (response->status != 200) {
-        result.error = classify_http_error(response->status, response->body);
+        result.error = classifyHttpError(response->status, response->body);
         log::error("[官方 API] " + result.error);
         return result;
     }

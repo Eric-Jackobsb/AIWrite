@@ -51,7 +51,7 @@ struct Frame {
 };
 
 // 解析一行（含上限校验；**不抛异常**）
-Frame parse_frame(const std::string& line);
+Frame parseFrame(const std::string& line);
 
 // 生成（`fields_json` 必须是 JSON 对象文本；空串 = `{}`）
 std::string make_command(const std::string& name, const std::string& id,
@@ -62,24 +62,24 @@ std::string make_error(const std::string& code, const std::string& id,
                        const std::string& hint = "");
 
 // 词表（§6.1）
-const std::vector<std::string>& known_commands();   // 10 条（v3 起含 run_script / logout_site / current_tab）
-const std::vector<std::string>& known_events();     // 8 条（v3 起含 script_done / tab）
+const std::vector<std::string>& knownCommands();   // 10 条（v3 起含 run_script / logout_site / current_tab）
+const std::vector<std::string>& knownEvents();     // 8 条（v3 起含 script_done / tab）
 // v4（step 14）：`send_prompt` / `read_answer` 的**站字段组**为必需字段（选择器 / 发送方式由调用方下发）
-std::vector<std::string>        required_fields_of(const std::string& command);
-bool                            is_known_command(const std::string& name);
+std::vector<std::string>        requiredFieldsOf(const std::string& command);
+bool                            isKnownCommand(const std::string& name);
 
 // 命令帧校验：通过 → true；否则 false 且 *reason 为**可操作原因**
 //（「未知命令 …」/「缺少字段 …」—— 文案与 Python 侧同构，便于对照断言）
-bool validate_command(const Frame& frame, std::string* reason);
+bool validateCommand(const Frame& frame, std::string* reason);
 
 // 单帧字节上限（UTF-8 计）
-bool frame_within_limit(const std::string& line);
+bool frameWithinLimit(const std::string& line);
 
 // `delta` 事件载荷 → 文本（形态 A：`text`；形态 B：`delta.text`）；
 // 无可用增量 → 空串 + *explicit_non_stream = true
 //（`I22`：流式降级**必须显式标注**「非流式（轮询）」，不许安静改变行为）
-std::string delta_text_of_frame(const std::string& payload_json, bool* explicit_non_stream);
+std::string deltaTextOfFrame(const std::string& payload_json, bool* explicit_non_stream);
 
-const char* error_code_bad_frame();   // "bad_frame"
+const char* errorCodeBadFrame();   // "bad_frame"
 
 } // namespace aiwrite::web::channel

@@ -30,13 +30,13 @@ struct SettingsPanelResult {
 };
 
 // 菜单调用：打开设置窗口
-void open_settings_panel();
-void close_settings_panel();
-bool settings_panel_visible();
+void openSettingsPanel();
+void closeSettingsPanel();
+bool settingsPanelVisible();
 
 // 每帧调用（窗口未打开时为空操作 / 零副作用）
 //  * 保存成功时把工作副本写回 `config`（调用方持有的实例）并返回 saved = true
-SettingsPanelResult draw_settings_panel(Config& config);
+SettingsPanelResult drawSettingsPanel(Config& config);
 
 // 说明：配置**校验**实现已移到 `utils/settings_validation.h`（`utils::validate_settings`）——
 // 它是纯函数，放在核心库才能被 `api_probe --settings-assert` 离线断言（GUI 目标不可断言）。

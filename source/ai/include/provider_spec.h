@@ -110,13 +110,13 @@ struct ProviderWebSpec {            // 网页版站点描述（kind=web）
 //    因此可在 `api_probe --exec-selftest` 里做纯函数断言（`VB2-24`）
 enum class WebSessionState {
     unknown,    // 尚无证据（该站点本轮还没读过 Cookie：重启后 / 从未开过窗口）
-    logged_in,  // 有站点无关的登录证据
+    loggedIn,  // 有站点无关的登录证据
     logged_out, // 已读过该站点 Cookie，但没有登录证据（未登录 / 会话已失效）
 };
 
 struct WebSessionEvidence {
     bool                     cookies_known = false; // 是否已读过该站点的 Cookie 快照
-    std::size_t              cookie_count  = 0;     // 该 origin 的 Cookie 条数
+    std::size_t              cookieCount  = 0;     // 该 origin 的 Cookie 条数
     std::vector<std::string> cookie_names;          // 该 origin 实际存在的 Cookie 名
 };
 
@@ -152,11 +152,11 @@ struct ProviderSpec {
     std::string docs_url;
     std::string origin;   // builtin | source | user.d/<file> | user | fallback
 
-    const ProviderModelSpec* find_model(const std::string& model_id) const;
+    const ProviderModelSpec* findModel(const std::string& model_id) const;
 };
 
 // 网页版内置适配器（builtin:deepseek）的默认端点 —— 与改造前常量逐字一致
-const ProviderWebEndpoints& default_deepseek_web_endpoints();
+const ProviderWebEndpoints& defaultDeepseekWebEndpoints();
 
 // ------------------------------------------------------------------ 加载报告 --
 
@@ -168,7 +168,7 @@ struct SpecLoadReport {
     std::vector<std::string> files;                  // 实际参与的层（含标签）
 
     std::string summary() const;                     // 一行摘要（Console / 自检用）
-    std::string error_of(const std::string& id) const;  // 未使用（保留扩展位）
+    std::string errorOf(const std::string& id) const;  // 未使用（保留扩展位）
 };
 
 struct ProviderSpecs {
@@ -177,7 +177,7 @@ struct ProviderSpecs {
 
     const ProviderSpec*      find(const std::string& id) const;
     std::vector<std::string> ids(const std::string& kind /*空 = 全部*/) const;
-    std::size_t              count_kind(const std::string& kind) const;
+    std::size_t              countKind(const std::string& kind) const;
 };
 
 // ---- 纯函数（离线断言用；不碰文件系统）----
@@ -186,14 +186,14 @@ ProviderSpecs merge_provider_specs(
     const std::vector<std::pair<std::string, std::string>>& layers, SpecLoadReport* report);
 
 // ---- 真实读盘：按上文 ①→⑤ 顺序组层后调用 merge_provider_specs ----
-ProviderSpecs load_provider_specs();
+ProviderSpecs loadProviderSpecs();
 
 // 进程内缓存（首次访问自动加载；UI「重新加载配置表」/ CLI 自检调用 reload）
 //  * provider_specs()          —— 取当前表（引用；跨 reload 可能失效，长生命周期请用快照）
 //  * provider_specs_snapshot() —— 取共享快照（工作线程/节点执行请用这个，避免 reload 竞态）
-const ProviderSpecs&                 provider_specs();
-std::shared_ptr<const ProviderSpecs> provider_specs_snapshot();
-void                                 reload_provider_specs();
+const ProviderSpecs&                 providerSpecs();
+std::shared_ptr<const ProviderSpecs> providerSpecsSnapshot();
+void                                 reloadProviderSpecs();
 
 // ---- M_patchB L1 续（PB2-17）：节点生效条目 → 网页版站点参数 ----
 //  * 生效条目是 web 条目 → 用它自己的 `web` 段
@@ -201,37 +201,37 @@ void                                 reload_provider_specs();
 //    （内置表即 `deepseek-web`），保持改造前行为「未选网页版条目时用内置默认站点」；
 //    字段为空时由调用方按内置默认回落（见 `web::login_request_of`）
 //  * `table` 可为快照（工作线程请传 `provider_specs_snapshot().get()`，避免 reload 竞态）
-ProviderWebSpec web_spec_for(const ProviderSpec* spec, const ProviderSpecs* table);
-std::string     web_provider_id_for(const ProviderSpec* spec, const ProviderSpecs* table);
-inline ProviderWebSpec web_spec_for(const ProviderSpec* spec)
+ProviderWebSpec webSpecFor(const ProviderSpec* spec, const ProviderSpecs* table);
+std::string     webProviderIdFor(const ProviderSpec* spec, const ProviderSpecs* table);
+inline ProviderWebSpec webSpecFor(const ProviderSpec* spec)
 {
-    return web_spec_for(spec, &provider_specs());
+    return webSpecFor(spec, &providerSpecs());
 }
-inline std::string web_provider_id_for(const ProviderSpec* spec)
+inline std::string webProviderIdFor(const ProviderSpec* spec)
 {
-    return web_provider_id_for(spec, &provider_specs());
+    return webProviderIdFor(spec, &providerSpecs());
 }
 
 // ---- M_patchB L1 修订（PB2-22 / 决策 D-22② / 不变量 I14）：**严格**站点解析（不回落）----
 //  * 站点只能来自 `kind == "web"` 条目自己的 `web` 段；非网页版条目 / 表外 id / nullptr → **空**
 //  * 与上方 `web_spec_for()`（保留旧回落语义，**仅供 CLI / 自检**守 `I2`）严格区分：
 //    界面 / 运行前校验 / 运行期**必须**用本组
-ProviderWebSpec strict_web_spec_for(const ProviderSpec* spec);
-std::string     strict_web_provider_id_for(const ProviderSpec* spec);
+ProviderWebSpec strictWebSpecFor(const ProviderSpec* spec);
+std::string     strictWebProviderIdFor(const ProviderSpec* spec);
 
 // 站点**不可用**的可操作错误文案（空串 = 可用）：界面（红）/ 运行前校验（「本次运行必定失败」）/ 运行期（NodeError）共用
 //  * 条目为空 / 非网页版条目 / `web.login_url` 为空（决策 `D-26`：**不**回落内置默认站点）
-std::string web_site_error(const ProviderSpec* spec);
+std::string webSiteError(const ProviderSpec* spec);
 
 // 站点**可选字段**缺失清单（可回落内置默认，但要点明；决策 `D-26`：回落 + 警告）——空串 = 无缺失
-std::string web_site_field_warnings(const ProviderSpec* spec);
+std::string webSiteFieldWarnings(const ProviderSpec* spec);
 
 // 该 `web.adapter` 本版本是否已实现（R12：表里有、程序没实现 → 运行时**明确报错**；空 adapter = 视为内置默认）
-bool web_adapter_implemented(const std::string& adapter);
+bool webAdapterImplemented(const std::string& adapter);
 
 // M_patchB L1 修订（PB2-26）：**登录型站点条目**（`adapter=dom` 且生成字段未就绪）
 //  * 登录 / 协议探测可用；生成会在运行时**明确报错**（不猜选择器、不静默降级）
-bool web_login_only(const ProviderSpec* spec);
+bool webLoginOnly(const ProviderSpec* spec);
 
 // ---- M_patchB L4（PB2-27）：站点无关的登录态判定 / 显示条件 / 探测适用性（全部**纯函数**）----
 
@@ -239,15 +239,15 @@ bool web_login_only(const ProviderSpec* spec);
 //  * `spec` 为空 / 非网页版条目 → `unknown`（没有站点登录态这个概念）
 //  * 配了 `cookie_names` → 命中任一即 `logged_in`；已读过 Cookie 但未命中 → `logged_out`
 //  * 未配 `cookie_names` → 该 origin 的 Cookie 非空即 `logged_in`（并集，不强制配 Cookie 名）
-WebSessionVerdict web_session_state(const ProviderSpec* spec, const WebSessionEvidence& evidence);
+WebSessionVerdict webSessionState(const ProviderSpec* spec, const WebSessionEvidence& evidence);
 
 // 状态标签（界面 / 状态栏用）：已登录 / 未登录 / 未确认
-std::string web_session_state_label(WebSessionState state);
+std::string webSessionStateLabel(WebSessionState state);
 
 // `D-28` ①：界面是否显示 `userToken` 行 —— **仅当**条目显式配了 `token_expr`
 //  * 通用 DOM 站点不产生 `userToken` → 不显示该行（改为「登录态由浏览器 profile 维持」）
 //  * 内置 `deepseek-web` 配了 `token_expr` → 行为不变（守 `I2`）
-bool web_shows_user_token(const ProviderSpec* spec);
+bool webShowsUserToken(const ProviderSpec* spec);
 
 // ---- M_patchB L4（PB2-28 / 不变量 `I16`）：**协议探测**（PoW 挑战 / 站点端点 / `localStorage.userToken`）
 //      对该条目是否**适用** ----
@@ -255,18 +255,18 @@ bool web_shows_user_token(const ProviderSpec* spec);
 //  * `dom` 站点 → 仅当**显式**配了 `probe_paths` 或 `token_expr` 才适用
 //    （`web.endpoints` 对 `dom` 无意义，加载期已给警告）；否则**不适用** ——
 //    页面内只做**只读诊断**，**不注入**任何 DeepSeek 端点 / `userToken` 读取
-bool probe_is_applicable(const ProviderWebSpec& web);
-bool probe_is_applicable(const ProviderSpec* spec);
+bool probeIsApplicable(const ProviderWebSpec& web);
+bool probeIsApplicable(const ProviderSpec* spec);
 
 // ---- 本版本「代码能力」清单（提示「表里有、程序还没实现」的条目，R9/R12）----
-std::vector<std::string> implemented_protocols();      // 例：{"openai", "deepseek-web"}
-std::vector<std::string> implemented_web_adapters();   // 例：{"builtin:deepseek"}
-std::string              protocol_display(const std::string& protocol);
+std::vector<std::string> implementedProtocols();      // 例：{"openai", "deepseek-web"}
+std::vector<std::string> implementedWebAdapters();   // 例：{"builtin:deepseek"}
+std::string              protocolDisplay(const std::string& protocol);
 
 // ---- 解析辅助（纯函数；节点 / 提示 / 自检共用）----
-std::string resolve_api_base(const ProviderSpec& spec, const std::string& param_value);
-std::string resolve_key_ref(const ProviderSpec& spec, const std::string& param_value);
-std::string resolve_env_name(const ProviderSpec& spec);   // 表里第一个 env 名（可空）
+std::string resolveApiBase(const ProviderSpec& spec, const std::string& param_value);
+std::string resolveKeyRef(const ProviderSpec& spec, const std::string& param_value);
+std::string resolveEnvName(const ProviderSpec& spec);   // 表里第一个 env 名（可空）
 // model_custom 非空 → 覆盖；否则节点 model 若属于该条目 → 用它；否则用表内首选
 // （for_vision=true 时优先 vision_model_default / 首个视觉模型）
 std::string resolve_model(const ProviderSpec& spec, const std::string& param_model,
@@ -275,14 +275,14 @@ std::string resolve_model(const ProviderSpec& spec, const std::string& param_mod
 // *declared 表示「该模型是否在表内被声明过」
 bool        spec_model_supports_vision(const ProviderSpec& spec, const std::string& model,
                                        bool* declared);
-std::string default_chat_path(const std::string& protocol);
-std::string default_auth_style(const std::string& protocol);
-std::string default_auth_header(const std::string& auth_style);
+std::string defaultChatPath(const std::string& protocol);
+std::string defaultAuthStyle(const std::string& protocol);
+std::string defaultAuthHeader(const std::string& auth_style);
 
 // ---- 自检：配置表相关离线断言（返回失败项数；api_probe --exec-selftest 也调用）----
 // 覆盖：合并优先级 / 必填缺失 / 类型错误 / 未知字段 / dup id 覆盖 / 密钥拒绝 /
 //      坏 JSON / schema_version 不匹配 / 兜底触发 / web 两种形态校验 / _ 前缀键忽略
 //   * passed_out：可选，回传通过项数（便于调用方并入自己的计数）
-int provider_spec_selftest(int* passed_out = nullptr);
+int providerSpecSelftest(int* passed_out = nullptr);
 
 } // namespace aiwrite::ai

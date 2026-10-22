@@ -6,6 +6,7 @@
 #include "log.h"
 #include "paths.h"
 #include "provider_spec.h"
+#include "string_util.h"   // CLN-05：narrow 收敛
 #include "webview2_runtime.h"
 
 #include <windows.h>
@@ -20,22 +21,6 @@
 
 namespace aiwrite::utils {
 namespace {
-
-std::string narrow(const std::wstring& wide)
-{
-    if (wide.empty()) {
-        return {};
-    }
-    const int need = ::WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), static_cast<int>(wide.size()),
-                                           nullptr, 0, nullptr, nullptr);
-    if (need <= 0) {
-        return {};
-    }
-    std::string out(static_cast<std::size_t>(need), '\0');
-    ::WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), static_cast<int>(wide.size()), out.data(), need,
-                          nullptr, nullptr);
-    return out;
-}
 
 // 读注册表字符串值（本文件独立的小拷贝：诊断报告只读 OS 版本，
 // 不复用 webview2_runtime.cpp 的私有实现——那一个还带 32/64 位视图语义）
@@ -54,7 +39,7 @@ std::string read_reg_string(HKEY root, const wchar_t* subkey, const wchar_t* nam
     if (status != ERROR_SUCCESS || type != REG_SZ) {
         return {};
     }
-    return narrow(std::wstring(buffer));
+    return utils::narrow(std::wstring(buffer));
 }
 
 std::string local_time_text()
@@ -122,7 +107,7 @@ std::string count_files(const std::filesystem::path& dir, const std::string& ext
 // 最近一次归档目录名（按目录修改时间取最新；无则空串）
 std::string newest_archive_dir_name()
 {
-    const std::filesystem::path dir = paths::expand(app_config().output.archive_dir);
+    const std::filesystem::path dir = paths::expand(appConfig().output.archive_dir);
     std::error_code             code;
     if (!std::filesystem::is_directory(dir, code)) {
         return {};
@@ -162,7 +147,7 @@ bool DiagnosticsReport::contains(const std::string& needle) const
     return text().find(needle) != std::string::npos;
 }
 
-std::string DiagnosticsReport::key_value(const std::string& key) const
+std::string DiagnosticsReport::keyValue(const std::string& key) const
 {
     const std::string prefix = key + " = ";
     for (const std::string& line : lines) {
@@ -174,7 +159,7 @@ std::string DiagnosticsReport::key_value(const std::string& key) const
 }
 
 
-DiagnosticsReport collect_diagnostics()
+DiagnosticsReport collectDiagnostics()
 {
     DiagnosticsReport         report;
     std::vector<std::string>& lines = report.lines;
@@ -221,28 +206,28 @@ DiagnosticsReport collect_diagnostics()
     lines.push_back("物理内存 = " + memory_text);
 
     // ---- [依赖]（网页版站点前置条件；缺失时给出可操作指引）----
-    const WebView2RuntimeInfo webview2 = detect_webview2_runtime();
+    const WebView2RuntimeInfo webview2 = detectWebview2Runtime();
     lines.push_back("[依赖]");
     lines.push_back("WebView2 = " + webview2_runtime_summary(webview2));
 
     // ---- [路径] ----
     lines.push_back("[路径]");
-    lines.push_back("程序目录 = " + paths::exe_dir().string());
-    lines.push_back("数据目录 = " + path_or_missing(paths::data_root()));
-    lines.push_back("配置文件 = " + path_or_missing(paths::config_file()));
-    lines.push_back("日志文件 = " + log::file_path_string());
-    lines.push_back("工作流目录 = " + paths::workflows_dir().string());
+    lines.push_back("程序目录 = " + paths::exeDir().string());
+    lines.push_back("数据目录 = " + path_or_missing(paths::dataRoot()));
+    lines.push_back("配置文件 = " + path_or_missing(paths::configFile()));
+    lines.push_back("日志文件 = " + log::filePathString());
+    lines.push_back("工作流目录 = " + paths::workflowsDir().string());
         // 说明：`paths::expand` 只做 `~` 替换（保留原串里的 `/`）⇒ 报告里再做一次 lexically_normal，
         // 让路径显示与资源管理器一致（不改变 expand 本身的行为，那条路径有自检断言覆盖）
         lines.push_back("输出目录 = " +
-                        paths::expand(app_config().output.archive_dir).lexically_normal().string());
-    lines.push_back("图片资源目录 = " + paths::assets_images_dir().string());
+                        paths::expand(appConfig().output.archive_dir).lexically_normal().string());
+    lines.push_back("图片资源目录 = " + paths::assetsImagesDir().string());
 
     // ---- [配置]（只报值与开关，不含任何密钥）----
-    const Config&           config = app_config();
+    const Config&           config = appConfig();
     const auto              on_off = [](bool value) { return value ? "开" : "关"; };
     std::string             unwired_text;
-    for (const std::string& field : unwired_config_fields()) {
+    for (const std::string& field : unwiredConfigFields()) {
         unwired_text += (unwired_text.empty() ? "" : "、") + field;
     }
 
@@ -261,18 +246,18 @@ DiagnosticsReport collect_diagnostics()
                     " / 上限=" + std::to_string(config.output.max_history) +
                     " / 清理阈值=" + std::to_string(config.output.ttl_days) + " 天");
     lines.push_back("日志保留 = " + std::to_string(config.advanced.log_ttl_days) + " 天");
-    lines.push_back("未接配置字段 = " + std::to_string(unwired_config_fields().size()) + " 项（" +
+    lines.push_back("未接配置字段 = " + std::to_string(unwiredConfigFields().size()) + " 项（" +
                     unwired_text + "）");
 
     // ---- [站点表]（provider 配置表加载结果；只读）----
-    const ai::ProviderSpecs&  specs       = ai::provider_specs();
+    const ai::ProviderSpecs&  specs       = ai::providerSpecs();
     const ai::SpecLoadReport& spec_report = specs.report;
     lines.push_back("[站点表]");
     lines.push_back("加载状态 = " + std::string(spec_report.ok ? "正常" : "有错误（已回落到可用表）") +
                     (spec_report.fallback_used ? "｜已用最小兜底表" : ""));
     lines.push_back("条目总数 = " + std::to_string(specs.items.size()) + "（官方 API " +
-                    std::to_string(specs.count_kind("official")) + " / 网页版 " +
-                    std::to_string(specs.count_kind("web")) + "）");
+                    std::to_string(specs.countKind("official")) + " / 网页版 " +
+                    std::to_string(specs.countKind("web")) + "）");
     lines.push_back("来源层数 = " + std::to_string(spec_report.files.size()));
     std::string first_error;
     if (!spec_report.errors.empty()) {
@@ -289,26 +274,26 @@ DiagnosticsReport collect_diagnostics()
 
     // ---- [凭据]（**只出条数**：既不输出条目名，也不输出密钥 / 密文）----
     // M_patchAB §2.3（PB-06 剩余）：目录 / 后端 / TTL 全部取自 `config.toml [credentials]`
-    const int ttl_days = app_config().credentials.ttl_days;
+    const int ttl_days = appConfig().credentials.ttl_days;
     lines.push_back("[凭据]");
-    lines.push_back("凭据库目录 = " + credentials_dir());
-    lines.push_back("后端 = " + app_config().credentials.backend + " / TTL = " +
+    lines.push_back("凭据库目录 = " + credentialsDir());
+    lines.push_back("后端 = " + appConfig().credentials.backend + " / TTL = " +
                     std::to_string(ttl_days) + " 天");
-    lines.push_back("已配置凭据数 = " + std::to_string(list_credentials(ttl_days).size()) +
+    lines.push_back("已配置凭据数 = " + std::to_string(listCredentials(ttl_days).size()) +
                     "（只出条数，不出条目名与密钥）");
 
     // ---- [归档与工作流] ----
     const std::string newest = newest_archive_dir_name();
     lines.push_back("[归档与工作流]");
-    lines.push_back("工作流文件数 = " + count_files(paths::workflows_dir(), ".json"));
+    lines.push_back("工作流文件数 = " + count_files(paths::workflowsDir(), ".json"));
     lines.push_back("最近一次归档 = " + (newest.empty() ? std::string("（无）") : newest));
 
     return report;
 }
 
-std::string diagnostics_report_text()
+std::string diagnosticsReportText()
 {
-    return collect_diagnostics().text();
+    return collectDiagnostics().text();
 }
 
 } // namespace aiwrite::utils

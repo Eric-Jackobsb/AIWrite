@@ -33,6 +33,6 @@ namespace aiwrite::ai {
 // provider_id 空 = 配置表里第一个 `kind=web` 条目
 // timeout_s  < 60 视为「用默认 300 秒」（人工登录需要时间）
 // get_path   "路径?查询串"（例：`/alice/xxx?a=1&b=2`）；**空 = 只读模式**（不碰站点接口）
-int upload_supply_probe(const std::string& provider_id, int timeout_s, const std::string& get_path);
+int uploadSupplyProbe(const std::string& provider_id, int timeout_s, const std::string& get_path);
 
 } // namespace aiwrite::ai

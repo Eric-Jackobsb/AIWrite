@@ -29,7 +29,7 @@
 namespace aiwrite::engine {
 
 // 当前工作流格式版本（权威位 = `workflow_io.h` 的 `kWorkflowVersion`，此处只做迁移判定）
-std::string current_workflow_version();
+std::string currentWorkflowVersion();
 
 // 一次工作流迁移的结果（`ok=false` ⇒ **拒绝载入**，`error` 给可操作原因）
 struct WorkflowMigrationOutcome {
@@ -55,7 +55,7 @@ WorkflowMigrationOutcome migrate_workflow_with(const std::vector<WorkflowMigrati
                                                nlohmann::json* document);
 
 // 生产入口（用内置迁移表）
-WorkflowMigrationOutcome migrate_workflow(nlohmann::json* document);
+WorkflowMigrationOutcome migrateWorkflow(nlohmann::json* document);
 
 // ---------------------------------------------------------------------------
 //  配置迁移（`config.toml`）**不在本文件**：它由 `utils/config.{h,cpp}` 实现
@@ -67,6 +67,6 @@ WorkflowMigrationOutcome migrate_workflow(nlohmann::json* document);
 // ---------------------------------------------------------------------------
 //  离线自检（`api_probe --exec-selftest` 调用）；返回失败项数
 // ---------------------------------------------------------------------------
-int migration_selftest(int* passed_out = nullptr);
+int migrationSelftest(int* passed_out = nullptr);
 
 } // namespace aiwrite::engine

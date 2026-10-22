@@ -4,6 +4,7 @@
 
 #include "web_pow.h"
 #include "log.h"
+#include "string_util.h"   // CLN-05：trim 收敛
 #include "webview_host.h"
 
 #include <sstream>
@@ -98,16 +99,6 @@ std::string snapshot_text_of(const nlohmann::json& node)
     return out;
 }
 
-std::string trim(const std::string& text)
-{
-    const auto begin = text.find_first_not_of(" \t\r\n");
-    if (begin == std::string::npos) {
-        return {};
-    }
-    const auto end = text.find_last_not_of(" \t\r\n");
-    return text.substr(begin, end - begin + 1);
-}
-
 
 // 从 {"data":{"biz_data":{...}}} 里取一层（缺失返回 nullptr，避免 operator[] 的 UB）
 const nlohmann::json* biz_data_of(const nlohmann::json& json)
@@ -179,7 +170,7 @@ bool reuse_recent_session(httplib::Client& client, const httplib::Headers& heade
 
 } // namespace
 
-WebChatResult web_chat(const web::Session& session, const WebChatRequest& request)
+WebChatResult webChat(const web::Session& session, const WebChatRequest& request)
 {
     WebChatResult result;
     if (session.user_token.empty()) {
@@ -229,7 +220,7 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
 
     PowChallenge challenge;
     std::string  parse_error;
-    if (!parse_pow_challenge(challenge_resp->body, &challenge, &parse_error)) {
+    if (!parsePowChallenge(challenge_resp->body, &challenge, &parse_error)) {
         result.error =
             "挑战解析失败: " + parse_error + " | 响应: " + challenge_resp->body.substr(0, 300);
         return result;
@@ -255,7 +246,7 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
     }
     else {
         std::string solve_error;
-        answer = solve_pow(challenge, &attempts, &solve_error);
+        answer = solvePow(challenge, &attempts, &solve_error);
         result.pow_attempts = attempts;
         log::warn("[网页版] PoW：页面内求解不可用（" + page_error + "），回退 C++ 求解器（尝试 " +
                   std::to_string(attempts) + " 次）");
@@ -269,7 +260,7 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
     // ---------------------------------------------------------- 3) 调用 -----
     httplib::Headers call_headers = headers;
     call_headers.emplace("Accept", "text/event-stream");
-    call_headers.emplace("x-ds-pow-response", make_pow_header_value(challenge, answer));
+    call_headers.emplace("x-ds-pow-response", makePowHeaderValue(challenge, answer));
 
     // 会话与 parent（网页版要求 chat_session_id 为 UUID）
     std::string session_id  = request.chat_session_id;
@@ -343,9 +334,9 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
         }
         ++line_index;
 
-        const std::string trimmed = trim(line);
+        const std::string trimmed = utils::trim(line);
         const std::string payload =
-            (trimmed.rfind("data:", 0) == 0) ? trim(trimmed.substr(5)) : trimmed;
+            (trimmed.rfind("data:", 0) == 0) ? utils::trim(trimmed.substr(5)) : trimmed;
         if (payload.empty() || payload == "[DONE]" || payload == "finished") {
             if (payload == "[DONE]" || payload == "finished") {
                 break;
@@ -386,15 +377,15 @@ WebChatResult web_chat(const web::Session& session, const WebChatRequest& reques
     //  * 401 / code=40002 → 必须重新登录：作废**该站点**的内存会话（面板随即显示「未登录」）
     //  * code=40003 → 请求被拒（PoW / 频率 / 前端版本）：给可操作提示，不作废会话
     const std::string failure_hint =
-        web_session_failure_hint(response->status, response->body);
+        webSessionFailureHint(response->status, response->body);
     if (!failure_hint.empty()) {
         if (!result.error.empty()) {
             result.error += "；";
         }
         result.error += failure_hint;
         log::warn("[网页版] " + failure_hint);
-        if (web_session_failure_needs_relogin(response->status, response->body)) {
-            const std::string site = web::site_key_of(request.endpoints.host);
+        if (webSessionFailureNeedsRelogin(response->status, response->body)) {
+            const std::string site = web::siteKeyOf(request.endpoints.host);
             web::SessionStore::instance().clear(site);
             log::warn("[网页版会话] 站点 " + (site.empty() ? std::string("(默认)") : site) +
                       " 的内存会话已作废（需重新登录；Cookie 仍在浏览器 profile 里）");
@@ -425,7 +416,7 @@ bool body_has_error_code(const std::string& body, int code)
 
 } // namespace
 
-std::string web_session_failure_hint(int http_status, const std::string& body)
+std::string webSessionFailureHint(int http_status, const std::string& body)
 {
     if (http_status == 401) {
         return "会话已失效（HTTP 401）：登录态已过期或被站点拒绝 —— 请在参数面板点"
@@ -447,7 +438,7 @@ std::string web_session_failure_hint(int http_status, const std::string& body)
     return {};
 }
 
-bool web_session_failure_needs_relogin(int http_status, const std::string& body)
+bool webSessionFailureNeedsRelogin(int http_status, const std::string& body)
 {
     return http_status == 401 || body_has_error_code(body, 40002);
 }

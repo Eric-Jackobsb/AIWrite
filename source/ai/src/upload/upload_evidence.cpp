@@ -30,7 +30,7 @@ std::string NetRecord::line() const
            (url.empty() ? std::string("(空 URL)") : url);
 }
 
-bool UploadNetwork::url_matches_any(const std::string& url, const std::vector<std::string>& needles)
+bool UploadNetwork::urlMatchesAny(const std::string& url, const std::vector<std::string>& needles)
 {
     if (url.empty() || needles.empty()) {
         return false;
@@ -43,7 +43,7 @@ bool UploadNetwork::url_matches_any(const std::string& url, const std::vector<st
     return false;
 }
 
-std::string UploadNetwork::evidence_for(const UploadExpectations& expect) const
+std::string UploadNetwork::evidenceFor(const UploadExpectations& expect) const
 {
     if (expect.net_url_contains.empty()) {
         return {};
@@ -51,7 +51,7 @@ std::string UploadNetwork::evidence_for(const UploadExpectations& expect) const
     std::size_t hits  = 0;
     std::string first;
     for (const NetRecord& record : records) {
-        if (url_matches_any(record.url, expect.net_url_contains)) {
+        if (urlMatchesAny(record.url, expect.net_url_contains)) {
             ++hits;
             if (first.empty()) {
                 first = record.line();
@@ -69,7 +69,7 @@ std::string UploadNetwork::evidence_for(const UploadExpectations& expect) const
 //    （`upload` / `/files` / `file/` / `attach` / `media` / `oss` / `tos` / `storage` / `blob`）
 //  * 为什么要求 POST/PUT：上传必然是写请求 —— 用 GET 命中特征词（页面 / 接口文档）会误判
 //  * 返回空串 = 未取到自动证据（调用方据此判「缺网络回执」）
-std::string UploadNetwork::evidence_for_auto() const
+std::string UploadNetwork::evidenceForAuto() const
 {
     static const std::vector<std::string> kGeneric = {"upload", "/files", "file/",  "attach", "media",
                                                       "oss",    "tos",    "storage", "blob"};
@@ -77,7 +77,7 @@ std::string UploadNetwork::evidence_for_auto() const
     std::string first;
     for (const NetRecord& record : records) {
         const bool is_write = record.method == "POST" || record.method == "PUT";
-        if (!is_write || !url_matches_any(record.url, kGeneric)) {
+        if (!is_write || !urlMatchesAny(record.url, kGeneric)) {
             continue;
         }
         ++hits;
@@ -185,18 +185,18 @@ std::vector<std::pair<std::string, int>> parse_count_pairs(const json& parsed, c
 
 } // namespace
 
-std::string page_state_script(const std::vector<std::string>& selectors)
+std::string pageStateScript(const std::vector<std::string>& selectors)
 {
     return page_state_script_impl(selectors, {});
 }
 
-std::string page_state_script(const std::vector<std::string>& selectors,
+std::string pageStateScript(const std::vector<std::string>& selectors,
                               const std::vector<std::string>& file_names)
 {
     return page_state_script_impl(selectors, file_names);
 }
 
-bool parse_page_state(const std::string& json_text, PageState* out, std::string* error)
+bool parsePageState(const std::string& json_text, PageState* out, std::string* error)
 {
     if (out == nullptr) {
         if (error != nullptr) {
@@ -231,7 +231,7 @@ bool parse_page_state(const std::string& json_text, PageState* out, std::string*
     return true;
 }
 
-int page_count(const PageState& state, const std::string& selector)
+int pageCount(const PageState& state, const std::string& selector)
 {
     for (const auto& entry : state.counts) {
         if (entry.first == selector) {
@@ -241,12 +241,12 @@ int page_count(const PageState& state, const std::string& selector)
     return 0;
 }
 
-std::string match_page_evidence(const PageState& state, const UploadExpectations& expect)
+std::string matchPageEvidence(const PageState& state, const UploadExpectations& expect)
 {
     if (expect.page_selector.empty()) {
         return {}; // 站点单元没给页面期望 → 只能靠网络回执判定
     }
-    const int count = page_count(state, expect.page_selector);
+    const int count = pageCount(state, expect.page_selector);
     if (count <= 0) {
         return {};
     }
@@ -260,7 +260,7 @@ std::string match_page_evidence(const PageState& state, const UploadExpectations
 //                      ③ blob/data 缩略图数 > 交件前基线
 //  * `baseline == nullptr`（没采到基线）→ 只保留 ①（不臆造「新增」）
 //  * 返回空串 = 未取到自动证据（调用方据此判「缺页面证据」，绝不假装成功）
-std::string match_page_evidence_auto(const PageState& state, const PageState* baseline)
+std::string matchPageEvidenceAuto(const PageState& state, const PageState* baseline)
 {
     for (const auto& entry : state.file_hits) {
         if (entry.second > 0) {
@@ -305,7 +305,7 @@ bool upload_evidence_ready(const std::string& page_evidence, const std::string& 
     return false;
 }
 
-int upload_evidence_selftest(int* passed_out)
+int uploadEvidenceSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
@@ -321,12 +321,12 @@ int upload_evidence_selftest(int* passed_out)
     };
 
     // ① URL 匹配
-    check(UploadNetwork::url_matches_any("https://tos-hl-x.snssdk.com/upload/v1/b/x.png",
+    check(UploadNetwork::urlMatchesAny("https://tos-hl-x.snssdk.com/upload/v1/b/x.png",
                                          {"tos-hl-x.snssdk.com/upload/v1/"}),
           "URL 含期望子串 → 命中");
-    check(!UploadNetwork::url_matches_any("https://example.com/x", {"tos-hl-x.snssdk.com/"}),
+    check(!UploadNetwork::urlMatchesAny("https://example.com/x", {"tos-hl-x.snssdk.com/"}),
           "URL 不含期望子串 → 不命中");
-    check(!UploadNetwork::url_matches_any("https://example.com/x", {}), "无期望子串 → 不命中");
+    check(!UploadNetwork::urlMatchesAny("https://example.com/x", {}), "无期望子串 → 不命中");
 
     // ② 网络证据
     {
@@ -335,58 +335,58 @@ int upload_evidence_selftest(int* passed_out)
         network.records.push_back(NetRecord{"https://tos-hl-x.snssdk.com/upload/v1/b/x.png", "POST", 200});
         UploadExpectations expect;
         expect.net_url_contains = {"tos-hl-x.snssdk.com/upload/v1/"};
-        const std::string evidence = network.evidence_for(expect);
+        const std::string evidence = network.evidenceFor(expect);
         check(evidence.find("POST") != std::string::npos && evidence.find("200") != std::string::npos &&
                   evidence.find("命中 1 条") != std::string::npos,
               "网络证据：命中并给出方法 / 状态码 / 命中数");
         UploadExpectations other;
         other.net_url_contains = {"never.example.com"};
-        check(network.evidence_for(other).empty(), "网络证据：未命中 → 空串");
+        check(network.evidenceFor(other).empty(), "网络证据：未命中 → 空串");
         UploadExpectations none;
-        check(network.evidence_for(none).empty(), "网络期望为空 → 空串（不由本层判定）");
+        check(network.evidenceFor(none).empty(), "网络期望为空 → 空串（不由本层判定）");
         check(!network.summary().empty() && network.summary().find("2 条") != std::string::npos,
               "网络摘要含条数");
         UploadNetwork empty;
         check(empty.summary().find("0 条") != std::string::npos, "空网络采集也要讲清楚（0 条）");
-        check(empty.evidence_for(expect).empty(), "空采集 → 无证据");
+        check(empty.evidenceFor(expect).empty(), "空采集 → 无证据");
     }
 
     // ③ 页面证据（脚本生成 + 解析 + 判定）
     {
-        const std::string script = page_state_script({".a", "input[type=file]"});
+        const std::string script = pageStateScript({".a", "input[type=file]"});
         check(script.find("querySelectorAll") != std::string::npos &&
                   script.find("input[type=file]") != std::string::npos,
               "页面状态脚本：选择器安全内联（JSON 数组）+ 只读采样");
 
         PageState   state;
         std::string error;
-        const bool  parsed = parse_page_state(
+        const bool  parsed = parsePageState(
             R"({"url":"https://a/b","title":"t","counts":[[".a",2],["input[type=file]",1],[".bad",-1]]})",
             &state, &error);
         check(parsed && error.empty() && state.url == "https://a/b" && state.counts.size() == 3,
               "页面状态解析：URL / 标题 / 计数全部取到");
-        check(page_count(state, ".a") == 2 && page_count(state, ".absent") == 0 &&
-                  page_count(state, ".bad") == -1,
+        check(pageCount(state, ".a") == 2 && pageCount(state, ".absent") == 0 &&
+                  pageCount(state, ".bad") == -1,
               "页面计数：命中 / 未采集（0）/ 非法选择器（-1）");
 
         UploadExpectations expect;
         expect.page_selector = ".a";
         expect.page_note     = "附件区";
-        check(match_page_evidence(state, expect).find("命中 2 个") != std::string::npos,
+        check(matchPageEvidence(state, expect).find("命中 2 个") != std::string::npos,
               "页面证据：命中 → 文案含命中数");
         expect.page_selector = ".absent";
-        check(match_page_evidence(state, expect).empty(), "页面证据：未命中 → 空串");
+        check(matchPageEvidence(state, expect).empty(), "页面证据：未命中 → 空串");
         expect.page_selector.clear();
-        check(match_page_evidence(state, expect).empty(), "页面期望为空 → 空串");
+        check(matchPageEvidence(state, expect).empty(), "页面期望为空 → 空串");
 
         PageState bad;
-        check(!parse_page_state("not json at all", &bad, &error) && !error.empty(),
+        check(!parsePageState("not json at all", &bad, &error) && !error.empty(),
               "页面状态解析：非法 JSON → 失败 + 可读原因");
         error.clear();
-        check(!parse_page_state("\"just a string\"", &bad, &error) && !error.empty(),
+        check(!parsePageState("\"just a string\"", &bad, &error) && !error.empty(),
               "页面状态解析：形态不符 → 失败 + 可读原因");
         error.clear();
-        check(parse_page_state("{}", &bad, &error) && bad.counts.empty(),
+        check(parsePageState("{}", &bad, &error) && bad.counts.empty(),
               "页面状态解析：缺 counts 也通过（计数为空）");
     }
 
@@ -410,7 +410,7 @@ int upload_evidence_selftest(int* passed_out)
         // 页面侧：交付文件名出现 → 命中
         PageState with_name;
         with_name.file_hits.emplace_back("样例图.png", 1);
-        check(match_page_evidence_auto(with_name, nullptr).find("文件名") != std::string::npos,
+        check(matchPageEvidenceAuto(with_name, nullptr).find("文件名") != std::string::npos,
               "自动判据（页面）：交付文件名出现在页面 → 命中");
 
         // 页面侧：附件池 / 缩略图相对**交件前基线**增加 → 命中
@@ -420,43 +420,43 @@ int upload_evidence_selftest(int* passed_out)
         PageState after;
         after.attach_pool = 1;
         after.blob_images = 2;
-        check(match_page_evidence_auto(after, &base).find("附件候选池") != std::string::npos,
+        check(matchPageEvidenceAuto(after, &base).find("附件候选池") != std::string::npos,
               "自动判据（页面）：附件候选池节点增加 → 命中");
         after.attach_pool = 0;
         after.blob_images = 3;
-        check(match_page_evidence_auto(after, &base).find("缩略图") != std::string::npos,
+        check(matchPageEvidenceAuto(after, &base).find("缩略图") != std::string::npos,
               "自动判据（页面）：缩略图增加 → 命中");
         PageState same;
         same.attach_pool = 0;
         same.blob_images = 2;
-        check(match_page_evidence_auto(same, &base).empty(),
+        check(matchPageEvidenceAuto(same, &base).empty(),
               "自动判据（页面）：与基线一致 → 空串（不假装成功）");
-        check(match_page_evidence_auto(base, nullptr).empty(),
+        check(matchPageEvidenceAuto(base, nullptr).empty(),
               "自动判据（页面）：无基线且无文件名 → 空串（不臆造「新增」）");
 
         // 网络侧：**写请求** + 通用特征词 → 命中；GET 一律不算
         UploadNetwork auto_net;
         auto_net.records.push_back(NetRecord{"https://x/files", "GET", 200});
         auto_net.records.push_back(NetRecord{"https://x/api/upload/v1?b=1", "POST", 200});
-        check(auto_net.evidence_for_auto().find("写请求") != std::string::npos,
+        check(auto_net.evidenceForAuto().find("写请求") != std::string::npos,
               "自动判据（网络）：POST + 通用上传特征词 → 命中（含「写请求」字样）");
         UploadNetwork only_get;
         only_get.records.push_back(NetRecord{"https://x/upload/doc.html", "GET", 200});
-        check(only_get.evidence_for_auto().empty(),
+        check(only_get.evidenceForAuto().empty(),
               "自动判据（网络）：GET 命中特征词 → **不**算（避免页面请求误判）");
         UploadNetwork no_hint;
         no_hint.records.push_back(NetRecord{"https://x/api/chat", "POST", 200});
-        check(no_hint.evidence_for_auto().empty(), "自动判据（网络）：无通用特征词 → 空串");
+        check(no_hint.evidenceForAuto().empty(), "自动判据（网络）：无通用特征词 → 空串");
 
         // 采样脚本与解析的 M8-37 扩展字段
-        const std::string script2 = page_state_script({".a"}, {"样例图.png"});
+        const std::string script2 = pageStateScript({".a"}, {"样例图.png"});
         check(script2.find("file_hits") != std::string::npos &&
                   script2.find("attach_pool") != std::string::npos &&
                   script2.find("样例图.png") != std::string::npos,
               "页面状态脚本：文件名与附件池采样已内联（JSON 安全转义）");
         PageState   ext;
         std::string ext_error;
-        const bool  ext_ok = parse_page_state(
+        const bool  ext_ok = parsePageState(
             R"({"url":"https://a/b","title":"t","counts":[[".a",1]],"file_hits":[["样例图.png",1]],"attach_pool":2,"blob_images":3})",
             &ext, &ext_error);
         check(ext_ok && ext.file_hits.size() == 1 && ext.attach_pool == 2 && ext.blob_images == 3,

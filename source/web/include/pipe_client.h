@@ -37,8 +37,8 @@ namespace aiwrite::web {
 using EventCallback = std::function<void(const channel::Frame&)>;
 
 // 管道全名 `\\.\pipe\aiwrite-browser-<pid>`（与 Python `pipe.daemon_pipe_name` 同构，`P1`）
-std::string daemon_pipe_name(std::uint32_t pid);
-std::string daemon_pipe_name();  // 缺省 = 本进程 pid
+std::string daemonPipeName(std::uint32_t pid);
+std::string daemonPipeName();  // 缺省 = 本进程 pid
 
 class PipeClient {
 public:
@@ -50,10 +50,10 @@ public:
 
     // 连接：重试至 `timeout_ms`（管道尚未创建 / 实例忙）；失败时 *error = **可操作原因**（`I21`）
     // `pipe_name` 可给短名（`aiwrite-browser-123`）或全名（`\\.\pipe\…`）；空名不合法
-    bool connect(const std::string& pipe_name, int timeout_ms, std::string* error);
+    bool connect(const std::string& pipeName, int timeout_ms, std::string* error);
 
     bool        connected() const;
-    std::string pipe_name() const;
+    std::string pipeName() const;
 
     // 同步命令：发命令帧 → 等「同 id 的 evt / err」→ *response = 载荷 JSON
     //  * 返回 false 且 *error 可操作（超时 / 通道关闭 / 守护进程回 err）
@@ -62,15 +62,15 @@ public:
               int timeout_ms, std::string* error);
 
     // 只发不等：`shutdown` 的"回包"是**进程退出**（§6.1 / `I23①`），故不配对
-    bool send_command(const std::string& name, const nlohmann::json& fields, std::string* error);
+    bool sendCommand(const std::string& name, const nlohmann::json& fields, std::string* error);
 
-    void on_event(EventCallback callback);
+    void onEvent(EventCallback callback);
 
     // 断开（幂等）：打断读线程 → join → 关句柄；未完成的 `call()` 立即失败
     void close();
 
     // 诊断：累计丢弃的非法帧数（对端发来的坏帧）
-    std::uint64_t dropped_frames() const;
+    std::uint64_t droppedFrames() const;
 
 private:
     struct Pending {
@@ -80,13 +80,13 @@ private:
         channel::Frame          frame;
     };
 
-    void        reader_loop(void* handle, void* read_event);
+    void        readerLoop(void* handle, void* read_event);
     void        dispatch(const channel::Frame& frame);
-    bool        write_line(const std::string& line, std::string* error);
-    bool        complete_pending(const std::string& id, const channel::Frame& frame);
-    void        fail_all_pending(const std::string& reason);
-    std::string next_id();
-    EventCallback current_callback();
+    bool        writeLine(const std::string& line, std::string* error);
+    bool        completePending(const std::string& id, const channel::Frame& frame);
+    void        failAllPending(const std::string& reason);
+    std::string nextId();
+    EventCallback currentCallback();
 
     mutable std::mutex          mutex_;
     void*                       handle_ = nullptr;       // HANDLE（头文件不拉 windows.h）
@@ -115,10 +115,10 @@ private:
 //  * 2026-10-04 实测卡死根因：面板每帧调 `tab_on_site()` = 新建连接 + `current_tab`，
 //    单次 30–140 ms、**最坏 2.1 s** ⇒ 帧率 2–10 fps
 //  * 线程安全（`std::atomic` / `thread_local`）；`ipc_reset_counters()` **仅**自检 / 诊断用
-std::uint64_t ipc_connect_count();        // 全局：成功建立的连接数（每次短连接 +1）
-std::uint64_t ipc_command_count();        // 全局：发出的命令帧数（`call` + `send_command`）
-std::uint64_t ipc_thread_connect_count(); // 本线程：其发起的连接数（**护栏判据**）
-std::uint64_t ipc_thread_command_count(); // 本线程：其发出的命令帧数（**护栏判据**）
-void          ipc_reset_counters();
+std::uint64_t ipcConnectCount();        // 全局：成功建立的连接数（每次短连接 +1）
+std::uint64_t ipcCommandCount();        // 全局：发出的命令帧数（`call` + `send_command`）
+std::uint64_t ipcThreadConnectCount(); // 本线程：其发起的连接数（**护栏判据**）
+std::uint64_t ipcThreadCommandCount(); // 本线程：其发出的命令帧数（**护栏判据**）
+void          ipcResetCounters();
 
 } // namespace aiwrite::web

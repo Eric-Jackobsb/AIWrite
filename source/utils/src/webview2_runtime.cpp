@@ -1,6 +1,7 @@
 #include "webview2_runtime.h"
 
 #include "paths.h"   // M6：bundled_bootstrapper_path() 定位 <exe>/webview2/...
+#include "string_util.h"   // CLN-05：narrow 收敛
 
 #include <windows.h>
 
@@ -37,21 +38,6 @@ std::wstring widen_ansi(const char* text)
 }
 
 // ---- 通用小工具：宽字符 → UTF-8 ----
-std::string narrow(const std::wstring& wide)
-{
-    if (wide.empty()) {
-        return {};
-    }
-    const int need = ::WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), static_cast<int>(wide.size()),
-                                           nullptr, 0, nullptr, nullptr);
-    if (need <= 0) {
-        return {};
-    }
-    std::string out(static_cast<std::size_t>(need), '\0');
-    ::WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), static_cast<int>(wide.size()), out.data(), need,
-                          nullptr, nullptr);
-    return out;
-}
 
 // 读注册表字符串值（REG_SZ / REG_EXPAND_SZ；两种视图都试）；失败返回空串
 std::string read_reg_string(HKEY root, const wchar_t* subkey, const wchar_t* name)
@@ -71,7 +57,7 @@ std::string read_reg_string(HKEY root, const wchar_t* subkey, const wchar_t* nam
     if (status != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ)) {
         return {};
     }
-    return narrow(std::wstring(buffer));
+    return utils::narrow(std::wstring(buffer));
 }
 
 // 取文件版本（4 段；取不到返回空串）
@@ -112,7 +98,7 @@ constexpr const wchar_t* kEdgeUpdateClientKeyNative =
 
 } // namespace
 
-WebView2RuntimeInfo detect_webview2_runtime()
+WebView2RuntimeInfo detectWebview2Runtime()
 {
     WebView2RuntimeInfo info;
 
@@ -137,7 +123,7 @@ WebView2RuntimeInfo detect_webview2_runtime()
     if (SUCCEEDED(status) && version != nullptr) {
         info.installed = true;
         info.source    = "api";
-        info.version   = narrow(version);
+        info.version   = utils::narrow(version);
         ::CoTaskMemFree(version);
         return info;
     }
@@ -188,11 +174,11 @@ const char* webview2_download_url()
     return "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
 }
 
-std::string bundled_bootstrapper_path()
+std::string bundledBootstrapperPath()
 {
     // 与 packaging\aiwrite.iss 的 DestDir 约定一致：<安装目录>\webview2\MicrosoftEdgeWebview2Setup.exe
     const std::filesystem::path candidate =
-        paths::exe_dir() / "webview2" / "MicrosoftEdgeWebview2Setup.exe";
+        paths::exeDir() / "webview2" / "MicrosoftEdgeWebview2Setup.exe";
     std::error_code code;
     if (std::filesystem::is_regular_file(candidate, code)) {
         return candidate.string();

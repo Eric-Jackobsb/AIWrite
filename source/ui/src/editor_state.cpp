@@ -14,6 +14,7 @@
 #include "paths.h"
 #include "probe_verdict.h"   // M_patchAB（PB-07）：会话失效错误串反查（纯函数）
 #include "provider_resolve.h" // M_patchAB（PB-07）：失败节点 → 生效条目 id（开哪一站的登录窗口）
+#include "failure_summary.h"  // DEBT-L8（M6-04）：失败汇总纯函数（collectFailures / summarizeFailures）
 
 #include <algorithm>
 #include <chrono>
@@ -53,12 +54,12 @@ EditorState& editor()
     return state;
 }
 
-void EditorState::set_status(const std::string& text)
+void EditorState::setStatus(const std::string& text)
 {
     status = text;
 }
 
-void EditorState::log_summary(const std::string& prefix) const
+void EditorState::logSummary(const std::string& prefix) const
 {
     log::info(prefix + "（节点 " + std::to_string(graph.nodes.size()) + "，连线 " +
               std::to_string(graph.edges.size()) + "）");
@@ -68,44 +69,44 @@ void EditorState::log_summary(const std::string& prefix) const
 void EditorState::snapshot(const std::string& label)
 {
     // 运行中修改工作流 → 计划与图不再一致，先终止本次运行（M2-04 守卫）
-    abort_run_if_any("修改工作流（" + label + "）");
+    abortRunIfAny("修改工作流（" + label + "）");
     undo.push(graph, label);
 }
 
-bool EditorState::undo_once()
+bool EditorState::undoOnce()
 {
     engine::Graph restored;
     std::string   label;
     if (!undo.undo(graph, restored, &label)) {
-        set_status("没有可撤销的操作");
+        setStatus("没有可撤销的操作");
         return false;
     }
     graph = std::move(restored);
     selected_nodes.clear();
     selected_node.clear();
-    log_summary("[撤销] " + label);
-    set_status("已撤销：" + label);
+    logSummary("[撤销] " + label);
+    setStatus("已撤销：" + label);
     return true;
 }
 
-bool EditorState::redo_once()
+bool EditorState::redoOnce()
 {
     engine::Graph restored;
     std::string   label;
     if (!undo.redo(graph, restored, &label)) {
-        set_status("没有可重做的操作");
+        setStatus("没有可重做的操作");
         return false;
     }
     graph = std::move(restored);
     selected_nodes.clear();
     selected_node.clear();
-    log_summary("[重做] " + label);
-    set_status("已重做：" + label);
+    logSummary("[重做] " + label);
+    setStatus("已重做：" + label);
     return true;
 }
 
 // ----------------------------------------------------------------- 工作流 ----
-void EditorState::clear_workflow()
+void EditorState::clearWorkflow()
 {
     graph.clear();
     undo.clear();
@@ -113,14 +114,14 @@ void EditorState::clear_workflow()
     selected_node.clear();
     clipboard_nodes_.clear();
     clipboard_edges_.clear();
-    log_summary("[新建] 已清空画布");
-    set_status("画布已清空（撤销栈也已清空）");
+    logSummary("[新建] 已清空画布");
+    setStatus("画布已清空（撤销栈也已清空）");
 
     // PC-01/02：清空画布**不删**快照（保守：不替用户决定丢弃可恢复内容），只重设基线
-    mark_autosave_baseline();
+    markAutosaveBaseline();
 }
 
-void EditorState::create_sample_workflow()
+void EditorState::createSampleWorkflow()
 {
     graph.clear();
     undo.clear();
@@ -128,12 +129,12 @@ void EditorState::create_sample_workflow()
     graph.name        = "默认工作流";
     graph.description = "文本输入 → 提示词模板 → 文本生成 → 文本输出（提供商配置接入文本生成的 provider 输入）";
 
-    create_node("TextInput", -420.0f, -40.0f);
-    create_node("PromptTemplate", -120.0f, -40.0f);
-    create_node("LLMGenerate", 220.0f, -40.0f);
-    create_node("TextOutput", 560.0f, -40.0f);
+    createNode("TextInput", -420.0f, -40.0f);
+    createNode("PromptTemplate", -120.0f, -40.0f);
+    createNode("LLMGenerate", 220.0f, -40.0f);
+    createNode("TextOutput", 560.0f, -40.0f);
     // 提供商配置放在文本生成下方，其 provider 输出接到文本生成的 provider 输入
-    create_node("ProviderConfig", 220.0f, 260.0f);
+    createNode("ProviderConfig", 220.0f, 260.0f);
 
     if (graph.nodes.size() == 5) {
         const std::string input_id    = graph.nodes[0].id;
@@ -158,9 +159,9 @@ void EditorState::create_sample_workflow()
 
     // 默认启动工作流落盘：~/.brain-ai/workflows/default.json（设计 §11.3 Workflow 存储）
     // 注意：密钥类参数（is_secret，如 API Key）不会写入文件
-    const std::filesystem::path default_file = paths::workflows_dir() / "default.json";
+    const std::filesystem::path default_file = paths::workflowsDir() / "default.json";
     std::string                 save_error;
-    if (engine::save_workflow(graph, default_file, &save_error)) {
+    if (engine::saveWorkflow(graph, default_file, &save_error)) {
         log::info("[默认工作流] 已保存到 " + default_file.string());
     }
     else {
@@ -171,29 +172,29 @@ void EditorState::create_sample_workflow()
     selected_nodes.clear();
     selected_node.clear();
     request_navigate_to_content = true;
-    log_summary("[默认工作流] 已创建");
-    set_status("已创建默认工作流（含提供商配置 → 文本生成），并保存到 default.json");
+    logSummary("[默认工作流] 已创建");
+    setStatus("已创建默认工作流（含提供商配置 → 文本生成），并保存到 default.json");
 }
 
 // ------------------------------------------------------------------ 节点 -----
-std::string EditorState::create_node(const std::string& type, float x, float y)
+std::string EditorState::createNode(const std::string& type, float x, float y)
 {
     std::string error;
     const std::string id = graph.addNode(type, x, y, &error);
     if (id.empty()) {
         log::error("创建节点失败: " + error);
-        set_status("创建节点失败：" + error);
+        setStatus("创建节点失败：" + error);
         return {};
     }
 
     const engine::Definition* definition = engine::NodeRegistry::instance().find(type);
     const std::string name = (definition != nullptr) ? definition->display_name : type;
     log::info("创建节点 " + id + "（" + name + "）");
-    set_status("已创建节点：" + name + "（" + id + "）");
+    setStatus("已创建节点：" + name + "（" + id + "）");
     return id;
 }
 
-bool EditorState::delete_node(const std::string& node_id)
+bool EditorState::deleteNode(const std::string& node_id)
 {
     const engine::Node* node = graph.findNode(node_id);
     if (node == nullptr) {
@@ -214,10 +215,10 @@ bool EditorState::delete_node(const std::string& node_id)
     return true;
 }
 
-bool EditorState::delete_selected()
+bool EditorState::deleteSelected()
 {
     if (selected_nodes.empty() && selected_links.empty()) {
-        set_status("没有选中的节点或连线");
+        setStatus("没有选中的节点或连线");
         return false;
     }
 
@@ -229,7 +230,7 @@ bool EditorState::delete_selected()
         snapshot("删除选中节点");
         const std::vector<std::string> targets = selected_nodes;
         for (const std::string& id : targets) {
-            delete_node(id);
+            deleteNode(id);
         }
         selected_nodes.clear();
         selected_node.clear();
@@ -250,9 +251,9 @@ bool EditorState::delete_selected()
         selected_links.clear();
     }
 
-    log_summary("[删除] 已删除 节点 " + std::to_string(node_total) + " / 连线 " +
+    logSummary("[删除] 已删除 节点 " + std::to_string(node_total) + " / 连线 " +
                 std::to_string(link_total));
-    set_status("已删除 节点 " + std::to_string(node_total) + " 个、连线 " +
+    setStatus("已删除 节点 " + std::to_string(node_total) + " 个、连线 " +
                std::to_string(link_total) + " 条");
     return true;
 }
@@ -263,13 +264,13 @@ bool EditorState::delete_selected()
 // 返回 FLT_MAX（imgui_node_editor.cpp:1676），旧版 sync_positions() 会把该值当位置回写模型，
 // 叠加 NavigateToContent 后视图落入 ~1e9 量级坐标 → 界面无响应（详见 CHANGELOG「复制/粘贴暂停」）。
 // 现已加位置守卫（node_canvas.cpp：clamp_position / 未知手柄时反向推送 / 视图跟随前校验）。
-void EditorState::copy_selection()
+void EditorState::copySelection()
 {
     clipboard_nodes_.clear();
     clipboard_edges_.clear();
 
     if (selected_nodes.empty()) {
-        set_status("没有选中的节点");
+        setStatus("没有选中的节点");
         return;
     }
 
@@ -290,13 +291,13 @@ void EditorState::copy_selection()
     }
 
     log::info("复制 " + std::to_string(clipboard_nodes_.size()) + " 个节点到剪贴板");
-    set_status("已复制 " + std::to_string(clipboard_nodes_.size()) + " 个节点");
+    setStatus("已复制 " + std::to_string(clipboard_nodes_.size()) + " 个节点");
 }
 
-bool EditorState::paste_clipboard()
+bool EditorState::pasteClipboard()
 {
     if (clipboard_nodes_.empty()) {
-        set_status("剪贴板为空");
+        setStatus("剪贴板为空");
         return false;
     }
 
@@ -344,8 +345,8 @@ bool EditorState::paste_clipboard()
     selected_node  = created.empty() ? std::string() : created.front();
     request_navigate_to_content = true;
 
-    log_summary("[粘贴] 已粘贴 " + std::to_string(created.size()) + " 个节点");
-    set_status("已粘贴 " + std::to_string(created.size()) + " 个节点");
+    logSummary("[粘贴] 已粘贴 " + std::to_string(created.size()) + " 个节点");
+    setStatus("已粘贴 " + std::to_string(created.size()) + " 个节点");
     return !created.empty();
 }
 
@@ -353,7 +354,7 @@ bool EditorState::paste_clipboard()
 // 说明（M2 P3-3）：运行前校验 → 执行器 → 每帧 tick。
 //  * 值只在 Executor 内部；只有节点状态写回 Graph（画布就地染状态色）
 //  * 控制台输出走 log::info，Console 面板读同一环形缓冲（设计 §12.4）
-bool EditorState::start_run()
+bool EditorState::startRun()
 {
     aiwrite::nodes::registerAllExecutors(); // 幂等
 
@@ -369,7 +370,7 @@ bool EditorState::start_run()
             log::error("[运行前校验] " + text);
             log::workflow("[运行前校验-失败] " + text);
         }
-        set_status("运行被拒绝：" + (errors.empty() ? std::string("未知原因") : errors.front()));
+        setStatus("运行被拒绝：" + (errors.empty() ? std::string("未知原因") : errors.front()));
         return false;
     }
     for (const std::string& text : warnings) {
@@ -381,18 +382,18 @@ bool EditorState::start_run()
     if (!executor.start(graph, &error)) {
         log::error("启动运行失败：" + error);
         log::workflow("[运行启动失败] " + error);
-        set_status("启动运行失败：" + error);
+        setStatus("启动运行失败：" + error);
         return false;
     }
 
     log::info("开始运行工作流：计划 " + std::to_string(executor.totalCount()) + " 个节点");
     log::workflow("===== 运行开始（计划 " + std::to_string(executor.totalCount()) + " 个节点）=====");
-    set_status("运行中…");
+    setStatus("运行中…");
     return true;
 }
 
 // PD-06①（FEA-M4-11 · 通用重跑）：从 node_id 开始重跑（复用上游结果）
-bool EditorState::start_rerun_async(const std::string& node_id, engine::RerunScope scope)
+bool EditorState::startRerunAsync(const std::string& node_id, engine::RerunScope scope)
 {
     aiwrite::nodes::registerAllExecutors(); // 幂等
 
@@ -403,7 +404,7 @@ bool EditorState::start_rerun_async(const std::string& node_id, engine::RerunSco
             log::error("[运行前校验] " + text);
             log::workflow("[运行前校验-失败] " + text);
         }
-        set_status("重跑被拒绝：" + (errors.empty() ? std::string("未知原因") : errors.front()));
+        setStatus("重跑被拒绝：" + (errors.empty() ? std::string("未知原因") : errors.front()));
         return false;
     }
     for (const std::string& text : warnings) {
@@ -419,7 +420,7 @@ bool EditorState::start_rerun_async(const std::string& node_id, engine::RerunSco
     if (!executor.startAsyncFrom(&graph, rerun, &error)) {
         log::error("启动重跑失败：" + error);
         log::workflow("[重跑启动失败] " + error);
-        set_status("启动重跑失败：" + error);
+        setStatus("启动重跑失败：" + error);
         return false;
     }
 
@@ -432,26 +433,26 @@ bool EditorState::start_rerun_async(const std::string& node_id, engine::RerunSco
               std::to_string(executor.totalCount()) + " 个节点");
     log::workflow("===== 重跑开始（节点 " + node_id + scope_text + " · 计划 " +
                   std::to_string(executor.totalCount()) + " 个节点，异步）=====");
-    set_status("重跑中：" + node_id + scope_text + "…");
+    setStatus("重跑中：" + node_id + scope_text + "…");
     return true;
 }
 
-void EditorState::cancel_run()
+void EditorState::cancelRun()
 {
     if (!executor.running()) {
-        set_status("当前没有正在运行的执行会话");
+        setStatus("当前没有正在运行的执行会话");
         return;
     }
     executor.requestStop(); // PB-01：置位 + 唤醒（HTTP 级真取消见 PB-02）
     log::warn("已请求停止运行（正在执行的节点会跑完当前步骤）");
-    set_status("正在停止…");
+    setStatus("正在停止…");
 }
 
-void EditorState::tick_run()
+void EditorState::tickRun()
 {
     // PB-01：异步会话 —— 只应用事件（写 Graph 状态 + 维护 run_snapshot）
     if (session_active_) {
-        pump_run_events();
+        pumpRunEvents();
         return;
     }
     if (!executor.running()) {
@@ -461,12 +462,12 @@ void EditorState::tick_run()
         return; // 本帧推进了一个节点
     }
     // 会话结束（Finished / Cancelled / Failed）
-    finish_run_session();
+    finishRunSession();
 }
 
 // ---------------------------------------------------------------- PB-01 -----
 // 线程化运行（状态层）：校验 → startAsync；主线程每帧 pump_run_events() 应用事件
-bool EditorState::start_run_async()
+bool EditorState::startRunAsync()
 {
     aiwrite::nodes::registerAllExecutors(); // 幂等
 
@@ -477,7 +478,7 @@ bool EditorState::start_run_async()
             log::error("[运行前校验] " + text);
             log::workflow("[运行前校验-失败] " + text);
         }
-        set_status("运行被拒绝：" + (errors.empty() ? std::string("未知原因") : errors.front()));
+        setStatus("运行被拒绝：" + (errors.empty() ? std::string("未知原因") : errors.front()));
         return false;
     }
     for (const std::string& text : warnings) {
@@ -489,7 +490,7 @@ bool EditorState::start_run_async()
     if (!executor.startAsync(&graph, &error)) {
         log::error("启动异步运行失败：" + error);
         log::workflow("[运行启动失败] " + error);
-        set_status("启动运行失败：" + error);
+        setStatus("启动运行失败：" + error);
         return false;
     }
 
@@ -499,11 +500,11 @@ bool EditorState::start_run_async()
     log::info("开始运行工作流（后台线程）：计划 " + std::to_string(executor.totalCount()) + " 个节点");
     log::workflow("===== 运行开始（计划 " + std::to_string(executor.totalCount()) +
                   " 个节点，异步）=====");
-    set_status("运行中…（界面保持响应；停止在节点边界生效）");
+    setStatus("运行中…（界面保持响应；停止在节点边界生效）");
     return true;
 }
 
-engine::RunNodeView* EditorState::snapshot_entry(const std::string& node_id)
+engine::RunNodeView* EditorState::snapshotEntry(const std::string& node_id)
 {
     for (engine::RunNodeView& view : run_snapshot.nodes) {
         if (view.node_id == node_id) {
@@ -519,7 +520,7 @@ engine::RunNodeView* EditorState::snapshot_entry(const std::string& node_id)
     return &run_snapshot.nodes.back();
 }
 
-void EditorState::pump_run_events()
+void EditorState::pumpRunEvents()
 {
     std::vector<engine::RunEvent> events;
     executor.pumpEvents(&events);
@@ -533,7 +534,7 @@ void EditorState::pump_run_events()
                     node->error_message = event.error;
                 }
             }
-            engine::RunNodeView* view = snapshot_entry(event.node_id);
+            engine::RunNodeView* view = snapshotEntry(event.node_id);
             view->state               = event.state;
             if (!event.error.empty()) {
                 view->error = event.error;
@@ -547,7 +548,7 @@ void EditorState::pump_run_events()
             break;
         }
         case engine::RunEvent::Kind::NodeOutput: {
-            engine::RunNodeView* view = snapshot_entry(event.node_id);
+            engine::RunNodeView* view = snapshotEntry(event.node_id);
             view->text                = event.text;
             view->state               = event.state;
             view->delta_bytes         = event.text.size();
@@ -555,7 +556,7 @@ void EditorState::pump_run_events()
         }
         case engine::RunEvent::Kind::Delta: {
             // PB-03/PB-08：增量按段追加到读模型（UI 逐字呈现的底座）
-            engine::RunNodeView* view = snapshot_entry(event.node_id);
+            engine::RunNodeView* view = snapshotEntry(event.node_id);
             view->text += event.text;
             view->state       = engine::NodeState::Running;
             view->delta_bytes = view->text.size();
@@ -572,21 +573,21 @@ void EditorState::pump_run_events()
             run_snapshot.running     = false;
             log::info("[执行器] " + event.summary);
             log::workflow("[执行器] " + event.summary);
-            finish_run_session();
+            finishRunSession();
             break;
         }
         }
     }
 }
 
-void EditorState::stop_run_async()
+void EditorState::stopRunAsync()
 {
     executor.stopAsync(); // join（幂等；退出 / 切换工作流前必须调用）
     session_active_ = false;
 }
 
 // 运行收尾：join → 权威快照落定 → 状态栏/日志 → 归档 → 错误条
-void EditorState::finish_run_session()
+void EditorState::finishRunSession()
 {
     executor.stopAsync(); // 契约：先 join 再读权威数据
 
@@ -611,16 +612,16 @@ void EditorState::finish_run_session()
         }
     }
     session_active_ = false;
-    set_status("运行结束：" + run_snapshot.summary);
+    setStatus("运行结束：" + run_snapshot.summary);
     log::workflow("===== 运行结束：" + run_snapshot.summary + " =====");
     // PA-04：逐节点耗时明细（补 M4-13 登记项）
     if (!executor.runInfos().empty()) {
         log::workflow(run_detail_text(executor));
     }
     // PC-05：运行结果归档
-    archive_run_outputs();
+    archiveRunOutputs();
     // PA-06：刷新错误条
-    refresh_last_error();
+    refreshLastError();
 
     // M_textio P5 + M_8nodes_extension L1-b（§4.8）：TextOutput 的「运行后自动导出」
     for (const engine::Node& node : graph.nodes) {
@@ -658,7 +659,7 @@ void EditorState::finish_run_session()
                 label = text;
             }
         }
-        std::string stem = workflow_display_name();
+        std::string stem = workflowDisplayName();
         if (const engine::Param* name_param = node.findParam("file_name")) {
             const std::string text = name_param->text();
             if (!text.empty()) {
@@ -687,15 +688,15 @@ void EditorState::finish_run_session()
             request.dir              = dir;
             request.header_template  = header_template;
             request.file_stem        = this_stem;
-            request.meta.workflow    = workflow_display_name();
+            request.meta.workflow    = workflowDisplayName();
             request.meta.node_id     = view->node_id;
             request.meta.state       = engine::nodeStateName(view->state);
             request.meta.duration_ms = view->duration_ms;
-            request.meta.stamp       = utils::document_time_text();
-            const utils::ExportResult result = utils::export_text_document(request);
+            request.meta.stamp       = utils::documentTimeText();
+            const utils::ExportResult result = utils::exportTextDocument(request);
             if (result.ok) {
                 log::info("[自动导出] " + view->node_id + " → " + result.path);
-                set_status("已自动导出文档：" + result.path);
+                setStatus("已自动导出文档：" + result.path);
             }
             else {
                 log::warn("[自动导出] 失败：" + result.error);
@@ -725,51 +726,67 @@ std::string local_time_text()
 
 } // namespace
 
-void EditorState::clear_last_error()
+void EditorState::clearLastError()
 {
     last_error = LastError{};
 }
 
-void EditorState::refresh_last_error()
+void EditorState::refreshLastError()
 {
-    for (const engine::Node& node : graph.nodes) {
-        if (node.state != engine::NodeState::Error) {
-            continue;
-        }
-        last_error.active  = true;
-        last_error.node_id = node.id;
-        last_error.message =
-            node.error_message.empty() ? std::string("执行失败") : node.error_message;
-        last_error.at = local_time_text();
+    // DEBT-L8（M6-04 步骤 5）：失败汇总 —— 收集**所有**失败节点（不只首个）
+    const std::vector<engine::FailureSummary> failures = engine::collectFailures(graph);
+    if (failures.empty()) {
+        last_error = LastError{}; // 本次运行无失败 → 清空（成功运行不留旧错误）
+        return;
+    }
 
-        // ---- M_patchAB §2.2（`PB-07`）：失败原因**反查**会话失效 ⇒ 错误条给「重新登录」入口 ----
-        //  * 判据 = 纯函数（401 / 40002 / 403 / 40003 /「会话已失效」/ invalid token …）；
-        //    只有判据命中才给入口（不猜、不误报：普通超时 / 解析失败不显示按钮）
-        const web::SessionFailure failure = web::classify_session_failure_text(last_error.message);
-        if (failure.session_related) {
+    last_error.active       = true;
+    last_error.failed_count = static_cast<int>(failures.size());
+    last_error.summary      = engine::summarizeFailures(graph);
+    last_error.node_id      = failures.front().node_id; // 首个失败节点（定位 / relogin 反查）
+    last_error.message =
+        failures.front().message.empty() ? std::string("执行失败") : failures.front().message;
+    last_error.at = local_time_text();
+    if (failures.size() > 1) {
+        // 多失败：每节点一行（tooltip 全文）
+        last_error.details.clear();
+        for (const engine::FailureSummary& f : failures) {
+            if (!last_error.details.empty()) {
+                last_error.details += "\n";
+            }
+            last_error.details += f.node_id + "：" + f.message;
+        }
+    }
+
+    // ---- M_patchAB §2.2（`PB-07`）：失败原因**反查**会话失效 ⇒ 错误条给「重新登录」入口 ----
+    //  * 判据 = 纯函数（401 / 40002 / 403 / 40003 /「会话已失效」/ invalid token …）；
+    //    只有判据命中才给入口（不猜、不误报：普通超时 / 解析失败不显示按钮）
+    const web::SessionFailure failure = web::classifySessionFailureText(last_error.message);
+    if (failure.session_related) {
+        const engine::Node* failed_node = graph.findNode(failures.front().node_id);
+        if (failed_node != nullptr) {
             const engine::EffectiveProvider effective =
-                engine::resolve_effective_provider(graph, node);
+                engine::resolveEffectiveProvider(graph, *failed_node);
             last_error.relogin_available   = true;
             last_error.relogin_needed      = failure.needs_relogin;
             last_error.relogin_provider_id = effective.provider;
-            last_error.relogin_text        = web::session_relogin_text(failure, effective.provider);
-            log::warn("[会话诊断] " + node.id + "：" + last_error.relogin_text);
+            last_error.relogin_text        = web::sessionReloginText(failure, effective.provider);
+            log::warn("[会话诊断] " + last_error.node_id + "：" + last_error.relogin_text);
         }
-        log::info("[错误条] " + node.id + " 失败：" + last_error.message);
-        return;
     }
-    last_error = LastError{}; // 本次运行无失败 → 清空（成功运行不留旧错误）
+    log::info("[错误条] " + last_error.summary + (failures.size() > 1 ? "" : "：" +
+                                                       last_error.message));
 }
 
 // ---- M_patchAB（PB2-07 / PB2-30②）：后台诊断结论（工作线程写、主线程每帧取一次）----
-void EditorState::post_background_status(const std::string& text)
+void EditorState::postBackgroundStatus(const std::string& text)
 {
     std::lock_guard<std::mutex> lock(background_mutex_);
     background_status_  = text;
     background_pending_ = true;
 }
 
-bool EditorState::take_background_status(std::string* out)
+bool EditorState::takeBackgroundStatus(std::string* out)
 {
     std::lock_guard<std::mutex> lock(background_mutex_);
     if (!background_pending_) {
@@ -782,7 +799,7 @@ bool EditorState::take_background_status(std::string* out)
     return true;
 }
 
-std::string EditorState::workflow_display_name() const
+std::string EditorState::workflowDisplayName() const
 {
     if (current_workflow_path.empty()) {
         return "未命名";
@@ -792,7 +809,7 @@ std::string EditorState::workflow_display_name() const
     return stem.empty() ? std::string("未命名") : stem;
 }
 
-void EditorState::archive_run_outputs()
+void EditorState::archiveRunOutputs()
 {
     // 节点条目与输出面板同源（runInfos + outputs）→ 归档内容与面板一致
     std::vector<utils::ArchiveNode> nodes;
@@ -808,16 +825,16 @@ void EditorState::archive_run_outputs()
         nodes.push_back(std::move(item));
     }
 
-    const Config& config = app_config();
+    const Config& config = appConfig();
 
     utils::ArchiveRequest request;
-    request.workflow_name = workflow_display_name();
+    request.workflow_name = workflowDisplayName();
     request.archive_dir   = config.output.archive_dir;
     request.keep_history  = config.output.keep_history;
     request.max_history   = config.output.max_history;
     request.ttl_days      = config.output.ttl_days;
 
-    const utils::ArchiveResult result = utils::archive_run(request, nodes, executor.summary());
+    const utils::ArchiveResult result = utils::archiveRun(request, nodes, executor.summary());
     if (result.ok) {
         last_archive_dir = result.dir;
         log::info("[归档] 运行输出已写入 " + result.dir + "（" + std::to_string(result.files) +
@@ -828,7 +845,7 @@ void EditorState::archive_run_outputs()
         //  * 默认 false ⇒ 行为与改造前**逐字一致**（零副作用）
         //  * 打开失败只写日志（不打断运行结束流程，也不改归档结果）
         if (config.output.auto_open_on_complete) {
-            if (utils::open_folder(result.dir)) {
+            if (utils::openFolder(result.dir)) {
                 log::info("[归档] 已按配置自动打开归档目录（output.auto_open_on_complete = true）");
             }
             else {
@@ -842,7 +859,7 @@ void EditorState::archive_run_outputs()
     }
 }
 
-std::string EditorState::run_status_text() const
+std::string EditorState::runStatusText() const
 {
     if (executor.state() == engine::ExecState::Idle) {
         return {};
@@ -866,20 +883,20 @@ std::string EditorState::run_status_text() const
     return stream.str();
 }
 
-void EditorState::abort_run_if_any(const std::string& reason)
+void EditorState::abortRunIfAny(const std::string& reason)
 {
     if (!executor.running()) {
         return;
     }
     log::warn("运行中" + reason + " → 已终止当前运行");
-    stop_run_async(); // PB-01：先 join 工作线程（再动 Executor 状态，避免竞争）
+    stopRunAsync(); // PB-01：先 join 工作线程（再动 Executor 状态，避免竞争）
     executor.cancel();
     executor.reset();
     for (engine::Node& node : graph.nodes) {
         node.state = engine::NodeState::Idle;
         node.error_message.clear();
     }
-    set_status("运行已终止（" + reason + "）");
+    setStatus("运行已终止（" + reason + "）");
 }
 
 // ----------------------------------------------------------- 自动保存（PC-01）----
@@ -888,7 +905,7 @@ void EditorState::abort_run_if_any(const std::string& reason)
 //    —— 指纹不含 viewport ⇒ 画布平移 / 缩放不会触发写盘
 //  * 首次发现变更时记时刻；**静默 ≥ autosave_idle_sec 秒**（默认 3）才写一次
 //  * 无变更 ⇒ 一次盘都不写；写失败 ⇒ 退避 10 秒（避免每帧重试砸盘 + 刷日志）
-void EditorState::pause_autosave(bool paused)
+void EditorState::pauseAutosave(bool paused)
 {
     autosave_paused = paused;
     if (!paused) {
@@ -896,20 +913,20 @@ void EditorState::pause_autosave(bool paused)
     }
 }
 
-void EditorState::mark_autosave_baseline()
+void EditorState::markAutosaveBaseline()
 {
-    autosave_signature_   = engine::graph_content_signature(graph);
+    autosave_signature_   = engine::graphContentSignature(graph);
     autosave_change_seen_ = false;
     autosave_last_probe_  = std::chrono::steady_clock::now();
     autosave_retry_after_ = {};
 }
 
-void EditorState::tick_autosave()
+void EditorState::tickAutosave()
 {
     if (autosave_paused) {
         return;
     }
-    const Config& config = app_config();
+    const Config& config = appConfig();
     if (!config.ui.autosave_enabled) {
         return;
     }
@@ -923,7 +940,7 @@ void EditorState::tick_autosave()
     }
     autosave_last_probe_ = now;
 
-    const std::string signature = engine::graph_content_signature(graph);
+    const std::string signature = engine::graphContentSignature(graph);
     if (signature != autosave_signature_) {
         autosave_change_seen_ = true;
         autosave_last_change_ = now; // 持续变更 ⇒ 时刻不断后移（= 「静默」判据）
@@ -949,7 +966,7 @@ void EditorState::tick_autosave()
                   (current_workflow_path.empty() ? "，未命名工作流"
                                                  : "，关联 " + current_workflow_path) +
                   "）");
-        set_status("已自动保存：未保存的更改已暂存（崩溃/退出后可恢复）");
+        setStatus("已自动保存：未保存的更改已暂存（崩溃/退出后可恢复）");
         return;
     }
 
@@ -957,12 +974,12 @@ void EditorState::tick_autosave()
     autosave_retry_after_ = now + std::chrono::seconds(10);
 }
 
-bool EditorState::restore_autosave(std::string* error)
+bool EditorState::restoreAutosave(std::string* error)
 {
-    engine::AutosaveInfo info = engine::autosave_probe();
+    engine::AutosaveInfo info = engine::autosaveProbe();
     engine::Graph        loaded;
     std::string          load_error;
-    if (!engine::autosave_load(loaded, &load_error)) {
+    if (!engine::autosaveLoad(loaded, &load_error)) {
         if (error != nullptr) {
             *error = load_error;
         }
@@ -970,7 +987,7 @@ bool EditorState::restore_autosave(std::string* error)
         return false;
     }
 
-    abort_run_if_any("恢复自动保存");
+    abortRunIfAny("恢复自动保存");
     graph = std::move(loaded);
     undo.clear();
     selected_nodes.clear();
@@ -982,26 +999,26 @@ bool EditorState::restore_autosave(std::string* error)
     restored_from_autosave_path = info.workflow_path;
     current_workflow_path.clear();
 
-    mark_autosave_baseline(); // 恢复内容 = 当前状态（否则会立刻再写一份同样的快照）
+    markAutosaveBaseline(); // 恢复内容 = 当前状态（否则会立刻再写一份同样的快照）
     log::info("[自动保存] 已恢复快照（节点 " + std::to_string(graph.nodes.size()) + " / 连线 " +
               std::to_string(graph.edges.size()) + "）" +
               (restored_from_autosave_path.empty() ? "（快照未关联工作流文件）"
                                                    : "（原文件 " + restored_from_autosave_path +
                                                          "，保存将另存为新文件）"));
-    set_status("已恢复未保存的更改（另存为新文件，不会覆盖原工作流）");
+    setStatus("已恢复未保存的更改（另存为新文件，不会覆盖原工作流）");
     return true;
 }
 
-void EditorState::flush_autosave_on_exit()
+void EditorState::flushAutosaveOnExit()
 {
     if (autosave_paused) {
         return;
     }
-    const Config& config = app_config();
+    const Config& config = appConfig();
     if (!config.ui.autosave_enabled) {
         return;
     }
-    if (engine::graph_content_signature(graph) == autosave_signature_) {
+    if (engine::graphContentSignature(graph) == autosave_signature_) {
         return; // 没有未保存的更改 ⇒ 不写盘
     }
 
@@ -1017,7 +1034,7 @@ void EditorState::flush_autosave_on_exit()
 }
 
 // ------------------------------------------------------------- 工作流文件 ----
-bool EditorState::save_workflow_to(const std::string& path, std::string* error)
+bool EditorState::saveWorkflowTo(const std::string& path, std::string* error)
 {
     if (path.empty()) {
         if (error != nullptr) {
@@ -1027,7 +1044,7 @@ bool EditorState::save_workflow_to(const std::string& path, std::string* error)
     }
 
     std::string save_error;
-    if (!engine::save_workflow(graph, path, &save_error)) {
+    if (!engine::saveWorkflow(graph, path, &save_error)) {
         if (error != nullptr) {
             *error = save_error;
         }
@@ -1037,7 +1054,7 @@ bool EditorState::save_workflow_to(const std::string& path, std::string* error)
     }
 
     current_workflow_path = path;
-    engine::push_recent_file(path, graph.name);
+    engine::pushRecentFile(path, graph.name);
     log::info("工作流已保存: " + path);
     log::workflow("[工作流-保存] " + path + "（节点 " + std::to_string(graph.nodes.size()) +
                   "，连线 " + std::to_string(graph.edges.size()) + "）");
@@ -1045,18 +1062,18 @@ bool EditorState::save_workflow_to(const std::string& path, std::string* error)
     // PC-01：显式保存成功 ⇒ 「已无未保存的更改」：清掉快照 + 重设基线（不会紧接着又写一份）
     {
         std::string autosave_error;
-        engine::autosave_clear(&autosave_error);
+        engine::autosaveClear(&autosave_error);
         if (!autosave_error.empty()) {
             log::warn("[自动保存] 清空旧快照失败：" + autosave_error);
         }
-        mark_autosave_baseline();
+        markAutosaveBaseline();
     }
 
-    set_status("已保存：" + path);
+    setStatus("已保存：" + path);
     return true;
 }
 
-bool EditorState::open_workflow_from(const std::string& path, std::string* error)
+bool EditorState::openWorkflowFrom(const std::string& path, std::string* error)
 {
     if (path.empty()) {
         if (error != nullptr) {
@@ -1067,7 +1084,7 @@ bool EditorState::open_workflow_from(const std::string& path, std::string* error
 
     engine::Graph loaded;
     std::string   load_error;
-    if (!engine::load_workflow(path, loaded, &load_error)) {
+    if (!engine::loadWorkflow(path, loaded, &load_error)) {
         if (error != nullptr) {
             *error = load_error;
         }
@@ -1088,7 +1105,7 @@ bool EditorState::open_workflow_from(const std::string& path, std::string* error
         return false;
     }
 
-    abort_run_if_any("切换工作流");
+    abortRunIfAny("切换工作流");
     graph = std::move(loaded);
     undo.clear(); // 设计 §6.6：加载工作流清空撤销栈
     selected_nodes.clear();
@@ -1096,23 +1113,23 @@ bool EditorState::open_workflow_from(const std::string& path, std::string* error
     selected_node.clear();
     request_navigate_to_content = true; // 视图跟随新内容
     current_workflow_path       = path;
-    engine::push_recent_file(path, graph.name);
+    engine::pushRecentFile(path, graph.name);
 
     // PC-01/02：换图**不删**快照（任何情况下都不丢稿；「快照 vs 工作流」的新旧由 mtime 判定），
     //  只把当前图设为「已保存」基线 ⇒ 不因换图本身触发一次写盘
-    mark_autosave_baseline();
+    markAutosaveBaseline();
 
     log::info("工作流已打开: " + path);
     log::workflow("[工作流-加载] " + path + "（节点 " + std::to_string(graph.nodes.size()) +
                   "，连线 " + std::to_string(graph.edges.size()) + "）");
-    log_summary("[工作流] 已加载");
-    set_status("已打开：" + path);
+    logSummary("[工作流] 已加载");
+    setStatus("已打开：" + path);
     return true;
 }
 
-std::vector<engine::RecentEntry> EditorState::recent_workflows() const
+std::vector<engine::RecentEntry> EditorState::recentWorkflows() const
 {
-    return engine::load_recent_files();
+    return engine::loadRecentFiles();
 }
 
 // ----------------------------------------------------- 文件对话框入口 -------
@@ -1127,35 +1144,35 @@ const std::vector<utils::FileFilter>& workflow_filters()
 
 } // namespace
 
-bool open_workflow_dialog()
+bool openWorkflowDialog()
 {
-    const std::string path = utils::open_file(workflow_filters(), paths::workflows_dir().string());
+    const std::string path = utils::open_file(workflow_filters(), paths::workflowsDir().string());
     if (path.empty()) {
         return false; // 用户取消
     }
 
     std::string error;
-    if (!editor().open_workflow_from(path, &error)) {
-        editor().set_status("打开失败：" + error);
+    if (!editor().openWorkflowFrom(path, &error)) {
+        editor().setStatus("打开失败：" + error);
         return false;
     }
     return true;
 }
 
-bool save_workflow_dialog()
+bool saveWorkflowDialog()
 {
     EditorState&      state = editor();
     const std::string default_name =
         (state.graph.name.empty() ? std::string("workflow") : state.graph.name) + ".json";
     const std::string path =
-        utils::save_file(workflow_filters(), paths::workflows_dir().string(), default_name);
+        utils::save_file(workflow_filters(), paths::workflowsDir().string(), default_name);
     if (path.empty()) {
         return false; // 用户取消
     }
 
     std::string error;
-    if (!state.save_workflow_to(path, &error)) {
-        state.set_status("保存失败：" + error);
+    if (!state.saveWorkflowTo(path, &error)) {
+        state.setStatus("保存失败：" + error);
         return false;
     }
     return true;

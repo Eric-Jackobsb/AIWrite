@@ -2,22 +2,13 @@
 
 #include "provider_spec.h"   // L4（PB2-27）：站点无关登录证据（ai::WebSessionEvidence）
 #include "log.h"
+#include "string_util.h"   // CLN-05：nowString 收敛
 
 #include <cctype>
 #include <ctime>
 
 namespace aiwrite::web {
 namespace {
-
-std::string now_string()
-{
-    const std::time_t now = std::time(nullptr);
-    std::tm           local{};
-    localtime_s(&local, &now);
-    char buffer[32] = {};
-    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &local);
-    return buffer;
-}
 
 } // namespace
 
@@ -49,7 +40,7 @@ std::string ProbeResult::summary() const
     return text;
 }
 
-std::string mask_value(const std::string& value)
+std::string maskValue(const std::string& value)
 {
     const std::size_t length = value.size();
     if (length == 0) {
@@ -63,7 +54,7 @@ std::string mask_value(const std::string& value)
 }
 
 // M_patchB L1 续（PB2-18）：站点键（origin；决策 D-19）
-std::string site_key_of(const std::string& url)
+std::string siteKeyOf(const std::string& url)
 {
     const std::size_t scheme = url.find("://");
     if (scheme == std::string::npos) {
@@ -81,11 +72,11 @@ std::string site_key_of(const std::string& url)
 }
 // M_patchB L4（PB2-27）：把内存会话转成「站点无关」的登录证据
 //  * 只取 Cookie 维度（是否读过 / 条数 / 名字）——**不取** user_token（不变量 I15）
-ai::WebSessionEvidence web_session_evidence(const Session& session)
+ai::WebSessionEvidence webSessionEvidence(const Session& session)
 {
     ai::WebSessionEvidence evidence;
     evidence.cookies_known = !session.url.empty(); // 写过会话快照（登录窗口提取过 Cookie）
-    evidence.cookie_count  = session.cookies.size();
+    evidence.cookieCount  = session.cookies.size();
     evidence.cookie_names.reserve(session.cookies.size());
     for (const Cookie& cookie : session.cookies) {
         evidence.cookie_names.push_back(cookie.name);
@@ -101,7 +92,7 @@ SessionStore& SessionStore::instance()
     return store;
 }
 
-std::string SessionStore::resolve_key(const std::string& site) const
+std::string SessionStore::resolveKey(const std::string& site) const
 {
     // 空串 = 默认槽（`current_`）—— 未指定站点时退化为改造前的“那一个会话”
     return site.empty() ? current_ : site;
@@ -113,11 +104,11 @@ void SessionStore::set(Session session)
     std::size_t count = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        key               = resolve_key(session.site);
+        key               = resolveKey(session.site);
         session.site      = key; // 归档后回填（便于快照读出归属）
-        session.logged_in = !session.cookies.empty();
+        session.loggedIn = !session.cookies.empty();
         if (session.updated_at.empty()) {
-            session.updated_at = now_string();
+            session.updated_at = utils::nowString();
         }
         count          = session.cookies.size();
         sessions_[key] = std::move(session);
@@ -127,37 +118,37 @@ void SessionStore::set(Session session)
               "Cookie " + std::to_string(count) + " 条（仅内存，程序退出即销毁）");
 }
 
-void SessionStore::set_probe(ProbeResult probe, const std::string& site)
+void SessionStore::setProbe(ProbeResult probe, const std::string& site)
 {
     std::string key;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        key              = resolve_key(site);
+        key              = resolveKey(site);
         Session& session = sessions_[key];
         if (session.url.empty()) {
             session.url = key; // 只有探测结果时，用站点键兜底显示
         }
         if (session.updated_at.empty()) {
-            session.updated_at = now_string();
+            session.updated_at = utils::nowString();
         }
         if (probe.ran_at.empty()) {
-            probe.ran_at = now_string();
+            probe.ran_at = utils::nowString();
         }
         if (!probe.token_raw.empty()) {
             session.user_token = probe.token_raw; // 真 Token 只留在这一个内存字段
             probe.token_raw.clear();              // 探测结果本身可安全打印
         }
         session.probe     = std::move(probe);
-        session.logged_in = !session.cookies.empty();
+        session.loggedIn = !session.cookies.empty();
         current_          = key;
     }
     log::info("[网页版会话] 协议探测结果已更新（站点 " + (key.empty() ? std::string("(默认)") : key) +
               "）：" + snapshot(key).probe.summary());
 }
 
-void SessionStore::set_probe(ProbeResult probe)
+void SessionStore::setProbe(ProbeResult probe)
 {
-    set_probe(std::move(probe), std::string());
+    setProbe(std::move(probe), std::string());
 }
 
 void SessionStore::clear(const std::string& site)
@@ -165,7 +156,7 @@ void SessionStore::clear(const std::string& site)
     std::string key;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        key = resolve_key(site);
+        key = resolveKey(site);
         sessions_.erase(key);
     }
     log::info("[网页版会话] 已注销（站点 " + (key.empty() ? std::string("(默认)") : key) +
@@ -177,7 +168,7 @@ void SessionStore::clear()
     clear(std::string());
 }
 
-void SessionStore::clear_all()
+void SessionStore::clearAll()
 {
     {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -190,7 +181,7 @@ void SessionStore::clear_all()
 Session SessionStore::snapshot(const std::string& site) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    const auto                  it = sessions_.find(resolve_key(site));
+    const auto                  it = sessions_.find(resolveKey(site));
     return it == sessions_.end() ? Session{} : it->second;
 }
 
@@ -199,44 +190,44 @@ Session SessionStore::snapshot() const
     return snapshot(std::string());
 }
 
-bool SessionStore::has_token(const std::string& site) const
+bool SessionStore::hasToken(const std::string& site) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    const auto                  it = sessions_.find(resolve_key(site));
+    const auto                  it = sessions_.find(resolveKey(site));
     return it != sessions_.end() && !it->second.user_token.empty();
 }
 
-bool SessionStore::logged_in(const std::string& site) const
+bool SessionStore::loggedIn(const std::string& site) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    const auto                  it = sessions_.find(resolve_key(site));
-    return it != sessions_.end() && it->second.logged_in;
+    const auto                  it = sessions_.find(resolveKey(site));
+    return it != sessions_.end() && it->second.loggedIn;
 }
 
-bool SessionStore::logged_in() const
+bool SessionStore::loggedIn() const
 {
-    return logged_in(std::string());
+    return loggedIn(std::string());
 }
 
-std::size_t SessionStore::cookie_count(const std::string& site) const
+std::size_t SessionStore::cookieCount(const std::string& site) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    const auto                  it = sessions_.find(resolve_key(site));
+    const auto                  it = sessions_.find(resolveKey(site));
     return it == sessions_.end() ? 0 : it->second.cookies.size();
 }
 
-std::size_t SessionStore::cookie_count() const
+std::size_t SessionStore::cookieCount() const
 {
-    return cookie_count(std::string());
+    return cookieCount(std::string());
 }
 
-void SessionStore::set_current_site(const std::string& site)
+void SessionStore::setCurrentSite(const std::string& site)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     current_ = site;
 }
 
-std::string SessionStore::current_site() const
+std::string SessionStore::currentSite() const
 {
     std::lock_guard<std::mutex> lock(mutex_);
     return current_;

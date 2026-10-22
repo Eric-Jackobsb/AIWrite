@@ -96,7 +96,21 @@
     {
       "id": "n2",
       "params": {
-        "template": "请根据以下内容续写：\n{vars}"
+        "api_base": "",
+        "api_key_ref": "",
+        "max_tokens": 2048,
+        "mode": "official",
+        "model": "deepseek-chat",
+        "model_custom": "",
+        "provider": "deepseek",
+        "seed": 0,
+        "stop": [],
+        "stream": true,
+        "system_prompt": "",
+        "temperature": 0.7,
+        "template": "请根据以下内容续写：\n{vars}",
+        "top_k": 0,
+        "top_p": 1.0
       },
       "position": {
         "x": -120.0,
@@ -108,13 +122,25 @@
     {
       "id": "n3",
       "params": {
+        "frequency_penalty": 0.0,
         "max_tokens": 2048,
         "mode": "web",
         "model": "deepseek-chat",
+        "n": 1,
+        "presence_penalty": 0.0,
+        "response_format": "text",
+        "retry_count": 0,
+        "retry_enabled": true,
+        "retry_interval_ms": 0,
         "seed": 0,
+        "stop": [],
         "stream": true,
         "system_prompt": "",
         "temperature": 0.7,
+        "timeout_connect_ms": 0,
+        "timeout_first_byte_ms": 0,
+        "timeout_stream_idle_ms": 0,
+        "top_k": 0,
         "top_p": 1.0
       },
       "position": {
@@ -127,8 +153,11 @@
     {
       "id": "n4",
       "params": {
+        "archive_policy": "inherit",
         "auto_export": false,
+        "batch_export": false,
         "export_dir": "",
+        "export_template": "",
         "file_name": "",
         "label": "输出"
       },
@@ -159,7 +188,16 @@
     {
       "id": "n6",
       "params": {
-        "path": "F:\\ims.png"
+        "crop_enabled": false,
+        "crop_h": 0,
+        "crop_w": 0,
+        "crop_x": 0,
+        "crop_y": 0,
+        "directory": "",
+        "path": "F:\\ims.png",
+        "resize_max_height": 0,
+        "resize_max_width": 0,
+        "resize_mode": "none"
       },
       "position": {
         "x": -1073.0,
@@ -182,16 +220,37 @@
         "x": -1025.0,
         "y": 352.0
       },
-      "title": "提供商配置",
+      "title": "吃白饭的",
       "type": "ProviderConfig"
     },
     {
       "id": "n8",
       "params": {
+        "crop_enabled": false,
+        "crop_h": 0,
+        "crop_w": 0,
+        "crop_x": 0,
+        "crop_y": 0,
+        "frequency_penalty": 0.0,
+        "image_order": "edge_order",
         "max_tokens": 2048,
+        "mode": "official",
+        "presence_penalty": 0.0,
+        "resize_max_height": 0,
+        "resize_max_width": 0,
+        "resize_mode": "none",
+        "retry_count": 0,
+        "retry_enabled": true,
+        "retry_interval_ms": 0,
+        "seed": 0,
+        "stop": [],
         "stream": true,
         "system_prompt": "",
         "temperature": 0.7,
+        "timeout_connect_ms": 0,
+        "timeout_first_byte_ms": 0,
+        "timeout_stream_idle_ms": 0,
+        "top_k": 0,
         "top_p": 1.0
       },
       "position": {

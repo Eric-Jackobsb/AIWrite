@@ -53,7 +53,7 @@ struct HttpJsonResult {
 };
 
 // 阻塞 POST（**可取消**）：拿到 HTTP 响应即 ok=true，具体状态码由调用方判定
-HttpJsonResult http_post_json(const HttpJsonRequest& request);
+HttpJsonResult httpPostJson(const HttpJsonRequest& request);
 
 // ---- 纯函数（离线断言用）----
 
@@ -62,11 +62,11 @@ std::string append_query_param(const std::string& url, const std::string& name,
                                const std::string& value);
 
 // 解析 JSON 文本：失败 ⇒ false + 可操作 error（空串 / 非 JSON 各有明确文案）
-bool parse_json_text(const std::string& text, nlohmann::json* out, std::string* error);
+bool parseJsonText(const std::string& text, nlohmann::json* out, std::string* error);
 
 // 从错误响应里取**可读消息**（`error.message` → `message` → `error` 字符串 → 空串）
 //  * 兼容三种形状：OpenAI 兼容 `{error:{message}}` / Anthropic `{error:{type,message}}`
 //    / Gemini `{error:{code,message,status}}`
-std::string json_error_message(const nlohmann::json& body);
+std::string jsonErrorMessage(const nlohmann::json& body);
 
 } // namespace aiwrite::ai

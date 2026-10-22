@@ -33,6 +33,86 @@
 
 | 日期 | 批次（新 → 旧） |
 |---|---|
+| 2026-10-22 | 🛑 **重构专项 · 架构 v1.1 定稿（零代码 · 文档）**：对象定义总表补充定稿 —— [refactor/ARCHITECTURE.md](refactor/ARCHITECTURE.md) **v1.0 → v1.1**（**§1.8 对象定义总表 10 个对象全部定稿** + 新增 25 条对象级决策 `ARCH-D20`~`D44`（19→**44**）+ 验收判据第 8 条 `AppContext` 运行时不可访问）；FREEZE §5 / DocMAP 行 + 最近更新行同步。**纯文档改动。下一步 = 按 `ARCH-R1` 开始实施。** |
+| 2026-10-22 | 🛑 **重构专项 · 架构 v1.0 定稿（零代码 · 文档）**：审计结论 → 用户拍板「冻结 → 重新设计架构 → 重构」全流程推进至**定稿** —— [refactor/ARCHITECTURE.md](refactor/ARCHITECTURE.md) **v0.1 → v1.0**（19 项决策 `ARCH-D1`~`D19` 全部拍板 · 迁移路线重组为 `ARCH-R/E/A/Z` 四阶段）；[refactor/FREEZE.md](refactor/FREEZE.md) 加 §5 进度记录；DocMAP 文档地图行 + 最近更新行同步。**纯文档改动。下一步 = 按 `ARCH-R1` 开始实施。** |
+| 2026-10-21 | 📋 **M_polish §2.5 拆条版（零代码 · 文档）**：用户要求「优先级表描述不够详细、看不懂（如『功能逻辑走查：上级节点 16 条 + M1/M2 画布 22 项勾账』）」→ §2.5 总览表加「拆条」列 + 新增 §2.5.2 拆条明细（P0-A/B · P1-A~J · P2-A/B），把每个任务批逐条列出（引用 DevPlan.todo Test 根节点 id，含怎么点 / 物证）：上级节点 16 条（含 FAIL #457/#465）· M2 画布 22 项（20 done + #505/#510 open + FAIL #506/#511）· 真机实测 11 节点 · 人工验收 13 顶层项 · 打包 2 条。**纯文档改动。** |
+
+| 2026-10-21 | 📋 **M_polish §2.5 当前打磨优先级表登记（零代码 · 文档）**：盘点当前全部待打磨项并整理优先级表（P0 = 阶段四 `POL-E` 便捷性细列+落地（唯一可离线大块）· Ctrl+S 复核 · P1 = 逻辑 / UX / 正确性收口 + 债务真机批 · P2 = 长尾）；顺手修正 §2.4 标题误置于 `POL-C` 清单之前的结构错位（清单归回 §2.3）。详见 [actionPlan/M_polish.md](actionPlan/M_polish.md) §2.5 · 变更记录 v1.6。 |
+
+| 2026-10-21 | 🗂️ **ToVerify 看板并入 DevPlan Test（零代码 · 结构）**：`docs/audit/ToVerify.todo` 移除 · 内容 5 组 **127 节点合并进 `DevPlan.todo` Test 根**（〇CN-01 人工验收 / 一待拍板 / 二GUI 点选 / 三冻结收口 / 四债务清零 · 全节点重编号 447..573 · key==id 唯一 · done 状态保留 · FAIL 记录随迁）· Test 根计数 **15 → 116 项** · 全库活链 8 文件同步（DEBT.todo · M_debt · M_polish · DocMAP · AI_README · roadmap · 变量术语对照表 · M_code_cleanup · CN_editor_refactor）· 历史记录保留（Archive / CHANGELOG 既有条目）· `check_links` 无 ToVerify 死链 |
+
+| 2026-10-21 | 🔒 **M_polish 阶段三 · POL-C-02 / POL-C-03 落地（数据安全走查 + 文案审计）**：`POL-C-02` = 数据安全边界走查补 2 处缺口断言（autosave 原子写失败路径 +4 · **28→32/0**；归档 TTL/保留边界 +7 · exec **706→713/0**）· `POL-C-03` = 三类异常文案（validate / failure_summary / web_error）可操作性审计通过（零代码）· graph **151/0** · selftest 十三组 PASS · check_links **1730/0** |
+| 2026-10-21 | 🔬 **M_polish 阶段三开工（POL-C · 正确性）**：细列 `POL-C` 清单（01 校验边界补强 ✅ 本批 · 02 数据安全边界走查 · 03 异常文案可操作审计 · 04 站点适配 ⏳ 真机 · 05/06 真机复核已登记 ToVerify）；**`POL-C-01`** = M6-06 校验边界补强 —— `api_executor_selftest.cpp` 补 **7 组 8 断言**（参数越界 / 枚举非法 / 自环 A→A / 多错误一次报告 / 可变长多入边正边界 / 可选 provider 未连 / 运行前继承加载校验）· executor-selftest **83→94/0** · exec **706/0** · graph **151/0** · selftest 十三组 PASS · check_links **1723/0** |
+| 2026-10-21 | 🛠️ **M_polish 阶段一回归 · `POL-L-01` selftest 补强落地**：`api_execution_selftest.cpp` 新增「4c. 创作链四段模板可实例化 + 端到端闭环」15 断言（构思→大纲→草稿→修订）· 无 Key 请求构造 V-11 覆盖勾账 · 构建 **0/0** · exec **691→706/0** · graph **151/0** · selftest 十三组 PASS · GUI 创作链 ⏳ 待真机 |
+| 2026-10-21 | ✨ **M_polish 阶段二开工（POL-UX · 操作体验）**：细列 `POL-UX` 清单（01 重试按钮 ✅ 本批 · 02 视觉统一离线走查登记 ✅ · 03 启动体验 ⏳ 真机 · 04 交互手感复核 ⏳ 真机）；**`POL-UX-01`** = 错误条「重试」按钮（复用 PD-06① `startRerunAsync(Downstream)` · 纯 UI 薄接线）· 构建 **0/0** · exec **691/0** · graph **151/0** · selftest 十三组 PASS |
+| 2026-10-21 | 🧮 **债务清零 · 批 A 离线项落地（A-2/3/4/5/7/8 ✅ · A-6 代码部分 ✅）**：L7 VB-03 假增量断言（682→686）· L8 失败汇总纯函数 + UI 接线（686→691）· L9 校验 5 边界（73→83）· C3 check_all 补 CLI 自检 + ce_repro 回归 · C4 `##node_inline_` 去借名 · C2 拆分评估维持不拆 · L11 字体 FontDefault 显式（视觉顺延） |
+| 2026-10-21 | 🧾 **债务清零立项（零代码 · 当前主线）**：用户拍板「优先解决所有债务问题」→ 债务总账 `audit/DEBT.todo`（6 类 / 26 项：代码债主体已清零 · 逻辑残项 11 · 验证人工 6 · 打包 2 · 文档 1 · 已知 bug 1）+ 专项 `actionPlan/M_debt.md`（批 A 离线 8 项 / 批 B 人工 18 项）· 人工验证项全登记 `ToVerify.todo`「四、债务清零人工验证」组（13 主项 / 6 站点子项 / 7 Human 子项）· roadmap §二 加「债务清零」主线行 · `M_polish.md` 补前置阶段衔接 · `check_links` broken 0（下条） |
+
+- **2026-10-22 · 🛑 重构专项 · 架构 v1.1 定稿（零代码 · 纯文档）**：对象定义总表补充定稿 ——
+  - **`ARCHITECTURE.md` v1.0 → v1.1**（`docs/refactor/`）：新增 **§1.8 对象定义总表** —— `EventBus` / `RunSession` / `WorkflowModel` / `SelectionState` / `ReadOnlyView` / `AutosaveService` / `Diagnostics` / `Clipboard` / `WorkflowFile` / `AppContext` **10 个对象全部定稿**（一句话定义 + 维度表 + 限制 + 依赖图 §1.8.11 + 注入示例 §1.8.12 + `rg` 断言 §1.8.13）；§1.4 ReadOnlyView 签名更新（`nodes_for_render()` / `edges_for_render()` 零拷贝访问器 + `config`）；§1.5 RecentFiles 归属 WorkflowFile；§1.6 `RunSession` 改为「启动（常驻）」；§1.7 菜单/设置面板改为「仅启动注入」；§4 验收判据新增第 8 条（`AppContext` 运行时不可访问）；§5 风险表新增「`AppContext` 重新长成上帝对象」对策；§7 新增 **25 条对象级决策 `ARCH-D20`~`D44`**（总数 19 → **44 条**）。**§2.1「单例总线」「上帝对象」两行解法同步指向 §1.8。**
+  - **`FREEZE.md` 同步**：§5 进度记录加 v1.1 定稿行（冻结继续生效）。
+  - **`DocMAP.md` 同步**：ARCHITECTURE 行 🟢 v1.1（10 对象 + 44 决策 + 验收八条）；最近更新行加 v1.1 记录。
+  - **验证**：check_links 全绿。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。**下一步 = 按 `ARCH-R1` 开始实施（待用户启动）。**
+
+- **2026-10-22 · 🛑 重构专项 · 架构 v1.0 定稿（零代码 · 纯文档）**：重构专项推进至**定稿** ——
+  - **`ARCHITECTURE.md` v0.1 → v1.0**（`docs/refactor/`）：用户拍板 **19 项决策 `ARCH-D1`~`D19`** —— ① 增量式重构；② 6 个对象拆分（WorkflowModel / RunSession / WorkflowFile / SelectionState / Clipboard / Diagnostics）；③ CeSession 对称拆分（CeModel / CeFile / CeSelection / CeSpec）；④ 先运行后编辑；⑤ 调用方直接持有对象、不持 `editor()`；⑥ 工具+流程双保险；⑦ 事件形态 1（通知）；⑧ 渲染直接读；⑨ 保留 WorkflowModel；⑩ 复用 RunEvent 队列；⑪ ReadOnlyView（每帧构建 · 只存引用 · 零拷贝）；⑫ 8 种 EditEvent；⑬ RunEvent 订阅化；⑭ `editor()` 完全退场只留 AppContext；⑮ 删除 TextureCache 例外；⑯ 拆分前补依赖图；⑰ 收敛前补差异盘点；⑱ 拆完后补对象交互断言；⑲ 回归基线只升不降。**迁移路线重组为四阶段**：`ARCH-R`（运行侧事件化 R1~R4）→ `ARCH-E`（编辑侧事件化 E1~E6）→ `ARCH-A`（应用级收口 A1~A5）→ `ARCH-Z`（收尾 Z1~Z2）；验收判据 §4 七条。
+  - **`FREEZE.md` 同步**：新增 §5 进度记录（2026-10-21 冻结生效 / 2026-10-22 架构定稿 · 冻结继续生效）。
+  - **`DocMAP.md` 同步**：文档地图 ARCHITECTURE 行 🟡 讨论稿 → 🟢 v1.0 定稿（无待定项）；最近更新行加 2026-10-22 记录。
+  - **验证**：check_links 全绿。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。**下一步 = 按 `ARCH-R1` 开始实施（待用户启动）。**
+
+- **2026-10-21 · 🛠️ M_polish 阶段一回归 · `POL-L-01` selftest 补强落地**：按 `M_polish.md` §2.1 `POL-L-01` 的「可自动断言部分」执行 ——
+  - **四段模板可实例化 + 端到端闭环**：`api_execution_selftest.cpp` 新增「**4c. 创作链四段模板可实例化 + 端到端闭环（POL-L-01）**」子段 **15 断言** —— ① 四段模板（构思 / 大纲 / 草稿 / 修订 · 对齐 `Creation_Roadmap_Guideline.md` §1.1）齐全且各含 `{vars}` 占位符；② 单段实例化（`execute_prompt_template`：灵感 → 前提句引导 · `{vars}` 正确替换）；③ 链式实例化 / 结果回流（上段输出作为下段 `{vars}` 输入 · 修订稿仍含灵感原文）；④ 端到端闭环（`TextInput(灵感) → 构思 → 大纲 → 草稿 → 修订 → TextOutput` 六节点图 · `Executor.start` 校验通过 → `runToCompletion` 完成 → `outputs()` 结果回流 · 含灵感 + 四段引导词）。四段均为纯文本 PromptTemplate（不触网、无需 Key）。
+  - **无 Key 请求构造勾账**：已由 V-11（6 / 0 · 2026-10-11 批 3）覆盖，本批不重复实现。
+  - **验证（2026-10-21 本机）**：构建 **0/0（4 目标）** · exec-selftest **691→706 / 0**（+15）· graph-selftest **151 / 0** · selftest 十三组 PASS。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。**最终 GUI 创作链走查 ⏳ 待真机。**
+
+- **2026-10-21 · ✨ M_polish 阶段二开工（POL-UX · 操作体验）**：按 `M_polish.md` §2.2 细列 `POL-UX` 清单并落地首项 ——
+  - **`POL-UX-01` 重试按钮（M6-04 步骤 4）**：`ui/error_bar.cpp` 错误条新增绿色「重试」按钮 —— 一键重跑**首个失败节点及下游**（复用 PD-06① `state.startRerunAsync(node_id, engine::RerunScope::Downstream)`；失败节点阻塞下游 ⇒ 重跑「节点及下游」走通后续链路；核心重跑语义已被 PD-06① 离线断言覆盖，本按钮为纯 UI 薄接线）· 守卫 = 节点仍在图中 + 无运行会话（`BeginDisabled` 置灰 + tooltip 说明原因）· 成功启动即 `clearLastError()`（错误条消失，状态栏显示「重跑中…」；重跑结束由 `refresh_last_error` 重新判定）· 重跑被拒（校验不过）保留错误条 · 与既有「重新登录」按钮（PB-07）并存。
+  - **`POL-UX-02` 视觉统一离线走查（零代码）**：审计结论 —— 字体 + 暗色主题已统一（`DEBT-L11`）· 画布空状态引导（`P7a-14`）· 输出面板「尚无运行结果」· 首启引导（`M6-02`）· console 过滤/搜索/导出已齐 · 状态圆点 + 脉冲光环（`PA-08`）已齐；视觉复核（L11 顺延项）与 `POL-UX-03` 启动计时 / `POL-UX-04` 交互手感复核归 GUI。
+  - **验证（2026-10-21 本机）**：构建 **0/0（4 目标）** · exec-selftest **691/0** · graph-selftest **151/0** · selftest 十三组 PASS（回归只升不降）。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+- **2026-10-21 · 🔒 M_polish 阶段三 · POL-C-02 / POL-C-03 落地（数据安全走查 + 异常文案审计）**：继续阶段三离线审计 ——
+  - **`POL-C-02` 数据安全边界走查**：全链路走查确认已覆盖（autosave 原子写 / 中断 `.tmp` / 轮转 keep / 恢复判定 4 场景 / 自清理 · 归档 TTL 只清理命名规则目录 + 本次永不删 + 先统计后删 + PW-11 保底 3 份），**补 2 处缺口断言**：
+    - ① **autosave 原子写失败路径**（`engine/src/autosave.cpp` `autosaveSelftest` 新增「④b」段 +4 条）：`autosave.json` 被同名**目录**顶替 ⇒ Windows 文件→目录 rename 必失败 —— 断言 `autosave_write` 返回 **false + 有错误信息** / 失败后 **`.tmp` 被自清理** / **原快照位置未被破坏**（rename 失败不产生半截覆盖）/ 移除目录后**重写恢复正常** —— **autosave-assert 28→32 / 0**。
+    - ② **归档 TTL / 保留边界**（`api_execution_selftest.cpp` PC-05 归档块 +7 条）：`ttl_days=0` **关闭清理**（40 天前旧目录保留 · 独立子目录隔离保留策略干扰）/ **非命名规则目录不参与保留 / TTL 清理**（`is_archive_dir_name` 负例 · 不误删用户文件）/ `keep_history=true` + `max_history=2` 连跑 4 次**只留最近 2 份** —— **exec 706→713 / 0**。
+  - **`POL-C-03` 异常文案与诊断可操作性审计（零代码）**：三类归因文案全部满足「**可操作 = 定位 id + 修复指引**」——
+    - **validate**（`validate.cpp`）：加载校验全量 `[节点id]` / `[边id]` 前缀（未知类型 / id 重复 / 端点缺失 / 端口类型不兼容 / 重复占用 / 环）+ 运行前引导（必填未连 · 网页版「本次运行必定失败」+ 登录引导 · 缺 API Key 提示）。
+    - **failure_summary**（`failure_summary.cpp`）：汇总文案带节点 id（`N 个节点失败：n1（…）；n2（…）`）· 错误透传（web 节点 = web_error 自带指引）· 已由 DEBT-L8 断言覆盖。
+    - **web_error**（`web_error.h`）：三类统一形状 `[owner <归属键>] <类别>（站点 <origin>）：<细节> —— 下一步：<可操作动作>` · owner 前缀含节点 id · 每类一句互不复制 · 已由 PW-05 5 条断言覆盖。
+    - **结论：无缺口，零代码改动。**
+  - **验证（2026-10-21 本机）**：构建 **0/0（4 目标）** · autosave-assert **28→32 / 0** · exec-selftest **706→713 / 0** · graph-selftest **151 / 0** · selftest 十三组 PASS · check_links **1730 / 0**（`check_all.ps1` 汇总注释 94/706→94/713 同步）。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+- **2026-10-21 · 🔬 M_polish 阶段三开工（POL-C · 正确性）**：按 `M_polish.md` §2.3 细列 `POL-C` 清单并落地首项 ——
+  - **`POL-C-01` M6-06 校验边界补强**：`api_executor_selftest.cpp` 在 DEBT-L9（5 个加载校验边界）之上再补 **7 组 8 断言** —— ① 参数越界（整体级加载校验：`LLMGenerate.temperature = 5.0` 超 0~2 ⇒ 拒绝 + 文案「不能大于」）；② 枚举非法值（`ProviderConfig.mode = nonsense-mode` ⇒ 拒绝 + 文案「取值不在枚举范围内」）；③ **自环 A→A**（`validateWorkflow` 级拓扑失败路径，与 DEBT-L9 的 A→B→A 对称）；④ **多错误一次报告**（未知节点类型 + 悬空边同图 ⇒ 一次校验返回全部 ≥2 条错误，**不短路**）；⑤ **可变长输入多条入边合法（正边界）**（`TextMerge.texts` 双入边 ⇒ 加载 / 运行前均通过，不误报「重复占用」）；⑥ **可选输入 provider 未连线不拒绝（正边界）**（`LLMGenerate.provider` 为 `is_optional` ⇒ 运行前通过）；⑦ **运行前校验继承加载校验（子集关系）**（必填参数为空 ⇒ 运行前同样拒绝）。逐项对齐 `validate.cpp` 检查清单（类型注册 / id 唯一 / 参数合法 / 边两端节点与端口存在 / 端口类型兼容 / 非可变长不重复占用 / 无环 ＋ 必填连接 / 可选放行）—— **加载 / 运行前两级校验边界封口**。
+  - **验证（2026-10-21 本机）**：构建 **0/0（4 目标）** · executor-selftest **83→94 / 0**（+11 = 8 显式断言 + 3 次 `add_node` 内部断言）· exec-selftest **706 / 0** · graph-selftest **151 / 0** · selftest 十三组 PASS · check_links **1723 / 0**（`check_all.ps1` 汇总注释 83→94 同步）。**⛔ 未提交**（按 [../AI_README.md](../AI_README.md) §6「改完即停并汇报」）。
+
+
+- **2026-10-21 · 🧮 债务清零 · 批 A 离线项落地（A-2/3/4/5/7/8 ✅ · A-6 代码部分 ✅）**：按 `M_debt.md` 批 A 执行 8 项离线可做项中的 7 项代码/评估落地 ——
+  - **A-2 `DEBT-L7`**：VB-03「假增量」离线断言补上（流式已拍板不做 · 事件槽位保留）—— `api_execution_selftest.cpp` 末尾新增 **VB-03①~④**（多段增量拼接 == 非流式整段 / 空段忽略 `handleDelta` 语义 / 单段一次性到达 == 整段 / `delta_bytes` 累计 == 正文字节数）· 语义对齐 `editor_state.cpp` Delta 分支 · **exec-selftest 682→686 / 0**。
+  - **A-4 `DEBT-L8`**：M6-04 重试 / 失败汇总 —— 新增 **`engine/failure_summary.{h,cpp}`**（`collectFailures` / `summarizeFailures` 纯函数）+ UI 接线（`editor_state.h` `LastError` 增 `failed_count/summary/details` · `refreshLastError` 汇总**所有**失败节点 · `error_bar.cpp` 多失败显示汇总文案 + tooltip 明细 · relogin 反查语义不变）· 重试已有 `retry_policy` + 设置面板 + VL1-03 覆盖参数断言 · **exec-selftest 686→691 / 0** · 错误条视觉复核顺延 M_polish（半人工）。
+  - **A-5 `DEBT-L9`**：M6-06 校验边界补强 —— `api_executor_selftest.cpp` 补 **5 个未覆盖边界**（节点 id 重复 / 终点节点不存在 / 终点端口不存在 / 上级节点规格不存在 / 环 A→B→A）· **executor-selftest 73→83 / 0**。
+  - **A-3 `DEBT-C3`**：测试资产完善 —— `check_all.ps1` 新增 **②b 两项**：`aiwrite --run-selftest`（CLN-15 拆出的 `cli_selftest.cpp` 入口）+ `ce_repro.exe 0`（上级编辑器窗口栈平衡回归）· 更新 exec 汇总注释 83/691 · **check_all 全绿**（新增两项 PASS · exec 691 / graph 151 / check_links 1717/0 / 打包 PASS）。
+  - **A-8 `DEBT-C4`**：`canvas_view.cpp` L582 ImGui label `##ce_inline_` → **`##node_inline_`**（去 `ce_` 借名 · 唯一使用点 · ID 唯一性由 node.id 保证）· 构建 0/0。
+  - **A-7 `DEBT-C2`**：webview_host（155KB/3489 行）/ dom_web_client（135KB/2397 行）拆分评估 —— 均为单匿名命名空间高耦合运行时代码，**无低风险接缝 ⇒ 维持不拆**（风险>收益 · 保持登记 M_code_cleanup §4.1 方向 4）· 行为等价零代码改动。
+  - **A-6 `DEBT-L11`**：字体 / 暗色主题 —— `app.cpp` **`io.FontDefault = fonts.ui`**（显式指定 CJK 主字体 · 确定性加固）· 审计确认 load_fonts + apply_dark_theme + 双 CanvasTheme 已统一、无浅色残留 · 视觉复核顺延 M_polish 阶段二（半人工）。
+  - **验证**：构建 **0/0（4 目标）** · exec **83+91+691 / 0** · graph **151 / 0** · run-selftest PASS · check_links **1717/0** · check_all 全绿。
+
+- **2026-10-21 · 🧾 债务清零立项（零代码 · 当前主线）**：用户拍板「优先解决所有债务问题」→ 债务总账 `audit/DEBT.todo`（6 类 / 26 项：代码债主体已清零 · 逻辑残项 11 · 验证人工 6 · 打包 2 · 文档 1 · 已知 bug 1）+ 专项 `actionPlan/M_debt.md`（批 A 离线 8 项 / 批 B 人工 18 项）· 人工验证项全登记 `ToVerify.todo`「四、债务清零人工验证」组（13 主项 / 6 站点子项 / 7 Human 子项）· roadmap §二 加「债务清零」主线行 · `M_polish.md` 补前置阶段衔接 · `check_links` broken 0（下条） |
+| 2026-10-21 | 🧊 **功能冻结 + 打磨阶段开工（零代码）**：「自定义 AI 收口」人工验收通过（2026-10-21 用户真机点选 · ToVerify.todo「三、冻结收口项」登记 done）→ **功能正式冻结生效**；`M_polish.md` §2.1 细列 **`POL-L` 清单**（01 创作主线端到端 / 02 mode 5 真机复核 / 03 功能逻辑走查 / 04 逻辑残项如实登记）· `check_links` **1685/0** |
+| 2026-10-21 | ⚙️ **自定义 AI 收口（冻结前最后一个功能）**：「新建 API 提供商…」模态（设置面板 · 镜像自建站点模态）→ 写 `~/.brain-ai/providers.d/<id>.json` → 热重载即时生效 · 支持 openai / anthropic / gemini + API Key 直接入 DPAPI 凭据库 · 纯函数 `ai/official_template` + `api_probe --official-assert` 闭环（40/0 · 端到端 20→21→20 自清理）· 构建 **0/0** · selftest **682/151/13 全绿** · `check_links` 1684/0 · **网页版自建不再投入（自定义路径只保留 API 接口）** |
+| 2026-10-20 | 🧹 驼峰化（CLN-06 扩项）**批 7/8 = app/tools 域**：公共头无 snake_case 函数（app 仅 3 入口 cpp · tools 为自检/诊断工具无公共声明）→ **0 项跳过** |
+| 2026-10-20 | 🧹 驼峰化（CLN-06 扩项）**批 6 = ui 域**：145 个 snake_case 函数 → camelCase（canvas_view 20 / ce_internal 6 / cli_internal 12 / composite_editor 24 / connection_test 10 / console_panel 2 / editor_state 38 / error_bar 1 / node_canvas 3 / node_library 1 / output_panel 3 / panel_internal 5 / prompt_generator 4 / settings_panel 4 / text_view 1 / texture_cache 10 / toolbar 1）· 734 替换 / 48 文件 · 构建 **0/0** · selftest **682/151/13组 全绿**（输出零内容差异） |
+| 2026-10-20 | 🧹 驼峰化（CLN-06 扩项）**批 5 = web 域**：72 个 snake_case 函数 → camelCase（channel_frames 9 / pipe_client 16 / probe_verdict 5 / pydoll_channel 11 / session_snapshot 5 / session_store 11 / webview_host 15）· 544 替换 / 32 文件 · 构建 **0/0** · selftest **682/151/13组 全绿**（输出零内容差异） |
+| 2026-10-20 | 🧹 驼峰化（CLN-06 扩项）**批 4 = ai 域**：123 个 snake_case 函数 → camelCase（anthropic 2 / cancel_token 2 / deepseek_official 13 / deepseek_web 3 / dom_web_client 16 / gemini 2 / http_json 3 / http_net 7 / image_convert 3 / image_preprocess 1 / inference 5 / provider_factory 4 / provider_spec 30 / retry 3 / site_template 9 / site_uploads 2 / upload_evidence 9 / upload_registry 7 / upload_supply 1 / web_pow 3）· 918 替换 / 62 文件 · 构建 **0/0** · selftest **682/151/13组 全绿**（输出零内容差异 · join_names 冲突无） |
+| 2026-10-20 | 🧹 驼峰化（CLN-06 扩项）**批 2 = engine 域**：48 个 snake_case 函数 → camelCase（autosave 7 / composite 11 / graph 3 / migration 3 / node_registry 4 / provider_resolve 10 / recent_files 6 / workflow_io 4）· 315 替换 / 35 文件 · 构建 **0/0** · selftest **682/151/13组 全绿**（输出零内容差异） |
+| 2026-10-20 | 🧹 驼峰化（CLN-06 扩项）**批 3 = nodes 域**：公共 API 仅 `registerAllExecutors()`（已驼峰）→ **0 项跳过** |
+| 2026-10-20 | 🧹 驼峰化（CLN-06 扩项）**批 1 = utils 域**：81 个 snake_case 函数 → camelCase · 550 替换 / 60 文件 · 构建 **0/0** · selftest **682/151/13组 全绿**（输出零内容差异） |
+| 2026-10-20 | 🧹 清理批 **CLN-15 落地**（api_probe 拆分）：`api_probe.cpp` 6937→321 行 · 新 `api_probe_selftest.cpp` / `api_graph_selftest.cpp` / `api_executor_selftest.cpp` / `api_execution_selftest.cpp` / `api_diag.cpp` / `api_internal.h` · 构建 **0/0** · selftest **682/151/13组 全绿**（基线存档输出逐行一致 · [audit_cleanup_15.md](audit/audit_cleanup_15.md)） |
+| 2026-10-20 | 🧹 清理批 **CLN-14 落地**（main 拆分）：`main.cpp` 2359→661 行 · 新 `cli_selftest.cpp` / `cli_diag.cpp` / `cli_internal.h` · 构建 **0/0** · selftest **682/151/13组 全绿**（[audit_cleanup_14.md](audit/audit_cleanup_14.md)） |
+| 2026-10-20 | 🧹 清理批 **CLN-13 落地**（composite_editor 拆分）：`composite_editor.cpp` 1687→172 行 · 新 `ce_state.cpp`/`ce_session.cpp`/`ce_run.cpp`/`ce_pack.cpp`/`ce_draw.cpp`/`ce_internal.h` · 构建 **0/0** · selftest **682/151/13组 全绿**（[audit_cleanup_13.md](audit/audit_cleanup_13.md)） |
+| 2026-10-20 | 🧹 清理批 **CLN-12 落地**（property_panel 拆分）：`property_panel.cpp` 1932→814 行 · 新 `panel_widgets.cpp` / `panel_web.cpp` / `panel_internal.h` · 构建 **0/0** · selftest **682/151/13组 全绿**（[audit_cleanup_12.md](audit/audit_cleanup_12.md)） |
+| 2026-10-20 | 🗺️ **打磨与优化阶段立项**（基础框架已搭好 · [actionPlan/M_polish.md](actionPlan/M_polish.md) · 逻辑 → 操作体验 → 正确性 → 便捷性 四阶段 · roadmap §二 同步） |
+| 2026-10-20 | 🧹 代码库清理批（[actionPlan/M_code_cleanup.md](actionPlan/M_code_cleanup.md) · `CLN-01…15`）：审查/勾账**全部完成** · 三项拍板（asyncMode 保留 · mode 5 仅文档推进 · **§3.4 拆分 + 驼峰化 = 执行 · 匿名命名空间专项 = 放弃**） |
+| 2026-10-19 | 🧩 上级节点编辑器能力对齐批：**「执行连线」试运行**（顶栏 执行连线/停止/清空结果 · 独立执行器跑沙箱副本 = 内部图 + 暴露输入测试源 · 状态圆点 + 节点结果摘要 · 与主画布运行互斥）+ `build_composite_test_graph`（`composite.h/cpp`）+ 自检第 10 节（**上级节点自检 80→91** · exec **682/0** · graph **151/0** · 构建 0/0）—— 移动/编辑/连线/执行四类操作与主画布对齐 |
+| 2026-10-19 | 🗂️ 人工验收操作单批（ToVerify.todo · 零代码）：〇组 8 项补「怎么点 / 留什么物证」 + 二组 GUI 点选 7 项迁入（原 DevPlan id=404 · 427~433）· DevPlan Human **29→22**（看板 245→238 叶子）· 断言计数同步（实测 composite **51→66** · exec **681→682**）· roadmap §五+§二 M6 状态复核（两批落地 + 安装包已编译） |
 | 2026-10-18 | 📦 `Composition_node` **指令式归档批（组合层 L4 重启 · 零代码）**：设计文档 `docs/actionPlan/Composition_node.md` → `docs/Archive/actionPlan/`（`git mv` · 归档标记行 + 状态 ✅ + 相对链接层级修正 + 承接位指定）· 新建 **`docs/actionPlan/ToVerify.todo`**（TodoList JSON · 承接原 DevPlan `Human > GUI 点选验收 id=434`）· DevPlan.todo：**id=347 勾 done**（归档）· **id=434 迁出**（Human 30→29 · GUI 8→7）· 五处索引同步（Archive/README · DocMAP · AI_README · 变量术语对照表 · M_preset_library）· 人工验收 + 待拍板项（`VCN-*`/`ACN-*` 验收框架 · 程序化生成规则 · 调试设施去留）全部迁 ToVerify.todo —— ⏳ 待真人执行 |
 | 2026-10-17 | 🧩 批 ⑦（PW-08 复位动作根治 · D-35③ 修订）：R2 阻塞根因实锤 —— **干净 profile 复现 `0x802A000C`**（关窗后**同一毫秒**重开撞 `CreateCoreWebView2Controller` 浏览器侧瞬时竞态 · **profile 论否决**）→ 复位**首选**改为**同一控制器导航回新会话页**（新增 `navigate_and_wait` 原语：`kNavigateMessage` / `run_navigate_in_window` / `navigate_now` · `window_table.h` 新 `ResetAction::NavigateToSession`）· **关窗重开降级兜底**（`kReopenSettleMs` 避让 + CreateController **3×300ms 退避重试** + 四处死壳重开点避让）· `api_probe` PW-08 断言同步（6→7 条）· 文档 §4.4 / §6 / §9 修订 | | 2026-10-17 | 📦 批 ⑥（ISCC 装包编译 + R2 探测阻塞登记）：winget 装 **Inno Setup 6.7.3** → `package.ps1` 全流程 **exit 0** · `AIwrite-Setup-0.2.0.exe` **9.1 MB**（payload 19 文件 / 34.6 MB · .iss 4/4 PASS）· **Human ①-1 勾账 done**；**R2 探测轮受阻未闭环**（门禁 11/11 PASS · DOM 探测 10 站全「控制器未就绪」= Debug `abort()` 弹窗 · `Invoke-Capture` 句柄继承缺陷致脚本崩溃） |
 | 2026-10-17 | 🧩 批 ⑤（Human 人工关卡总账 + Bootstrapper 补齐）：`DevPlan.todo` 新增 **`Human`（人工关卡）根分类**（8 组 **30 条 checklist** · 打包/站点回填/Key 门/GUI/环境模拟/真机/结论人审/契约 · 与 Test/Feature 并行不改原条目）+ 网络恢复后 **WebView2 Bootstrapper 自动下载**（1.78 MB · `PQ-02` 可选件补齐）· 零代码 |
@@ -44,6 +124,89 @@
 | 2026-10-16 | 🧩 `Composition_node` **实施批（组合层 L4 重启落地）**：上级节点模型 / 注册表 / 独立文件存储 / 展开执行 + 编辑器（打包选区·新建·独立标签页·撤销重做）+ 节点库「上级节点」分类 + 紫条视觉 + 新建草稿保存修正（`allow_incomplete_draft`）+ `composite_selftest` **51 断言**并入 `--exec-selftest`（构建 0/0 · exec **681/0** · graph **151/0**）—— ⛔ 待人工验收 |
 | 2026-10-16 | 📖 规范审查 + 文档收口批 CN-0：`Composition_node.md` 设计定稿（上级节点 = 组合层 **L4 重启** · `CN-D1`~`CN-D20` · 零代码）—— 规范审查（3 阻断 2 冲突 5 缺口全暴露）+ 修正基础节点计数 **20→14**（三处）+ **五处登记**（AI_README §5 / DocMAP / 变量术语对照表 §11.2 / CHANGELOG / DevPlan.todo）+ `CN-D20` L4 重启（覆盖 `M_node_expansion`「L4 不做」） |
 | 2026-10-16 | 🔁 功能批：`PD-06①` 通用重跑（`FEA-M4-11` · NodeOnly/Downstream）+ `PW-10` 模板占位符报错（`PQ-13` 落地）+ `PW-11` 归档保留下限 `kHistoryFloor=3`（exec **655→681** · graph 151/0 · check_all 15/15） |
+
+**🧾 债务清零 · 批 A-1 · DEBT-B1 修复（2026-10-21 · 代码）**
+
+- **bug 确认**：上级节点编辑器**从未实现 Ctrl+S 保存快捷键**（仅有「保存」按钮）—— ToVerify #305 子项记录「Ctrl+S 没有保存成功，按键保存可以成功」= 预期功能缺失。
+- **修复**：`source/ui/src/ce_draw.cpp` 新增 `ce_handle_save_key` —— Ctrl+S 触发与「保存」按钮**同一路径** `compositeEditorSave`；隔离条件与 Delete 键一致（无文本输入 / 无激活控件 / 无弹层 / 左键未按住 / 窗口聚焦或悬停）；`drawCompositeEditor` 画布输入区挂接调用。
+- **验证**：构建 **0/0**（4 目标）· `api_probe --exec-selftest` **682/0** · `--graph-selftest` **151/0** · `aiwrite --run-selftest` **PASS** · `check_links` 1717/0。
+- **登记**：`DEBT.todo` `DEBT-B1` 标记修复落地（done）· GUI 人工复核登记 ToVerify「四 · ⑫ Ctrl+S 保存复核」（#4011）。主画布 Ctrl+S 未实现 = 观察项（不在本期，不扩大改动面）。
+- **二修（2026-10-21 · 真机实测）**：复测仍静默失败 → 根因实锤 = 隔离条件 `IsWindowFocused(ChildWindows)`/`IsWindowHovered()` 只认画布容器（`##ce_canvas_host` child），而 Ctrl+S 常在右侧规格面板 / 顶栏按下 → 被拦截；放宽为 `RootAndChildWindows` + 键位改 `ImGui::IsKeyDown(ImGuiMod_Ctrl)`（弃用 deprecated `io.KeyCtrl`）。**验证**：SendKeys 注入真实 Ctrl+S（`--auto-open-composite` 场景）→ 诊断日志 `Focused=1 Hovered=1 Ctrl=1` → 保存函数真实执行（预期失败路径）· 离线自检 exec **713/0** · graph **151/0** · autosave **32/0** · 构建 0 error · 诊断日志随后清理。
+
+**🧾 债务清零立项（2026-10-21 · 零代码 · 当前主线）**
+
+- **背景与拍板**：功能冻结已生效；用户拍板「**现在优先解决所有债务问题**」—— 先把全部已知债务盘点、清零，再继续 M_polish 四阶段打磨。债务清零 = **打磨阶段 0（前置）**。
+- **债务总账 `audit/DEBT.todo`（新建 · 6 类 / 26 项 · 与 ToVerify/DevPlan 同格式看板）**：
+  - **一、代码结构债（5）**：`DEBT-C0` CLN 主体（CLN-01~15 + 驼峰化 8 批）**✅ 已清零勾账**；余 `DEBT-C1` mode 5 小地图 GUI 复核（人工）/ `DEBT-C2` webview_host·dom_web_client 拆分（低优先级）/ `DEBT-C3` ce_repro 并入 composite_selftest / `DEBT-C4` 借名观察点。
+  - **二、逻辑残项债（11）**：`DEBT-L1` PB2-29 逐站回填 / `L2` 会话失效复核 / `L3` 真 Key 生成 / `L4` PB2-24 点选 / `L5` PC-01/02 点选 / `L6` 企业网络实测（人工 6 项）· `L7` VB-03 断言 / `L8` M6-04 重试失败汇总 / `L9` M6-06 校验边界 / `L11` M6-05 UI 细节（可离线）· `L10` M6-07 启动测量（半人工）。
+  - **三、验证人工债（6）**：`DEBT-V1`~`V6` = ToVerify 〇/一/二组剩余 + DevPlan Human 未迁项 + M6-10 示例 + roadmap 人工项（全部人工 → ToVerify）。
+  - **四、打包债（2）**：`DEBT-P1` 安装包冒烟 / `P2` README 截图视频。**五、文档债（1）**：`DEBT-D1` DOC-M1-01。**六、已知 bug 债（1）**：`DEBT-B1` ⚠ Ctrl+S 保存失败（★高优先级 · ToVerify #305 子项真实记录）。
+- **专项 `actionPlan/M_debt.md`（新建）**：批 A 离线 8 项（含 DEBT-B1 排查 / L7 / C3 / L8 / L9 / L11 / C2 / C4）· 批 B 人工 18 项（全部登记 ToVerify 四组）。
+- **ToVerify.todo**：新增「**四、债务清零人工验证**」（id 1200 · 13 主项 + 6 站点子项 4301-4306 + 7 Human 子项 4201-4207）—— 人工债务项唯一勾账位。
+- **roadmap.md**：§二 阶段总览加「**债务清零（当前主线）**」行（打磨主线改为「债务清零后继续」）；`M_polish.md` 补「前置阶段」衔接（POL-L-02 与 DEBT-C1 同源）。
+
+**🧊 功能冻结 + 打磨阶段开工（2026-10-21 · 零代码）**
+
+- **✅ 冻结生效**：「自定义 AI 收口」人工验收通过（2026-10-21 用户真机点选 · 详情见上一条目）→ **功能正式冻结**。此后只做 **bug 修复 / 人工验收闭环（ToVerify）/ 打包发布 / 文档核对**；任何新功能进 backlog，不进本期。
+- **打磨阶段开工**：主线 = [M_polish.md](actionPlan/M_polish.md) 四阶段（逻辑 → 操作体验 → 正确性 → 便捷性）。**阶段一（逻辑 · `POL-L*`）清单已细列**：`POL-L-01` 创作主线端到端（构思→大纲→草稿→修订）· `POL-L-02` 上级编辑器小地图导航 mode 5 真实 GUI 复核（收口暂停任务）· `POL-L-03` 功能逻辑走查（参数面/接线/校验/回流 · 结合 ToVerify 〇组+二组逐项勾账）· `POL-L-04` 逻辑残项如实登记（真机/Key 阻塞项承接 ToVerify）。
+- **ToVerify.todo**：新增「三、冻结收口项」（id 1100 · 叶子 11001 done · 自定义 AI 收口人工验收物证：真机点选 · `providers.d/my-ai.json` 生成 · 下拉立即出现 · 无警告新增）。
+
+**⚙️ 自定义 AI 收口（2026-10-21 · 冻结前最后一个功能）**
+
+- **背景与拍板**：用户需求 = 用户可自行配置 **API 地址 + API Key** 接入自己喜欢的 AI 服务；网页版自建因需 DOM 选择器操作偏难 → **不再投入**，自定义路径**只保留 API 接口**（内置网页版站点 `deepseek-web` 等维持现状）。
+- **现状复核**：`providers.d` 新增条目 / 热重载 / DPAPI 凭据库 / 「测试连接」/「新建网页版站点…」模态均已存在（M_patchB · PB2-24），唯一缺口 = **无「新建 API 提供商」UI**（此前只能手写 `providers.d/<id>.json`）。
+- **落地**：
+  - 新 `ai/official_template.{h,cpp}`：`OfficialProviderTemplate`（默认 / 照抄内置 / 校验 / 生成 JSON / 落盘）+ `officialTemplateSelftest`（**40 断言**）；
+  - `site_template` 抽出共享 `providerIdError` + `writeUserProviderFile`（站点 / 官方 API **共用一套**，不新增重复实现）；
+  - 设置面板第⑥节新增「**新建 API 提供商…**」模态：模板来源（空白 / 照抄内置官方条目）、协议（openai / anthropic / gemini）、api_base、模型清单（逗号分隔，**留空 = 自由填写**）、能力勾选、env / Key 引用、**API Key 密码框（可选 → 创建时立即入 DPAPI 凭据库，不落明文不进 JSON）**、创建即热重载并复核条目以 `kind=official` 生效；
+  - `api_probe --official-assert`（镜像 `--site-assert`：纯函数 + 真实写盘 → 重载 → 枚举/校验即时可用 → 自清理）+ 入 `check_all.ps1`（**16 → 17 项**）。
+- **验证**：构建 **0 error / 0 warning** · `--official-assert` 纯函数 **40/0** + 端到端 写盘/进表/进枚举（20→21）/新节点校验/旧实例刷新/清理零残留 **全是** · `--site-assert` **50/0**（原 47 + 3 条共享函数断言）· selftest **682 / 151 / 13 组全绿** · `check_links` **1684/0** · DevPlan.todo 已登记（`FEA-CAI-01`）。
+- **✅ 人工验收（2026-10-21 · 用户真机点选）**：设置 → 提供商与站点表 →「新建 API 提供商…」→ 选「照抄 deepseek」→ 改 id=my-ai → 填 api_base=`https://x.com/v1` → 点「创建并重新加载」→ 「提供商」下拉**立即出现** my-ai · `providers.d/my-ai.json` 已生成 · 表警告/错误清单**无新增** · Console 无 error · 已登记 ToVerify.todo「三、冻结收口项」（done）。
+- **⛔ 冻结声明（✅ 已生效 2026-10-21）**：本批 = **冻结前最后一个功能**，且人工验收已通过 → **功能正式冻结**。此后只做 **bug 修复 / 人工验收闭环（ToVerify）/ 打包发布 / 文档核对**；任何新功能进 backlog，不进本期。下一阶段 = **打磨与优化（M_polish.md 四阶段主线）**。
+
+**🗺️ 打磨与优化阶段立项（2026-10-20 · [actionPlan/M_polish.md](actionPlan/M_polish.md) · 最优先）**
+
+- **判断**：M1~M8 核心、Patch A/B、M8 方案 E、M6 第一批、上级节点、代码库清理审查完成 ⇒ **基础框架已经搭建好**（用户 2026-10-20 拍板）。
+- **主线**：从「**逻辑 → 操作体验 → 正确性 → 便捷性**」四阶段对软件打磨与优化；专项文档 `M_polish.md` 定路线与编号空间（`POL-L*`/`POL-UX*`/`POL-C*`/`POL-E*` + `POL-V*`/`POL-A*`）；roadmap §二 新增「打磨与优化阶段路线」。
+- **执行序**：roadmap/立项（本轮）→ §3.4 拆分（CLN-12~15）→ 驼峰化（CLN-06 扩项）。每阶段开工先出 `POL-*` 清单，小批验证。
+
+**🧹 代码库清理批（2026-10-19~20 · `CLN-01…15` · [actionPlan/M_code_cleanup.md](actionPlan/M_code_cleanup.md)）**
+
+- **计划**：跨里程碑工程质量补丁，**不占用 M1–M8 编号**（2026-10-19 立项 · v1.10）。§3 清理清单 = `CLN-01`~`CLN-15`；每批独立验证 + §3.0 删除前置审计闸门。
+- **审查/勾账全部完成（2026-10-20）**：`CLN-01` 死代码扫描（无删除项）· `CLN-02` 冗余 include（删 `api_probe.cpp` 2 行）· `CLN-03` 失效分支（无删除项）· `CLN-04` TODO 台账（初始归零）· `CLN-05` 重复辅助函数收敛（5 组 14 处 → `utils/string_util` 单一来源 · 55 调用点）· `CLN-06`~`CLN-08` 头文件/命名/告警纯审计勾账（`/W4` 0 告警）· `CLN-09`+`CLN-10` 小地图/对齐吸附共享化落地（4 文件）+ `CLN-11` 复核无残留 · `CLN-12`~`CLN-15` 大文件拆分可行性审查（**未落地**，待批准执行）。
+- **三项待决拍板（2026-10-20）**：`asyncMode()` 观察项 = **保留**（公共契约）· 上级编辑器小地图导航（mode 5）= **仅文档推进**（导航链路全拆解 + 4 根因候选 H1~H4，待真实 GUI 复核）· **§3.4 拆分（CLN-12~15）= 批准执行 · `CLN-06` 扩项驼峰化 = 批准执行（§3.4 完成后开始）· 匿名命名空间成员专项 = 放弃**。
+- **🆕 打磨与优化阶段立项（2026-10-20 · 最优先）**：基础框架已搭好 → 「**逻辑 → 操作体验 → 正确性 → 便捷性**」四阶段打磨（专项 [actionPlan/M_polish.md](actionPlan/M_polish.md) · roadmap §二 同步 · 任务 `POL-*`）。
+- **✅ `CLN-12` 拆分落地（2026-10-20 · [audit/audit_cleanup_12.md](audit/audit_cleanup_12.md)）**：`property_panel.cpp`（1932 行 → 814 行）按域拆三份 —— `panel_widgets.cpp`（参数控件域）/ `panel_web.cpp`（网页会话+提供商域）/ `panel_internal.h`（内部共享声明）。验证：构建 **0/0**（4 目标）· `--exec-selftest` **682/0** · `--graph-selftest` **151/0** · `--selftest` **十三组全 PASS**（与基准零升降）。
+- **✅ `CLN-14` 拆分落地（2026-10-20 · [audit/audit_cleanup_14.md](audit/audit_cleanup_14.md)）**：`main.cpp`（2359 行 → 661 行）**按 CLI 功能区拆** —— `cli_selftest.cpp`（自检域：`run_selftest` + 各 selftest）/ `cli_diag.cpp`（诊断域：帮助 / pipe / 会话清单 / 表导出）/ `cli_internal.h`（三 TU 共享声明）。匿名块 17 个 CLI/辅助符号提升全局命名空间（内部头共享，**不进公共头**；`join_names` / `print_usage` 冲突排查无）。验证：构建 **0/0**（4 目标）· `--exec-selftest` **682/0** · `--graph-selftest` **151/0** · `--selftest` **13 组 PASS** · `aiwrite.exe --help` 正常。
+- **✅ 驼峰化（`CLN-06` 扩项）批 2 = engine 域（2026-10-20）**：48 个 snake_case 函数统一 camelCase —— `autosave` / `composite` / `graph` / `migration` / `node_registry` / `provider_resolve` / `recent_files` / `workflow_io`（`loadWorkflow` / `saveWorkflow` / `applyAutosave` / `buildCompositeTestGraph` / `registerExecutor`…）。全库定义 + 调用点 **315 次替换 / 35 文件**。验证：构建 **0/0**（4 目标）· `--exec-selftest` **682/0** · `--graph-selftest` **151/0** · `--selftest` **13 组 PASS**（输出零内容差异）。
+- **✅ 驼峰化（`CLN-06` 扩项）批 3 = nodes 域（2026-10-20）**：公共 API 仅 `registerAllExecutors()`（已驼峰）→ **0 项跳过**。
+- **✅ 驼峰化（`CLN-06` 扩项）批 4 = ai 域（2026-10-20）**：123 个 snake_case 函数统一 camelCase —— `anthropic` / `cancel_token` / `deepseek_official`（`buildEndpoint` / `resolveApiKey` / `officialChat`…）/ `deepseek_web` / `dom_web_client`（`domChat` / `domSiteProbe` / `domProbeAll`…）/ `gemini` / `http_json` / `http_net` / `image_convert` / `image_preprocess` / `inference_provider` / `provider_factory` / `provider_spec`（`webSpecFor` / `resolveApiBase` / `implementedProtocols`…）/ `retry_policy` / `site_template` / `site_uploads` / `upload_evidence` / `upload_registry` / `upload_supply_probe` / `web_pow`。全库定义 + 调用点 **918 次替换 / 62 文件**（`join_names` 与 `cli_selftest.cpp` 全局版命名空间隔离、冲突无）。验证：构建 **0/0**（4 目标）· `--exec-selftest` **682/0** · `--graph-selftest` **151/0** · `--selftest` **13 组 PASS**（输出零内容差异）。
+- **✅ 驼峰化（`CLN-06` 扩项）批 5 = web 域（2026-10-20）**：72 个 snake_case 函数统一 camelCase —— `channel_frames` / `pipe_client`（`sendCommand` / `readerLoop` / `ipcConnectCount`…）/ `probe_verdict` / `pydoll_channel`（`ensureSession` / `loginSite` / `logoutSite`…）/ `session_snapshot` / `session_store`（`currentSite` / `loggedIn` / `cookieCount`…）/ `webview_host`（`protocolProbe` / `waitReady` / `ensureSession`…）。全库定义 + 调用点 **544 次替换 / 32 文件**。验证：构建 **0/0**（4 目标）· `--exec-selftest` **682/0** · `--graph-selftest` **151/0** · `--selftest` **13 组 PASS**（输出零内容差异）。
+- **✅ 驼峰化（`CLN-06` 扩项）批 6 = ui 域（2026-10-20）**：145 个 snake_case 函数统一 camelCase —— `canvas_view` / `ce_internal` / `cli_internal` / `composite_editor`（`compositeEditorState` / `compositeEditorStartRun`…）/ `connection_test` / `console_panel` / `editor_state`（`startRunAsync` / `saveWorkflowTo` / `tickAutosave`…）/ `error_bar` / `node_canvas` / `node_library` / `output_panel` / `panel_internal` / `prompt_generator` / `settings_panel` / `text_view` / `texture_cache` / `toolbar`。全库定义 + 调用点 **734 次替换 / 48 文件**。验证：构建 **0/0**（4 目标）· `--exec-selftest` **682/0** · `--graph-selftest` **151/0** · `--selftest` **13 组 PASS**（输出零内容差异）。
+- **✅ 驼峰化（`CLN-06` 扩项）批 7/8 = app/tools 域（2026-10-20）**：`app/` 仅 3 个入口 cpp（`main.cpp` / `cli_selftest.cpp` / `cli_diag.cpp`）、`tools/` 为自检/诊断工具（无公共头声明 snake_case 函数）→ **0 项跳过**。至此 **8 批全部完成**（utils 81 / engine 48 / ai 123 / web 72 / ui 145 = **469 个函数 · 3061 次替换 · 237 文件**；nodes/app/tools 跳过）。
+- **✅ 驼峰化（`CLN-06` 扩项）批 1 = utils 域（2026-10-20）**：81 个 snake_case 公共函数统一 camelCase —— `asset_store`（`imagesRoot` / `isToken` / `makeToken` / `resolveToken` / `toLocalPath(s)`…）· `config`（`loadConfig` / `saveConfig` / `appConfig` / `setAppConfig` / `migrateConfig`…）· `credential`（`saveCredential` / `loadCredential` / `credentialsDir` / `resolveSecret`…）· `diagnostics`（`installExceptionCounter` / `exceptionTotal`…）· `file_dialog`（`pickFolder` / `openInExplorer`…）· `log`（`clearEntries` / `purgeOldFiles`…）· `output_archive`（`archiveRun`）· `paths`（`dataRoot` / `outputsDir` / `configFile` / `recentFile` / `splitPathList`…）· `settings_validation`（`validateSettings`）· `text_export`（`exportTextDocument` / `writeDocument`…）· `webview2_runtime` / `window_geometry`。替换脚本 = C++ 感知状态机（跳过注释 / 字符串 / 字符字面量 / raw string；识别 **C++14 数字分隔符** `60'000`，避免把 `'` 误当字符字面量导致漏替换）。验证：构建 **0/0**（4 目标）· `--exec-selftest` **682/0** · `--graph-selftest` **151/0** · `--selftest` **13 组 PASS**（输出零内容差异，剥离时间戳后仅剩耗时数字 / 带日期临时文件名）· `check_links` 1684/0。
+- **✅ `CLN-15` 拆分落地（2026-10-20 · [audit/audit_cleanup_15.md](audit/audit_cleanup_15.md)）**：`api_probe.cpp`（6937 行 / ≈390 KB → 321 行 / ≈14 KB）**按自检分节拆** —— `api_probe_selftest.cpp`（协议/网络/CLI 单测）/ `api_graph_selftest.cpp`（图模型）/ `api_executor_selftest.cpp`（执行器 P3-1）/ `api_execution_selftest.cpp`（执行核心 P3-2 · `execution_selftest` ≈3500 行单函数）/ `api_diag.cpp`（诊断/断言）/ `api_internal.h`（跨 TU 共享声明）。匿名块 A（含嵌套 B）+ C 符号提升全局命名空间（内部头共享，**不进公共头**）。**基线存档先跑再动**（`build/_cln15_baseline/`）。验证：构建 **0/0**（4 目标）· `--exec-selftest` **682/0** · `--graph-selftest` **151/0** · `--selftest` **13 组 PASS**（输出与基线逐行一致，`Compare-Object` 差异仅日志时间戳）· `check_links` 1679/0。§3.4 拆分**全部完成** → 下一步驼峰化（`CLN-06` 扩项）。
+- **✅ `CLN-13` 拆分落地（2026-10-20 · [audit/audit_cleanup_13.md](audit/audit_cleanup_13.md)）**：`composite_editor.cpp`（1687 行 → 172 行）按域拆五份 + `ce_internal.h` —— `ce_state.cpp`（状态+撤销）/ `ce_session.cpp`（会话操作）/ `ce_run.cpp`（试运行「执行连线」）/ `ce_pack.cpp`（打包选区）/ `ce_draw.cpp`（绘制+对话框）。跨 TU 共享（`g_ce_*` 画布全局 / 撤销栈 / `ce_push_snapshot` / `ce_remove_node` / `ce_apply_snap` 等）经 `ce_internal.h` extern 提升，**不进公共头、对外 API 不变**。验证：构建 **0/0**（4 目标）· `--exec-selftest` **682/0** · `--graph-selftest` **151/0** · `--selftest` **十三组全 PASS**（与基准零升降）。
+- **全量验证**：构建 **0 error / 0 warning** · `--selftest` 13 组 PASS · `--exec-selftest` 682/0 · `--graph-selftest` 151/0 · `check_links` 1625/0。审计报告：`docs/audit/audit_cleanup_01.md` ~ `audit_cleanup_09_10.md`。
+
+**🧩 上级节点编辑器能力对齐批（2026-10-19）**
+
+- **背景**：上级节点编辑器（2026-10-16 落地）此前只支持**结构编辑**（移动 / 添加 / 删除 / 改名 / 连线 / 参数 / 撤销重做），无法像主画布一样**运行验证**；本次补上「**执行连线**」，四类操作与主画布对齐。
+- **引擎**：新增 `build_composite_test_graph`（`composite.h` / `composite.cpp`）—— 深拷贝内部图 + 为每个**暴露输入**接一个「测试源节点」（按端口类型映射：Text/Any→`TextInput`、Image→`ImageInput`、Provider→`ProviderConfig`；id `__ce_src_<k>`），让内部图脱离父工作流也能跑通（运行前校验不再报「必填输入未连接」）。
+- **UI（composite_editor.cpp / .h）**：顶栏新增「**执行连线 / 停止 / 清空结果**」；会话内独立 `Executor` 跑沙箱副本（`startAsync` 工作线程 + 每帧 `composite_editor_tick_run` 泵事件回写），画布节点加**状态圆点**（与主画布同色）+ **结果摘要**（绿=结果 / 红=错误 / 黄=跳过 / 蓝=运行中）；顶栏显示运行摘要；关闭窗口自动 join 后台线程；与主画布运行**互斥**（主画布会话活动时拒绝启动）；重跑前排空残留事件。
+- **自检**：`composite_selftest.cpp` 新增**第 10 节「试运行沙箱」**（11 断言）：无沙箱必填输入被拒 → 沙箱构建成功 → 测试源生成与接入 → 规格不被改动 → 校验通过 → 整图执行完成、节点 Done、产出存在。
+- **验证（2026-10-19 本机）**：构建 **0 error / 0 warning** · `--graph-selftest` **151/0** · `--exec-selftest` **682/0**（上级节点自检 **80→91/0**，含新增 11 断言）—— 均 exit 0。⛔ GUI 人工实测待补（放置实例 → 编辑器执行连线 → 状态/结果展示）。
+
+
+**🗂️ 人工验收操作单批（2026-10-19 · 零代码）**
+
+- **ToVerify.todo 操作单化**：〇、CN-01 人工验收 8 项（id 1~8）逐项追加「怎么点」（逐步点击路径）+「留什么物证」（截图 / Console 输出 / 生成文件路径，三项至少留一）；**新增 二、GUI 点选验收（M1~M7 · 原 DevPlan id=404 的 id=427~433 七项迁入）**，逐项带操作单；board_rules 更新（来源、断言基线 66/0·682/0、物证纪律）。
+- **DevPlan.todo 同步**：id=404「GUI 点选验收」组整体迁出并删除 · Human 计数 **29→22** · 看板叶子 **245→238**（done 186 不变 · open 59→52）—— ToVerify 二组各项内容内标注「原 DevPlan id=427~433」留存迹。
+- **断言计数同步（2026-10-19 本机实测）**：`--exec-selftest` 执行器 **682/0** · 上级节点自检 **66/0**（**51 + 15** = 双源 / 空草稿实例化回归断言）· `--selftest` 执行器组 **682/0** · graph **151/0** —— 同步位：AI_README §2（两行）、AI_Status §一（L15/L19）+ 批次 #10 复测注、loop_dev §4（两行）。
+- **roadmap 状态复核**：§五 M6 表 + §二「M6 收口」行 → 🟢 两批已落地 + 安装包已编译（`AIwrite-Setup-0.2.0.exe` 9.1 MB · 2026-10-17 批Ⅵ）；M6-03 ⏸ 已拍板不做 · M6-04/05/06/10 🟢 剩打磨小项 · M6-07 🔁 归口画布专项。
+- **ToVerify 迁址 + 验证项拆分（2026-10-19 · 零代码）**：`docs/actionPlan/ToVerify.todo` → `docs/audit/ToVerify.todo`（迁入 audit）；验证项按「**每个可独立勾选的验证点 = 1 条**」拆解 —— 〇组 7 子项 → **21 条** · 二组 GUI 7 项 → **51 条**（画布交互按 `节点编辑器使用说明.md` §8 拆 **22 条** · VB-01…09 拆 **9 条** · E-02/4 错误路径/VLM 自检拆 6 条等）· 原 TST 条目保留为「组」标题（内容不变）· 一、待拍板 4 项不拆 · board_rules 补拆分说明 · expandKeys 同步全部组。
+- **路径索引同步（6 处）**：Archive/README（L5/L27 链接）· Archive/actionPlan/Composition_node.md（L4/L12/L641 链接）· DocMAP（L30）· 变量术语对照表（L382）· AI_README（L85/L136）· DevPlan id=347 内容 —— 全部 `actionPlan/ToVerify.todo` → `audit/ToVerify.todo`；CHANGELOG 历史批次记录（2026-10-18 归档批）按「只增不改」保留旧路径。
+
 
 **📦 `Composition_node` 指令式归档批（2026-10-18 · 零代码）**
 

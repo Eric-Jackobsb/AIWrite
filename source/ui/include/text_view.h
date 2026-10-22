@@ -18,6 +18,6 @@ void draw_readonly_text(const char* id, const std::string& text, float height_li
                         std::size_t display_limit = 40000);
 
 // 复制文本到剪贴板并写日志（log_prefix 形如 "[输出面板]"）
-void copy_text(const std::string& text, const std::string& log_prefix);
+void copyText(const std::string& text, const std::string& log_prefix);
 
 } // namespace aiwrite::ui

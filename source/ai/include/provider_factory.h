@@ -31,15 +31,15 @@ struct ProviderCreation {
 };
 
 // 建 provider（`config.provider_id` / `display` 会自动对齐到 `spec`，能力快照取自本条）
-ProviderCreation create_provider(const ProviderSpec& spec, ProviderRuntimeConfig config);
+ProviderCreation createProvider(const ProviderSpec& spec, ProviderRuntimeConfig config);
 
 // 本工厂是否实现该 protocol（纯判断；自检 / 提示 / R9 核对共用）
-bool factory_implements(const std::string& protocol);
+bool factoryImplements(const std::string& protocol);
 
 // 本工厂实现的 protocol 清单（顺序 = 分派顺序）
-std::vector<std::string> factory_protocols();
+std::vector<std::string> factoryProtocols();
 
 // 分派顺序的展示文本（例 `openai` → `anthropic` → …）
-std::string factory_protocols_text();
+std::string factoryProtocolsText();
 
 } // namespace aiwrite::ai

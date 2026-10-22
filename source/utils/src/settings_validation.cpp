@@ -14,7 +14,7 @@ std::string range_error(const char* label, long long value, long long low, long 
 
 } // namespace
 
-std::string validate_settings(const Config& config)
+std::string validateSettings(const Config& config)
 {
     if (config.output.archive_dir.empty()) {
         return "归档目录不能为空（填一个目录，或用右侧「选择目录…」按钮选一个）";

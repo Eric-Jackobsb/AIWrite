@@ -6,6 +6,7 @@
 #include "log.h"
 #include "node_registry.h"
 #include "node_canvas.h"
+#include "string_util.h"        // CLN-05：findCi 收敛
 #include "theme.h"
 
 #include <imgui.h>
@@ -17,33 +18,6 @@
 
 namespace aiwrite::ui {
 namespace {
-
-// M_node_expansion L3-01：大小写不敏感子串匹配（ASCII 折叠；中文原样字节比较）
-std::size_t find_ci(const std::string& haystack, const std::string& needle)
-{
-    if (needle.empty()) {
-        return 0;
-    }
-    if (needle.size() > haystack.size()) {
-        return std::string::npos;
-    }
-    const auto lower = [](char c) {
-        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    };
-    for (std::size_t i = 0; i + needle.size() <= haystack.size(); ++i) {
-        bool ok = true;
-        for (std::size_t j = 0; j < needle.size(); ++j) {
-            if (lower(haystack[i + j]) != lower(needle[j])) {
-                ok = false;
-                break;
-            }
-        }
-        if (ok) {
-            return i;
-        }
-    }
-    return std::string::npos;
-}
 
 // ---- PS-04 / §7.1：上级节点列表项操作状态（右键删除 / 复制到我的节点库）----
 std::string g_composite_context_id;             // 右键命中的上级节点 id
@@ -70,7 +44,7 @@ bool draw_library_item(const engine::Definition* definition, engine::NodeCategor
 
     // L3-01 高亮匹配：在 Selectable 文本上叠一层半透明底色（覆盖匹配段）
     if (!query.empty()) {
-        const std::size_t pos = find_ci(definition->display_name, query);
+        const std::size_t pos = utils::findCi(definition->display_name, query);
         if (pos != std::string::npos) {
             ImDrawList* dl       = ImGui::GetWindowDrawList();
             const ImVec2 item_min = ImGui::GetItemRectMin();
@@ -109,7 +83,7 @@ bool draw_library_item(const engine::Definition* definition, engine::NodeCategor
 
 } // namespace
 
-void draw_node_library(const char* title, bool* open)
+void drawNodeLibrary(const char* title, bool* open)
 {
     if (open != nullptr && !*open) {
         return;
@@ -136,7 +110,7 @@ void draw_node_library(const char* title, bool* open)
         ImGui::SetTooltip("清空搜索，恢复全部分类列表");
     }
     const std::string query = search_buf;
-    const bool        searching = find_ci(search_buf, "") != 0 ? false : (search_buf[0] != '\0');
+    const bool        searching = utils::findCi(search_buf, "") != 0 ? false : (search_buf[0] != '\0');
     ImGui::TextDisabled("点击节点即在画布中心添加");
     ImGui::Separator();
 
@@ -158,13 +132,13 @@ void draw_node_library(const char* title, bool* open)
         bool any = false;
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
         for (const engine::Definition* definition : registry.listTypes()) {
-            if (find_ci(definition->display_name, query) == std::string::npos &&
-                find_ci(definition->type, query) == std::string::npos) {
+            if (utils::findCi(definition->display_name, query) == std::string::npos &&
+                utils::findCi(definition->type, query) == std::string::npos) {
                 continue;
             }
             any = true;
             if (draw_library_item(definition, definition->category, query)) {
-                canvas_add_node_at_center(definition->type);
+                canvasAddNodeAtCenter(definition->type);
             }
         }
         ImGui::PopStyleColor();
@@ -195,7 +169,7 @@ void draw_node_library(const char* title, bool* open)
                 }
 
                 if (ImGui::Selectable(spec->name.c_str())) {
-                    canvas_add_composite_at_center(spec->id);
+                    canvasAddCompositeAtCenter(spec->id);
                 }
                 const bool row_hovered = ImGui::IsItemHovered();
 
@@ -265,10 +239,10 @@ void draw_node_library(const char* title, bool* open)
             }
             ImGui::Separator();
             if (ImGui::Button("新建上级节点…", ImVec2(-1.0f, 0.0f))) {
-                composite_new_dialog();
+                compositeNewDialog();
             }
             if (ImGui::Button("打包选区为上级节点…", ImVec2(-1.0f, 0.0f))) {
-                composite_pack_dialog();
+                compositePackDialog();
             }
             ImGui::Spacing();
             ImGui::Separator();
@@ -301,7 +275,7 @@ void draw_node_library(const char* title, bool* open)
 
             for (const engine::Definition* definition : items) {
                 if (draw_library_item(definition, category, query)) {
-                    canvas_add_node_at_center(definition->type);
+                    canvasAddNodeAtCenter(definition->type);
                 }
             }
             ImGui::Spacing();
@@ -325,18 +299,18 @@ void draw_node_library(const char* title, bool* open)
         ImGui::Spacing();
         if (ImGui::Button("删除", ImVec2(90.0f, 0.0f))) {
             // 目标节点正被编辑器打开 → 先强制关闭编辑器（§9.1②）
-            if (composite_editor_state().active &&
-                composite_editor_state().working.id == g_composite_delete_pending) {
-                composite_editor_force_close();
+            if (compositeEditorState().active &&
+                compositeEditorState().working.id == g_composite_delete_pending) {
+                compositeEditorForceClose();
             }
             std::string error;
             if (!engine::CompositeRegistry::instance().remove(g_composite_delete_pending,
                                                               &error)) {
-                editor().set_status("删除上级节点失败：" + error);
+                editor().setStatus("删除上级节点失败：" + error);
                 log::warn("[上级节点] 删除失败: " + error);
             }
             else {
-                editor().set_status("已删除上级节点：" + g_composite_delete_pending);
+                editor().setStatus("已删除上级节点：" + g_composite_delete_pending);
                 log::info("[上级节点] 已删除 " + g_composite_delete_pending);
             }
             g_composite_delete_pending.clear();
@@ -364,13 +338,13 @@ void draw_node_library(const char* title, bool* open)
         ImGui::Spacing();
         if (ImGui::Button("复制", ImVec2(90.0f, 0.0f))) {
             std::string error;
-            if (!engine::CompositeRegistry::instance().copy_to_user(g_composite_copy_pending,
+            if (!engine::CompositeRegistry::instance().copyToUser(g_composite_copy_pending,
                                                                     &error)) {
-                editor().set_status("复制到我的节点库失败：" + error);
+                editor().setStatus("复制到我的节点库失败：" + error);
                 log::warn("[上级节点] 复制失败: " + error);
             }
             else {
-                editor().set_status("已复制到我的节点库（可编辑）：" + g_composite_copy_pending);
+                editor().setStatus("已复制到我的节点库（可编辑）：" + g_composite_copy_pending);
                 log::info("[上级节点] 已复制到用户源 " + g_composite_copy_pending);
             }
             g_composite_copy_pending.clear();

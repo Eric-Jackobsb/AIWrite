@@ -40,20 +40,20 @@ inline constexpr int kTimeoutScriptMs = 20'000;  // `run_script`（v2 · 只读�
 //    （step 6 的老实现只是**只读判定**：要求已有守护进程在跑 ⇒ 诊断工具自己起不了会话）
 //  * ⚠️ `ensure_session` 会起**常驻浏览器**（`--serve` **不带** `--once`）⇒ 调用方**必须**在收尾调
 //    `shutdown_session()`，否则留孤儿浏览器 / 守护进程（`I23` 同族纪律）
-bool session_ready();      // 纯查询：本进程是否已有活动会话（**不起任何东西**）
-bool shutdown_session();   // 关会话（`Browser.close` → 等进程退出）；返回「是否确实关过」；**幂等**
+bool sessionReady();      // 纯查询：本进程是否已有活动会话（**不起任何东西**）
+bool shutdownSession();   // 关会话（`Browser.close` → 等进程退出）；返回「是否确实关过」；**幂等**
 
 // **M7B step 12（`M7B-44`）**：请求取消**正在进行的登录态轮询**（`login_site` / `pydoll_login`）
 //  * 面板关窗 / 进程退出时由 `ui::wait_web_tasks()` 调用 —— 否则退出要把登录上限干等完
 //    （实测旧版：关主窗口后还多等了 3 分钟）
 //  * **幂等 · 线程安全**；只改**轮询循环的继续条件**，不动会话、不发任何命令
 //  * 下一次 `login_site` / `pydoll_login` 进入时会**自动复位**（一次取消只作用于在跑的那一次）
-void request_cancel_session_ops();
+void requestCancelSessionOps();
 
 // 确保会话 + 按站点判定登录态（判据 `I15′` = CDP Cookie 名单命中条目 `cookie_names`，**去 `userToken`**）
 //  * 无会话 → 起守护进程（**常驻**）+ `open_tab`（站点 `url`）；已有会话 → **复用**（不重复起浏览器）
 //  * 未登录 → false + 可操作原因，但**会话仍可用**（只读诊断脚本照跑 —— 由调用方决定）
-bool ensure_session(const SiteRef& site, int timeout_ms, std::string* error);
+bool ensureSession(const SiteRef& site, int timeout_ms, std::string* error);
 
 // 「打开登录窗口」（**新通道 · v3 · step 11**）：确保**有头**会话 → `open_tab`（站点 `url`）→
 //   轮询 `login_state` 直到 `logged_in`（判据 `I15′` = 条目 `cookie_names` 命中）→ 写内存
@@ -64,14 +64,14 @@ bool ensure_session(const SiteRef& site, int timeout_ms, std::string* error);
 //  * ⚠️ **阻塞式**（`Q4`）⇒ UI **不得**在 UI 线程调用 —— 面板用独立后台线程（同旧 WebView2 窗口做法）
 //  * 返回：true = 已登录；false + *error = 超时 / 依赖问题（**可操作**；`I21`：**绝不**回落旧通道）
 //  * 收尾责任：调用方负责在本进程退出前 `shutdown_session()`（与 `ensure_session` 同族纪律）
-bool login_site(const SiteRef& site, int timeout_seconds, std::string* error);
+bool loginSite(const SiteRef& site, int timeout_seconds, std::string* error);
 
 // 按站点注销（**v3 · step 11 已落地**）：`Storage.clearDataForOrigin` —— 只清**该 origin** 的
 //   Cookie / localStorage / IndexedDB / Cache（**不影响**其他站点；**不删** profile）
 //  * `origin` 由本函数按 `login_request_site(site)` 派生后下发（`I14`：站点只来自条目）
 //  * 成功后同步清内存 `SessionStore` 该站点会话（旧通道 `logout_site` 的既有语义一致）
 //  * **会话不在运行 / 命令失败** → false + 可操作原因（`I21`：**不假装成功**、**不回落旧通道**）
-bool logout_site(const SiteRef& site, int timeout_ms, std::string* error);
+bool logoutSite(const SiteRef& site, int timeout_ms, std::string* error);
 
 // 在页面内执行 JS 并取回结果（**批 3 step 8 已落地**：词表 v2 的 `run_script` → `script_done`）
 //  * 语义 = **只读诊断**（`--web-dom-dump` / `--web-adapter-selftest` 走新通道的地基，`M7B-18`）；
@@ -116,8 +116,8 @@ bool read_answer(const SiteRef& site, const std::vector<std::string>& answer_sel
 //  * `current_tab_site()`：无会话 / 读失败 → **空串**（调用方按「无 tab / 未知」处置 —— 不假装）
 //  * `tab_on_site(site)`：入参可为**站点键（origin）**或**任意 URL**（内部先归一到 origin 再比）
 //    —— 语义对齐旧通道 `window_on_site`（`site_key_of(current) == site_key_of(want)`）
-std::string current_tab_site();
-bool        tab_on_site(const std::string& site);
+std::string currentTabSite();
+bool        tabOnSite(const std::string& site);
 
 // ---- 批 2 冒烟（`M7B-19` 门槛 · `M7B-18` 的一半）----
 
@@ -132,7 +132,7 @@ int selftest(int timeout_ms);
 //    「**页面内执行 JS + 取回结构化结果**」（`M7B-18`）
 //  * **零外网、零登录**（夹具落临时目录 · `file:///`）；开的是**独立管道名**，不撞生产 / 其他自检
 //  * 返回：0 = 通过；1 = 失败；2 = 依赖问题
-int script_selftest(int timeout_seconds);
+int scriptSelftest(int timeout_seconds);
 
 // **内容返回端到端**（**step 14 · P4** · 词表 v4）：起守护进程 → `open_tab`（本地 `file:///` 夹具：
 // 输入框 + 发送按钮 + 回答容器）→ **`send_prompt`**（真打字 + 触发发送）→ 逐字符自证（`run_script` 只读）
@@ -140,13 +140,13 @@ int script_selftest(int timeout_seconds);
 //  * 验的能力 = **生产内容路径（v4 三命令）**：注入 / 发送 / 取回答 + 长文本截断契约
 //  * **零外网、零登录**；独立管道名（不撞生产 / 其他自检）
 //  * 返回：0 = 通过；1 = 失败；2 = 依赖问题
-int chat_selftest(int timeout_seconds);
+int chatSelftest(int timeout_seconds);
 
 // `--pydoll-login <id>`：起**有头**浏览器 → `open_tab`（条目 `web.login_url`）→ 轮询
 // `login_state` 判到 `logged_in`（`cookie_names` 命中，`I15′`）→ 写内存 `SessionStore` →
 // **`shutdown`（`Browser.close` 等进程退出，`I23①`）**
 //  * 合规：**有头窗口 + 人工登录**（不代填密码、不绕验证，§13）
 //  * 返回：0 = 登录成功；1 = 超时 / 失败（带可操作提示）；2 = 参数 / 依赖问题
-int pydoll_login(const std::string& provider_id, int timeout_seconds);
+int pydollLogin(const std::string& provider_id, int timeout_seconds);
 
 } // namespace aiwrite::web::channel

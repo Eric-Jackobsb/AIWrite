@@ -1,6 +1,7 @@
 #include "site_template.h"
 
 #include "log.h"
+#include "string_util.h"   // CLN-05：trim 收敛
 
 #include <algorithm>
 #include <cctype>
@@ -15,16 +16,6 @@ namespace aiwrite::ai {
 namespace {
 
 using ordered_json = nlohmann::ordered_json;
-
-std::string trim(const std::string& text)
-{
-    const auto begin = text.find_first_not_of(" \t\r\n");
-    if (begin == std::string::npos) {
-        return {};
-    }
-    const auto end = text.find_last_not_of(" \t\r\n");
-    return text.substr(begin, end - begin + 1);
-}
 
 bool is_id_char(char ch)
 {
@@ -97,7 +88,7 @@ bool has_text(const std::vector<std::string>& items, const std::string& needle)
 
 // --------------------------------------------------------------------- 模板 --
 
-WebSiteTemplate site_template_default()
+WebSiteTemplate siteTemplateDefault()
 {
     WebSiteTemplate tpl;
     tpl.id               = "my-site";
@@ -112,17 +103,17 @@ WebSiteTemplate site_template_default()
     return tpl;
 }
 
-WebSiteTemplate site_template_from_spec(const ProviderSpec* spec)
+WebSiteTemplate siteTemplateFromSpec(const ProviderSpec* spec)
 {
     if (spec == nullptr || spec->kind != "web") {
-        return site_template_default();
+        return siteTemplateDefault();
     }
-    WebSiteTemplate tpl = site_template_default();
+    WebSiteTemplate tpl = siteTemplateDefault();
     tpl.id           = spec->id;
     tpl.display      = spec->display.empty() ? spec->id : spec->display;
     tpl.login_url    = spec->web.login_url;
     tpl.window_title = spec->web.window_title;
-    tpl.cookie_names = join_names(spec->web.cookie_names);
+    tpl.cookie_names = joinNames(spec->web.cookie_names);
     tpl.token_expr   = spec->web.token_expr;
     tpl.notes        = spec->notes;
 
@@ -150,36 +141,44 @@ WebSiteTemplate site_template_from_spec(const ProviderSpec* spec)
 
 // ----------------------------------------------------------------- 校验 / 落盘 --
 
-std::string site_id_error(const std::string& id)
+// 共享的条目 id 校验（站点 / 官方 API 提供商共用；`kind_label` = 「站点」/「提供商」）
+std::string providerIdError(const std::string& id, const std::string& kind_label)
 {
+    const std::string fname = kind_label + " id";
     if (id.empty()) {
-        return "站点 id 不能为空（它会成为文件名 providers.d/<id>.json）";
+        return fname + " 不能为空（它会成为文件名 providers.d/<id>.json）";
     }
     if (id.size() > 64) {
-        return "站点 id 过长（≤64 字符）：" + id;
+        return fname + " 过长（≤64 字符）：" + id;
     }
-    if (trim(id) != id) {
-        return "站点 id 首尾不能有空白：" + id;
+    if (utils::trim(id) != id) {
+        return fname + " 首尾不能有空白：" + id;
     }
     for (const char ch : id) {
         if (!is_id_char(ch)) {
-            return std::string("站点 id 只能含字母、数字、`-`、`_`、`.`（当前含「") + ch +
+            return std::string(fname + " 只能含字母、数字、`-`、`_`、`.`（当前含「") + ch +
                    "」；不允许空格 / 斜杠 / 中文）";
         }
     }
     if (std::isalnum(static_cast<unsigned char>(id[0])) == 0) {
-        return "站点 id 必须以字母或数字开头：" + id;
+        return fname + " 必须以字母或数字开头：" + id;
     }
     return {};
 }
 
-std::string site_template_error(const WebSiteTemplate& tpl)
+std::string siteIdError(const std::string& id)
 {
-    const std::string id_problem = site_id_error(tpl.id);
+    return providerIdError(id, "站点");
+}
+
+
+std::string siteTemplateError(const WebSiteTemplate& tpl)
+{
+    const std::string id_problem = siteIdError(tpl.id);
     if (!id_problem.empty()) {
         return id_problem;
     }
-    const std::string url = trim(tpl.login_url);
+    const std::string url = utils::trim(tpl.login_url);
     if (url.empty()) {
         return "登录页地址不能为空（站点身份的唯一来源；见 §8 附录 C/D）";
     }
@@ -189,16 +188,16 @@ std::string site_template_error(const WebSiteTemplate& tpl)
     return {};
 }
 
-std::string site_template_pending(const WebSiteTemplate& tpl)
+std::string siteTemplatePending(const WebSiteTemplate& tpl)
 {
     std::vector<std::string> missing;
-    if (trim(tpl.input_selector).empty()) {
+    if (utils::trim(tpl.input_selector).empty()) {
         missing.push_back("input_selector");
     }
-    if (trim(tpl.send_kind).empty() || trim(tpl.send_value).empty()) {
+    if (utils::trim(tpl.send_kind).empty() || utils::trim(tpl.send_value).empty()) {
         missing.push_back("send");
     }
-    if (trim(tpl.answer_selector).empty()) {
+    if (utils::trim(tpl.answer_selector).empty()) {
         missing.push_back("answer_selector");
     }
     std::string text;
@@ -211,7 +210,7 @@ std::string site_template_pending(const WebSiteTemplate& tpl)
     return text;
 }
 
-std::vector<std::string> split_names(const std::string& text)
+std::vector<std::string> splitNames(const std::string& text)
 {
     // 全角逗号 / 分号（U+FF0C / U+FF1B）先归一为 ASCII —— 用户从文档整段粘贴也能用
     std::string normalized;
@@ -232,7 +231,7 @@ std::vector<std::string> split_names(const std::string& text)
     std::vector<std::string> names;
     std::string              current;
     const auto               flush = [&names, &current]() {
-        const std::string name = trim(current);
+        const std::string name = utils::trim(current);
         current.clear();
         if (!name.empty() && std::find(names.begin(), names.end(), name) == names.end()) {
             names.push_back(name);
@@ -249,7 +248,7 @@ std::vector<std::string> split_names(const std::string& text)
     return names;
 }
 
-std::string join_names(const std::vector<std::string>& names)
+std::string joinNames(const std::vector<std::string>& names)
 {
     std::string text;
     for (const std::string& name : names) {
@@ -263,7 +262,7 @@ std::string join_names(const std::vector<std::string>& names)
     }
     return text;
 }
-std::string site_file_json(const WebSiteTemplate& tpl)
+std::string siteFileJson(const WebSiteTemplate& tpl)
 {
     ordered_json entry;
     entry["id"]       = tpl.id;
@@ -281,23 +280,23 @@ std::string site_file_json(const WebSiteTemplate& tpl)
     web["login_url"]    = tpl.login_url;
     web["window_title"] = window_title_of(tpl);
     // 只写**非空**的可选字段：留空 = 走解析期默认（也避免「已声明但为空」被误当实测值）
-    if (!trim(tpl.input_selector).empty()) {
+    if (!utils::trim(tpl.input_selector).empty()) {
         web["input_selector"] = tpl.input_selector;
     }
-    if (!trim(tpl.send_kind).empty() && !trim(tpl.send_value).empty()) {
+    if (!utils::trim(tpl.send_kind).empty() && !utils::trim(tpl.send_value).empty()) {
         web["send"] = ordered_json{{"kind", tpl.send_kind}, {"value", tpl.send_value}};
     }
-    if (!trim(tpl.answer_selector).empty()) {
+    if (!utils::trim(tpl.answer_selector).empty()) {
         web["answer_selector"] = tpl.answer_selector;
     }
-    if (!trim(tpl.done_kind).empty()) {
+    if (!utils::trim(tpl.done_kind).empty()) {
         web["done_when"] = ordered_json{{"kind", tpl.done_kind}, {"selector", tpl.done_selector}};
     }
-    const std::vector<std::string> cookies = split_names(tpl.cookie_names);
+    const std::vector<std::string> cookies = splitNames(tpl.cookie_names);
     if (!cookies.empty()) {
         web["cookie_names"] = cookies;
     }
-    if (!trim(tpl.token_expr).empty()) {
+    if (!utils::trim(tpl.token_expr).empty()) {
         web["token_expr"] = tpl.token_expr;
     }
     web["answer_poll_ms"]   = tpl.answer_poll_ms;
@@ -316,16 +315,22 @@ std::string site_file_json(const WebSiteTemplate& tpl)
 bool write_user_site_file(const WebSiteTemplate& tpl, const std::filesystem::path& dir,
                           bool overwrite, std::string* error, std::filesystem::path* written)
 {
-    const std::string problem = site_template_error(tpl);
+    const std::string problem = siteTemplateError(tpl);
     if (!problem.empty()) {
         if (error != nullptr) {
             *error = problem;
         }
         return false;
     }
+    return writeUserProviderFile(tpl.id, siteFileJson(tpl), dir, overwrite, error, written);
+}
 
+bool writeUserProviderFile(const std::string& id, const std::string& json,
+                           const std::filesystem::path& dir, bool overwrite,
+                           std::string* error, std::filesystem::path* written)
+{
     std::error_code             ec;
-    const std::filesystem::path path = dir / (tpl.id + ".json");
+    const std::filesystem::path path = dir / (id + ".json");
     if (!overwrite && std::filesystem::exists(path, ec)) {
         if (error != nullptr) {
             *error = "已存在同名文件：" + path.string() + "（勾选「覆盖同名条目」后重试）";
@@ -351,8 +356,7 @@ bool write_user_site_file(const WebSiteTemplate& tpl, const std::filesystem::pat
             }
             return false;
         }
-        const std::string text = site_file_json(tpl);
-        out.write(text.data(), static_cast<std::streamsize>(text.size()));
+        out.write(json.data(), static_cast<std::streamsize>(json.size()));
         out.flush();
         if (!out) {
             out.close();
@@ -379,45 +383,53 @@ bool write_user_site_file(const WebSiteTemplate& tpl, const std::filesystem::pat
     if (written != nullptr) {
         *written = path;
     }
-    log::info("[站点] 已写入用户站点条目 " + path.string() + "（重新加载配置表后立即可用）");
+    log::info("[站点表] 已写入用户条目 " + path.string() + "（重新加载配置表后立即可用）");
     return true;
 }
+
 
 // ============================================================================
 //  自检（离线；`api_probe --site-assert` 调用；返回失败项数）
 // ============================================================================
 
-int site_template_selftest(int* passed_out)
+int siteTemplateSelftest(int* passed_out)
 {
     std::printf("[站点模板] 自建网页版站点条目：生成 / 校验 / 落盘\n");
     CheckCounter counter;
 
     // ---- ① id 合法性（含路径穿越，防写出到 providers.d 之外）----
-    counter.check(site_id_error("kimi-web").empty(), "id：kimi-web 合法");
-    counter.check(site_id_error("SITE_1.2").empty(), "id：SITE_1.2 合法");
-    counter.check(!site_id_error("").empty(), "id：空被拒");
-    counter.check(!site_id_error("my site").empty(), "id：含空格被拒");
-    counter.check(!site_id_error("../evil").empty(), "id：路径穿越 `../` 被拒");
-    counter.check(!site_id_error("a/b").empty(), "id：斜杠被拒");
-    counter.check(!site_id_error("-lead").empty(), "id：首字符须为字母或数字");
-    counter.check(!site_id_error(std::string(65, 'a')).empty(), "id：>64 字符被拒");
+    counter.check(siteIdError("kimi-web").empty(), "id：kimi-web 合法");
+    counter.check(siteIdError("SITE_1.2").empty(), "id：SITE_1.2 合法");
+    counter.check(!siteIdError("").empty(), "id：空被拒");
+    counter.check(!siteIdError("my site").empty(), "id：含空格被拒");
+    counter.check(!siteIdError("../evil").empty(), "id：路径穿越 `../` 被拒");
+    counter.check(!siteIdError("a/b").empty(), "id：斜杠被拒");
+    counter.check(!siteIdError("-lead").empty(), "id：首字符须为字母或数字");
+    counter.check(!siteIdError(std::string(65, 'a')).empty(), "id：>64 字符被拒");
+    // 共享函数（自定义 AI 收口：官方 API 提供商复用同一规则）
+    counter.check(siteIdError("x") == providerIdError("x", "站点"),
+                  "共享：siteIdError ≡ providerIdError(id, \"站点\")");
+    counter.check(providerIdError("my-provider_2.0", "提供商").empty(), "共享：提供商 id 合法");
+    counter.check(providerIdError("../x", "提供商").find("提供商 id") != std::string::npos,
+                  "共享：报错文案前缀为「提供商 id」");
+
 
     // ---- ② 模板校验（缺登录页 / 非 http(s) 一律拒写）----
-    WebSiteTemplate tpl = site_template_default();
-    counter.check(!site_template_error(tpl).empty(), "校验：缺登录页 → 拒写",
-                  site_template_error(tpl));
+    WebSiteTemplate tpl = siteTemplateDefault();
+    counter.check(!siteTemplateError(tpl).empty(), "校验：缺登录页 → 拒写",
+                  siteTemplateError(tpl));
     tpl.id        = "demo-site";
     tpl.display   = "演示站点（自建）";
     tpl.login_url = "ftp://demo.example.com";
-    counter.check(!site_template_error(tpl).empty(), "校验：非 http(s) 登录页 → 拒写");
+    counter.check(!siteTemplateError(tpl).empty(), "校验：非 http(s) 登录页 → 拒写");
     tpl.login_url = "https://demo.example.com/chat";
-    counter.check(site_template_error(tpl).empty(), "校验：id + https 登录页 → 通过",
-                  site_template_error(tpl));
-    counter.check(site_template_pending(tpl).find("input_selector") != std::string::npos,
+    counter.check(siteTemplateError(tpl).empty(), "校验：id + https 登录页 → 通过",
+                  siteTemplateError(tpl));
+    counter.check(siteTemplatePending(tpl).find("input_selector") != std::string::npos,
                   "校验：选择器缺失 → 待实测清单点名 input_selector");
 
     // ---- ③ 生成的 JSON（信封 / 嵌套形状 / 白名单字段）----
-    const std::string text = site_file_json(tpl);
+    const std::string text = siteFileJson(tpl);
     counter.check(text.find("\"schema_version\": 1") != std::string::npos,
                   "JSON：带 schema_version 信封");
     counter.check(text.find("\"_comment\"") != std::string::npos,
@@ -439,14 +451,14 @@ int site_template_selftest(int* passed_out)
     full.done_selector     = "button[aria-label*='停止']";
     full.cookie_names      = "kimi_session, kimi_token";
     full.token_expr        = "localStorage.getItem('token')";
-    counter.check(site_template_pending(full).empty(), "模板：完整模板 → 待实测清单为空");
-    counter.check(split_names(full.cookie_names).size() == 2, "Cookie 名单：`a, b` 两项");
-    counter.check(split_names("a，b；c").size() == 3, "Cookie 名单：全角分隔符三项");
-    counter.check(split_names("a,a,b").size() == 2, "Cookie 名单：去重");
+    counter.check(siteTemplatePending(full).empty(), "模板：完整模板 → 待实测清单为空");
+    counter.check(splitNames(full.cookie_names).size() == 2, "Cookie 名单：`a, b` 两项");
+    counter.check(splitNames("a，b；c").size() == 3, "Cookie 名单：全角分隔符三项");
+    counter.check(splitNames("a,a,b").size() == 2, "Cookie 名单：去重");
 
     SpecLoadReport      report;
     const ProviderSpecs specs = merge_provider_specs(
-        {{"builtin", selftest_base_layer_json()}, {"user.d", site_file_json(full)}}, &report);
+        {{"builtin", selftest_base_layer_json()}, {"user.d", siteFileJson(full)}}, &report);
     counter.check(report.errors.empty(), "合并：生成的文件零错误",
                   report.errors.empty() ? "" : report.errors.front());
     const ProviderSpec* loaded = specs.find("demo-site");
@@ -468,7 +480,7 @@ int site_template_selftest(int* passed_out)
                   "合并：无「未知字段」告警（只写白名单字段）");
 
     // ---- ⑤ 回归护栏：缺信封 ⇒ 整层失效（R8 / §8 附录 D 实测表第一行）----
-    std::string no_envelope = site_file_json(full);
+    std::string no_envelope = siteFileJson(full);
     const auto  envelope_at = no_envelope.find("  \"schema_version\"");
     if (envelope_at != std::string::npos) {
         const auto line_end = no_envelope.find('\n', envelope_at);
@@ -491,7 +503,7 @@ int site_template_selftest(int* passed_out)
     SpecLoadReport      report_esc;
     const ProviderSpecs specs_esc =
         merge_provider_specs({{"builtin", selftest_base_layer_json()},
-                              {"user.d", site_file_json(escaped)}},
+                              {"user.d", siteFileJson(escaped)}},
                              &report_esc);
     const ProviderSpec* confirmed = specs_esc.find("esc-site");
     counter.check(confirmed != nullptr && confirmed->display == escaped.display,
@@ -541,12 +553,12 @@ int site_template_selftest(int* passed_out)
     builtin_source.web.login_url      = "https://chat.deepseek.com";
     builtin_source.web.input_selector = "should-not-copy";
     builtin_source.web.cookie_names   = {"userToken"};
-    const WebSiteTemplate copied = site_template_from_spec(&builtin_source);
+    const WebSiteTemplate copied = siteTemplateFromSpec(&builtin_source);
     counter.check(copied.id == "deepseek-web" && copied.login_url == "https://chat.deepseek.com",
                   "照抄：站点身份（id / 登录页）已抄");
     counter.check(copied.input_selector.empty(), "照抄：内建站点的选择器不抄");
     counter.check(copied.cookie_names == "userToken", "照抄：Cookie 名清单已抄");
-    counter.check(!site_file_json(copied).empty(), "照抄：可直接生成文件 JSON");
+    counter.check(!siteFileJson(copied).empty(), "照抄：可直接生成文件 JSON");
 
     if (passed_out != nullptr) {
         *passed_out = counter.passed;

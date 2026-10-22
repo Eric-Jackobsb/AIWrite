@@ -37,24 +37,24 @@ struct TextureInfo {
 };
 
 // 取图片纹理（命中缓存直接返回；失败结果也会缓存，避免每帧重试）
-TextureInfo texture_for(const std::string& path);
+TextureInfo textureFor(const std::string& path);
 
 // 逐帧标记：渲染循环**每帧开头**调用一次（见 ui/app.cpp）
 //  * 标记本帧用到的纹理为「保护」，本轮淘汰不碰它们
 //  * 作用：同屏卡片数 > 容量时也不会出现「LRU 互相顶掉 → 每帧 100% 未命中」
-void begin_frame();
+void beginFrame();
 
 // 读图片尺寸（只解析文件头；不需要 GL 上下文；失败返回 false 并写 error）
-bool image_size(const std::string& path, int* width, int* height, std::string* error);
+bool imageSize(const std::string& path, int* width, int* height, std::string* error);
 
 // 容量控制（0 = 不限制）；调小时立即淘汰
-void        set_texture_capacity(std::size_t capacity);
-std::size_t texture_capacity();
-std::size_t cached_texture_count();
+void        setTextureCapacity(std::size_t capacity);
+std::size_t textureCapacity();
+std::size_t cachedTextureCount();
 
 // 字节预算（解码后纹理字节数；0 = 不限制；默认 256 MB）——防止「大图工作流」吃爆显存
-void        set_texture_byte_budget(std::size_t bytes);
-std::size_t texture_byte_budget();
+void        setTextureByteBudget(std::size_t bytes);
+std::size_t textureByteBudget();
 
 // 统计（CS-01 诊断用；仅渲染线程读写，无锁）
 //  * 累计值单调递增，调用方自己取差值算「近 N 秒」的请求/命中/解码次数
@@ -71,9 +71,9 @@ struct TextureCacheStats {
     std::size_t capacity   = 0; // 当前条目容量（0 = 不限制）
     std::size_t byte_budget = 0; // 当前字节预算（0 = 不限制）
 };
-TextureCacheStats texture_cache_stats();
+TextureCacheStats textureCacheStats();
 
 // 释放全部纹理（退出前 / GL 上下文销毁前必须调用）
-void release_textures();
+void releaseTextures();
 
 } // namespace aiwrite::ui

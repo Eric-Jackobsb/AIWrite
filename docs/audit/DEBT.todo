@@ -1,0 +1,451 @@
+{
+  "board_rules": [
+    "债务总账（DEBT.todo）—— 2026-10-21 建立",
+    "动机：用户拍板「现在优先解决所有债务问题」—— 先清零债务，再继续 M_polish 四阶段打磨",
+    "分类：代码结构（DEBT-CODE）· 逻辑残项（DEBT-LOGIC）· 验证人工（DEBT-VERIFY）· 打包发布（DEBT-PKG）· 文档（DEBT-DOC）· 已知 bug（DEBT-BUG）",
+    "人工验证项一律登记 DevPlan.todo Test「四、债务清零人工验证」组 · 本总账只做映射（fileLink / content 内注明）",
+    "离线可做项（DEBT-C2/C3/C4 · DEBT-L7/L8/L9）按 M_debt.md 批次执行",
+    "勾账纪律：每项落地后 done=true + CHANGELOG 登记 + 回归只升不降"
+  ],
+  "todotree": {
+    "tree": [
+      {
+        "key": 6,
+        "children": [
+          {
+            "key": 1,
+            "children": [],
+            "todo": {
+              "id": 3001,
+              "content": "DEBT-C0 代码库清理主体（CLN-01~15 + 驼峰化 8 批）= ✅ 已清零（2026-10-20 · 审计报告 audit_cleanup_01~15）\n范围：CLN-01 死代码 / 02 include / 03 失效分支 / 04 TODO 台账 / 05 重复辅助函数 / 06~08 头文件一致性 / 09~11 重复实现合并（小地图+对齐吸附共享化）/ 12~15 超大文件拆分 · 驼峰化 8 批 469 函数 3061 次替换\n状态：✅ 勾账项 · 债务归零记录",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/audit/DEBT.todo",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 2,
+            "children": [],
+            "todo": {
+              "id": 3002,
+              "content": "DEBT-C1 上级编辑器小地图导航（mode 5）：headless 复现 FAIL（view_center 恒定不移动）→ 待真实 GUI 复核区分 H1/H4（headless 失真）vs H2/H3（真实 bug）\n来源：M_code_cleanup §2 · M_polish POL-L-02\n执行：人工 GUI 复核 → DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_code_cleanup.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 3,
+            "children": [],
+            "todo": {
+              "id": 3003,
+              "content": "DEBT-C2 webview_host / dom_web_client 拆分 = 评估完成（2026-10-21 · 批 A A-7）· 维持不拆\n评估：webview_host.cpp 仍 155KB/3489 行 · dom_web_client.cpp 135KB/2397 行；两者均为单匿名命名空间高耦合运行时代码（窗口/状态机/助手束），无低风险拆分接缝（拆需破匿名封装跨 TU 暴露内部，或大重构触全部调用点）⇒ 风险>收益\n结论：保持登记为后续优化项（M_code_cleanup §4.1 方向 4）· 行为等价（零代码改动）· 勾账",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_code_cleanup.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 4,
+            "children": [],
+            "todo": {
+              "id": 3004,
+              "content": "DEBT-C3 测试资产完善 = ✅ 已落地（2026-10-21 · 批 A A-3）\n落地：check_all.ps1 新增 ②b 两项 —— aiuwrite --run-selftest（CLN-15 拆出的 cli_selftest.cpp 入口）+ ce_repro.exe 0（上级编辑器窗口栈平衡回归）· 更新 exec 汇总注释 83/691\n验证：check_all 全绿（新增两项 PASS · exec 691 / graph 151 / check_links 1717/0 / 打包 PASS）",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_code_cleanup.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 5,
+            "children": [],
+            "todo": {
+              "id": 3005,
+              "content": "DEBT-C4 canvas_view.cpp `##ce_inline_` 借名观察点 = ✅ 已落地（2026-10-21 · 批 A A-8）\n落地：canvas_view.cpp L582 label 改为 `##node_inline_`（去 `ce_` 借名 · 唯一使用点 · ImGui ID 唯一性由 node.id 保证不变）\n验证：构建 0/0",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_code_cleanup.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          }
+        ],
+        "todo": {
+          "id": 3100,
+          "content": "一、代码结构债（DEBT-CODE）：CLN 主体已清零 · 余 1 项（2026-10-21 · 批 A 落地 C2/C3/C4）",
+          "done": false,
+          "level": "secondary",
+          "fileLink": "docs/actionPlan/M_code_cleanup.md",
+          "focus": false,
+          "end": 1792569000000
+        }
+      },
+      {
+        "key": 17,
+        "children": [
+          {
+            "key": 7,
+            "children": [],
+            "todo": {
+              "id": 3011,
+              "content": "DEBT-L1 PB2-29 内置站点 answer_selector 逐站实测回填（6 站国内：kimi / qwen / doubao / yuanbao / ernie / spark · D-32 ①）\n执行：人工（登录 + 手动发消息 + --web-dom-dump）→ DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 8,
+            "children": [],
+            "todo": {
+              "id": 3012,
+              "content": "DEBT-L2 PB-07 / PB2-25 真实会话失效响应复核（错误串反查 + 重登入口已离线落地）\n执行：人工（一次真实失效响应可同批验两条）→ DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 9,
+            "children": [],
+            "todo": {
+              "id": 3013,
+              "content": "DEBT-L3 PB2-10 / PB2-11 真实生成（Anthropic / Gemini Key）\n执行：人工（需 Key）→ DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 10,
+            "children": [],
+            "todo": {
+              "id": 3014,
+              "content": "DEBT-L4 PB2-24 界面点选回路真人点一次（新建站点 → providers.d/<id>.json → 重新加载 → 下拉即时刷新）+ 新建后一次真实运行\n执行：人工 → DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 11,
+            "children": [],
+            "todo": {
+              "id": 3015,
+              "content": "DEBT-L5 PC-01/02 真人点选（改图 → 写快照 → 点「恢复」）· autosave 逻辑已 28/0\n执行：人工 → DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 12,
+            "children": [],
+            "todo": {
+              "id": 3016,
+              "content": "DEBT-L6 PB-06 剩余企业网络实测（代理 / 自签证书 / [credentials] 已接线）\n执行：人工（需企业网络环境）→ DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 13,
+            "children": [],
+            "todo": {
+              "id": 3017,
+              "content": "DEBT-L7 VB-03 「假增量」离线断言 = ✅ 已落地（2026-10-21 · 批 A A-2）\n落地：api_execution_selftest.cpp 末尾新增 VB-03①~④（多段拼接==非流式整段 / 空段忽略 / 单段即整段 / delta_bytes==正文字节数）· 语义对齐 editor_state.cpp Delta 分支\n验证：exec-selftest 682→686 只升不降 · 构建 0/0",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 14,
+            "children": [],
+            "todo": {
+              "id": 3018,
+              "content": "DEBT-L8 M6-04 错误处理剩余 = ✅ 已落地（2026-10-21 · 批 A A-4）\n落地：新增 engine failure_summary.{h,cpp}（collectFailures / summarizeFailures 纯函数）+ UI 接线（editor_state.h LastError 增 failed_count/summary/details · refreshLastError 汇总所有失败节点 · error_bar.cpp 显示汇总 + tooltip 明细）· 重试已有 retry_policy + 设置面板 + VL1-03 覆盖参数断言\n验证：exec-selftest 686→691 · 构建 0/0（UI 编译通过）\n顺延：错误条视觉复核 → M_polish 阶段二/三（半人工）",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M6.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 15,
+            "children": [],
+            "todo": {
+              "id": 3019,
+              "content": "DEBT-L9 M6-06 工作流校验边界用例补强 = ✅ 已落地（2026-10-21 · 批 A A-5）\n落地：api_executor_selftest.cpp 补 5 个未覆盖边界断言（节点 id 重复 / 终点节点不存在 / 终点端口不存在 / 上级节点规格不存在 / 环 A→B→A）\n验证：executor-selftest 73→83 · 构建 0/0",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M6.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 16,
+            "children": [],
+            "todo": {
+              "id": 3020,
+              "content": "DEBT-L10 M6-07 启动测量（启动 <3s 未测 · 渲染侧已达标）\n执行：半人工（测量需跑 GUI）→ DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M6.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 3060,
+            "children": [],
+            "todo": {
+              "id": 3052,
+              "content": "DEBT-L11 M6-05 UI 细节剩余：字体加载 / 暗色主题统一 = 🟡 离线代码部分已落地（2026-10-21 · 批 A A-6）\n落地：app.cpp io.FontDefault 显式指定 = CJK 主字体（字体确定性加固）· 审计确认 load_fonts（微软雅黑14 + Consolas13+中文字形合并 + 回退）+ apply_dark_theme + 双 CanvasTheme（主灰/复合蓝）已统一 · 无浅色残留硬编码\n顺延：视觉复核（半人工）→ M_polish 阶段二（DEBT.todo 原定）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M6.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          }
+        ],
+        "todo": {
+          "id": 3110,
+          "content": "二、逻辑/功能残项债（DEBT-LOGIC）：离线 3 项已落地（2026-10-21 · 批 A：L7/L8/L9）· 余 6 项人工（L1-6）+ L10 测量 / L11 视觉顺延 M_polish",
+          "done": false,
+          "level": "secondary",
+          "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+          "focus": false,
+          "end": 1792569000000
+        }
+      },
+      {
+        "key": 7,
+        "children": [
+          {
+            "key": 1,
+            "children": [],
+            "todo": {
+              "id": 3021,
+              "content": "DEBT-V1 DevPlan.todo Test 〇组 CN-01 剩余 open：#3（含 #305 Ctrl+S 保存失败 bug 记录）/ #4 / #5 / #6 / #7 / #8\n执行：人工 → 已在 DevPlan.todo Test（DEBT-B1 关联）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/DevPlan.todo",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 2,
+            "children": [],
+            "todo": {
+              "id": 3022,
+              "content": "DEBT-V2 DevPlan.todo Test 一、CN-01 待拍板项（#9~#13：验收框架 / 程序化生成 / 预览增强 / 调试设施去留）\n执行：人工拍板 → 已在 DevPlan.todo Test",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/DevPlan.todo",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 3,
+            "children": [],
+            "todo": {
+              "id": 3023,
+              "content": "DEBT-V3 DevPlan.todo Test 二、GUI 点选验收 51 项（M1~M7 · 原 DevPlan id=404 迁入）\n执行：人工逐项点选 → 已在 DevPlan.todo Test",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/DevPlan.todo",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 4,
+            "children": [],
+            "todo": {
+              "id": 3024,
+              "content": "DEBT-V4 DevPlan Human 未迁入项 → 补入 DevPlan.todo Test 四组（打包冒烟 / 站点回填 11 项 / API Key 门 / VM-01 / M8 真机 Gate / 循环轮次人审 / 协作契约）",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/DevPlan.todo",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 5,
+            "children": [],
+            "todo": {
+              "id": 3025,
+              "content": "DEBT-V5 M6-10 跑通现有示例（E-01 内置 / E-02 / ImgPlusText）· 自测载体已 16/16\n执行：人工 → DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M6.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 6,
+            "children": [],
+            "todo": {
+              "id": 3026,
+              "content": "DEBT-V6 roadmap §十二 两条人工项：界面点选回路（PB2-24）+ 手册文案逐处复核\n执行：人工 → DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/roadmap.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          }
+        ],
+        "todo": {
+          "id": 3120,
+          "content": "三、验证/人工验收债（DEBT-VERIFY）：6 项全部人工 → 承接 DevPlan.todo Test",
+          "done": false,
+          "level": "secondary",
+          "fileLink": "docs/DevPlan.todo",
+          "focus": false,
+          "end": 1792569000000
+        }
+      },
+      {
+        "key": 10,
+        "children": [
+          {
+            "key": 8,
+            "children": [],
+            "todo": {
+              "id": 3031,
+              "content": "DEBT-P1 安装包冒烟：干净机器首启引导（缺 WebView2 → 官方下载/随包安装/重新检测）→ 载入示例跑通（TST-M6-01）\n执行：人工 → DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/DevPlan.todo",
+              "focus": false,
+              "end": 1792569000000
+            }
+          },
+          {
+            "key": 9,
+            "children": [],
+            "todo": {
+              "id": 3032,
+              "content": "DEBT-P2 M6-09 README 截图 / 视频教程（文字部分已落地）\n执行：人工（文档）→ DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/actionPlan/M6.md",
+              "focus": false,
+              "end": 1792569000000
+            }
+          }
+        ],
+        "todo": {
+          "id": 3130,
+          "content": "四、打包/发布债（DEBT-PKG）：2 项全部人工",
+          "done": false,
+          "level": "secondary",
+          "fileLink": "docs/actionPlan/M6.md",
+          "focus": false,
+          "end": 1792569000000
+        }
+      },
+      {
+        "key": 12,
+        "children": [
+          {
+            "key": 11,
+            "children": [],
+            "todo": {
+              "id": 3041,
+              "content": "DEBT-D1 DOC-M1-01 V-06/A-06 取证后更新 M1.md 验收表与遗留登记表（依赖 TST-M1-01 Key 实测）\n执行：人工（依赖 Key）→ DevPlan.todo Test 四组",
+              "done": false,
+              "level": "default",
+              "fileLink": "docs/DevPlan.todo",
+              "focus": false,
+              "end": 1792569000000
+            }
+          }
+        ],
+        "todo": {
+          "id": 3140,
+          "content": "五、文档债（DEBT-DOC）：1 项（依赖 Key 取证）",
+          "done": false,
+          "level": "secondary",
+          "fileLink": "docs/DevPlan.todo",
+          "focus": false,
+          "end": 1792569000000
+        }
+      },
+      {
+        "key": 14,
+        "children": [
+          {
+            "key": 13,
+            "children": [],
+            "todo": {
+              "id": 3051,
+              "content": "DEBT-B1 ⚠ Ctrl+S 保存失败（DevPlan.todo Test #457（原 ToVerify #1792561459558） 真实记录：Ctrl+S 未保存成功 · 按键保存可成功）\n执行：先离线排查快捷键链路（可能的 imgui 菜单快捷键冲突）→ GUI 人工复核 → DevPlan.todo Test 四组\n✅ 修复已落地（2026-10-21）：ce_draw.cpp 新增 ce_handle_save_key（Ctrl+S → compositeEditorSave · 与「保存」按钮同一路径 · 隔离条件同 Delete 键）· 构建 0/0 · exec 682/0 · graph 151/0 · run-selftest PASS · GUI 复核登记 ToVerify #4011",
+              "done": true,
+              "level": "default",
+              "fileLink": "docs/DevPlan.todo",
+              "focus": false,
+              "end": 1792569000000
+            }
+          }
+        ],
+        "todo": {
+          "id": 3150,
+          "content": "六、已知 bug 债（DEBT-BUG）：1 项 · ★高优先级",
+          "done": false,
+          "level": "secondary",
+          "fileLink": "docs/DevPlan.todo",
+          "focus": false,
+          "end": 1792569000000
+        }
+      }
+    ],
+    "expandKeys": [
+      10,
+      7,
+      17
+    ],
+    "add_mode": "bottom",
+    "virtual": false,
+    "showLine": false,
+    "playFontSize": 24,
+    "title": "Debt",
+    "autoSort": false,
+    "showEndTime": false,
+    "simpleMode": false,
+    "lang": "en",
+    "version": "1792590408110"
+  }
+}

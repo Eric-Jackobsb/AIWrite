@@ -119,11 +119,33 @@
               "done": false,
               "level": "danger"
             }
+          },
+          {
+            "key": 445,
+            "children": [
+              {
+                "key": 446,
+                "children": [],
+                "todo": {
+                  "id": 446,
+                  "content": "DBG-CN-01 上级节点暴露的输入为空时无法保存（应改为可保存 · 空输入合法）｜ 现象：上级节点规格的暴露输入端口为空时，保存被校验拦截；期望允许保存 ｜ 定位线索：engine/src/composite.cpp validate_composite_spec() L101-114 暴露输入引用校验（引用的内部输入端口必须存在 / 无内部入边）· 上级节点实例端口恒 is_optional=true（composite.cpp L309 · validate.cpp L122 跳过 optional）⇒ 运行前不拦，疑为规格保存或加载校验拦截 ｜ 2026-10-21 登记 · ⛔ 待用户审查补充确切拦截点与场景后统一修复 + 补「空输入可保存」反例断言（exec-selftest）｜ 关联 M_polish §POL-C-01 校验边界相邻区",
+                  "done": false,
+                  "level": "warning",
+                  "fileLink": "docs/actionPlan/M_polish.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 445,
+              "content": "CN 上级节点（1 项 · 待修复 2026-10-21）",
+              "done": false,
+              "level": "secondary"
+            }
           }
         ],
         "todo": {
           "id": 1,
-          "content": "Debug（0 项 · 已全部勾账 2026-10-17）",
+          "content": "Debug（1 项 · CN 上级节点待修复 2026-10-21）",
           "done": false,
           "level": "danger"
         }
@@ -283,9 +305,11 @@
                 "todo": {
                   "id": 158,
                   "content": "FEA-M_patchB-29…30 L4 站点数据落地 + 自助闭环：内置站点选择器逐站实测回填（verified:true + 附录 E 两列）+ --run-selftest --web --provider <id> + 面板「测试选择器」+ PB2-24 并入（新建条目 / 重新加载配置表 / 下拉即时刷新） ｜ §3 PB2-29/PB2-30 · 验收 AB2-21/AB2-22 · 清单见附录 E ｜ 进度：v15 已完成 **12/12 逐站直连实测**（登录窗口都打开各自站点；3 条域名修正为最终域：kimi→www.kimi.com、tongyi→www.qianwen.com、ernie→wenxin.baidu.com）+ **4 条输入框选择器实测回填**（kimi/qwen/yuanbao/ernie，已进 assets/providers.json；--provider-dump 确认只剩 answer_selector）+ --run-selftest --web --provider <id> ✅ + 新工具 --web-dom-dump（只读枚举候选+建议）；剩余：11 条 answer_selector 需人工登录并手动发一条消息后取回（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环 ｜ 进度（2026-09-28 复核）：维持原文结论 —— 12/12 逐站直连 + 4 条输入框选择器已实测回填；剩余 = 11 条 answer_selector（唯一人工关卡）+ 面板「测试选择器」+ PB2-24 自助闭环 ｜ 进度（2026-10-10）：**PB2-24 自助闭环 ✅ 已落地**（设置面板「新建网页版站点…」写 `~/.brain-ai/providers.d/<id>.json` + 「重新加载配置表」+ 下拉/运行前校验即时刷新 + 配置表错误/警告界面可见；离线断言 `api_probe --site-assert` = 纯函数 47/0 + 端到端全绿 · 已进 `check_all.ps1`（本项落地时 13/13 · 现行全量 14/14）；**界面点选回路待真人点一次**）⇒ 剩余 = 11 条 answer_selector（唯一人工关卡，现行清单 10 条）+ 面板「测试选择器」 ｜ 进度（2026-10-17 复核）：**PB2-30② 面板「测试选择器」✅ 已落地（2026-10-11 批 2 · ui/connection_test.{h,cpp} `request_selector_check` + 参数面板「测试选择器（只读诊断）」按钮，命中数 / 登录判据 / 建议进面板结果区 + Console；码语义 0/1/2/3 与 CLI 一致）** ⇒ 剩余唯一人工关卡 = 11 条 answer_selector 逐站实测回填（需人工登录 + 发一条消息后 `--web-dom-dump` 取回，走 loop_dev §3 S5/S6）+ 界面点选回路真人点一次",
-                  "done": false,
+                  "done": true,
                   "level": "default",
-                  "fileLink": "docs/actionPlan/M_patchAB_rest.md"
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+                  "focus": false,
+                  "end": 1792587999192
                 }
               }
             ],
@@ -301,16 +325,38 @@
             "children": [],
             "todo": {
               "id": 347,
-              "content": "CN-01… 上级节点（Composite Node）实施 —— 组合层 L4 重启（CN-D20）· 设计依据 docs/Archive/actionPlan/Composition_node.md（🆕 2026-10-16 批 CN-0 登记 · 设计定稿 · **实施完成**（代码 2026-10-16：模型 / 注册表 / 独立文件存储 / 展开执行 / 编辑器（打包·新建·独立标签页·撤销重做）/ 节点库「上级节点」分类 / 紫条视觉 / 新建草稿保存修正 / `composite_selftest` **51 断言** · exec **681/0** · graph **151/0** · 构建 0/0）· ✅ **2026-10-18 归档**（指令式 · Archive/README §三 5 · 实施完成、仅剩人工验收）· ⏳ **人工验收 + 待拍板项已迁 docs/actionPlan/ToVerify.todo**）",
+              "content": "CN-01… 上级节点（Composite Node）实施 —— 组合层 L4 重启（CN-D20）· 设计依据 docs/Archive/actionPlan/Composition_node.md（🆕 2026-10-16 批 CN-0 登记 · 设计定稿 · **实施完成**（代码 2026-10-16：模型 / 注册表 / 独立文件存储 / 展开执行 / 编辑器（打包·新建·独立标签页·撤销重做）/ 节点库「上级节点」分类 / 紫条视觉 / 新建草稿保存修正 / `composite_selftest` **51 断言** · exec **681/0** · graph **151/0** · 构建 0/0）· ✅ **2026-10-18 归档**（指令式 · Archive/README §三 5 · 实施完成、仅剩人工验收）· ⏳ **人工验收 + 待拍板项已迁 docs/audit/ToVerify.todo（2026-10-19 迁 audit · 2026-10-21 并入本看板 Test 〇/一组）**）",
               "done": true,
               "level": "default",
               "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+            }
+          },
+          {
+            "key": 443,
+            "children": [
+              {
+                "key": 444,
+                "children": [],
+                "todo": {
+                  "id": 444,
+                  "content": "FEA-CAI-01 自定义 AI 收口（冻结前最后一个功能）：设置面板「新建 API 提供商…」模态 → 写 ~/.brain-ai/providers.d/<id>.json（带 schema_version 信封）→ 热重载即时生效（无需重启）；支持 openai / anthropic / gemini 协议 + API Key 直接入 DPAPI 凭据库（不落明文）；纯函数 ai::official_template（生成/校验/落盘）+ api_probe --official-assert 闭环断言（40/0 + 端到端 20→21→20 自清理）｜ 网页版自建不再投入（用户拍板：自定义路径只保留 API 接口）｜ 2026-10-21 已落地勾账 done",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/CHANGELOG.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 443,
+              "content": "自定义 AI 收口（1 项 · 已落地 2026-10-21）",
+              "done": false,
+              "level": "secondary"
             }
           }
         ],
         "todo": {
           "id": 17,
-          "content": "Feature（3 项）",
+          "content": "Feature（4 项）",
           "done": false,
           "level": "default"
         }
@@ -570,11 +616,1526 @@
               "done": false,
               "level": "default"
             }
+          },
+          {
+            "key": 447,
+            "children": [
+              {
+                "key": 448,
+                "children": [
+                  {
+                    "key": 449,
+                    "children": [],
+                    "todo": {
+                      "id": 449,
+                      "content": "① 节点库「上级节点」分类可见（含「新建上级节点」入口）\n怎么点：① 启动 build\\bin\\aiwrite.exe → ② 左侧节点库面板 → ③ 分类滚动到「上级节点」→ 确认「新建上级节点」入口可见\n留什么物证：截图（节点库「上级节点」分类 + 新建入口）；Console stdout 无 error",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792388312002
+                    }
+                  },
+                  {
+                    "key": 450,
+                    "children": [],
+                    "todo": {
+                      "id": 450,
+                      "content": "② 「新建上级节点」→ 独立编辑标签页打开（§10 · CN-D11）\n怎么点：① 点「新建上级节点」→ ② 确认独立编辑标签页打开（空白画布 + 顶部命名框）\n留什么物证：截图（新标签页标题栏 + 空白画布 + 顶部命名框）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792388326055
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 448,
+                  "content": "新建：节点库「上级节点」分类 → 「新建上级节点」→ 独立编辑标签页打开（§10 · CN-D11）\n怎么点：① 启动 build\\bin\\aiwrite.exe → ② 左侧节点库面板 → ③ 分类滚动到「上级节点」→ ④ 点「新建上级节点」→ ⑤ 确认独立编辑标签页打开（空白画布 + 顶部命名框）\n留什么物证：截图（新标签页标题栏 + 画布）；Console stdout 无 error",
+                  "done": true,
+                  "level": "secondary",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                  "focus": false,
+                  "end": 1792561350290
+                }
+              },
+              {
+                "key": 451,
+                "children": [
+                  {
+                    "key": 452,
+                    "children": [],
+                    "todo": {
+                      "id": 452,
+                      "content": "① 编辑器内拖入基础节点\n怎么点：① 在上级节点画布拖入「文本输入」/「模板」等基础节点 → ② 确认节点出现在画布\n留什么物证：截图（画布上的基础节点）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792561358986
+                    }
+                  },
+                  {
+                    "key": 453,
+                    "children": [],
+                    "todo": {
+                      "id": 453,
+                      "content": "② 端口连线\n怎么点：① 在基础节点间拖端口连线 → ② 确认连线建立（类型匹配）\n留什么物证：截图（连线）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792561361537
+                    }
+                  },
+                  {
+                    "key": 454,
+                    "children": [],
+                    "todo": {
+                      "id": 454,
+                      "content": "③ 端口操作「设为输入 / 设为输出」→ 占位节点出现（CN-D6/D7）\n怎么点：① 端口操作「设为输入 / 设为输出」→ ② 占位节点出现\n留什么物证：截图（端口标记 + 占位节点）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792561363155
+                    }
+                  },
+                  {
+                    "key": 455,
+                    "children": [],
+                    "todo": {
+                      "id": 455,
+                      "content": "④ 顶部命名框改名\n怎么点：① 顶部命名框输入新名称 → ② 确认生效（标题栏 / 画布同步）\n留什么物证：截图（新名称）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792561388122
+                    }
+                  },
+                  {
+                    "key": 456,
+                    "children": [
+                      {
+                        "key": 457,
+                        "children": [],
+                        "todo": {
+                          "content": "FAIL：ctrl+S并没有保存成功，按键保存可以成功✅ 修复落地（2026-10-21 · DEBT-B1）：Ctrl+S 已实现（ce_handle_save_key）· 待真人复核（走四组 #4011）",
+                          "id": 457,
+                          "level": "default",
+                          "done": false,
+                          "start": 1792561459558
+                        }
+                      }
+                    ],
+                    "todo": {
+                      "id": 456,
+                      "content": "⑤ 保存（Ctrl+S / 保存按钮）\n怎么点：① Ctrl+S 或点保存按钮 → ② 确认保存成功\n留什么物证：截图；保存后 ~/.brain-ai/composites/<id>.json 已生成",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 451,
+                  "content": "编辑：编辑器内添加基础节点 + 连线 + 标记输入/输出端口（占位节点 · CN-D6/D7）→ 命名 → 保存\n怎么点：① 在上级节点画布拖入「文本输入」/「模板」等基础节点 → ② 端口连线 → ③ 端口操作「设为输入 / 设为输出」（占位节点出现）→ ④ 顶部命名框改名 → ⑤ 保存（Ctrl+S / 保存按钮）\n留什么物证：截图（端口标记 + 命名）；保存后 ~/.brain-ai/composites/<id>.json 已生成",
+                  "done": false,
+                  "level": "secondary",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                }
+              },
+              {
+                "key": 458,
+                "children": [
+                  {
+                    "key": 459,
+                    "children": [],
+                    "todo": {
+                      "id": 459,
+                      "content": "① 主画布 ≥2 个相连节点可框选 / 多选\n怎么点：① 主画布放 ≥2 个相连节点 → ② 框选 / 多选 → ③ 全部选中\n留什么物证：截图（多选状态）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792390238985
+                    }
+                  },
+                  {
+                    "key": 460,
+                    "children": [],
+                    "todo": {
+                      "id": 460,
+                      "content": "② 右键菜单「打包为上级节点」→ 打包对话框出现（§8 · CN-D10）\n怎么点：① 选中后右键菜单 → ② 点「打包为上级节点」→ ③ 打包对话框出现\n留什么物证：截图（右键菜单 + 打包对话框）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792392310935
+                    }
+                  },
+                  {
+                    "key": 461,
+                    "children": [],
+                    "todo": {
+                      "id": 461,
+                      "content": "③ 对话框勾选要暴露的参数\n怎么点：① 对话框勾选要暴露的参数 → ② 确认勾选项被记住\n留什么物证：截图（勾选项）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792574384393
+                    }
+                  },
+                  {
+                    "key": 462,
+                    "children": [],
+                    "todo": {
+                      "id": 462,
+                      "content": "④ 命名保存 → 节点库「上级节点」分类刷新出现该节点\n怎么点：① 命名 → 保存 → ② 节点库「上级节点」分类刷新出现该节点\n留什么物证：截图（节点库刷新）；打包后 ~/.brain-ai/composites/ 新增 <id>.json",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792393355188
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 458,
+                  "content": "打包：画布选中多节点 → 右键「打包为上级节点」→ 暴露参数勾选 → 保存（§8 · CN-D10 双创建方式）\n怎么点：① 主画布放 ≥2 个相连节点 → ② 框选/多选 → ③ 右键菜单「打包为上级节点」→ ④ 对话框勾选要暴露的参数 → ⑤ 命名 → 保存 → ⑥ 节点库「上级节点」分类刷新出现该节点\n留什么物证：截图（打包对话框 + 勾选项）；打包后 ~/.brain-ai/composites/ 新增 <id>.json",
+                  "done": false,
+                  "level": "secondary",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                }
+              },
+              {
+                "key": 463,
+                "children": [
+                  {
+                    "key": 464,
+                    "children": [
+                      {
+                        "key": 465,
+                        "children": [],
+                        "todo": {
+                          "content": "FAIL: 上级节点无法拖入父画布",
+                          "id": 465,
+                          "level": "default",
+                          "done": false,
+                          "start": 1792574361643
+                        }
+                      }
+                    ],
+                    "todo": {
+                      "id": 464,
+                      "content": "① 上级节点拖入父画布 + 输入口连线\n怎么点：① 从节点库拖刚打包的上级节点到主画布 → ② 输入节点（如「文本输入」）连其输入口\n留什么物证：截图（画布 + 连线）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                    }
+                  },
+                  {
+                    "key": 466,
+                    "children": [],
+                    "todo": {
+                      "id": 466,
+                      "content": "② 输出口连「文本输出」\n怎么点：① 上级节点输出口连「文本输出」节点 → ② 确认连线建立\n留什么物证：截图（完整工作流）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792574406559
+                    }
+                  },
+                  {
+                    "key": 467,
+                    "children": [],
+                    "todo": {
+                      "id": 467,
+                      "content": "③ 运行 → 输出面板结果正确（展开执行 · §7.1 · CN-D9）\n怎么点：① 顶部「运行」→ ② 观察输出面板 / 「文本输出」结果\n留什么物证：输出面板结果截图",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792574408985
+                    }
+                  },
+                  {
+                    "key": 468,
+                    "children": [],
+                    "todo": {
+                      "id": 468,
+                      "content": "④ Console 无「内部 id 冲突」报错\n怎么点：① 运行后检查 Console → ② 无「内部 id 冲突」错误\n留什么物证：Console 截图（无该类报错）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792574412269
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 463,
+                  "content": "父画布运行：把上级节点拖入父画布 → 连外部节点 → 运行 → 展开执行结果正确（§7.1 · CN-D9 · 内部 id 无冲突）\n怎么点：① 从节点库拖刚打包的上级节点到主画布 → ② 输入节点（如「文本输入」）连其输入口 → ③ 其输出口连「文本输出」→ ④ 顶部「运行」→ ⑤ 观察结果\n留什么物证：运行后输出面板结果正确；Console 无「内部 id 冲突」报错；截图（画布 + 输出面板）",
+                  "done": false,
+                  "level": "secondary",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                }
+              },
+              {
+                "key": 469,
+                "children": [
+                  {
+                    "key": 470,
+                    "children": [],
+                    "todo": {
+                      "id": 470,
+                      "content": "① ~/.brain-ai/composites/<id>.json 独立文件生成（§3.3 · CN-D12）\n怎么点：① 资源管理器打开 %USERPROFILE%\\.brain-ai\\composites\\ → ② 确认 <id>.json 存在\n留什么物证：资源管理器截图（文件列表 + 大小）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792574419001
+                    }
+                  },
+                  {
+                    "key": 471,
+                    "children": [],
+                    "todo": {
+                      "id": 471,
+                      "content": "② 重启应用后节点库「上级节点」分类仍可见（惰性扫描）\n怎么点：① 完全退出 aiiwrite → ② 重启 → ③ 节点库「上级节点」分类仍可见该节点\n留什么物证：重启后节点库截图",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792574424103
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 469,
+                  "content": "存储验证：~/.brain-ai/composites/<id>.json 独立文件生成（§3.3 · CN-D12）· 重启应用后节点库「上级节点」分类仍可见（惰性扫描）\n怎么点：① 资源管理器打开 %USERPROFILE%\\.brain-ai\\composites\\ → ② 确认 <id>.json 存在 → ③ 完全退出 aiiwrite → ④ 重启 → ⑤ 节点库「上级节点」分类仍可见该节点\n留什么物证：资源管理器截图（文件列表 + 大小）；重启后节点库截图",
+                  "done": false,
+                  "level": "secondary",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                }
+              },
+              {
+                "key": 472,
+                "children": [
+                  {
+                    "key": 473,
+                    "children": [],
+                    "todo": {
+                      "id": 473,
+                      "content": "① 编辑时禁止：上级节点编辑器内拖入上级节点被拒绝（CN-D5/D16）\n怎么点：① 打开某上级节点编辑器 → ② 从节点库拖「上级节点」分类的节点到编辑器画布 → ③ 被拒绝（光标禁止 / 提示）\n留什么物证：截图（拒绝反馈）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                    }
+                  },
+                  {
+                    "key": 474,
+                    "children": [],
+                    "todo": {
+                      "id": 474,
+                      "content": "② 校验拒绝：放入后校验报错\n怎么点：① 尝试放入上级节点 → ② 校验拒绝并报错（Console 校验错误日志）\n留什么物证：Console 校验错误日志截图",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 472,
+                  "content": "禁止嵌套：上级节点编辑器中不能再拖入上级节点（编辑时禁止 + 校验拒绝 · CN-D5/D16）\n怎么点：① 打开某上级节点编辑器 → ② 从节点库拖「上级节点」分类的节点到编辑器画布 → ③ 应被拒绝（光标禁止 / 提示 / 校验报错）\n留什么物证：截图（拒绝反馈）；Console 校验错误日志",
+                  "done": false,
+                  "level": "secondary",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                }
+              },
+              {
+                "key": 475,
+                "children": [
+                  {
+                    "key": 476,
+                    "children": [],
+                    "todo": {
+                      "id": 476,
+                      "content": "① 画布紫条视觉区分（§10 · CN-D13）\n怎么点：① 主画布放置一个上级节点实例 → ② 肉眼确认节点紫条（顶栏 / 边框）\n留什么物证：截图（紫条节点）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792574435953
+                    }
+                  },
+                  {
+                    "key": 477,
+                    "children": [],
+                    "todo": {
+                      "id": 477,
+                      "content": "② 节点库独立分类「上级节点」\n怎么点：① 节点库确认「上级节点」独立分类存在\n留什么物证：截图（节点库分类）",
+                      "done": true,
+                      "level": "default",
+                      "fileLink": "docs/Archive/actionPlan/Composition_node.md",
+                      "focus": false,
+                      "end": 1792574440995
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 475,
+                  "content": "视觉区分：画布紫条 + 节点库独立分类「上级节点」肉眼确认（§10 · CN-D13）\n怎么点：① 主画布放置一个上级节点实例 → ② 肉眼确认节点紫条（顶栏/边框）→ ③ 节点库确认「上级节点」独立分类存在\n留什么物证：截图（紫条节点 + 节点库分类）",
+                  "done": false,
+                  "level": "secondary",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 447,
+              "content": "〇、CN-01 上级节点（Composite Node）人工验收（§14 十项清单 · 原 DevPlan id=434）—— 新建 → 编辑 → 打包 → 父画布运行 → 展开执行结果正确",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 478,
+            "children": [
+              {
+                "key": 479,
+                "children": [],
+                "todo": {
+                  "id": 479,
+                  "content": "是否补正式验收框架 `VCN-*` / `ACN-*`（§14-8 · 现以 `composite_selftest` 51 断言替代）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                }
+              },
+              {
+                "key": 480,
+                "children": [],
+                "todo": {
+                  "id": 480,
+                  "content": "程序化生成上级节点规则（§14-10 · 现仅 UI 打包路径）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                }
+              },
+              {
+                "key": 481,
+                "children": [],
+                "todo": {
+                  "id": 481,
+                  "content": "预览增强：悬停 / 弹窗放大预览形态（§14-3 未拍板部分）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                }
+              },
+              {
+                "key": 482,
+                "children": [],
+                "todo": {
+                  "id": 482,
+                  "content": "调试设施去留：`--auto-open-composite` / 窗口栈 watchdog / `ce_repro` / `composite_editor_test_drive_new_dialog` 保留 or 摘除",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/Archive/actionPlan/Composition_node.md"
+                }
+              }
+            ],
+            "todo": {
+              "id": 478,
+              "content": "一、CN-01 待拍板项（人工决策 · 验收通过后一并回填）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 483,
+            "children": [
+              {
+                "key": 484,
+                "children": [
+                  {
+                    "key": 485,
+                    "children": [],
+                    "todo": {
+                      "id": 485,
+                      "content": "A-03 画布交互基础可用（M1 · 原 DevPlan id=427）\n怎么点：① 主画布节点拖拽 / 连线 / 运行基础可用\n留什么物证：截图（画布交互状态）；Console 无 error",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574509233
+                    }
+                  },
+                  {
+                    "key": 486,
+                    "children": [],
+                    "todo": {
+                      "id": 486,
+                      "content": "A-04 WebView2 登录窗口（需真机站点）\n怎么点：① 节点「Web 生成」→ ② 站点选择 → ③ 「打开登录窗口」→ ④ WebView2 窗口出现并完成登录\n留什么物证：登录窗口截图 + 登录后状态截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574515353
+                    }
+                  },
+                  {
+                    "key": 487,
+                    "children": [],
+                    "todo": {
+                      "id": 487,
+                      "content": "A-05 Cookie 提取（登录态生效）\n怎么点：① 登录后直接发起一次生成 → ② 确认会话生效（无需重复登录）\n留什么物证：生成结果截图；Console 会话日志",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574516753
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 484,
+                  "content": "TST-M1-02：画布交互 / WebView2 登录 / Cookie 提取（M1 · A-03/A-04/A-05）｜原 DevPlan id=427\n怎么点：① A-03 画布交互：主画布节点拖拽 / 连线 / 运行基础可用 → ② A-04 WebView2 登录（需真机站点）：节点「Web 生成」→ 站点选择 → 「打开登录窗口」→ WebView2 窗口出现并完成登录 → ③ A-05 Cookie 提取：登录后直接发起一次生成，确认会话生效\n留什么物证：登录窗口截图 + 登录后生成结果截图；Console 会话日志",
+                  "done": false,
+                  "level": "secondary"
+                }
+              },
+              {
+                "key": 488,
+                "children": [
+                  {
+                    "key": 489,
+                    "children": [],
+                    "todo": {
+                      "id": 489,
+                      "content": "§8#1 启动应用 → 默认工作流 5 节点 4 连线（含「提供商配置 → 文本生成.provider」）\n怎么点：① 启动应用 → ② 自动出现默认工作流，Console 显示「创建节点 n1…n5」+「[默认工作流] 已保存到 …workflows\\default.json」\n留什么物证：启动后画布截图 + Console 截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574556205
+                    }
+                  },
+                  {
+                    "key": 490,
+                    "children": [],
+                    "todo": {
+                      "id": 490,
+                      "content": "§8#1b 检查 %USERPROFILE%\\.brain-ai\\workflows\\default.json\n怎么点：① 打开该文件 → ② 确认为 5 节点 4 连线 → ③ 不含 api_key 字段\n留什么物证：文件内容截图 / 资源管理器截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574559919
+                    }
+                  },
+                  {
+                    "key": 491,
+                    "children": [],
+                    "todo": {
+                      "id": 491,
+                      "content": "§8#2 左键单击节点 → 选中边框 + 参数面板显示该节点参数\n怎么点：① 左键单击节点 → ② 节点出现选中边框 → ③ 右侧参数面板显示该节点参数\n留什么物证：截图（选中状态 + 参数面板）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574613497
+                    }
+                  },
+                  {
+                    "key": 492,
+                    "children": [],
+                    "todo": {
+                      "id": 492,
+                      "content": "§8#2b 节点外观：输入端口圆点在左 / 输出圆点在右 / 连线左右分明 / 节点等宽 / 超长省略\n怎么点：① 观察节点 → ② 输入端口圆点在节点左侧、输出在右侧 → ③ 节点宽度 = 按标签实测最宽的同一值（不随标题 / 参数 / 结果长度变化；单行省略为 …，多行最多 6 行）\n留什么物证：截图（外观细节）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574616333
+                    }
+                  },
+                  {
+                    "key": 493,
+                    "children": [],
+                    "todo": {
+                      "id": 493,
+                      "content": "§8#3 右键画布 → 输入 → 文本输入（在鼠标位置新建）\n怎么点：① 右键画布 → 输入 → 文本输入 → ② 在鼠标位置新建节点，Console 记录「创建节点 n5（文本输入）」\n留什么物证：截图（新建位置）+ Console 截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574618947
+                    }
+                  },
+                  {
+                    "key": 494,
+                    "children": [],
+                    "todo": {
+                      "id": 494,
+                      "content": "§8#4 节点库点击「文本生成」→ 画布中心新建并自动选中\n怎么点：① 节点库点击「文本生成」→ ② 画布中心新建节点并自动选中\n留什么物证：截图（选中状态）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574621213
+                    }
+                  },
+                  {
+                    "key": 495,
+                    "children": [],
+                    "todo": {
+                      "id": 495,
+                      "content": "§8#5 修改参数（文本内容 → 输入文字 → 回车）\n怎么点：① 参数面板文本内容输入文字 → 回车 → ② 节点卡片参数预览同步更新 → ③ 状态栏提示「参数已修改」\n留什么物证：截图（预览同步 + 状态栏）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574623617
+                    }
+                  },
+                  {
+                    "key": 496,
+                    "children": [],
+                    "todo": {
+                      "id": 496,
+                      "content": "§8#6 拖拽节点\n怎么点：① 拖拽节点 → ② 节点跟随移动 → ③ 拖动结束后「撤销」可回到移动前位置\n留什么物证：截图（移动前后）；撤销后位置",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574624981
+                    }
+                  },
+                  {
+                    "key": 497,
+                    "children": [],
+                    "todo": {
+                      "id": 497,
+                      "content": "§8#7 拖端口连线（text 输出 → 空着的 text 输入）\n怎么点：① 拖端口连线 → ② 连线建立，状态栏「已连线 nX → nY」\n留什么物证：截图（连线 + 状态栏）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574626151
+                    }
+                  },
+                  {
+                    "key": 498,
+                    "children": [],
+                    "todo": {
+                      "id": 498,
+                      "content": "§8#8 拖端口连线（text 输出 → image 输入）→ 类型不兼容拒绝\n怎么点：① 拖端口连线 → ② 连线变红并拒绝，状态栏 / Console 提示「类型不兼容: text → image」\n留什么物证：截图（红线拒绝 + 提示）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574627647
+                    }
+                  },
+                  {
+                    "key": 499,
+                    "children": [],
+                    "todo": {
+                      "id": 499,
+                      "content": "§8#9 拖到已有连线的输入端口 → 旧连线替换\n怎么点：① 拖到已有连线的输入端口 → ② 旧连线被替换，边数不变，提示「（替换了原连线）」\n留什么物证：截图 + Console 提示",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574628839
+                    }
+                  },
+                  {
+                    "key": 500,
+                    "children": [],
+                    "todo": {
+                      "id": 500,
+                      "content": "§8#10 右键节点 → 删除该节点\n怎么点：① 右键节点 → 删除该节点 → ② 节点与其连线一起消失\n留什么物证：截图（删除后画布）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574790537
+                    }
+                  },
+                  {
+                    "key": 501,
+                    "children": [],
+                    "todo": {
+                      "id": 501,
+                      "content": "§8#11 左键单击连线（变选中）→ 工具栏「删除选中」\n怎么点：① 左键单击连线选中 → ② 工具栏「删除选中」→ ③ 连线消失节点保留，Console 记录「删除连线 eN」，撤销可恢复\n留什么物证：截图 + Console 截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574793217
+                    }
+                  },
+                  {
+                    "key": 502,
+                    "children": [],
+                    "todo": {
+                      "id": 502,
+                      "content": "§8#12 复制 / 粘贴（⏸ 已暂停）\n怎么点：① 确认菜单 / 工具栏显示灰色「复制/粘贴（暂停，M2/M3 重做）」→ ② 点击无效 → ③ 不再出现卡死\n留什么物证：截图（灰色菜单）+ 无卡死",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574827517
+                    }
+                  },
+                  {
+                    "key": 503,
+                    "children": [],
+                    "todo": {
+                      "id": 503,
+                      "content": "§8#13 双击节点 → 参数面板改标题\n怎么点：① 双击节点 → 参数面板改标题 → ② 画布节点标题即时更新 → ③「撤销」可回退标题\n留什么物证：截图（标题更新 + 撤销回退）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574833009
+                    }
+                  },
+                  {
+                    "key": 504,
+                    "children": [],
+                    "todo": {
+                      "id": 504,
+                      "content": "§8#14 参数面板改温度（滑块）→ 撤销 → 重做\n怎么点：① 改温度滑块 → ② 撤销回到旧值 → ③ 重做回到新值\n留什么物证：截图（三次状态）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574835889
+                    }
+                  },
+                  {
+                    "key": 505,
+                    "children": [
+                      {
+                        "key": 506,
+                        "children": [],
+                        "todo": {
+                          "content": "FAIL: 撤销失败，应该是快照存储的没有更新，只有在console里面有变化并且只能改变节点位置，或者删除了节点。创建了的新节点不能撤回",
+                          "id": 506,
+                          "level": "default",
+                          "done": false,
+                          "start": 1792574858787
+                        }
+                      }
+                    ],
+                    "todo": {
+                      "id": 505,
+                      "content": "§8#15 连续操作 5 次后连点「撤销」\n怎么点：① 连续操作 5 次 → ② 连点「撤销」逐步回退到初始（工具栏悬停可见操作名）→ ③ 再点「重做」逐步前进\n留什么物证：截图（回退到初始 + 重做前进）",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 507,
+                    "children": [],
+                    "todo": {
+                      "id": 507,
+                      "content": "§8#16 工具栏「新建（清空）」\n怎么点：① 工具栏「新建（清空）」→ ② 画布清空 → ③「撤销」变灰（栈已清空）\n留什么物证：截图（空画布 + 撤销灰）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574961181
+                    }
+                  },
+                  {
+                    "key": 508,
+                    "children": [],
+                    "todo": {
+                      "id": 508,
+                      "content": "§8#17 参数面板 File 参数点「浏览…」\n怎么点：① 点「浏览…」→ ② 弹出原生文件对话框 → ③ 取消不改变值，选择后写入路径\n留什么物证：截图（对话框 + 写入路径）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792574963205
+                    }
+                  },
+                  {
+                    "key": 509,
+                    "children": [],
+                    "todo": {
+                      "id": 509,
+                      "content": "§8#18 图片输入节点不设路径 →「参数校验 1 项错误」\n怎么点：① 图片输入节点不设路径 → ② 参数面板与节点卡片显示「参数校验 1 项错误」\n留什么物证：截图（错误标记）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575045993
+                    }
+                  },
+                  {
+                    "key": 510,
+                    "children": [
+                      {
+                        "key": 511,
+                        "children": [],
+                        "todo": {
+                          "content": "FAIL：重置布局没有效果？不能恢复。改为恢复为小地图储存的同款",
+                          "id": 511,
+                          "level": "default",
+                          "done": false,
+                          "start": 1792575083335
+                        }
+                      }
+                    ],
+                    "todo": {
+                      "id": 510,
+                      "content": "§8#19 滚轮缩放 / 中键平移 / 视图 → 重置布局\n怎么点：① 滚轮缩放（0.1x~4.0x）→ ② 中键平移 → ③ 视图 → 重置布局恢复\n留什么物证：截图（缩放 / 平移后 + 重置恢复）",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 512,
+                    "children": [],
+                    "todo": {
+                      "id": 512,
+                      "content": "§8#20 关闭窗口\n怎么点：① 关闭窗口 → ② Console 出现「主窗口关闭，开始清理」→ ③ app.log 无 ERROR\n留什么物证：Console 截图 + app.log 片段",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575160391
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 488,
+                  "content": "TST-M2-01：画布交互 22 项逐项确认（M2 · 使用说明 §8）｜原 DevPlan id=428\n怎么点：按使用说明 §8 的 22 项画布交互逐项操作 —— 可选 / 多选 / 框选 / 连线 / 右键菜单 / 删除 / 复制 / 撤销重做 / 节点搜索 / 小地图 / 吸附对齐 / 对齐辅助线等（逐项打勾）\n留什么物证：22 项勾选清单（建议导出勾选表）；代表性截图 2~3 张（如框选 + 右键菜单）",
+                  "done": false,
+                  "level": "secondary"
+                }
+              },
+              {
+                "key": 513,
+                "children": [
+                  {
+                    "key": 514,
+                    "children": [],
+                    "todo": {
+                      "id": 514,
+                      "content": "① 三处结果一致（节点内摘要 / 参数面板「运行结果」/ 输出面板）\n怎么点：① 跑一个含「文本输出」的工作流 → ② 对照三处结果一致\n留什么物证：三处对照截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575175544
+                    }
+                  },
+                  {
+                    "key": 515,
+                    "children": [],
+                    "todo": {
+                      "id": 515,
+                      "content": "② 输出面板「复制全文」→ 粘贴核对\n怎么点：① 输出面板点「复制全文」→ ② 粘贴到记事本 → ③ 内容核对一致\n留什么物证：粘贴后记事本截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575171725
+                    }
+                  },
+                  {
+                    "key": 516,
+                    "children": [],
+                    "todo": {
+                      "id": 516,
+                      "content": "③ 输出面板「该节点」复制\n怎么点：① 点「该节点」复制 → ② 粘贴核对为该节点内容\n留什么物证：粘贴结果截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575173308
+                    }
+                  },
+                  {
+                    "key": 517,
+                    "children": [],
+                    "todo": {
+                      "id": 517,
+                      "content": "④ 输出面板「导出到文件」\n怎么点：① 点「导出到文件」→ ② 记导出路径\n留什么物证：导出文件绝对路径 + 内容截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575174679
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 513,
+                  "content": "TST-M3-02：结果呈现三处一致 + 输出面板复制/导出（M3）｜原 DevPlan id=429\n怎么点：① 跑一个含「文本输出」的工作流 → ② 对照三处结果一致：节点内摘要 / 参数面板「运行结果」/ 输出面板 → ③ 输出面板试「复制全文」→ 粘贴到记事本核对 → ④ 试「该节点」复制 → ⑤ 试「导出到文件」→ 记导出路径\n留什么物证：三处对照截图；导出文件绝对路径 + 内容截图",
+                  "done": false,
+                  "level": "secondary"
+                }
+              },
+              {
+                "key": 518,
+                "children": [
+                  {
+                    "key": 519,
+                    "children": [],
+                    "todo": {
+                      "id": 519,
+                      "content": "VB-01 UI 不卡（M_patchA §4.2 · 原 DevPlan id=430）\n怎么点：① 配好提供商 Key → ② 运行 LLM 生成节点 → ③ 生成期间窗口可拖动 / 可交互 → ④ 诊断日志无长帧\n留什么物证：可交互截图；~/.brain-ai/logs/app.log 无长帧记录",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575291056
+                    }
+                  },
+                  {
+                    "key": 520,
+                    "children": [
+                      {
+                        "key": 521,
+                        "children": [],
+                        "todo": {
+                          "content": "FAIL: 取消没有生效，程序还是一直在运行并且直到结束。",
+                          "id": 521,
+                          "level": "default",
+                          "done": false,
+                          "start": 1792575301425
+                        }
+                      }
+                    ],
+                    "todo": {
+                      "id": 520,
+                      "content": "VB-02 取消生效（★重点）—— 运行中点「■ 停止」1 秒内生效\n怎么点：① 运行 LLM 生成节点 → ② 运行中点「■ 停止」→ ③ 1 秒内进入取消状态（状态栏 / 日志出现取消记录；HTTP 请求被中断）\n留什么物证：停止前后状态栏 / 输出面板截图；Console / 日志取消记录",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 522,
+                    "children": [],
+                    "todo": {
+                      "id": 522,
+                      "content": "VB-03 流式拼接一致（增量拼接结果 == 非流式结果；注：流式数据源已拍板不做，验证非流式一致性）\n怎么点：① 同一提示词分别对比 → ② 拼接结果一致；delta_bytes 与正文长度一致\n留什么物证：对比截图",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 523,
+                    "children": [],
+                    "todo": {
+                      "id": 523,
+                      "content": "VB-04 参数透传（body 含 system/temperature/max_tokens/top_p 期望值）\n怎么点：① 跑自检断言 → ② 断言通过（离线）\n留什么物证：自检 PASS 行截图",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 524,
+                    "children": [],
+                    "todo": {
+                      "id": 524,
+                      "content": "VB-05 凭据三优先级（参数 > 环境变量 > 凭据管理器）+ 日志无明文\n怎么点：① 分别以参数 / 环境变量 / 凭据管理器提供 Key → ② 优先级正确 → ③ 写入 / 读取 / 删除均成功 → ④ 日志无明文\n留什么物证：设置截图 + 日志检查",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 525,
+                    "children": [],
+                    "todo": {
+                      "id": 525,
+                      "content": "VB-06 会话失效引导（40002 提示可一键重登）\n怎么点：① 伪造失效 Token 发起生成 → ② 出现「重新登录」入口（错误串反查 + 错误条按钮）→ ③ 按钮可打开登录窗口\n留什么物证：错误条 / 引导截图 + 登录窗口截图",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 526,
+                    "children": [],
+                    "todo": {
+                      "id": 526,
+                      "content": "VB-07 线程安全（运行中编辑图 / 切工作流）\n怎么点：① 运行中编辑图 / 切工作流 → ② 安全终止不崩溃 → ③ 无数据竞争告警\n留什么物证：操作截图；Console 无崩溃栈",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 527,
+                    "children": [],
+                    "todo": {
+                      "id": 527,
+                      "content": "VB-08 无回归（--run-selftest --web 基线全绿）\n怎么点：① 命令行跑 --run-selftest --web → ② §0.4 基线全绿\n留什么物证：末行全绿输出",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 528,
+                    "children": [],
+                    "todo": {
+                      "id": 528,
+                      "content": "VB-09 异常不崩（断网 / 超时 / 坏 JSON）\n怎么点：① 断网 / 超时 / 坏 JSON 各触发一次 → ② 均转为节点 error + 可读提示，不崩溃\n留什么物证：错误提示截图；Console 无崩溃",
+                      "done": false,
+                      "level": "default"
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 518,
+                  "content": "TST-M4-01：VB-01…VB-09 运行/停止/会话（M4 · 重点 VB-02）｜原 DevPlan id=430\n怎么点：① 配好提供商 Key → ② 运行 LLM 生成节点 → ③ 运行中点「■ 停止」→ 确认 1 秒内生效 → ④ 顺带确认：流式拼接一致 / 凭据三优先级 / 会话失效引导（40002 提示可一键重登）/ 线程安全（无卡死无崩溃）\n留什么物证：停止前后状态栏/输出面板截图；Console 无崩溃栈",
+                  "done": false,
+                  "level": "secondary"
+                }
+              },
+              {
+                "key": 529,
+                "children": [
+                  {
+                    "key": 530,
+                    "children": [],
+                    "todo": {
+                      "id": 530,
+                      "content": "① VLM 提供商配置 + 节点接线\n怎么点：① 配 VLM 提供商 → ② 画布放「图片输入」节点 + VLM 节点并连线\n留什么物证：截图（画布节点 + 接线）",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575462251
+                    }
+                  },
+                  {
+                    "key": 531,
+                    "children": [],
+                    "todo": {
+                      "id": 531,
+                      "content": "② 图片卡片预览（缩略图 + 尺寸 + 格式）\n怎么点：① 图片输入节点选图 → ② 卡片显示缩略图 + 尺寸 + 格式\n留什么物证：图片预览截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575459944
+                    }
+                  },
+                  {
+                    "key": 532,
+                    "children": [],
+                    "todo": {
+                      "id": 532,
+                      "content": "③ VLM 生成成功\n怎么点：① 运行 → ② 生成结果正确\n留什么物证：生成结果截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575464347
+                    }
+                  },
+                  {
+                    "key": 533,
+                    "children": [],
+                    "todo": {
+                      "id": 533,
+                      "content": "④ Output 窗口历史保留 + 自动打开\n怎么点：① 生成后 Output 窗口自动打开 → ② 历史记录保留\n留什么物证：Output 窗口截图",
+                      "done": true,
+                      "level": "default",
+                      "focus": false,
+                      "end": 1792575468135
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 529,
+                  "content": "TST-M5-01：VLM 生成 + 图片预览 + Output 窗口（M5 · 需真机 VLM Key）｜原 DevPlan id=431\n怎么点：① 配 VLM 提供商 → ② 「图片输入」节点 + VLM 节点 → ③ 图片卡片预览（缩略图 + 尺寸 + 格式）→ ④ 生成 → ⑤ Output 窗口历史保留 + 自动打开\n留什么物证：生成结果截图 + 图片预览截图 + Output 窗口截图",
+                  "done": false,
+                  "level": "secondary"
+                }
+              },
+              {
+                "key": 534,
+                "children": [
+                  {
+                    "key": 535,
+                    "children": [],
+                    "todo": {
+                      "id": 535,
+                      "content": "① 设置面板配置 keep_history / max_history / ttl_days\n怎么点：① 设置面板配置三参数 → ② 保存生效\n留什么物证：设置面板截图",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 536,
+                    "children": [],
+                    "todo": {
+                      "id": 536,
+                      "content": "② 连续运行若干次 → 归档目录数量符合策略\n怎么点：① 连续运行若干次 → ② 打开归档目录核对数量与清理行为符合策略\n留什么物证：归档目录截图（数量对照策略）",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 537,
+                    "children": [],
+                    "todo": {
+                      "id": 537,
+                      "content": "③ 改小 ttl_days 再跑 → 超期清理生效\n怎么点：① 改小 ttl_days → ② 再跑一次 → ③ 超期记录被清理\n留什么物证：运行前后目录列表",
+                      "done": false,
+                      "level": "default"
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 534,
+                  "content": "TST-M6-02：归档与保留策略人工确认（M6 · §10.6 keep_history/max_history/ttl_days）｜原 DevPlan id=432\n怎么点：① 设置面板配置 keep_history / max_history / ttl_days → ② 连续运行若干次 → ③ 打开归档目录核对数量与清理行为符合策略 → ④ 改小 ttl_days 再跑一次确认超期清理\n留什么物证：归档目录截图（数量对照策略）；运行前后目录列表",
+                  "done": false,
+                  "level": "secondary"
+                }
+              },
+              {
+                "key": 538,
+                "children": [
+                  {
+                    "key": 539,
+                    "children": [],
+                    "todo": {
+                      "id": 539,
+                      "content": "① GUI 端到端 E-02（智谱 glm-4v-flash）\n怎么点：① 配智谱 Key → ② 跑 E-02 端到端 → ③ 结果正确\n留什么物证：端到端结果截图",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 540,
+                    "children": [],
+                    "todo": {
+                      "id": 540,
+                      "content": "② 错误路径① 缺 Key\n怎么点：① 清空 Key → ② 运行 → ③ 明确报错引导，不崩溃\n留什么物证：错误提示截图",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 541,
+                    "children": [],
+                    "todo": {
+                      "id": 541,
+                      "content": "③ 错误路径② 网络错误\n怎么点：① 制造网络错误 → ② 运行 → ③ 明确报错，不崩溃\n留什么物证：错误提示截图",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 542,
+                    "children": [],
+                    "todo": {
+                      "id": 542,
+                      "content": "④ 错误路径③ 图片文件不存在\n怎么点：① 图片输入节点指向不存在的文件 → ② 运行 → ③ 明确报错\n留什么物证：错误提示截图",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 543,
+                    "children": [],
+                    "todo": {
+                      "id": 543,
+                      "content": "⑤ 错误路径④ 非法图片\n怎么点：① 图片输入节点指向非法图片 → ② 运行 → ③ 明确报错\n留什么物证：错误提示截图",
+                      "done": false,
+                      "level": "default"
+                    }
+                  },
+                  {
+                    "key": 544,
+                    "children": [],
+                    "todo": {
+                      "id": 544,
+                      "content": "⑥ VLM 自检 --vlm-selftest --image <WebP>\n怎么点：① 命令行跑 api_probe.exe --vlm-selftest --image <WebP> → ② 末行 PASS\n留什么物证：--vlm-selftest 末行 PASS 输出",
+                      "done": false,
+                      "level": "default"
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 538,
+                  "content": "TST-M7-02：GUI 端到端 E-02 + 4 类错误路径 + VLM 自检（M7 · 需智谱 glm-4v-flash Key）｜原 DevPlan id=433\n怎么点：① 配智谱 Key → ② 跑 E-02（智谱 glm-4v-flash）端到端 → ③ 4 类错误路径逐一触发：缺 Key / 网络错误 / 图片文件不存在 / 非法图片 → ④ 命令行跑 api_probe.exe --vlm-selftest --image <WebP>\n留什么物证：端到端结果截图；4 类错误路径各一张；--vlm-selftest 末行 PASS 输出",
+                  "done": false,
+                  "level": "secondary"
+                }
+              }
+            ],
+            "todo": {
+              "id": 483,
+              "content": "二、GUI 点选验收（M1~M7 · 原 DevPlan id=404 七项 · 2026-10-19 迁入）—— 逐项真机点选，留截图/日志/路径物证",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 545,
+            "children": [
+              {
+                "key": 546,
+                "children": [],
+                "todo": {
+                  "id": 546,
+                  "content": "新建 API 提供商模态人工验收（冻结前最后一个功能 · 已通过）\n怎么点：① 设置 → 提供商与站点表 → 新建 API 提供商… → ② 选「照抄 deepseek」→ 改 id=my-ai → 填 api_base=https://x.com/v1 → ③ 点「创建并重新加载」→ ④ 确认「提供商」下拉立即出现 my-ai\n留什么物证：2026-10-21 用户真机点选确认；providers.d/my-ai.json 已生成 · 表警告/错误清单无新增 · Console 无 error；配套 `--official-assert` 纯函数 40/0 + 端到端 20→21→20 自清理",
+                  "done": true,
+                  "level": "default",
+                  "fileLink": "docs/DevPlan.todo",
+                  "focus": false,
+                  "end": 1792560332072
+                }
+              }
+            ],
+            "todo": {
+              "id": 545,
+              "content": "三、冻结收口项（2026-10-21 · 自定义 AI 收口人工验收 + 冻结生效）",
+              "done": false,
+              "level": "secondary"
+            }
+          },
+          {
+            "key": 547,
+            "children": [
+              {
+                "key": 548,
+                "children": [],
+                "todo": {
+                  "id": 548,
+                  "content": "① 上级编辑器小地图导航 mode 5 真实 GUI 复核（DEBT-C1 · POL-L-02）\n怎么点：构建 app → 人工点上级编辑器小地图 → 观察视图是否导航到位（headless 复现 FAIL：view_center 恒定 32.0,-27.8）\n留什么物证：截图（点击前后画布位置）；正常 ⇒ headless 失真收尾关闭；不生效 ⇒ 深挖 H2/H3\n来源：docs/actionPlan/M_code_cleanup.md §2",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_code_cleanup.md §2",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 549,
+                "children": [
+                  {
+                    "key": 550,
+                    "children": [],
+                    "todo": {
+                      "id": 550,
+                      "content": "① kimi-web 回填 answer_selector（DEBT-L1 · 输入框 div.chat-input-editor 已就绪）\n怎么点：人工登录 kimi-web → 手动发一条消息 → --web-dom-dump 取回 answer_selector → 回填 providers.json → --web-adapter-selftest 复核\n留什么物证：截图（站点页面）；回填后 --run-selftest --web --provider kimi-web 输出\n来源：docs/DevPlan.todo（#413-418）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo（#413-418）",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 551,
+                    "children": [],
+                    "todo": {
+                      "id": 551,
+                      "content": "① qwen-web 回填 answer_selector（DEBT-L1 · 输入框 textarea[placeholder=\"Ask Qwen\"] + 发送按钮已就绪）\n怎么点：人工登录 qwen-web → 手动发一条消息 → --web-dom-dump 取回 answer_selector → 回填 providers.json → --web-adapter-selftest 复核\n留什么物证：截图（站点页面）；回填后 --run-selftest --web --provider qwen-web 输出\n来源：docs/DevPlan.todo（#413-418）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo（#413-418）",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 552,
+                    "children": [],
+                    "todo": {
+                      "id": 552,
+                      "content": "① doubao-web 回填 answer_selector（DEBT-L1 · 输入框 div.tiptap.ProseMirror 已回填 · 兼图片理解首个目标站）\n怎么点：人工登录 doubao-web → 手动发一条消息 → --web-dom-dump 取回 answer_selector → 回填 providers.json → --web-adapter-selftest 复核\n留什么物证：截图（站点页面）；回填后 --run-selftest --web --provider doubao-web 输出\n来源：docs/DevPlan.todo（#413-418）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo（#413-418）",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 553,
+                    "children": [],
+                    "todo": {
+                      "id": 553,
+                      "content": "① yuanbao-web 回填 answer_selector（DEBT-L1 · 输入框 div.ql-editor.ql-blank 已就绪）\n怎么点：人工登录 yuanbao-web → 手动发一条消息 → --web-dom-dump 取回 answer_selector → 回填 providers.json → --web-adapter-selftest 复核\n留什么物证：截图（站点页面）；回填后 --run-selftest --web --provider yuanbao-web 输出\n来源：docs/DevPlan.todo（#413-418）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo（#413-418）",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 554,
+                    "children": [],
+                    "todo": {
+                      "id": 554,
+                      "content": "① ernie-web 回填 answer_selector（DEBT-L1 · 输入框 #chat-textarea 已就绪）\n怎么点：人工登录 ernie-web → 手动发一条消息 → --web-dom-dump 取回 answer_selector → 回填 providers.json → --web-adapter-selftest 复核\n留什么物证：截图（站点页面）；回填后 --run-selftest --web --provider ernie-web 输出\n来源：docs/DevPlan.todo（#413-418）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo（#413-418）",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 555,
+                    "children": [],
+                    "todo": {
+                      "id": 555,
+                      "content": "① spark-web 回填 answer_selector（DEBT-L1 · 需登录后取输入框 + 回答容器）\n怎么点：人工登录 spark-web → 手动发一条消息 → --web-dom-dump 取回 answer_selector → 回填 providers.json → --web-adapter-selftest 复核\n留什么物证：截图（站点页面）；回填后 --run-selftest --web --provider spark-web 输出\n来源：docs/DevPlan.todo（#413-418）",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo（#413-418）",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 549,
+                  "content": "② 逐站回填 answer_selector（DEBT-L1 · 6 站国内 · D-32 ①）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/DevPlan.todo",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 556,
+                "children": [],
+                "todo": {
+                  "id": 556,
+                  "content": "③ 会话失效真实响应复核（DEBT-L2 · PB-07/PB2-25）\n怎么点：一次真实失效响应（过期 Cookie/注销后请求）→ 观察错误条「重新登录」+ 错误串反查\n留什么物证：截图（错误条）；一次响应同批验两条\n来源：docs/actionPlan/M_patchAB_rest.md",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 557,
+                "children": [],
+                "todo": {
+                  "id": 557,
+                  "content": "④ 真 Key 生成实测（DEBT-L3 · PB2-10/11）\n怎么点：Anthropic Key 跑 Messages API + Gemini Key 跑 generateContent → 真实生成成功\n留什么物证：生成输出；日志无明文\n来源：docs/actionPlan/M_patchAB_rest.md",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 558,
+                "children": [],
+                "todo": {
+                  "id": 558,
+                  "content": "⑤ PB2-24 界面点选回路真人点一次（DEBT-L4）\n怎么点：设置面板「新建网页版站点…」→ providers.d/<id>.json → 「重新加载配置表」→ 下拉即时刷新 → 新建后一次真实运行\n留什么物证：截图（新建对话框 + 刷新前后下拉）；运行日志\n来源：docs/actionPlan/M_patchAB_rest.md §3.5",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md §3.5",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 559,
+                "children": [],
+                "todo": {
+                  "id": 559,
+                  "content": "⑥ 崩溃恢复真人点选（DEBT-L5 · PC-01/02）\n怎么点：改图 → 等快照写入 → 强杀进程 → 重启 → 点「恢复」→ 内容指纹逐字相同\n留什么物证：截图（恢复询问框）；恢复后内容对比\n来源：docs/actionPlan/M_patchAB_rest.md §4",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md §4",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 560,
+                "children": [],
+                "todo": {
+                  "id": 560,
+                  "content": "⑦ 企业网络实测（DEBT-L6 · PB-06 剩余）\n怎么点：代理 + 自签证书 + [credentials] 配置项在企业网络下实测\n留什么物证：实测日志\n来源：docs/actionPlan/M_patchAB_rest.md §2.3",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M_patchAB_rest.md §2.3",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 561,
+                "children": [],
+                "todo": {
+                  "id": 561,
+                  "content": "⑧ 启动测量 <3s（DEBT-L10 · M6-07 剩余）\n怎么点：--open <工作流> + 日志时间戳计时 → 启动 <3s；执行流畅性\n留什么物证：日志时间戳\n来源：docs/actionPlan/M6.md §2 M6-07",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M6.md §2 M6-07",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 562,
+                "children": [],
+                "todo": {
+                  "id": 562,
+                  "content": "⑨ M6-10 跑通现有示例（DEBT-V5）\n怎么点：跑 E-01 内置 / E-02_图片转小说 / ImgPlusText → 加载 + 运行 + 结果回流\n留什么物证：截图（三个示例运行结果）\n来源：docs/actionPlan/M6.md §2 M6-10",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M6.md §2 M6-10",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 563,
+                "children": [
+                  {
+                    "key": 564,
+                    "children": [],
+                    "todo": {
+                      "id": 564,
+                      "content": "① 干净机器冒烟（DEBT-P1 · TST-M6-01）\n怎么点：新机装安装包 → 首启引导（缺 WebView2 → 官方下载/随包安装/重新检测）→ 载入示例跑通\n留什么物证：截图 + 日志\n来源：docs/DevPlan.todo #412",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo #412",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 565,
+                    "children": [],
+                    "todo": {
+                      "id": 565,
+                      "content": "② 境外站点回填（chatglm/chatgpt/claude/gemini · 本批范围外）\n怎么点：（可选 · D-32 ②）人工登录后回填\n留什么物证：截图\n来源：docs/DevPlan.todo #419-422",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo #419-422",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 566,
+                    "children": [],
+                    "todo": {
+                      "id": 566,
+                      "content": "③ API Key 门（TST-M1-01/M4-02/DOC-M1-01）\n怎么点：设 DEEPSEEK_API_KEY → api_probe --chat → V-03/08/09 → 更新 M1.md 验收表\n留什么物证：api_probe 输出 + M1.md\n来源：docs/DevPlan.todo #424-426",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo #424-426",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 567,
+                    "children": [],
+                    "todo": {
+                      "id": 567,
+                      "content": "④ 缺 WebView2 环境模拟（VM-01）\n怎么点：模拟缺失 WebView2 → 首启引导三路探测 + 依赖自检红字 + --dep-check exit 1\n留什么物证：截图 + 退出码\n来源：docs/DevPlan.todo #435",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo #435",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 568,
+                    "children": [],
+                    "todo": {
+                      "id": 568,
+                      "content": "⑤ M8 真机 Gate（TST-M8-01）\n怎么点：豆包端到端 M8-14 + AW-01/03/04/06 + Kimi 侦察（真实登录态）\n留什么物证：截图 + 日志\n来源：docs/DevPlan.todo #436",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo #436",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 569,
+                    "children": [],
+                    "todo": {
+                      "id": 569,
+                      "content": "⑥ 循环轮次结论人审（R1 基线 + 每轮 R 报告）\n怎么点：按 loop_dev §7 人审结论\n留什么物证：审阅记录\n来源：docs/DevPlan.todo #437-438",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo #437-438",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  },
+                  {
+                    "key": 570,
+                    "children": [],
+                    "todo": {
+                      "id": 570,
+                      "content": "⑦ 协作契约常设项（审阅未提交变更 / 每批回归回填）\n怎么点：每批执行（⛔ 不提交）\n留什么物证：批记录\n来源：docs/DevPlan.todo #439-440",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/DevPlan.todo #439-440",
+                      "focus": false,
+                      "end": 1792569200000
+                    }
+                  }
+                ],
+                "todo": {
+                  "id": 563,
+                  "content": "⑨ DevPlan Human 未迁项（DEBT-V4 · 7 项）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/DevPlan.todo",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 571,
+                "children": [],
+                "todo": {
+                  "id": 571,
+                  "content": "⑩ roadmap §十二 人工项（DEBT-V6）\n怎么点：界面点选回路（同 ⑤）+ 手册文案逐处复核（RM-D1 面向 C 口径）\n留什么物证：复核记录\n来源：docs/roadmap.md §十二",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/roadmap.md §十二",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 572,
+                "children": [],
+                "todo": {
+                  "id": 572,
+                  "content": "⑪ README 截图/视频教程（DEBT-P2 · M6-09 剩余）\n怎么点：README 补截图（安装 / 首启 / 快速上手 / 常见问题）\n留什么物证：README 截图\n来源：docs/actionPlan/M6.md §2 M6-09",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/actionPlan/M6.md §2 M6-09",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              },
+              {
+                "key": 573,
+                "children": [],
+                "todo": {
+                  "id": 573,
+                  "content": "⑫ Ctrl+S 保存复核（DEBT-B1 复核段）\n怎么点：离线排查修复后 → GUI 复核 Ctrl+S 保存成功（与按键保存一致）\n留什么物证：截图（保存提示 / 文件 mtime）\n来源：原 ToVerify.todo #305 子项 · 2026-10-21 并入 DevPlan Test（本组 ② 的 FAIL 记录 = key 457）",
+                  "done": false,
+                  "level": "default",
+                  "fileLink": "docs/DevPlan.todo",
+                  "focus": false,
+                  "end": 1792569200000
+                }
+              }
+            ],
+            "todo": {
+              "id": 547,
+              "content": "四、债务清零人工验证（2026-10-21 建立 · 来源 = DEBT.todo 人工项 · 映射 M_debt §2 批 B）",
+              "done": false,
+              "level": "secondary",
+              "fileLink": "docs/audit/DEBT.todo"
+            }
           }
         ],
         "todo": {
           "id": 54,
-          "content": "Test（14 项）",
+          "content": "Test（116 项 · ToVerify 人工验收 5 组并入 2026-10-21）",
           "done": false,
           "level": "warning"
         }
@@ -877,87 +2438,6 @@
             }
           },
           {
-            "key": 404,
-            "children": [
-              {
-                "key": 427,
-                "children": [],
-                "todo": {
-                  "id": 427,
-                  "content": "TST-M1-02：人工确认后勾选 A-03（画布交互）/ A-04（WebView2 登录）/ A-05（Cookie 提取）｜ Test > M1",
-                  "done": false,
-                  "level": "default"
-                }
-              },
-              {
-                "key": 428,
-                "children": [],
-                "todo": {
-                  "id": 428,
-                  "content": "TST-M2-01：使用说明 §8 的 22 项画布交互逐项确认（可选/多选/框选/连线/右键菜单）｜ Test > M2",
-                  "done": false,
-                  "level": "default"
-                }
-              },
-              {
-                "key": 429,
-                "children": [],
-                "todo": {
-                  "id": 429,
-                  "content": "TST-M3-02：结果呈现三处一致（节点内摘要 / 参数面板「运行结果」/ 输出面板）+ 输出面板复制全文·该节点、导出到文件 ｜ Test > M3",
-                  "done": false,
-                  "level": "default"
-                }
-              },
-              {
-                "key": 430,
-                "children": [],
-                "todo": {
-                  "id": 430,
-                  "content": "TST-M4-01：VB-01…VB-09（重点 VB-02「■ 停止」1 秒内生效；流式拼接一致 / 凭据三优先级 / 会话失效引导 / 线程安全）｜ Test > M4",
-                  "done": false,
-                  "level": "default"
-                }
-              },
-              {
-                "key": 431,
-                "children": [],
-                "todo": {
-                  "id": 431,
-                  "content": "TST-M5-01：VLM 生成 + 图片预览 + Output 窗口历史/自动打开 ｜ Test > M5",
-                  "done": false,
-                  "level": "default"
-                }
-              },
-              {
-                "key": 432,
-                "children": [],
-                "todo": {
-                  "id": 432,
-                  "content": "TST-M6-02：归档与保留策略人工确认（§10.6 · keep_history/max_history/ttl_days 生效）｜ Test > M6",
-                  "done": false,
-                  "level": "default"
-                }
-              },
-              {
-                "key": 433,
-                "children": [],
-                "todo": {
-                  "id": 433,
-                  "content": "TST-M7-02：GUI 端到端（E-02 智谱 glm-4v-flash + 4 类错误路径 + --vlm-selftest --image <WebP>）｜ Test > M7",
-                  "done": false,
-                  "level": "default"
-                }
-              }
-            ],
-            "todo": {
-              "id": 404,
-              "content": "GUI 点选验收（7 项 · id=434 已迁 docs/actionPlan/ToVerify.todo）",
-              "done": false,
-              "level": "secondary"
-            }
-          },
-          {
             "key": 405,
             "children": [
               {
@@ -1066,7 +2546,7 @@
         ],
         "todo": {
           "id": 400,
-          "content": "Human（29 项 · 人工关卡 · 需真人执行 · 2026-10-17 建 · id=434 已迁 docs/actionPlan/ToVerify.todo）",
+          "content": "Human（22 项 · 人工关卡 · 需真人执行 · 2026-10-17 建 · id=434 迁出 + GUI 点选 7 项 2026-10-19 迁 ToVerify.todo · 2026-10-21 随 ToVerify 并入本看板 Test「二、GUI 点选验收」组）",
           "done": false,
           "level": "secondary"
         }
@@ -3037,6 +4517,28 @@
                       "level": "success",
                       "fileLink": "docs/actionPlan/M_node_expansion_part2.md"
                     }
+                  },
+                  {
+                    "key": 441,
+                    "children": [],
+                    "todo": {
+                      "id": 441,
+                      "content": "M_code_cleanup 代码库清理（CLN-01…15 · 🆕 2026-10-19 批 · v1.10 · 不占用 M1–M8 编号）：§3 清理清单审查/勾账全部完成（CLN-01 死代码 · 02 冗余 include · 03 失效分支 · 04 TODO 台账 · 05 重复辅助函数收敛 5 组 14 处 → utils/string_util · 06~08 头文件/命名/告警纯审计 · 09+10 小地图/对齐吸附共享化 · 11 复核 · 12~15 大文件拆分可行性审查）· 构建 0/0 · selftest 全绿（13 组 / 682 / 151）· check_links 1625/0；两项待决已拍板（asyncMode 保留 · mode 5 仅文档推进）· 三项拍板（2026-10-20）：§3.4 拆分（CLN-12~15）= 执行 · CLN-06 扩项驼峰化 = 执行（§3.4 后）· 匿名命名空间专项 = 放弃；🆕 打磨与优化阶段立项 → 见 M_polish（id=442）· CLN-12 拆分已落地（property_panel → panel_widgets/panel_web/panel_internal.h · 构建 0/0 · selftest 682/151/13 组全绿 · audit_cleanup_12.md）· CLN-13 拆分已落地（composite_editor → ce_state/ce_session/ce_run/ce_pack/ce_draw + ce_internal.h · 构建 0/0 · selftest 682/151/13 组全绿 · audit_cleanup_13.md）· CLN-14 拆分已落地（main → cli_selftest/cli_diag + cli_internal.h · 按 CLI 功能区拆 · 构建 0/0 · selftest 682/151/13 组全绿 · audit_cleanup_14.md）· CLN-15 拆分已落地（api_probe → api_probe_selftest/api_graph_selftest/api_executor_selftest/api_execution_selftest/api_diag + api_internal.h · 按自检分节拆 · 基线存档 682/151/13 组输出逐行一致 · 构建 0/0 · audit_cleanup_15.md）· 驼峰化批 1 已落地（CLN-06 扩项 · utils 域 81 函数 → camelCase · 550 替换/60 文件 · 构建 0/0 · selftest 682/151/13 组全绿 · 输出零内容差异）· 驼峰化批 2 已落地（engine 域 48 函数 → camelCase · 315 替换/35 文件 · 构建 0/0 · selftest 全绿）· 批 3 nodes 无公共 snake_case 跳过 · 驼峰化批 4~8 已全部落地（批 4 ai 域 123 函数 → camelCase · 918 替换/62 文件 · 批 5 web 域 72 函数 · 544 替换/32 文件 · 批 6 ui 域 145 函数 · 734 替换/48 文件 · 批 7 app 域仅 3 入口 cpp 跳过 · 批 8 tools 域无公共头声明跳过 · **合计 469 函数 · 3061 替换 · 237 文件** · 每批构建 0/0 · selftest 682/151/13 组全绿 · 输出零内容差异）· **🎉 CLN-06 扩项驼峰化 8 批全部完成**",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/actionPlan/M_code_cleanup.md"
+                    }
+                  },
+                  {
+                    "key": 442,
+                    "children": [],
+                    "todo": {
+                      "id": 442,
+                      "content": "M_polish 打磨与优化阶段立项（🆕 2026-10-20 · 当前主线 · 最优先 · 不占用 M1–M8 编号）：基础框架已搭好 → 按「逻辑 → 操作体验 → 正确性 → 便捷性」四阶段打磨（用户 2026-10-20 拍板）· 任务 POL-L*/POL-UX*/POL-C*/POL-E* + 验证 POL-V*/验收 POL-A* · 逐阶段清单待开工细列 · 承接 M_code_cleanup §4 / M_patchAB_rest / M_patchC / M6 打磨小项 · roadmap §二 已同步；后续执行序：roadmap/立项 → §3.4 拆分（CLN-12~15）→ 驼峰化（CLN-06 扩项）· ✅ **已审核通过（2026-10-20 用户复核）**",
+                      "done": false,
+                      "level": "default",
+                      "fileLink": "docs/actionPlan/M_polish.md"
+                    }
                   }
                 ],
                 "todo": {
@@ -3581,11 +5083,8 @@
     ],
     "expandKeys": [
       1,
-      2,
       4,
-      6,
       12,
-      14,
       17,
       18,
       22,
@@ -3632,7 +5131,6 @@
       227,
       232,
       236,
-      239,
       249,
       250,
       252,
@@ -3655,11 +5153,11 @@
       401,
       402,
       403,
-      404,
       405,
       406,
       407,
-      408
+      408,
+      445
     ],
     "add_mode": "bottom",
     "virtual": false,
@@ -3671,6 +5169,6 @@
     "simpleMode": false,
     "lang": "en",
     "desc": "**当前基线（2026-10-08 本机全量实测）**\n- build: 0 error / 0 warning（MSVC /W4）\n- api_probe --selftest：PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · 执行器 425/0）\n- exec_selftest: 425 / 0 · graph_selftest: 110 / 0\n- aiwrite --upload-selftest: 72 / 0（离线三组；真机加 --provider / --image，且该站点已登录过一次）\n- 夹具: poll_answer_gate 12/0（--old 5/7 · exit 1）· send_chain 17/0\n- 文档: python vcpkg-cache/check_links.py → checked 500 / broken 8（**全为既存**：7 条历史 actionPlan/M7B.md 路径 + 1 条反引号内文误判，非本轮引入）\n\n**文档口径（2026-10-08 全量梳理 · 定义见 docs/DocMAP.md §五）**\n- 标记三态：✅ 已固定 / 📦 已失效（**只标记不删除**）/ ⬜ 待定（必须登记到本分类 PQ-xx）\n- 本分类「待定 · 未拍板」= 全部未拍板项（PQ-01 ~ PQ-19）；拍板后同批：改计划文档 + DocMAP §5.3 + 本项置 done\n- ✅ **2026-10-11 拍板落盘（待定清零）**：`PQ-01`（① 内部滚动 + 每批内部版本号）· `PQ-03`（留用 `v0.5.3` · 不清理）· `PQ-06`（沿用 `v0.5.4`）· `PQ-09`（② `login_url` 缺失 = 报错 · 复核 = 与现行实现一致 ⇒ 勾账）· `PQ-12`（① 只做国内 6 站）· `PQ-20`（**推翻「节点数维持 8」**，范围细谈归 `docs/actionPlan/M_node_expansion.md`）⇒ 六项全部置 done；**「待定 · 未拍板」分类 = 0 项**（分组保留作历史）\n- ✅ **2026-10-09 拍板落盘**：**14 项**已拍板（`PQ-02` / `PQ-04` / `PQ-05` / `PQ-07` / `PQ-08` / `PQ-10` / `PQ-11` / `PQ-13` / `PQ-14` / `PQ-15` / `PQ-16` / `PQ-17` / `PQ-18` / `PQ-19`）⇒ 已置 done；**余 5 项待定**（`PQ-01` / `PQ-03` / `PQ-06` / `PQ-09` / `PQ-12`）\n- 里程碑：M1 / M2 / M4 / M5 与 M7 第一轮 + P7-a ✅ 已固定；**M7B / P7-b（Pydoll 路线）📦 已退场（2026-10-05 · 方案 E）**；现行网页通道 = M8（站点上传模板）\n- 未做（有任务号，**非**待定）：M8 Phase 4~6（**Phase 3 已改判不执行 ⇒ 栈休眠保留**）· M8-21 / M8-23 · PW-02/04/05/06/08~12 · M_patchAB_rest §1–§3 残项 · M6 未开工\n- 待真机：AW-01 / AW-03 / AW-04 / AW-06（网页版多节点与取答案）· 有 Key 的 official 复跑\n\n**历史原文（2026-09-27 基线 · ⛔ 保留不删；其中 Pydoll / M7B 段落已 📦 退场）**\n\n**当前基线（2026-10-08 本机全量实测）**\n- build: 0 error / 0 warning（MSVC /W4）\n- api_probe --selftest：PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · 执行器 425/0）\n- exec_selftest: 425 / 0 · graph_selftest: 110 / 0\n- aiwrite --upload-selftest: 72 / 0（离线三组；真机加 --provider / --image，且该站点已登录过一次）\n- 夹具: poll_answer_gate 12/0（--old 5/7 · exit 1）· send_chain 17/0\n- 文档: python vcpkg-cache/check_links.py → checked 500 / broken 8（**全为既存**：7 条历史 actionPlan/M7B.md 路径 + 1 条反引号内文误判，非本轮引入）\n\n**文档口径（2026-10-08 全量梳理 · 定义见 docs/DocMAP.md §五）**\n- 标记三态：✅ 已固定 / 📦 已失效（**只标记不删除**）/ ⬜ 待定（必须登记到本分类 PQ-xx）\n- 本分类「待定 · 未拍板」= 全部未拍板项（PQ-01 ~ PQ-19）；拍板后同批：改计划文档 + DocMAP §5.3 + 本项置 done\n- 里程碑：M1 / M2 / M4 / M5 与 M7 第一轮 + P7-a ✅ 已固定；**M7B / P7-b（Pydoll 路线）📦 已退场（2026-10-05 · 方案 E）**；现行网页通道 = M8（站点上传模板）\n- 未做（有任务号，**非**待定）：M8 Phase 4~6（**Phase 3 已改判不执行 ⇒ 栈休眠保留**）· M8-21 / M8-23 · PW-02/04/05/06/08~12 · M_patchAB_rest §1–§3 残项 · M6 未开工\n- 待真机：AW-01 / AW-03 / AW-04 / AW-06（网页版多节点与取答案）· 有 Key 的 official 复跑\n\n**历史原文（2026-09-27 基线 · ⛔ 保留不删；其中 Pydoll / M7B 段落已 📦 退场）**\n\n**当前基线（2026-09-27）**\n- build: 0 error / 0 warning（MSVC /W4）\n- selftest: api_probe --selftest：七组 PASS（V-11/V-12 随 PB-09）\n- graph_selftest: 110 通过 / 0 失败\n- exec_selftest: 251 通过 / 0 失败（执行器 + 运行信息 + 归档 + 配置表 / L4 断言）\n- provider_selftest: 50 通过 / 0 失败（--provider-dump 21 条：official 9 / web 12）\n- run_selftest: PASS（离线 3/5 为预期）· run_selftest_web: PASS（5/5；官网侧会话失效见 PB2-25）\n- web_chain: --web-probe / --web-chat：PASS（协议探明 + 端到端生成）\n- docs_links: python vcpkg-cache/check_links.py → broken 0\n\n**M7（2026-09-27 落地）**\\n- 图片格式按内容嗅探（不看扩展名）+ 本地解码 stb/WIC 双后端 + 可操作报错；诊断：`api_probe --image-decode <路径>`\\n- 删图片输出节点（N-09）：节点 9→8\\n- **冻结区（I17）**：不得把合成/截断/未识别格式数据交给 WIC（曾致 CRT 断言崩溃，退出码 3）；见 source/README.md §4.2 / §6.1\\n\\n**M7 第二轮 P7（2026-09-27 会议决议 D1–D9 · 计划中，未开工）**\\n- P7-a（v0.5.2）：图片端口 variadic 多图（I19）+ 统一资源目录 + official 收口（超限拒 / 体积与耗时 / 错误分类）+ UI A 档\\n- P7-b（v0.5.3 待确认）：网页版图片上传 = Pydoll 独立浏览器 + Python 守护进程 + 命名管道 + Win32 事件（先做 P7b-01~05 前置验证，未过则回滚；方案 B′ 2026-09-29：网页版图片理解首个目标站 = 豆包 doubao-web，P7b-05b 只读侦察先行（上传入口 4 类 + 纯图无字视觉判别），审核通过后才动管道 M7B-02/04）\\n- 新增不变量 I18（无上传证据不得自动发送）/ I19（image 端口语义向后兼容）；开口项 Q1–Q8 见 M7.md §17\\n\\n**M7 第三轮 M7B（2026-09-28 立项 · 计划中未开工）**\n- 网页通道整体迁 Pydoll：WebView2 退场（source/ 内 17 文件 ≈184 处）+ 全部网页版条目走 Pydoll（builtin:deepseek 协议栈退役）+ CDP Network 事件重建 SSE 增量（保住逐字流式）+ 只维护一套登录态（~/.brain-ai/pydoll-profile）\n- 作废不变量 I2（不再承诺无参 CLI 逐字不变）→ 新增 I20（CLI 契约：--provider 必填 / 缺参列候选 + 退出码 2 / 保留字 --provider auto）/ I21（不静默降级）/ I22（流式降级标记非流式）；I15 → I15′（证据源改 CDP Cookie）；I16 升级为全局\n- 破坏性变更（计划）：--web-chat / --login-selftest 需 --provider；--web-probe 废弃；老用户需重新登录一次\n- 任务：前置验证 M7B-01~08 + 6 批 M7B-10~M7B-41（先建后拆，批 5 才删 WebView2）；基线 --exec-selftest 先降后升（删 VB2-17 前半 / VB2-25①③④，新增 VB2-28~VB2-36）\n- 计划全文：docs/actionPlan/M7B.md（WebView2 接触面 17 文件 ≈184 处清单见其 §1.3）｜ **阶段 0 已完成（2026-09-28）**：批 0 基线复测（exec 251/0 · graph 110/0 · provider 50/0 · run-selftest(--web) PASS · 断链 265/0）+ Pydoll 2.27.0 环境就绪（.venv 冒烟通过）+ 回滚锚点 pre-m7b 已推送；**仍未开工**\n\n**主要风险 / 待办**\n- 会话失效（40002/401/40003）缺界面引导（PB-07 / PB2-25）\n- 11 条内置站点仍缺 answer_selector（需人工登录一次 + 发一条消息 → PB2-29）\n- 流式数据源受 httplib 限制（PB-03/08 暂停 · D-31 待拍板）\n- 未接配置字段仍无效果（PD-03 / FEA-M6-01）\n- 补丁系列剩余项统一见 docs/actionPlan/M_patchAB_rest.md",
-    "version": "1792067073417"
+    "version": "1792587999495"
   }
 }

@@ -144,20 +144,20 @@ bool validateBeforeRun(const Graph& graph, ValidationMessages* errors,
         // M_patchB L2 修订（PB2-20 / 决策 D-21）：按**该节点自己的条目**解析
         //  * 此前误用 resolve_effective_provider()：它对 ProviderConfig 恒返回默认构造
         //    → 提示里的站点永远回落内置默认（换 Kimi 条目也显示 DeepSeek）
-        const EffectiveProvider effective = resolve_display_provider(graph, node);
+        const EffectiveProvider effective = resolveDisplayProvider(graph, node);
 
         if (mode_value == "web") {
             // M_patchB L1 修订（PB2-22 / 决策 D-22② / D-26 / 不变量 I14）：站点必须来自**该条目自己的 web 段**
             //  * **不**回落内置默认站点；站点不可用 → 明确报错 + 三条引导
-            const std::string site_error = ai::web_site_error(effective.spec);
+            const std::string site_error = ai::webSiteError(effective.spec);
             if (!site_error.empty()) {
                 // 决策 D-25：**不阻断**运行（保持既有「提示不阻断」契约），但明确告知「本次运行必定失败」
                 notes.push_back("[" + node.id + "] 网页版模式：**本次运行必定失败** —— " + site_error);
                 continue;
             }
-            const ai::ProviderWebSpec site = ai::strict_web_spec_for(effective.spec);
+            const ai::ProviderWebSpec site = ai::strictWebSpecFor(effective.spec);
             std::string               text = "[" + node.id + "] 网页版模式：站点 " + site.login_url;
-            const std::string field_warnings = ai::web_site_field_warnings(effective.spec);
+            const std::string field_warnings = ai::webSiteFieldWarnings(effective.spec);
             if (!field_warnings.empty()) {
                 text += "（" + field_warnings + "）";
             }
@@ -169,7 +169,7 @@ bool validateBeforeRun(const Graph& graph, ValidationMessages* errors,
         // ---- 网页版条目 + official（决策 D-21）：该条目没有官方 API 通道 → 明确提示 ----
         //  （不再继续提示 API Key：避免「填了 Key 才发现地址为空」的误导）
         {
-            const std::string kind_hint = mode_kind_hint(effective);
+            const std::string kind_hint = modeKindHint(effective);
             if (!kind_hint.empty()) {
                 notes.push_back("[" + node.id + "] " + kind_hint);
                 continue;
@@ -177,7 +177,7 @@ bool validateBeforeRun(const Graph& graph, ValidationMessages* errors,
         }
 
         const Param* key       = node.findParam("api_key");
-        const bool   in_params = key != nullptr && !key->is_empty();
+        const bool   in_params = key != nullptr && !key->isEmpty();
         const char*  env_key   = std::getenv("DEEPSEEK_API_KEY");
         const bool   in_env    = env_key != nullptr && *env_key != '\0';
         if (!in_params && !in_env) {
@@ -192,11 +192,11 @@ bool validateBeforeRun(const Graph& graph, ValidationMessages* errors,
     //  * 为何不升级为 error：自检（--run-selftest）与 api_probe 断言要求运行前校验「不阻断」
     //    （见 api_probe「未配置 Key：运行前校验仍通过」）。真正的拦截在 UI 层：工具栏弹窗确认。
     for (const Node& node : graph.nodes) {
-        const std::string reason = unwired_reason(graph, node);
+        const std::string reason = unwiredReason(graph, node);
         if (reason.empty()) {
             continue;
         }
-        const EffectiveProvider effective = resolve_effective_provider(graph, node);
+        const EffectiveProvider effective = resolveEffectiveProvider(graph, node);
         std::string              text     = "[" + node.id + "] " + reason;
         if (node.type == "LLMGenerate") {
             text += effective.from_edge

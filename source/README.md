@@ -252,7 +252,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [
 #     `.iss ↔ payload` 一致性锁（4 条 Source 通配逐条核对）已实测 —— 见 `docs/CHANGELOG.md` `[Unreleased]`
 #   ⚠ 附带 WebView2 Bootstrapper（`PQ-02`）为**可选件**：把 `MicrosoftEdgeWebview2Setup.exe` 放进
 #     `packaging\webview2\` 即随包；没有则该行 `skipifsourcedoesntexist` 静默跳过（见该目录 README）
-#   📦 完整打包与分发说明（口径 / 安装包内容 / 干净机器冒烟）：见 [../../packaging/PACKAGING.md](../../packaging/PACKAGING.md)
+#   📦 完整打包与分发说明（口径 / 安装包内容 / 干净机器冒烟）：见 [../packaging/PACKAGING.md](../packaging/PACKAGING.md)
 
 # —— M6 新增配置键 / 新接线项 ——
 #   [ui] first_run_done            = false  # 首启引导是否已看过（**缺键 = false** ⇒ 老用户也会看一次，可跳过）

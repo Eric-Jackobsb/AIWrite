@@ -35,10 +35,10 @@ nlohmann::json gemini_build_body(const GenerateParams& params, bool send_seed,
                                  const std::vector<std::string>& image_data_urls);
 
 // 响应文本：`candidates[0].content.parts[*].text` 逐块拼接（可指定第几个候选）
-std::string gemini_extract_text(const nlohmann::json& body, std::size_t candidate = 0);
+std::string geminiExtractText(const nlohmann::json& body, std::size_t candidate = 0);
 
 // 无文本时的可操作原因（`promptFeedback.blockReason` / `finishReason` / `error.message`）
-std::string gemini_block_reason(const nlohmann::json& body);
+std::string geminiBlockReason(const nlohmann::json& body);
 
 // 实现（`protocol = "gemini"`）
 class GeminiProvider final : public InferenceProvider {
@@ -51,7 +51,7 @@ public:
 
 private:
     ProviderRuntimeConfig config_;
-    ProviderCaps          caps_ = permissive_caps();
+    ProviderCaps          caps_ = permissiveCaps();
 };
 
 } // namespace aiwrite::ai

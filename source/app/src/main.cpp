@@ -50,1710 +50,12 @@
 #include <string>
 #include <vector>
 
-namespace {
-
-// 报告时间戳（"YYYY-MM-DD HH:MM:SS"，与其它落盘报告同口径）
-std::string report_timestamp()
-{
-    const std::time_t now = std::time(nullptr);
-    std::tm           tm{};
-#if defined(_WIN32)
-    localtime_s(&tm, &now);
-#else
-    localtime_r(&now, &tm);
-#endif
-    std::ostringstream stream;
-    stream << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-    return stream.str();
-}
-
-// 读文本文件（UTF-8 原样；失败 → false + 原因）—— 批 3：读上一轮报告做 diff
-bool read_text_file(const std::string& path, std::string* out, std::string* error)
-{
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        if (error != nullptr) {
-            *error = "打不开文件（不存在 / 无权限）：" + path;
-        }
-        return false;
-    }
-    std::ostringstream buffer;
-    buffer << in.rdbuf();
-    if (out != nullptr) {
-        *out = buffer.str();
-    }
-    return true;
-}
-
-// 写文本文件（UTF-8 **无 BOM**，与其它报告一致；父目录不存在则创建）
-bool write_text_file(const std::string& path, const std::string& text, std::string* error)
-{
-    std::error_code ec;
-    const std::filesystem::path fs_path(path);
-    if (!fs_path.parent_path().empty()) {
-        std::filesystem::create_directories(fs_path.parent_path(), ec);
-    }
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out) {
-        if (error != nullptr) {
-            *error = "写不了文件（目录不存在 / 无权限）：" + path;
-        }
-        return false;
-    }
-    out << text;
-    if (!out) {
-        if (error != nullptr) {
-            *error = "写入过程中出错：" + path;
-        }
-        return false;
-    }
-    return true;
-}
-
-// ------------------------------------------------------------- UTF-8 口径 ----
-// VA-07（TST-L01 缺陷修复）：取样必须按 **UTF-8 码点** 计数，**不能**按字节。
-//  背景（实证）：CJK 一个字占 3 字节 ⇒ 原本的 `substr(0, 24)` 只截到 8 个汉字
-//  「从前有座山，山里」；而网页版模型常把工作流自身的 text 参数（种子文本
-//  「从前有座山，山里有座庙。」）复述在答案开头 ⇒ 该 8 字前缀**必然**命中
-//  工作流 JSON 里的参数值 ⇒ 合法答案被判成"运行结果泄漏"（假阴性，污染退出码）。
-//  * 只统计码点首字节（续字节 10xxxxxx 不计数）：容错损坏 UTF-8，不会越界。
-
-// 码点数（不是字节数）
-std::size_t utf8_length(const std::string& text)
-{
-    std::size_t count = 0;
-    for (const char raw : text) {
-        if ((static_cast<unsigned char>(raw) & 0xC0) != 0x80) {
-            ++count;
-        }
-    }
-    return count;
-}
-
-// 取前 max_chars 个码点的前缀（不劈开多字节字符；不足 max_chars 则返回全文）
-std::string utf8_prefix(const std::string& text, std::size_t max_chars)
-{
-    std::size_t chars = 0;
-    for (std::size_t i = 0; i < text.size(); ++i) {
-        if ((static_cast<unsigned char>(text[i]) & 0xC0) == 0x80) {
-            continue; // 续字节：仍在同一个码点内
-        }
-        if (chars == max_chars) {
-            return text.substr(0, i);
-        }
-        ++chars;
-    }
-    return text;
-}
-
-// VA-07 取样长度（单位：**码点**）
-constexpr std::size_t kVa07ProbeChars = 24;
-
-void print_usage()
-{
-    std::printf("AIwrite - AI 小说/剧本创作软件 (M1 技术验证)\n");
-    std::printf("用法: aiwrite [选项]\n");
-    std::printf("  --open <路径>    启动即打开指定工作流 JSON（默认用内置示例工作流）\n");
-    std::printf("  --console        为日志额外分配控制台窗口（便于开发调试）\n");
-    std::printf("  --login-selftest [--timeout <秒>]\n");
-    std::printf("                   网页版登录自检：离屏跑「WebView2 环境 → 导航 → 提取 Cookie」\n");
-    std::printf("                   退出码 0=通过 / 1=失败 / 2=超时（默认超时 30 秒）\n");
-    std::printf("  --web-probe [--timeout <秒>]\n");
-    std::printf("                   网页版协议探测：在已登录页面内读取 userToken 并请求 PoW 挑战\n");
-    std::printf("                   退出码 0=取到 userToken / 1=失败（需先登录过一次）\n");
-    std::printf("                   ＋ --provider <id>：按**配置表条目**的站点探测（PB2-23；\n");
-    std::printf("                     严格解析、不回落；站点不可用 → 打印原因 + 退出码 2）\n");
-    std::printf("  --web-adapter-selftest --provider <id>\n");
-    std::printf("                   L3（PB2-15）选择器探测 / 诊断：在**已登录窗口**里只读检查\n");
-    std::printf("                   input_selector / send / answer_selector / done_when / token_expr，\n");
-    std::printf("                   并给可操作修复建议；退出码 0=全部命中 / 1=有缺项或页面异常\n");
-    std::printf("                   / 2=站点不可用 / 3=需登录（人工介入；批 3 · FEA-L03）\n");
-    std::printf("                   ＋ --provider all：**批量只读探测**全部 DOM 站点（批 3 · FEA-L01）\n");
-    std::printf("                     退出码 0=全部可用 / 3=有站需登录 / 1=有真失败 / 2=无可测站点\n");
-    std::printf("                   ＋ --json <路径>：把报告落成机器读版 JSON（供与上一轮对比）\n");
-    std::printf("                   ＋ --json-diff <上一轮报告>：对比并打印状态 / 判据变化\n");
-    std::printf("  --web-chat \"<提示词>\"\n");
-    std::printf("                   网页版生成：取 PoW 挑战 → C++ 求解 → 调用 /api/v0/chat/completion\n");
-    std::printf("                   退出码 0=取到文本 / 1=失败（需先登录过一次）\n");
-    std::printf("  --web-session-selftest\n");
-    std::printf("                   会话自动引导回归：先按用户手动路径开窗口（不探测）→ 再调 ensure_session\n");
-    std::printf("                   应「窗口已开 → 自动补探测」拿到凭证；退出码 0=通过 / 1=失败\n");
-    std::printf("  --web-session-list [--json <路径>]\n");
-    std::printf("                   会话 / 登录态清单（批 3 · FEA-L02）：① 本进程内存会话（I15：不落盘，\n");
-    std::printf("                   全新进程必然为空）② L2 DPAPI 快照**只读元数据**（路径 / 字节 / 时间）\n");
-    std::printf("                   ③ 每条网页版条目的登录判据配置（cookie_names）\n");
-    std::printf("                   退出码 0=清单成功（有无会话都算成功）/ 1=读快照元数据异常\n");
-    std::printf("  --run-selftest [--web] [--official]\n");
-    std::printf("                   执行自检：创建示例工作流 → 运行到结束，打印各节点状态与统计\n");
-    std::printf("                   --web：LLMGenerate 走网页版真实生成（需已登录过一次）\n");
-    std::printf("                   默认 LLMGenerate 为占位实现，预期该节点 error、下游 skipped\n");
-    std::printf("  --vlm-selftest [--image <路径>] [--api-base <地址>] [--model <模型名>]\n");
-    std::printf("                 [--key-ref <凭据引用名>]\n");
-    std::printf("                   图片理解（M5-02）自检：编码图片 → 构造多模态请求体（离线断言）\n");
-    std::printf("                   → 有 Key 时真实调用并打印生成文本\n");
-    std::printf("                   退出码 0=通过 / 1=失败 / 2=缺少 API Key（离线部分已通过）\n");
-    std::printf("  --provider-selftest [--provider <id>] [--api-base <地址>] [--model <模型名>]\n");
-    std::printf("                      [--key-ref <凭据引用名>]\n");
-    std::printf("                   Provider 配置表（M_patchB L1）自检：表校验 + 离线断言\n");
-    std::printf("                   --provider <id> 时：API 条目 → 有 Key 就发一条 ping；\n");
-    std::printf("                   网页版条目 → 只检查登录态与端点一致性（不发送内容）\n");
-    std::printf("                   退出码 0=通过 / 1=失败 / 2=缺 Key 或未登录（离线部分已通过）\n");
-    std::printf("  --provider-dump  打印生效的 Provider 配置表（含来源与覆盖链）\n");
-    std::printf("  --pipe-selftest [--timeout <秒>]\n");
-    std::printf("                   M7B-02 命名管道冒烟：起 Python 守护进程（brain_ai_browser --serve）\n");
-    std::printf("                   → hello → 校验 ready{proto, python, browser} → shutdown\n");
-    std::printf("                   退出码 0=通过 / 1=失败 / 2=环境缺失（找不到 Python 或包目录）\n");
-    std::printf("  --pydoll-selftest [--timeout <秒>]\n");
-    std::printf("                   M7B 新通道自检（批 2）：起守护进程 → hello → shutdown（**不开浏览器**）\n");
-    std::printf("                   退出码 0=通过 / 1=失败 / 2=依赖缺失（无 Python / 无包目录）\n");
-    std::printf("  --pydoll-login <id> [--timeout <秒>]\n");
-    std::printf("                   M7B 新通道冒烟（批 2）：起**有头**浏览器打开条目站点，\n");
-    std::printf("                   等**人工登录**（不代填密码 · §13）→ 判据 = 条目 cookie_names 命中 → 关窗\n");
-    std::printf("                   退出码 0=登录成功 / 1=超时或失败 / 2=参数或依赖问题\n");
-
-    std::printf("  --web-supply-probe [--provider <id>] [--timeout <秒>] [--get <路径?查询串>]\n");
-    std::printf("                   M8 Phase 2 供料探针（**只读**）：按条目起有头 WebView2（需人工登录）→\n");
-    std::printf("                   取样 device_id 候选 + 会话 Cookie（值脱敏）→ 报告写 ~/.brain-ai/logs/；\n");
-    std::printf("                   带 --get 时用会话 Cookie 发**一次 GET**，判定站点接口是否下发签名材料\n");
-    std::printf("                   退出码 0=完成 / 1=页面或会话未就绪 / 2=条目或站点不可用\n");
-
-    std::printf("  --upload-selftest [--provider <id>] [--image <路径>] [--timeout <秒>]\n");
-    std::printf("                   M8-14 站点上传模板自检：离线三组（图片准备 / 双证据判定 / 注册表与\n");
-    std::printf("                   契约）→ 带 --provider 时**追加真机一次**（按条目把 --image 交给\n");
-    std::printf("                   WebView2 页面里的站点自己的上传逻辑，并要求**双证据**齐备：\n");
-    std::printf("                   页面附件区节点 + 站点上传请求回执；缺一即如实报错、不继续发送）\n");
-    std::printf("                   退出码 0=全绿 / 1=有失败 / 2=站点不可用（非网页版 / 缺 login_url）\n");
-    std::printf("                   真机示例：aiwrite.exe --upload-selftest --provider doubao-web --image \"D:\\a.png\"\n");
-    std::printf("                   （需该站点已登录过一次；离屏窗口自动复用，用户无需干预）\n");
-
-    std::printf("  --help           显示本帮助\n");
-}
-
-// M_patchAB §2.4（PB-09）：`--run-selftest --official` —— **有 Key 时真实生成一次**
-//  * 语义与其余自检一致：0 = 成功 / 1 = 失败 / 2 = 缺 Key 或参数不可用（**不发请求**）
-//  * 只发**一次**请求（「请只回复 pong」，消耗极小额度）；Key 只以来源 + 长度呈现（脱敏 R20）
-std::string join_names(const std::vector<std::string>& items); // 定义见文件下方（--provider-* 区）
-int official_generate_selftest(const std::string& provider_id)
-{
-    const aiwrite::ai::ProviderSpecs specs = aiwrite::ai::provider_specs();
-
-    // 条目：显式 `--provider <id>` 优先，否则第一个 official 条目
-    std::string entry_id = provider_id;
-    if (entry_id.empty()) {
-        const std::vector<std::string> ids = specs.ids("official");
-        entry_id                           = ids.empty() ? std::string() : ids.front();
-    }
-    if (entry_id.empty()) {
-        std::printf("[官方 API 自检] ✗ 配置表里没有 official 条目\n");
-        return 2;
-    }
-    const aiwrite::ai::ProviderSpec* spec = specs.find(entry_id);
-    if (spec == nullptr) {
-        std::printf("[官方 API 自检] ✗ 表里没有 id=%s（用 --provider-dump 查看全部）\n", entry_id.c_str());
-        return 2;
-    }
-    if (spec->kind != "official") {
-        std::printf("[官方 API 自检] ✗ 条目 %s 不是 official 条目（kind=%s）\n", entry_id.c_str(),
-                    spec->kind.c_str());
-        return 2;
-    }
-    if (spec->protocol != "openai") {
-        std::printf("[官方 API 自检] ✗ 条目 %s 的 protocol=%s 本版本尚未实现（已实现：%s）\n",
-                    entry_id.c_str(), spec->protocol.c_str(),
-                    join_names(aiwrite::ai::implemented_protocols()).c_str());
-        return 2;
-    }
-
-    const std::string api_base = aiwrite::ai::resolve_api_base(*spec, std::string());
-    const std::string model    = aiwrite::ai::resolve_model(*spec, std::string(), std::string(), false);
-    const std::string key_ref  = aiwrite::ai::resolve_key_ref(*spec, std::string());
-    if (api_base.empty()) {
-        std::printf("[官方 API 自检] ✗ 条目 %s 未填 api_base：请用 --api-base 指定，或在 providers.json 补齐\n",
-                    entry_id.c_str());
-        return 2;
-    }
-
-    // Key：环境变量（表内 env 名按序）→ 凭据库（与节点运行期同序，PB-06）
-    std::string       key;
-    std::string       key_source;
-    for (const std::string& env_name : spec->env_names) {
-        const char* value = std::getenv(env_name.c_str());
-        if (value != nullptr && *value != '\0') {
-            key        = value;
-            key_source = "环境变量 " + env_name;
-            break;
-        }
-    }
-    if (key.empty() && !key_ref.empty()) {
-        std::string       load_error;
-        const std::string stored = aiwrite::utils::load_credential(key_ref, &load_error);
-        if (!stored.empty()) {
-            key        = stored;
-            key_source = "凭据库 " + key_ref;
-        }
-    }
-    if (key.empty()) {
-        std::printf("[官方 API 自检] ✗ 未找到 API Key（环境变量 %s / 凭据库 %s）\n"
-                    "  提示：在界面「提供商配置 → API Key」填一次即入库（PB-06）\n",
-                    join_names(spec->env_names).c_str(), key_ref.c_str());
-        return 2;
-    }
-
-    aiwrite::ai::OfficialChatRequest request;
-    request.options         = aiwrite::ai::provider_options_from(*spec);
-    request.api_base        = api_base;
-    request.options.api_base = api_base;
-    request.api_key         = key;
-    request.model           = model;
-    request.prompt          = "请只回复 pong";
-    request.temperature     = 0.0;
-    request.max_tokens      = 16;
-    std::printf("[官方 API 自检] 条目=%s · 地址=%s · 模型=%s · 凭据来源=%s（脱敏：不打印 Key）\n",
-                entry_id.c_str(), api_base.c_str(), model.c_str(), key_source.c_str());
-    std::printf("[官方 API 自检] 发一次真实生成（「请只回复 pong」，消耗极小额度）…\n");
-
-    const aiwrite::ai::OfficialChatResult result = aiwrite::ai::official_chat(request);
-    std::printf("[官方 API 自检] HTTP %d · 耗时 %lld ms · 取消=%s\n", result.http_status,
-                static_cast<long long>(result.elapsed_ms), result.cancelled ? "是" : "否");
-    if (!result.ok || result.text.empty()) {
-        std::printf("[官方 API 自检] FAIL：%s\n",
-                    result.error.empty() ? "未取到文本" : result.error.c_str());
-        return 1;
-    }
-    std::string reply = result.text;
-    if (reply.size() > 120) {
-        reply.resize(120);
-        reply += "…";
-    }
-    std::printf("[官方 API 自检] PASS：回复=[%s]\n", reply.c_str());
-    return 0;
-}
-
-// --run-selftest：不打开窗口，直接验证 EditorState 的运行接线（start_run / tick_run / 状态文本）
-//  * M_patchB L4（PB2-30①）：`--provider <id>` 可指定**任意网页版条目**（默认 = 表内第一个 web 条目）
-int run_selftest(bool use_web, const std::string& provider_id)
-{
-    aiwrite::ui::EditorState& state = aiwrite::ui::editor();
-    state.create_sample_workflow();
-
-    // 默认（自检不联网）：把生成相关节点的 mode 置为 official（官方 API 占位分支）
-    // --run-selftest --web：置为 web，走真实网页版生成
-    // 注意：LLMGenerate 的模式取「provider 端口（ProviderConfig）」优先，故两处都要设
-    // M_patchB L1 修订（PB2-22 / 决策 D-22②）：站点**不回落** → `--web` 必须显式选**网页版条目**
-    std::string web_entry = provider_id;
-    if (use_web && web_entry.empty()) {
-        const std::vector<std::string> web_entry_ids = aiwrite::ai::provider_specs().ids("web");
-        web_entry = web_entry_ids.empty() ? std::string() : web_entry_ids.front();
-    }
-    if (use_web) {
-        // PB2-30①：显式指定的条目必须真的存在且是网页版条目（严格解析，**不**回落）
-        const aiwrite::ai::ProviderSpec* spec = aiwrite::ai::provider_specs().find(web_entry);
-        if (web_entry.empty()) {
-            std::printf("[运行自检] ✗ 配置表里没有网页版条目（kind=web）：无法执行 --web 自检\n");
-            return 1;
-        }
-        if (spec == nullptr) {
-            std::printf("[运行自检] ✗ 表里没有 id=%s（用 --provider-dump 查看全部）\n", web_entry.c_str());
-            return 2;
-        }
-        if (spec->kind != "web") {
-            std::printf("[运行自检] ✗ 条目 %s 不是网页版条目（kind=%s）：--web 自检需要 kind=web"
-                        "（决策 D-22②，站点不回落）\n",
-                        web_entry.c_str(), spec->kind.c_str());
-            return 2;
-        }
-        if (aiwrite::ai::web_site_error(spec) != std::string()) {
-            std::printf("[运行自检] ✗ 条目 %s 站点不可用：%s\n", web_entry.c_str(),
-                        aiwrite::ai::web_site_error(spec).c_str());
-            return 2;
-        }
-        if (aiwrite::ai::web_login_only(spec)) {
-            // M8-37（零开关）：生成字段未回填**不再判定为失败** —— 运行期会自动识别选择器；
-            //  这里只如实提示（原「登录型条目 → 返回 1」的行为已被自动识别取代）
-            std::printf("[运行自检] ⚠ 条目 %s 的生成字段未回填（web.input_selector / send / "
-                        "answer_selector）：本次运行将**自动识别**（结果打印在下方）；"
-                        "如需固化可用 --web-dom-dump --provider %s 取建议选择器\n",
-                        web_entry.c_str(), web_entry.c_str());
-        }
-    }
-    for (aiwrite::engine::Node& node : state.graph.nodes) {
-        if (use_web && node.type == "ProviderConfig") {
-            if (aiwrite::engine::Param* provider = node.findParam("provider")) {
-                provider->value = web_entry; // 决策 D-22②：站点不回落，必须选网页版条目
-            }
-        }
-        if (node.type != "LLMGenerate" && node.type != "ProviderConfig") {
-            continue;
-        }
-        if (aiwrite::engine::Param* mode = node.findParam("mode")) {
-            mode->value = std::string(use_web ? "web" : "official");
-        }
-    }
-    std::printf("[运行自检] 模式：%s\n", use_web ? "web（网页版真实生成）" : "official（离线占位）");
-    if (use_web) {
-        std::printf("[运行自检] 网页版条目：%s（站点取自该条目，不回落）\n", web_entry.c_str());
-    }
-
-    std::printf("[运行自检] 示例工作流：节点 %zu，连线 %zu\n", state.graph.nodes.size(),
-                state.graph.edges.size());
-    // PC-05：本次自检把运行结果归档到临时目录（不污染用户 outputs），便于断言
-    {
-        aiwrite::Config selftest_config         = aiwrite::app_config();
-        const std::filesystem::path archive_root =
-            std::filesystem::temp_directory_path() / "aiwrite_run_selftest_outputs";
-        std::error_code cleanup_ec;
-        std::filesystem::remove_all(archive_root, cleanup_ec);
-        selftest_config.output.archive_dir  = archive_root.string();
-        selftest_config.output.keep_history = false;
-        selftest_config.output.max_history  = 1;
-        selftest_config.output.ttl_days     = 0;
-        aiwrite::set_app_config(selftest_config);
-    }
-    // VA-07 判据②的「运行前基线」：与 save_workflow 落盘形式逐字节同源
-    // （engine/workflow_io.cpp： graph_to_json(graph).dump(2) + "\n"）。
-    // 用途：网页版答案常以工作流自身的种子文本开头 ⇒「答案前缀命中 JSON」可能只是
-    //       模型**合法复述参数值**；只有「命中处不在运行前基线里」才算运行结果泄漏。
-    const std::string json_before = aiwrite::engine::graph_to_json(state.graph).dump(2) + "\n";
-
-    if (!state.start_run()) {
-        std::printf("[运行自检] FAIL：start_run 被拒绝（%s）\n", state.status.c_str());
-        return 1;
-    }
-
-    int guard = 0;
-    while (state.executor.running() && guard++ < 4096) {
-        state.tick_run();
-    }
-
-    std::printf("[运行自检] 状态栏文本：%s\n", state.run_status_text().c_str());
-    for (const aiwrite::engine::Node& node : state.graph.nodes) {
-        std::string detail;
-        if (!node.error_message.empty()) {
-            detail = "（" + node.error_message + "）";
-        }
-        std::printf("[运行自检] %-3s %-15s %-8s %s\n", node.id.c_str(), node.type.c_str(),
-                    aiwrite::engine::nodeStateName(node.state), detail.c_str());
-    }
-    std::printf("[运行自检] %s\n", state.executor.summary().c_str());
-
-    const bool finished = state.executor.state() == aiwrite::engine::ExecState::Finished;
-
-    // ---- PA-02：输出面板数据通道（与面板「复制全文 / 导出」同一实现）----
-    const std::string output_text = aiwrite::ui::run_output_text(state.graph, state.executor);
-    std::printf("[运行自检] 输出面板文本：%zu 字符\n", output_text.size());
-    if (!output_text.empty()) {
-        const std::size_t head = output_text.size() > 100 ? 100 : output_text.size();
-        std::printf("[运行自检] 输出面板预览：%s…\n", output_text.substr(0, head).c_str());
-    }
-
-    // VA-07 取样：LLMGenerate 节点的运行结果（跑完不得出现在工作流 JSON 里）
-    std::string llm_result;
-    for (const aiwrite::engine::Node& node : state.graph.nodes) {
-        if (node.type == "LLMGenerate") {
-            llm_result = aiwrite::ui::node_output_text(state.graph, state.executor, node.id);
-            break;
-        }
-    }
-
-    // ---- M2-05：工作流文件往返（保存 → 打开，走 app 侧同一代码路径）----
-    // 备份/还原 recent.json，避免自检污染真实最近列表
-    const std::filesystem::path recent_file = aiwrite::paths::recent_file();
-    std::string                 recent_backup;
-    std::error_code             ec;
-    const bool                  had_recent = std::filesystem::exists(recent_file, ec);
-    if (had_recent) {
-        std::ifstream     in(recent_file, std::ios::binary);
-        std::stringstream buffer;
-        buffer << in.rdbuf();
-        recent_backup = buffer.str();
-    }
-
-    const std::filesystem::path temp_file =
-        std::filesystem::temp_directory_path() / "aiwrite_run_selftest_workflow.json";
-    std::string file_error;
-    const bool  saved      = state.save_workflow_to(temp_file.string(), &file_error);
-    const std::size_t nodes_before = state.graph.nodes.size();
-    const bool  opened     = saved && state.open_workflow_from(temp_file.string(), &file_error);
-    const bool  same       = opened && state.graph.nodes.size() == nodes_before;
-    std::printf("[运行自检] 工作流文件往返：保存=%s / 打开=%s / 节点数一致=%s%s\n",
-                saved ? "OK" : "失败", opened ? "OK" : "失败", same ? "OK" : "不一致",
-                file_error.empty() ? "" : ("（" + file_error + "）").c_str());
-
-    // ---- PC-05：运行结果已自动归档（每节点 .txt + run.json）----
-    bool        archive_ok = false;
-    std::size_t archive_files = 0;
-    bool        doc_found  = false;
-    if (!state.last_archive_dir.empty()) {
-        const std::filesystem::path dir(state.last_archive_dir);
-        archive_ok = std::filesystem::exists(dir / "run.json");
-        for (const std::filesystem::directory_entry& entry :
-             std::filesystem::directory_iterator(dir, ec)) {
-            if (!entry.is_regular_file(ec) || entry.path().extension() != ".txt") {
-                continue;
-            }
-            ++archive_files;
-            std::ifstream     in(entry.path(), std::ios::binary);
-            std::stringstream buffer;
-            buffer << in.rdbuf();
-            const std::string content    = buffer.str();
-            // 归档是**全文**落盘 ⇒ 这里只做「含生成文档」的存在性判断，
-            // 故沿用字节前缀即可（VA-07 的纯净判据见下方，那条必须按码点取样）。
-            const std::size_t probe_len  = llm_result.size() < 24 ? llm_result.size() : 24;
-            if (!content.empty() &&
-                (llm_result.empty() ||
-                 content.find(llm_result.substr(0, probe_len)) != std::string::npos)) {
-                doc_found = true; // 归档里确实含生成文档（离线模式下 LLM 失败，退化为"有内容"）
-            }
-        }
-    }
-    std::printf("[运行自检] PC-05 归档：%s（目录 %s，节点文件 %zu 个，含生成文档=%s）\n",
-                archive_ok && doc_found ? "OK" : "失败",
-                state.last_archive_dir.empty() ? "（无）" : state.last_archive_dir.c_str(),
-                archive_files, doc_found ? "是" : "否");
-
-    // VA-07：保存出来的 JSON 不得包含运行结果（运行态值原则）
-    // 判据（TST-L01 缺陷修复 —— 原实现按**字节**取样，见 anonymous namespace 的说明）：
-    //   ① 取样 = 答案前 kVa07ProbeChars 个 **UTF-8 码点**（不再按 24 字节截断）
-    //   ② 命中但**不算**泄漏：该取样在「运行前 JSON 基线」里就已存在
-    //      ⇒ 命中的是工作流自身参数值（模型合法复述种子文本），不是运行结果被写回
-    //   ③ 已知盲区（如实登记）：若运行结果前缀与某个运行前参数值**逐字相同**，
-    //      两者无法区分（属于不可观测差异）；由 VA-01 三处一致 + 人工复核兜底。
-    bool        json_clean      = true;
-    bool        json_static_hit = false;
-    std::size_t json_chars      = 0;
-    std::size_t baseline_chars  = 0;
-    std::size_t probe_chars     = 0;
-    std::size_t probe_bytes     = 0;
-    std::size_t hit_index       = std::string::npos;
-    std::string probe;
-    if (saved && !llm_result.empty()) {
-        std::ifstream     json_in(temp_file, std::ios::binary);
-        std::stringstream json_buffer;
-        json_buffer << json_in.rdbuf();
-        const std::string json = json_buffer.str();
-        json_chars          = json.size();
-        baseline_chars      = json_before.size();
-        probe               = utf8_prefix(llm_result, kVa07ProbeChars);
-        probe_chars         = utf8_length(probe);
-        probe_bytes         = probe.size();
-        hit_index           = json.find(probe);
-        json_static_hit     = (hit_index != std::string::npos) &&
-                              json_before.find(probe) != std::string::npos;
-        json_clean = (hit_index == std::string::npos) || json_static_hit;
-    }
-    std::printf("[运行自检] VA-07 工作流 JSON 不含运行结果：%s\n", json_clean ? "OK" : "失败");
-    {
-        // 诊断：命中/未命中都要能复盘（取样口径 = 答案前 N 个**码点**；转义换行/引号便于比对）
-        std::string head;
-        for (const char c : probe) {
-            if (c == '\n') {
-                head += "\\n";
-            }
-            else if (c == '\r') {
-                head += "\\r";
-            }
-            else if (c == '"') {
-                head += "\\\"";
-            }
-            else {
-                head += c;
-            }
-        }
-        const std::string hit =
-            (hit_index == std::string::npos) ? std::string("未命中") : std::to_string(hit_index);
-        std::printf("[运行自检] VA-07 诊断：llm_result=%zu 字节/%zu 码点 / 取样=%zu 码点（%zu 字节）/ "
-                    "json=%zu 字节（运行前基线 %zu 字节）/ 命中位置=%s / 命中运行前内容=%s / "
-                    "取样文本=[%s]\n",
-                    llm_result.size(), utf8_length(llm_result), probe_chars, probe_bytes, json_chars,
-                    baseline_chars, hit.c_str(), json_static_hit ? "是" : "否", head.c_str());
-    }
-
-    std::filesystem::remove(temp_file, ec);
-    if (had_recent) {
-        std::ofstream out(recent_file, std::ios::binary | std::ios::trunc);
-        out << recent_backup;
-    }
-    else {
-        std::filesystem::remove(recent_file, ec);
-    }
-
-    // ---- VA-01（PA-03）：三处呈现同源（画布节点摘要 / 参数面板结果区 / 输出面板全文）----
-    bool consistency_ok = false;
-    {
-        const std::string all = aiwrite::ui::run_output_text(state.graph, state.executor);
-        std::size_t       compared  = 0;
-        bool              contained = true;
-        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
-            const std::string per_node =
-                aiwrite::ui::node_output_text(state.graph, state.executor, info.node_id);
-            if (per_node.empty()) {
-                continue;
-            }
-            ++compared;
-            if (all.find(per_node) == std::string::npos) {
-                contained = false; // 输出面板全文必须包含每个节点全文
-            }
-        }
-        consistency_ok = contained && compared > 0;
-        std::printf("[运行自检] VA-01 三处一致：%s（比对 %zu 个有输出的节点，全文 %zu 字符）\n",
-                    consistency_ok ? "OK" : "失败", compared, all.size());
-    }
-
-    // ---- P1-c：参数驱动（"无硬编码"断言）----
-    // 改「文本输入」的「文本内容」参数（等价于在参数面板输入框里打字）后重新运行，
-    // 断言：① 该节点运行输出 == 新文本（且与上次不同）② 下游「提示词模板」输出包含新文本
-    // （即：真正发给 AI 的提示词来自输入框，而不是任何写死的示例文本）
-    bool param_driven_ok = false;
-    {
-        const std::string      marker     = "P1C 参数驱动：这段文本来自输入框。";
-        aiwrite::engine::Node* input_node = nullptr;
-        aiwrite::engine::Node* tpl_node   = nullptr;
-        for (aiwrite::engine::Node& node : state.graph.nodes) {
-            if (input_node == nullptr && node.type == "TextInput") {
-                input_node = &node;
-            }
-            if (tpl_node == nullptr && node.type == "PromptTemplate") {
-                tpl_node = &node;
-            }
-        }
-        aiwrite::engine::Param* text_param =
-            (input_node != nullptr) ? input_node->findParam("text") : nullptr;
-        if (input_node != nullptr && tpl_node != nullptr && text_param != nullptr) {
-            const std::string before =
-                aiwrite::ui::node_output_text(state.graph, state.executor, input_node->id);
-            text_param->value = marker; // 模拟"参数面板输入框里改写文本内容"
-            state.start_run();
-            int guard2 = 0;
-            while (state.executor.running() && guard2++ < 4096) {
-                state.tick_run();
-            }
-            const std::string after  = aiwrite::ui::node_output_text(state.graph, state.executor,
-                                                                     input_node->id);
-            const std::string prompt = aiwrite::ui::node_output_text(state.graph, state.executor,
-                                                                     tpl_node->id);
-            const bool        changed = (after == marker) && (after != before);
-            const bool        flowed  = prompt.find(marker) != std::string::npos;
-            param_driven_ok           = changed && flowed;
-            std::printf("[运行自检] P1-c 参数驱动（无硬编码）：%s（节点输出随参数变化=%s / "
-                        "下游提示词含新文本=%s）\n",
-                        param_driven_ok ? "OK" : "失败", changed ? "是" : "否", flowed ? "是" : "否");
-        }
-        else {
-            std::printf("[运行自检] P1-c 参数驱动（无硬编码）：跳过（图中缺少 TextInput / "
-                        "PromptTemplate 节点）\n");
-            param_driven_ok = true;
-        }
-    }
-
-    // ---- PB-01：线程化运行（事件队列 + Graph 不被工作线程写 + 快照同源）----
-    bool async_ok = false;
-    if (!use_web) {
-        // 归位到 Idle（上一轮运行把状态写进了 Graph；异步运行只应改副本）
-        for (aiwrite::engine::Node& node : state.graph.nodes) {
-            node.state = aiwrite::engine::NodeState::Idle;
-            node.error_message.clear();
-        }
-
-        std::string start_error;
-        const bool  started = state.executor.startAsync(&state.graph, &start_error);
-
-        std::vector<aiwrite::engine::RunEvent> events;
-        int                                    guard3 = 0;
-        while (state.executor.state() == aiwrite::engine::ExecState::Running && guard3++ < 20000) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            state.executor.pumpEvents(&events);
-        }
-        // 【API 契约】先 join 再取最后一轮事件：会话结束的那一刻 state_ 已翻转为非 Running，
-        // 而 worker 的 Finished 事件可能尚未入队 —— 必须先 stopAsync()（join）再 pumpEvents()
-        state.executor.stopAsync();
-        state.executor.pumpEvents(&events);
-
-        std::size_t state_events = 0;
-        std::size_t output_events = 0;
-        std::size_t console_events = 0;
-        std::size_t finish_events = 0;
-        std::size_t delta_events  = 0;
-        for (const aiwrite::engine::RunEvent& event : events) {
-            switch (event.kind) {
-            case aiwrite::engine::RunEvent::Kind::NodeState: ++state_events; break;
-            case aiwrite::engine::RunEvent::Kind::NodeOutput: ++output_events; break;
-            case aiwrite::engine::RunEvent::Kind::Console: ++console_events; break;
-            case aiwrite::engine::RunEvent::Kind::Delta: ++delta_events; break;
-            case aiwrite::engine::RunEvent::Kind::Finished: ++finish_events; break;
-            }
-        }
-
-        // ① 主线程尚未应用事件 → Graph 仍是 Idle（证明工作线程只改自己的副本）
-        bool graph_untouched = true;
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
-            if (node.state != aiwrite::engine::NodeState::Idle) {
-                graph_untouched = false;
-                break;
-            }
-        }
-
-        // ② 快照 == 权威数据（runInfos / outputs）
-        const aiwrite::engine::RunSnapshot snapshot =
-            aiwrite::engine::makeSnapshot(state.graph, state.executor);
-        bool same_view = snapshot.nodes.size() == state.executor.runInfos().size();
-        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
-            const aiwrite::engine::RunNodeView* view = snapshot.find(info.node_id);
-            if (view == nullptr || view->state != info.state || view->type != info.type ||
-                std::fabs(view->duration_ms - info.duration_ms) > 0.0001) {
-                same_view = false;
-                break;
-            }
-        }
-
-        bool text_same = true;
-        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
-            const std::string authoritative =
-                aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(), info.node_id);
-            const aiwrite::engine::RunNodeView* view = snapshot.find(info.node_id);
-            const std::string from_snapshot = (view != nullptr) ? view->text : std::string();
-            if (authoritative != from_snapshot) {
-                text_same = false;
-                break;
-            }
-        }
-
-        async_ok = started && finish_events == 1 && state_events > 0 && output_events > 0 &&
-                   console_events > 0 && graph_untouched && same_view && text_same &&
-                   state.executor.state() != aiwrite::engine::ExecState::Running;
-        std::printf("[运行自检] PB-01 线程化：%s（启动=%s / 状态事件 %zu / 输出事件 %zu / Console %zu / "
-                    "增量事件 %zu / Finished %zu / Graph 未被工作线程写=%s / 快照一致=%s / 文本一致=%s）\n",
-                    async_ok ? "OK" : "失败", started ? "是" : "否", state_events, output_events,
-                    console_events, delta_events, finish_events, graph_untouched ? "是" : "否",
-                    same_view ? "是" : "否", text_same ? "是" : "否");
-    }
-    else {
-        std::printf("[运行自检] PB-01 线程化：跳过（--web 模式避免二次联网；该断言在离线模式验证）\n");
-        async_ok = true;
-    }
-
-    // ---- PB-01 第二步：EditorState 异步入口（start_run_async + tick_run 泵事件）----
-    bool session_ok = true;
-    if (!use_web) {
-        for (aiwrite::engine::Node& node : state.graph.nodes) {
-            node.state = aiwrite::engine::NodeState::Idle;
-            node.error_message.clear();
-        }
-
-        const bool started = state.start_run_async();
-        int        guard4  = 0;
-        while (state.session_active() && guard4++ < 40000) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            state.tick_run(); // 主线程：pump_run_events（写 Graph + 维护 run_snapshot）
-        }
-        const bool session_ended = !state.session_active();
-
-        // 读模型 == 权威数据（状态 / 类型 / 文本），且 Graph 节点状态已由事件应用到位
-        const aiwrite::engine::RunSnapshot& view = state.run_snapshot_view();
-        bool same_view = view.nodes.size() == state.executor.runInfos().size();
-        for (const aiwrite::engine::NodeRunInfo& info : state.executor.runInfos()) {
-            const aiwrite::engine::RunNodeView* item = view.find(info.node_id);
-            const aiwrite::engine::Node*        node = state.graph.findNode(info.node_id);
-            if (item == nullptr || node == nullptr || item->state != info.state ||
-                node->state != info.state ||
-                item->text != aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(),
-                                                              info.node_id)) {
-                same_view = false;
-                break;
-            }
-        }
-        state.stop_run_async(); // 幂等（收尾已 join）
-        session_ok = started && session_ended && same_view &&
-                     state.executor.state() != aiwrite::engine::ExecState::Running;
-        std::printf("[运行自检] PB-01 第二步（EditorState 异步 + RunSnapshot）：%s（启动=%s / 会话结束=%s / "
-                    "快照·Graph == 权威=%s / 节点 %zu 个 / 状态 %s）\n",
-                    session_ok ? "OK" : "失败", started ? "是" : "否", session_ended ? "是" : "否",
-                    same_view ? "是" : "否", view.nodes.size(),
-                    aiwrite::engine::execStateName(state.executor.state()));
-    }
-    else {
-        std::printf("[运行自检] PB-01 第二步：跳过（--web 模式避免二次联网）\n");
-    }
-
-    // ---- M_textio P5：汇点节点（TextOutput）的运行态值可读（回归断言）----
-    bool sink_ok = false;
-    {
-        std::string output_id;
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
-            if (node.type == "TextOutput") {
-                output_id = node.id;
-            }
-        }
-        std::string source_id;
-        if (!output_id.empty()) {
-            if (const aiwrite::engine::Edge* edge = state.graph.findEdgeIntoInput(output_id, "text")) {
-                source_id = edge->from_node;
-            }
-        }
-        std::string sink_text;
-        std::string source_text;
-        bool sink_same = false;
-        if (!output_id.empty() && !source_id.empty()) {
-            sink_text   = aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(), output_id);
-            source_text = aiwrite::engine::nodeOutputText(state.graph, state.executor.outputs(), source_id);
-            const aiwrite::engine::RunSnapshot snap = aiwrite::engine::makeSnapshot(state.graph, state.executor);
-            const aiwrite::engine::RunNodeView* view = snap.find(output_id);
-            sink_same = (sink_text == source_text) && view != nullptr && view->text == source_text;
-        }
-        sink_ok = sink_same;
-        std::printf("[运行自检] M_textio 汇点结果可读：%s（TextOutput=%s / 上游=%s / 汇点 %zu 字符 / 上游 %zu 字符）\n",
-                    sink_ok ? "OK" : "失败", output_id.c_str(), source_id.c_str(), sink_text.size(),
-                    source_text.size());
-    }
-
-    // ---- 参数范围安全断言（防“Slider 断言崩溃”回归）----
-    //  ImGui 的 Slider* 只接受 half-range（imgui_widgets.cpp SliderBehavior：
-    //  IM_ASSERT(p_max <= T_MAX / 2)）；参数定义越界会让控件一渲染就 abort。
-    bool param_range_ok = true;
-    {
-        std::size_t checked   = 0;
-        std::string first_bad = "";
-        for (const aiwrite::engine::Definition* definition :
-             aiwrite::engine::NodeRegistry::instance().listTypes()) {
-            for (const aiwrite::engine::Param& param : definition->params) {
-                if (!param.min_value.has_value() || !param.max_value.has_value()) {
-                    continue;
-                }
-                ++checked;
-                const double lo    = *param.min_value;
-                const double hi    = *param.max_value;
-                const double limit = (param.type == aiwrite::engine::ParamType::Int)
-                                         ? 1073741823.0
-                                         : 1.7e38; // IM_S32_MAX/2 与 ≈FLT_MAX/2
-                const bool bad = !(lo <= hi) || lo < -limit || hi > limit;
-                if (bad) {
-                    param_range_ok = false;
-                    if (first_bad.empty()) {
-                        first_bad = definition->type + "." + param.id;
-                        std::printf("[运行自检]   越界参数：%s min=%g max=%g（安全上限 ±%g）\n",
-                                    first_bad.c_str(), lo, hi, limit);
-                    }
-                }
-            }
-        }
-        std::printf("[运行自检] 参数范围安全（ImGui Slider 上限）：%s（检查 %zu 个带范围参数）\n",
-                    param_range_ok ? "OK" : "失败", checked);
-    }
-
-    // ---- M_rerun：文本生成「重新生成（新 seed）」断言（离线）----
-    bool seed_ok = false;
-    {
-        aiwrite::ai::OfficialChatRequest request;
-        request.api_key = "sk-selftest";
-        request.prompt  = "hi";
-        request.model   = "deepseek-chat";
-        request.seed    = 12345;
-        const nlohmann::json with_seed = aiwrite::ai::build_request_body(request);
-        request.seed                   = 0;
-        const nlohmann::json without_seed = aiwrite::ai::build_request_body(request);
-        bool has_param = false;
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
-            if (node.type != "LLMGenerate") {
-                continue;
-            }
-            if (const aiwrite::engine::Param* seed_param = node.findParam("seed")) {
-                has_param = (seed_param->number(-1.0) == 0.0);
-            }
-        }
-        seed_ok = with_seed.contains("seed") && with_seed["seed"].get<int>() == 12345 &&
-                  !without_seed.contains("seed") && has_param;
-        std::printf("[运行自检] M_rerun 新 seed：%s（含 seed=%s / 不含 seed=%s / 节点含 seed 参数=%s）\n",
-                    seed_ok ? "OK" : "失败", with_seed.contains("seed") ? "是" : "否",
-                    without_seed.contains("seed") ? "是" : "否", has_param ? "是" : "否");
-    }
-
-    // ---- F1（M3-04 重做）：复制/粘贴的模型级断言（先断言、后接线 UI）----
-    // 说明：画布层守卫见 node_canvas.cpp（clamp_position / 未知手柄反向推送 / 视图跟随前校验），
-    //       这里覆盖模型侧：新 id 唯一、位置偏移且有限、参数复制、选区内部连线重映射、可撤销。
-    bool paste_ok = false;
-    {
-        // 注意：paste_clipboard() 内部会压撤销快照（Graph 重新分配）→ 源节点必须**按值**捕获，
-        //       不能持有 Node* 指针（否则断言读到悬空内存，误报失败）。
-        struct Source {
-            std::string id;
-            std::string type;
-            float       x = 0.0f;
-            float       y = 0.0f;
-            std::vector<std::pair<std::string, nlohmann::json>> params;
-        };
-        std::vector<Source> sources;
-        // 优先取「存在连线」的一对节点（覆盖"选区内部连线被一并粘贴"这条路径）
-        std::vector<std::string> prefer;
-        for (const aiwrite::engine::Edge& edge : state.graph.edges) {
-            const aiwrite::engine::Node* from = state.graph.findNode(edge.from_node);
-            const aiwrite::engine::Node* to   = state.graph.findNode(edge.to_node);
-            if (from != nullptr && to != nullptr && from->type != "ProviderConfig" &&
-                to->type != "ProviderConfig") {
-                prefer = {edge.from_node, edge.to_node};
-                break;
-            }
-        }
-
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
-            if (sources.size() >= 2) {
-                break;
-            }
-            const bool wanted = !prefer.empty()
-                                    ? (node.id == prefer[0] || node.id == prefer[1])
-                                    : (node.type == "TextInput" || node.type == "PromptTemplate");
-            if (!wanted) {
-                continue;
-            }
-            Source source;
-            source.id   = node.id;
-            source.type = node.type;
-            source.x    = node.x;
-            source.y    = node.y;
-            for (const aiwrite::engine::Param& param : node.params) {
-                source.params.emplace_back(param.id, param.value);
-            }
-            sources.push_back(std::move(source));
-        }
-
-        const auto in_selection = [&sources](const std::string& id) {
-            for (const Source& source : sources) {
-                if (source.id == id) {
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        // 选区**内部**连线数量（这些应被一并粘贴）
-        std::size_t internal_edges = 0;
-        for (const aiwrite::engine::Edge& edge : state.graph.edges) {
-            if (in_selection(edge.from_node) && in_selection(edge.to_node)) {
-                ++internal_edges;
-            }
-        }
-
-        std::set<std::string> ids_before;
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
-            ids_before.insert(node.id);
-        }
-        const std::size_t nodes_before_paste = state.graph.nodes.size();
-        const std::size_t edges_before_paste = state.graph.edges.size();
-
-        state.selected_nodes.clear();
-        for (const Source& source : sources) {
-            state.selected_nodes.push_back(source.id);
-        }
-        state.copy_selection();
-        const bool copied = state.has_clipboard();
-        const bool pasted = state.paste_clipboard();
-
-        std::vector<const aiwrite::engine::Node*> added;
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
-            if (ids_before.find(node.id) == ids_before.end()) {
-                added.push_back(&node);
-            }
-        }
-
-        const std::size_t edges_after_paste = state.graph.edges.size();
-
-        const bool count_ok = copied && pasted && added.size() == sources.size() &&
-                              state.graph.nodes.size() == nodes_before_paste + sources.size() &&
-                              edges_after_paste == edges_before_paste + internal_edges;
-
-        // 诊断：粘贴后"新增节点之间的连线"数量（应与选区内部连线数一致）
-        std::size_t added_edges = 0;
-        for (const aiwrite::engine::Edge& edge : state.graph.edges) {
-            bool from_added = false;
-            bool to_added   = false;
-            for (const aiwrite::engine::Node* node : added) {
-                from_added = from_added || node->id == edge.from_node;
-                to_added   = to_added || node->id == edge.to_node;
-            }
-            if (from_added && to_added) {
-                ++added_edges;
-            }
-        }
-
-        bool placement_ok = true;
-        bool params_ok    = true;
-        for (const aiwrite::engine::Node* node : added) {
-            const Source* origin = nullptr;
-            for (const Source& source : sources) {
-                if (source.type == node->type) {
-                    origin = &source;
-                    break;
-                }
-            }
-            if (origin == nullptr) {
-                placement_ok = false;
-                continue;
-            }
-            constexpr float kOffset = 40.0f;
-            if (!std::isfinite(node->x) || !std::isfinite(node->y) ||
-                std::fabs(node->x) > 1.0e6f || std::fabs(node->y) > 1.0e6f ||
-                std::fabs(node->x - (origin->x + kOffset)) > 0.01f ||
-                std::fabs(node->y - (origin->y + kOffset)) > 0.01f) {
-                placement_ok = false;
-            }
-            for (const std::pair<std::string, nlohmann::json>& expected : origin->params) {
-                const aiwrite::engine::Param* actual = node->findParam(expected.first);
-                if (actual == nullptr || actual->value != expected.second) {
-                    params_ok = false;
-                }
-            }
-        }
-
-        const bool selection_ok = state.selected_nodes.size() == 2 &&
-                                  state.request_navigate_to_content; // 视图跟随延后到画布绘制后
-        const bool undo_ok = (state.undo.canUndo() && state.undo_once() &&
-                              state.graph.nodes.size() == nodes_before_paste &&
-                              state.graph.edges.size() == edges_before_paste);
-        // 空剪贴板：清空选择后复制 → 剪贴板应为空，粘贴被拒绝
-        state.selected_nodes.clear();
-        state.copy_selection();
-        const bool empty_ok = !state.has_clipboard() && !state.paste_clipboard();
-
-        paste_ok = count_ok && placement_ok && params_ok && selection_ok && undo_ok && empty_ok;
-        std::printf("[运行自检] F1 复制/粘贴：%s（新增 %zu 节点 / 连线 期望+%zu 实际+%zu 新增节点间 %zu / "
-                    "位置=%s / 参数=%s / 选择与跟随=%s / 可撤销=%s / 空剪贴板=%s）\n",
-                    paste_ok ? "OK" : "失败", added.size(), internal_edges,
-                    edges_after_paste - edges_before_paste, added_edges,
-                    placement_ok ? "OK" : "失败", params_ok ? "OK" : "失败",
-                    selection_ok ? "OK" : "失败", undo_ok ? "OK" : "失败",
-                    empty_ok ? "OK" : "失败");
-    }
-
-    const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
-                      consistency_ok && param_driven_ok && async_ok && session_ok && sink_ok && seed_ok &&
-                      param_range_ok &&
-                      paste_ok;
-    std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
-    return pass ? 0 : 1;
-}
-
-// --web-chat：不打开界面，用已登录 profile 直接调网页版生成（PoW 求解 + SSE 解析）
-int web_chat_selftest(const std::string& prompt)
-{
-    aiwrite::web::LoginRequest request;
-    request.offscreen              = true;
-    request.timeout_seconds        = 0;    // 生命周期由本函数控制
-    request.probe_after_load       = true; // 目的：拿到 Cookie + userToken
-    request.auto_close_after_probe = false; // 窗口保留给后续 PoW 求解复用
-
-    aiwrite::web::LoginWindow& window = aiwrite::web::login_window();
-    std::string error;
-    if (!window.start(request, &error)) {
-        std::printf("[网页版生成] 启动登录窗口失败: %s\n", error.c_str());
-        return 1;
-    }
-
-    // 等探测完成（窗口保持打开，供后续 PoW 求解复用）
-    for (int i = 0; i < 200; ++i) { // ≤20 秒
-        if (!aiwrite::web::SessionStore::instance().snapshot().probe.ran_at.empty()) {
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    const aiwrite::web::Session session = aiwrite::web::SessionStore::instance().snapshot();
-    std::printf("[网页版生成] 会话：Cookie %zu 条，userToken %s\n", session.cookie_count(),
-                session.user_token.empty() ? "未获取" : "已获取（仅内存）");
-    if (session.user_token.empty()) {
-        std::printf("[网页版生成] FAIL：请先登录一次（`aiwrite.exe --login-selftest` 或界面"
-                    "参数面板的「打开登录窗口」）\n");
-        return 1;
-    }
-
-    aiwrite::ai::WebChatRequest chat;
-    chat.prompt = prompt;
-    const aiwrite::ai::WebChatResult result = aiwrite::ai::web_chat(session, chat);
-
-    std::printf("[网页版生成] HTTP %d，PoW 尝试 %lld 次\n", result.http_status,
-                result.pow_attempts);
-    std::printf("---- 原始响应前几行 ----\n%s\n", result.raw_head.c_str());
-    std::printf("---- 生成文本 ----\n%s\n", result.text.c_str());
-    if (!result.error.empty()) {
-        std::printf("---- 错误 ----\n%s\n", result.error.c_str());
-    }
-
-    const bool pass = result.ok && !result.text.empty();
-    std::printf("[网页版生成] %s\n", pass ? "PASS" : "FAIL");
-
-    aiwrite::web::login_window().request_close(); // 收尾：关闭离屏窗口
-    aiwrite::web::login_window().join();
-    aiwrite::web::SessionStore::instance().clear(); // 自检不留会话
-    return pass ? 0 : 1;
-}
+#include "cli_internal.h"
 
 // ============================================================================
-//  --pipe-selftest：M7B-02 命名管道冒烟（**1 命令 + 1 事件**）
-//
-//  * 起 Python 守护进程（`brain_ai_browser --serve --once`）→ 连管道 → `hello`
-//    → 校验 `ready{proto, python, browser}` → `shutdown` → 收 `stage{close}`
-//    → **等进程退出**（`I23①` 口径：等进程退出，不强杀）
-//  * 退出码：0=通过 / 1=失败 / 2=环境缺失（找不到 Python 解释器或包目录）
-//  * 本函数末尾的「必要时强杀」只是**自检收尾**；生产路径**禁止**以强杀当启动/关闭手段
-//    （§13 / `MB-D0-8` L3）
+//  入口 main（CLN-14 拆分后保留）：CLI 参数分派 + 启动/退出收尾
+//  * 自检 / 诊断函数与通用辅助已拆至 cli_selftest.cpp / cli_diag.cpp（cli_internal.h 声明）
 // ============================================================================
-int pipe_selftest(int timeout_ms)
-{
-    namespace fs = std::filesystem;
-    const auto   to_wide = [](const std::string& text) -> std::wstring {
-        if (text.empty()) {
-            return {};
-        }
-        const int size = ::MultiByteToWideChar(CP_UTF8, 0, text.c_str(),
-                                               static_cast<int>(text.size()), nullptr, 0);
-        if (size <= 0) {
-            return {};
-        }
-        std::wstring wide(static_cast<std::size_t>(size), L'\0');
-        ::MultiByteToWideChar(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()),
-                              wide.data(), size);
-        return wide;
-    };
-    const auto text_field = [](const nlohmann::json& object, const char* key) -> std::string {
-        if (object.is_object() && object.contains(key) && object[key].is_string()) {
-            return object[key].get<std::string>();
-        }
-        return "?";
-    };
-
-    // ---- ① 包目录：<仓库根>/source/python（开发期）→ <exe>/python（部署期，M7B-11 拷贝）----
-    std::vector<fs::path> package_candidates;
-#ifdef AIWRITE_SOURCE_DIR
-    // AIWRITE_SOURCE_DIR = <仓库根>/source ⇒ Python 包就在其下（`source/python/`）。
-    // 2026-10-03 目录迁移（运行代码归源码树 / 运行期数据仍在 ~/.brain-ai）：原为 <仓库根>/python。
-    package_candidates.emplace_back(fs::path(AIWRITE_SOURCE_DIR) / "python");
-#endif
-    package_candidates.emplace_back(aiwrite::paths::exe_dir() / "python");
-    fs::path package_dir;
-    for (const fs::path& candidate : package_candidates) {
-        if (fs::exists(candidate / "brain_ai_browser" / "__main__.py")) {
-            package_dir = candidate;
-            break;
-        }
-    }
-    if (package_dir.empty()) {
-        std::printf("[管道自检] 环境缺失（退出码 2）：找不到 brain_ai_browser 包目录\n");
-        for (const fs::path& candidate : package_candidates) {
-            std::printf("   候选：%s\n", candidate.string().c_str());
-        }
-        return 2;
-    }
-
-    // ---- ② 解释器：`.venv` 优先 → 退回 PATH 上的 python.exe ----
-    fs::path python_exe;
-    const fs::path venv_candidates[] = {package_dir / ".venv" / "Scripts" / "python.exe",
-                                        aiwrite::paths::exe_dir() / "python" / ".venv" /
-                                            "Scripts" / "python.exe"};
-    for (const fs::path& candidate : venv_candidates) {
-        if (fs::exists(candidate)) {
-            python_exe = candidate;
-            break;
-        }
-    }
-    const std::string python_text =
-        python_exe.empty() ? std::string("python.exe") : python_exe.string();
-
-    // ---- ③ 起守护进程（stdout/stderr → <日志目录>/pipe_selftest_daemon.log）----
-    const std::string pipe_name =
-        std::string("aiwrite-browser-selftest-") + std::to_string(::GetCurrentProcessId());
-    const fs::path log_path = aiwrite::paths::logs_dir() / "pipe_selftest_daemon.log";
-
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength        = sizeof(sa);
-    sa.bInheritHandle = TRUE;
-    HANDLE log_handle = ::CreateFileW(to_wide(log_path.string()).c_str(), GENERIC_WRITE,
-                                      FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, CREATE_ALWAYS,
-                                      FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (log_handle == INVALID_HANDLE_VALUE) {
-        std::printf("[管道自检] 环境缺失（退出码 2）：无法创建守护进程日志 %s\n",
-                    log_path.string().c_str());
-        return 2;
-    }
-    // 子进程 stdin 指向 NUL（自检不喂输入；避免部分 Python 构建对空句柄敏感）
-    HANDLE nul_handle =
-        ::CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ, &sa, OPEN_EXISTING, 0, nullptr);
-
-    std::wstring command = L"\"" + to_wide(python_text) +
-                           L"\" -m brain_ai_browser --serve --once --pipe-name " +
-                           to_wide(pipe_name) + L" --idle-timeout 20";
-    STARTUPINFOW si{};
-    si.cb          = sizeof(si);
-    si.dwFlags     = STARTF_USESTDHANDLES;
-    si.hStdInput   = nul_handle;
-    si.hStdOutput  = log_handle;
-    si.hStdError   = log_handle;
-    PROCESS_INFORMATION pi{};
-    const std::wstring  work_dir = to_wide(package_dir.string());
-
-    const BOOL spawned = ::CreateProcessW(nullptr, command.data(), nullptr, nullptr, TRUE,
-                                          CREATE_NO_WINDOW, nullptr,
-                                          work_dir.empty() ? nullptr : work_dir.c_str(), &si, &pi);
-    const DWORD spawn_error = spawned ? 0 : ::GetLastError();
-    ::CloseHandle(log_handle);
-    if (nul_handle != INVALID_HANDLE_VALUE) {
-        ::CloseHandle(nul_handle);
-    }
-    if (spawned == 0) {
-        std::printf("[管道自检] %s：无法启动守护进程（%lu，解释器 %s）\n",
-                    spawn_error == ERROR_FILE_NOT_FOUND ? "环境缺失（退出码 2）" : "FAIL",
-                    static_cast<unsigned long>(spawn_error), python_text.c_str());
-        std::printf("   提示：在 %s 下建虚拟环境（python -m venv .venv && .venv\\Scripts\\pip "
-                    "install -r requirements.txt）\n",
-                    package_dir.string().c_str());
-        return spawn_error == ERROR_FILE_NOT_FOUND ? 2 : 1;
-    }
-    ::CloseHandle(pi.hThread);
-
-    // 自检收尾（**非生产口径**）：先等进程退出，超时才强杀
-    const auto reap_child = [&pi](int wait_ms) -> int {
-        if (::WaitForSingleObject(pi.hProcess, static_cast<DWORD>(wait_ms)) == WAIT_TIMEOUT) {
-            std::printf("[管道自检] 守护进程未在 %d ms 内退出 → 自检收尾强杀"
-                        "（生产路径禁止此手段，见 §13）\n",
-                        wait_ms);
-            ::TerminateProcess(pi.hProcess, 1);
-            ::WaitForSingleObject(pi.hProcess, 3000);
-        }
-        DWORD code = 0;
-        ::GetExitCodeProcess(pi.hProcess, &code);
-        ::CloseHandle(pi.hProcess);
-        return static_cast<int>(code);
-    };
-    // 失败诊断：打印守护进程日志尾部（stdout/stderr 都重定向到这里）
-    const auto dump_log_tail = [&log_path](int lines) {
-        std::ifstream stream(log_path, std::ios::binary);
-        if (!stream) {
-            return;
-        }
-        std::vector<std::string> tail;
-        std::string              line;
-        while (std::getline(stream, line)) {
-            tail.push_back(std::move(line));
-            if (tail.size() > static_cast<std::size_t>(lines)) {
-                tail.erase(tail.begin());
-            }
-        }
-        std::printf("---- 守护进程日志尾部（%s）----\n", log_path.string().c_str());
-        for (const std::string& text : tail) {
-            std::printf("  %s\n", text.c_str());
-        }
-    };
-
-    // ---- ④ 连管道 → 1 命令（hello）→ 1 事件（ready）----
-    std::atomic<bool> closing_seen{false};
-    aiwrite::web::PipeClient client;
-    client.on_event([&closing_seen](const aiwrite::web::channel::Frame& frame) {
-        std::printf("[事件] %-10s id=%-3s %s\n", frame.name.c_str(), frame.id.c_str(),
-                    frame.payload_json.c_str());
-        if (frame.kind == "evt" && frame.name == "stage" &&
-            frame.payload_json.find("\"close\"") != std::string::npos) {
-            closing_seen.store(true);
-        }
-    });
-
-    std::string error;
-    if (!client.connect(pipe_name, timeout_ms, &error)) {
-        std::printf("[管道自检] FAIL 连接守护进程失败：%s\n", error.c_str());
-        client.close();
-        const int code = reap_child(3000);
-        std::printf("[管道自检] 守护进程退出码 = %d\n", code);
-        dump_log_tail(15);
-        return 1;
-    }
-    std::printf("[管道自检] 已连接 %s\n", pipe_name.c_str());
-
-    nlohmann::json ready;
-    const bool     hello_ok = client.call("hello", nlohmann::json::object(), &ready, 5000, &error);
-    const std::string proto_text =
-        (ready.is_object() && ready.contains("proto") && ready["proto"].is_number_integer())
-            ? std::to_string(ready["proto"].get<int>())
-            : std::string("?");
-    if (hello_ok) {
-        std::printf("[管道自检] ready：proto=%s python=%s browser=%s\n", proto_text.c_str(),
-                    text_field(ready, "python").c_str(), text_field(ready, "browser").c_str());
-    } else {
-        std::printf("[管道自检] FAIL hello 失败：%s\n", error.c_str());
-    }
-    const bool ready_ok = hello_ok && ready.is_object() && ready.contains("proto") &&
-                          ready["proto"].is_number_integer() &&
-                          ready["proto"].get<int>() == aiwrite::web::channel::kProtoVersion &&
-                          !text_field(ready, "python").empty() &&
-                          text_field(ready, "python") != "?" &&
-                          !text_field(ready, "browser").empty() &&
-                          text_field(ready, "browser") != "?";
-
-    // ---- ⑤ shutdown → 等 stage{close} 事件（Python → C++ 事件通道）----
-    nlohmann::json shutdown_fields = nlohmann::json::object();
-    shutdown_fields["grace_ms"]    = 500;
-    const bool shutdown_ok = client.send_command("shutdown", shutdown_fields, &error);
-    if (!shutdown_ok) {
-        std::printf("[管道自检] FAIL shutdown 发送失败：%s\n", error.c_str());
-    }
-    for (int i = 0; i < 150 && !closing_seen.load(); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    }
-    const bool event_ok = closing_seen.load();
-
-    // ---- ⑥ 收尾：关通道 → 等守护进程退出（I23①：等进程退出，不强杀）----
-    client.close();
-    const int  daemon_code = reap_child(timeout_ms);
-    const bool pass        = ready_ok && shutdown_ok && event_ok && daemon_code == 0;
-
-    std::printf("[管道自检] %s（hello→ready=%s / 事件 stage{close}=%s / 守护进程退出码=%d / "
-                "丢弃非法帧=%llu）\n",
-                pass ? "PASS" : "FAIL", ready_ok ? "是" : "否", event_ok ? "是" : "否", daemon_code,
-                static_cast<unsigned long long>(client.dropped_frames()));
-    std::printf("[管道自检] 守护进程日志：%s\n", log_path.string().c_str());
-    if (!pass) {
-        dump_log_tail(15);
-    }
-    return pass ? 0 : 1;
-}
-
-// --web-session-selftest：回归「窗口已打开但内存无凭证」真 bug（2026-09-26）
-//  步骤 1：按**用户手动路径**开登录窗口（probe_after_load=false → 内存里不会有 userToken）
-//  步骤 2：调 web::ensure_session() —— 修复前：只“等” → 25s 超时失败（运行时报「未取得网页版凭证」）
-//                                       修复后：识别「窗口已开 → 补探测」 → 数秒内取到凭证
-int web_session_selftest()
-{
-    aiwrite::web::LoginWindow& window = aiwrite::web::login_window();
-
-    // ---- 步骤 1：模拟用户手动点「打开登录窗口」（历史行为：不自动探测）----
-    aiwrite::web::LoginRequest manual;
-    manual.offscreen        = true;  // 离屏，不打扰用户
-    manual.probe_after_load = false; // 【关键】刻意不探测 → 内存无 userToken
-    std::string error;
-    if (!window.start(manual, &error)) {
-        std::printf("[会话自检] FAIL 启动登录窗口失败：%s\n", error.c_str());
-        return 1;
-    }
-    for (int i = 0; i < 100; ++i) { // ≤10 秒：等页面加载（Cookie 提取即可）
-        if (aiwrite::web::SessionStore::instance().snapshot().logged_in) {
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-    const aiwrite::web::Session before = aiwrite::web::SessionStore::instance().snapshot();
-    const bool                 token_empty = before.user_token.empty();
-    std::printf("[会话自检] 步骤 1：窗口已开（Cookie %zu 条，userToken %s）\n",
-                before.cookie_count(), token_empty ? "空（符合预期）" : "非空（场景不成立）");
-
-    // ---- 步骤 2：ensure_session 必须自己补探测，而不是干等 ----
-    const bool ok = aiwrite::web::ensure_session(30000, &error);
-    const aiwrite::web::Session after = aiwrite::web::SessionStore::instance().snapshot();
-    if (ok) {
-        std::printf("[会话自检] 步骤 2：ensure_session=OK（userToken 长度 %zu，仅内存）\n",
-                    after.user_token.size());
-    }
-    else {
-        std::printf("[会话自检] 步骤 2：ensure_session=失败：%s\n", error.c_str());
-    }
-
-    const bool pass = token_empty && ok;
-    std::printf("[会话自检] %s（判定：开窗口时无凭证=%s / ensure_session 取得凭证=%s）\n",
-                pass ? "PASS" : "FAIL", token_empty ? "是" : "否", ok ? "是" : "否");
-
-    window.request_close(); // 收尾：关闭离屏窗口
-    window.join();
-    aiwrite::web::SessionStore::instance().clear(); // 自检不留会话
-    return pass ? 0 : 1;
-}
-
-// --vlm-selftest：图片理解（M5-02）自检
-//   ① 离线：编码图片 → 构造 OpenAI 兼容多模态请求体（不需要 Key）
-//   ② 联网：Key 三级优先级（参数 → 环境变量 → 凭据库引用）解析成功时真实调用
-//   退出码：0=通过（联网取到文本）/ 1=失败 / 2=缺少 API Key（离线部分已通过）
-int vlm_selftest(const std::string& image_path, const std::string& api_base,
-                 const std::string& model, const std::string& key_ref)
-{
-    aiwrite::ai::OfficialChatRequest request;
-    request.api_base    = api_base;
-    request.model       = model;
-    request.prompt      = "用一句中文描述这张图片的主要内容。";
-    request.images      = {image_path};
-    request.temperature = 1.0;
-    request.max_tokens  = 512;
-    request.top_p       = 0.95;
-
-    // ---- ① 离线：图片编码 + 请求体构造 ----
-    std::string       encode_error;
-    const auto        encode_started = std::chrono::steady_clock::now();
-    const std::string data_url =
-        aiwrite::ai::encode_image_data_url(image_path, request.image_max_bytes, &encode_error);
-    const double      encode_ms =
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - encode_started)
-            .count();
-    if (data_url.empty()) {
-        std::printf("[图片理解自检] FAIL：图片编码失败：%s\n", encode_error.c_str());
-        return 1;
-    }
-    const nlohmann::json       body     = aiwrite::ai::build_request_body(request);
-    const nlohmann::json&      messages = body["messages"];
-    // 注意：未设置 system_prompt 时 messages 只有 1 条 → 取最后一条（user）
-    const nlohmann::json&      parts    = messages.back()["content"];
-    const bool                 body_ok  =
-        parts.is_array() && parts.size() == 2 && parts[0]["type"] == "text" &&
-        parts[1]["type"] == "image_url" &&
-        parts[1]["image_url"]["url"].get<std::string>() == data_url;
-    std::printf("[图片理解自检] 端点：%s\n", aiwrite::ai::build_endpoint(api_base).c_str());
-    std::printf("[图片理解自检] 模型：%s\n", model.c_str());
-    std::printf("[图片理解自检] 图片：%s（data URL %zu 字符）\n", image_path.c_str(),
-                data_url.size());
-    // P7a-10：编码后体积与耗时（base64 字符 ≈ 原始 × 1.33）—— 离线即可核对，不必真发请求
-    std::printf("[图片理解自检] 编码后体积：%s（base64 字符 %zu，原始约 %s），耗时 %.0f ms\n",
-                aiwrite::ai::human_bytes(data_url.size()).c_str(), data_url.size(),
-                aiwrite::ai::human_bytes(static_cast<std::size_t>(
-                    static_cast<double>(data_url.size()) / 1.33)).c_str(),
-                encode_ms);
-    if (!body_ok) {
-        std::printf("[图片理解自检] FAIL：请求体不是预期的多模态结构（text + image_url）\n");
-        return 1;
-    }
-    std::printf("[图片理解自检] 离线请求体构造 PASS\n");
-
-    // ---- ② 联网：Key 解析（参数 → 环境变量 → 凭据库引用）----
-    const aiwrite::utils::ResolvedSecret secret =
-        aiwrite::utils::resolve_secret(std::string(), key_ref);
-    if (secret.key.empty()) {
-        std::printf("[图片理解自检] 未找到 API Key（环境变量 DEEPSEEK_API_KEY 或凭据库 %s）\n",
-                    key_ref.c_str());
-        std::printf("  提示：在界面「提供商配置 → API Key」填写一次即会自动入库（ref=%s）\n",
-                    key_ref.c_str());
-        return 2;
-    }
-    request.api_key = secret.key;
-    std::printf("[图片理解自检] 凭据来源=%s，开始真实调用…\n", secret.source.c_str());
-
-    const aiwrite::ai::OfficialChatResult result = aiwrite::ai::official_chat(request);
-    std::printf("[图片理解自检] HTTP %d，耗时 %.0f ms\n", result.http_status, result.elapsed_ms);
-    if (!result.ok || result.text.empty()) {
-        std::printf("[图片理解自检] FAIL：%s\n",
-                    result.error.empty() ? "未取到文本" : result.error.c_str());
-        return 1;
-    }
-    std::printf("---- 生成文本 ----\n%s\n", result.text.c_str());
-    std::printf("[图片理解自检] PASS\n");
-    return 0;
-}
-
-// --provider-selftest / --provider-dump：Provider 配置表（M_patchB L1 / PB2-01、PB2-07 离线部分）
-//   ① 表校验 + 离线断言（official 与 web 两类条目**同一套**）
-//   ② --provider <id>：API 条目 → 有 Key 时发一条 ping；网页版条目 → 只检查登录态与端点
-//   退出码：0=通过 / 1=失败 / 2=缺 Key（API）或未登录（web）—— 离线部分均已通过
-
-std::string join_names(const std::vector<std::string>& items)
-{
-    std::string text;
-    for (const std::string& item : items) {
-        if (!text.empty()) {
-            text += "、";
-        }
-        text += item;
-    }
-    return text.empty() ? std::string("（无）") : text;
-}
-
-// ============================================================================
-//  --web-session-list：**会话 / 登录态清单**（批 3 · FEA-L02）
-//
-//  把「登录态现在到底什么情况」从界面里搬到命令行 —— 三类事实一次列清：
-//    ① 本进程**内存**会话（`I15`：凭证不落盘 ⇒ 全新进程必然为空，**如实标注**而不是假装）
-//    ② L2 DPAPI 快照的**只读元数据**（路径 / 字节 / 修改时间 / 触发时机；不解密、不读内容）
-//    ③ 每条网页版条目的**登录判据配置**（`cookie_names`；`I15′`：判据不得依赖厂商专有物）
-//  退出码：0 = 清单输出成功（**有没有会话都算成功** —— 它是报告命令，不是门槛）；
-//          1 = 落盘失败 / 快照元数据异常；2 = 表读取失败
-// ============================================================================
-int web_session_list(const std::string& json_path)
-{
-    using aiwrite::web::SessionStore;
-
-    std::printf("\n===== 会话 / 登录态清单（批 3 · FEA-L02）=====\n");
-
-    // ---- ① 本进程内存会话 ----
-    SessionStore&                  store  = SessionStore::instance();
-    const std::vector<std::string> sites  = store.sites();
-    nlohmann::json                 memory = nlohmann::json::array();
-    std::printf("① 内存会话（本进程）：%zu 个站点\n", sites.size());
-    if (sites.empty()) {
-        std::printf("   无 —— 凭证**只在内存**（I15：不写盘、不进日志）⇒ 全新进程必然为空：\n");
-        std::printf("   要拿内存凭证，请在**同一次运行**里先登录"
-                    "（界面「打开登录窗口」/ --login-selftest / --web-adapter-selftest）\n");
-    }
-    else {
-        std::printf("   %-30s %-16s %-12s %-7s %-5s %-20s %s\n", "站点键（origin）", "条目 id",
-                    "登录态", "Cookie", "凭证", "更新时间", "会话来源 URL");
-        for (const std::string& site : sites) {
-            const aiwrite::web::Session session = store.snapshot(site);
-            const aiwrite::ai::ProviderSpec* spec =
-                aiwrite::ai::provider_specs().find(session.provider_id);
-            std::string state_label = "非表内条目（按 origin 归档）";
-            if (spec != nullptr) {
-                const aiwrite::ai::WebSessionVerdict verdict = aiwrite::ai::web_session_state(
-                    spec, aiwrite::web::web_session_evidence(session));
-                state_label = aiwrite::ai::web_session_state_label(verdict.state);
-            }
-            std::printf("   %-30s %-16s %-12s %-7zu %-5s %-20s %s\n", site.c_str(),
-                        session.provider_id.empty() ? "（未标注）" : session.provider_id.c_str(),
-                        state_label.c_str(), session.cookie_count(),
-                        session.user_token.empty() ? "无" : "有", session.updated_at.c_str(),
-                        session.url.c_str());
-            nlohmann::json item;
-            item["site"]         = site;
-            item["provider_id"]  = session.provider_id;
-            item["state_label"]  = state_label;
-            item["logged_in"]    = session.logged_in;
-            item["cookie_count"] = session.cookie_count();
-            item["has_token"]    = !session.user_token.empty();
-            item["updated_at"]   = session.updated_at;
-            item["url"]          = session.url;
-            memory.push_back(item);
-        }
-    }
-    // ---- ② L2 快照只读元数据（红线 I23③：C++ 侧永不读快照内容）----
-    const aiwrite::web::SnapshotInfo info = aiwrite::web::inspect_snapshot();
-    std::printf("\n② L2 登录态快照（DPAPI 加密；只有 Python 侧读写 —— 此处只读元数据、不解密）\n");
-    std::printf("   路径      : %s\n", aiwrite::web::snapshot_file().string().c_str());
-    std::printf("   状态      : %s\n", aiwrite::web::snapshot_summary(info).c_str());
-    std::printf("   触发时机  : %s\n", aiwrite::web::snapshot_trigger_note().c_str());
-    if (!info.exists) {
-        std::printf("   提示      : 快照由守护进程（brain_ai_browser --serve）在登录后写出；"
-                    "没跑过就不存在（不是错误）\n");
-    }
-    else if (!info.in_size_limit) {
-        std::printf("   ⚠️ 超限    : > %llu 字节 ⇒ Python 侧按「损坏」处理（重登一次会重写）\n",
-                    static_cast<unsigned long long>(aiwrite::web::kSnapshotMaxBytes));
-    }
-
-    // ---- ③ 网页版条目登录判据 ----
-    std::printf("\n③ 网页版条目登录判据（站点无关 · I15′：cookie_names 命中 或 该 origin Cookie 非空）\n");
-    nlohmann::json entries   = nlohmann::json::array();
-    int            web_total = 0;
-    for (const aiwrite::ai::ProviderSpec& spec : aiwrite::ai::provider_specs().items) {
-        if (spec.kind != "web") {
-            continue;
-        }
-        ++web_total;
-        std::printf("   %-16s %-26s %-6s %s\n", spec.id.c_str(), spec.display.c_str(),
-                    spec.web.adapter.c_str(),
-                    spec.web.cookie_names.empty()
-                        ? "（未配 cookie_names ⇒ 判据只剩「该 origin Cookie 非空」）"
-                        : join_names(spec.web.cookie_names).c_str());
-        nlohmann::json item;
-        item["id"]           = spec.id;
-        item["display"]      = spec.display;
-        item["adapter"]      = spec.web.adapter;
-        item["login_url"]    = spec.web.login_url;
-        item["cookie_names"] = spec.web.cookie_names;
-        entries.push_back(item);
-    }
-    std::printf("   共 %d 条网页版条目\n", web_total);
-
-    // ---- 机器读版（供 loop 报告引用 / 与上一轮对比）----
-    if (!json_path.empty()) {
-        nlohmann::json doc;
-        doc["schema"]          = "aiwrite.web_session_list/1";
-        doc["generated_at"]    = report_timestamp();
-        doc["memory_sessions"] = memory;
-        doc["l2_snapshot"]     = {{"path", aiwrite::web::snapshot_file().string()},
-                                  {"exists", info.exists},
-                                  {"bytes", info.bytes},
-                                  {"modified_at", info.modified_at},
-                                  {"in_size_limit", info.in_size_limit},
-                                  {"max_bytes", aiwrite::web::kSnapshotMaxBytes},
-                                  {"trigger_note", aiwrite::web::snapshot_trigger_note()}};
-        doc["web_entries"]     = entries;
-        std::string write_error;
-        if (!write_text_file(json_path, doc.dump(2) + "\n", &write_error)) {
-            std::printf("\n[会话清单] 落盘失败：%s\n", write_error.c_str());
-            return 1;
-        }
-        std::printf("\n[会话清单] 机器读版已写入：%s\n", json_path.c_str());
-    }
-    std::printf("[会话清单] 完成（内存会话 %zu 个 · L2 快照 %s · 网页版条目 %d 条）\n\n",
-                sites.size(), info.exists ? "存在" : "不存在", web_total);
-    std::fflush(stdout);
-    return 0;
-}
-
-void print_spec_list(const aiwrite::ai::ProviderSpecs& specs)
-{
-    for (const aiwrite::ai::ProviderSpec& spec : specs.items) {
-        std::string detail;
-        if (spec.kind == "web") {
-            detail = "adapter=" + spec.web.adapter + " login=" + spec.web.login_url;
-        }
-        else {
-            detail = "protocol=" + spec.protocol +
-                     " base=" + (spec.api_base.empty() ? std::string("（手填）") : spec.api_base);
-        }
-        std::printf("   %-18s kind=%-8s %s\n", spec.id.c_str(), spec.kind.c_str(),
-                    detail.c_str());
-        std::printf("   %-18s 来源=%-18s 模型 %zu 个%s\n", "", spec.origin.c_str(),
-                    spec.models.size(), spec.verified ? "  [已实测]" : "  [未验证]");
-    }
-}
-
-int provider_dump()
-{
-    const aiwrite::ai::ProviderSpecs specs = aiwrite::ai::provider_specs();
-    std::printf("[配置表] %s；条目 %zu 条（official %zu / web %zu）\n",
-                specs.report.summary().c_str(), specs.items.size(),
-                specs.count_kind("official"), specs.count_kind("web"));
-    print_spec_list(specs);
-    std::printf("[配置表] 已实现协议：%s\n",
-                join_names(aiwrite::ai::implemented_protocols()).c_str());
-    std::printf("[配置表] 已实现网页版适配器：%s\n",
-                join_names(aiwrite::ai::implemented_web_adapters()).c_str());
-    std::printf("[配置表] 用户目录：%s（新增条目）\n",
-                aiwrite::paths::user_providers_dir().string().c_str());
-    std::printf("[配置表] 用户覆盖：%s\n", aiwrite::paths::user_providers_file().string().c_str());
-    for (const std::string& warning : specs.report.warnings) {
-        std::printf("[配置表][警告] %s\n", warning.c_str());
-    }
-    for (const std::string& error : specs.report.errors) {
-        std::printf("[配置表][错误] %s\n", error.c_str());
-    }
-    return 0;
-}
-
-int provider_selftest(const std::string& provider_id, const std::string& api_base,
-                      const std::string& model, const std::string& key_ref)
-{
-    const aiwrite::ai::ProviderSpecs specs = aiwrite::ai::provider_specs();
-    std::printf("[Provider 自检] 表：%s；条目 %zu 条（official %zu / web %zu）\n",
-                specs.report.summary().c_str(), specs.items.size(),
-                specs.count_kind("official"), specs.count_kind("web"));
-    print_spec_list(specs);
-
-    int       offline_passed = 0;
-    const int offline_failed = aiwrite::ai::provider_spec_selftest(&offline_passed);
-    if (provider_id.empty()) {
-        std::printf("[Provider 自检] 未指定 --provider：仅完成离线部分（表校验 + 断言）\n");
-        return offline_failed == 0 ? 0 : 1;
-    }
-
-    const aiwrite::ai::ProviderSpec* spec = specs.find(provider_id);
-    if (spec == nullptr) {
-        std::printf("[Provider 自检] FAIL：表里没有 id=%s（用 --provider-dump 查看全部）\n",
-                    provider_id.c_str());
-        return 1;
-    }
-
-    // ---- 网页版条目：只检查登录态与端点一致性（不发送内容，避免误触发站点）----
-    if (spec->kind == "web") {
-        const std::string token =
-            aiwrite::web::SessionStore::instance().snapshot().user_token;
-        const bool logged_in = !token.empty();
-        std::printf("[Provider 自检] 网页版 %s：适配器=%s\n", spec->display.c_str(),
-                    spec->web.adapter.c_str());
-        std::printf("[Provider 自检] 登录页：%s\n", spec->web.login_url.c_str());
-        if (spec->web.adapter == "dom") {
-            // M_patchB L1 修订（PB2-26）：DOM 条目**没有内置端点**（真实交互由 DOM 执行器在页面内完成）
-            //  * 如实显示「不适用 / 生成未就绪」，避免把内置默认（DeepSeek）端点误读成本条目的端点
-            std::printf("[Provider 自检] 端点：不适用（DOM 适配器；无内置端点）\n");
-            std::printf("[Provider 自检] 生成：%s\n",
-                        aiwrite::ai::web_login_only(spec)
-                            ? "未回填（生成字段缺失）—— **运行时会自动识别**选择器（M8-37）；"
-                              "固化可用 --web-dom-dump"
-                            : "字段齐全（声明值优先；未命中时仍会自动识别兜底）");
-        }
-        else {
-            std::printf("[Provider 自检] 端点：host=%s completion=%s challenge=%s\n",
-                        spec->web.endpoints.host.c_str(),
-                        spec->web.endpoints.completion_path.c_str(),
-                        spec->web.endpoints.challenge_path.c_str());
-        }
-        std::printf("[Provider 自检] 探测路径：%s\n", join_names(spec->web.probe_paths).c_str());
-        std::printf("[Provider 自检] 登录态=%s（内存凭证，程序退出即销毁）\n",
-                    logged_in ? "有" : "无");
-        if (!logged_in) {
-            std::printf("  提示：先在界面「提供商配置 → 打开登录窗口」登录一次，或跑 "
-                        "--web-session-selftest\n");
-            return 2;
-        }
-        return offline_failed == 0 ? 0 : 1;
-    }
-
-    // ---- API 条目：协议实现检查 → Key 解析（env 列表 → 凭据库）→ 一条 ping ----
-    //  * L2（`B2-b` · PB2-09/10/11）：**按表 protocol 经工厂分派**（不再只认 openai）
-    if (!aiwrite::ai::factory_implements(spec->protocol)) {
-        std::printf("[Provider 自检] %s 的 protocol=%s 本版本尚未实现（工厂已实现：%s）"
-                    "：跳过联网测试\n",
-                    spec->display.c_str(), spec->protocol.c_str(),
-                    aiwrite::ai::factory_protocols_text().c_str());
-        return offline_failed == 0 ? 0 : 1;
-    }
-    const std::string effective_base = aiwrite::ai::resolve_api_base(*spec, api_base);
-    const std::string effective_model =
-        aiwrite::ai::resolve_model(*spec, model, std::string(), false);
-    const std::string effective_ref = aiwrite::ai::resolve_key_ref(*spec, key_ref);
-    std::printf("[Provider 自检] 生效地址=%s；生效模型=%s；引用名=%s\n", effective_base.c_str(),
-                effective_model.c_str(), effective_ref.c_str());
-    if (effective_base.empty()) {
-        std::printf("[Provider 自检] FAIL：该条目未填 api_base，请用 --api-base 指定\n");
-        return 1;
-    }
-
-    std::string key;
-    std::string key_source;
-    for (const std::string& env_name : spec->env_names) {
-        const char* value = std::getenv(env_name.c_str());
-        if (value != nullptr && *value != '\0') {
-            key        = value;
-            key_source = "环境变量 " + env_name;
-            break;
-        }
-    }
-    if (key.empty()) {
-        std::string       load_error;
-        const std::string stored = aiwrite::utils::load_credential(effective_ref, &load_error);
-        if (!stored.empty()) {
-            key        = stored;
-            key_source = "凭据库 " + effective_ref;
-        }
-    }
-    if (key.empty()) {
-        std::printf("[Provider 自检] 未找到 API Key（环境变量 %s / 凭据库 %s）\n",
-                    join_names(spec->env_names).c_str(), effective_ref.c_str());
-        std::printf("  提示：在界面「提供商配置 → API Key」填写一次即自动入库\n");
-        return 2;
-    }
-    std::printf("[Provider 自检] 凭据来源=%s，发一条 ping（消耗极小额度）…\n", key_source.c_str());
-
-    // ---- L2（`B2-b`）：经**工厂**按表 protocol 分派（openai / anthropic / gemini 三协议同一入口）----
-    aiwrite::ai::ProviderRuntimeConfig runtime;
-    runtime.api_base    = effective_base;
-    runtime.model       = effective_model;
-    runtime.api_key     = key;
-    runtime.options     = aiwrite::ai::provider_options_from(*spec);
-    runtime.console_tag = "[Provider 自检]";
-    const aiwrite::ai::ProviderCreation created = aiwrite::ai::create_provider(*spec, runtime);
-    if (created.provider == nullptr) {
-        std::printf("[Provider 自检] FAIL：%s\n", created.error.c_str());
-        return 1;
-    }
-    std::printf("[Provider 自检] 协议=%s，实现=%s\n", created.provider->protocol().c_str(),
-                created.provider->name().c_str());
-
-    aiwrite::ai::GenerateParams ping_params;
-    ping_params.prompt      = "请只回复：pong";
-    ping_params.max_tokens  = 16;
-    ping_params.temperature = 0.0;
-    ping_params.top_p       = 1.0;
-    const aiwrite::ai::GenerateResult ping = created.provider->generate(ping_params);
-    std::printf("[Provider 自检] HTTP %d，耗时 %.0f ms\n", ping.http_status, ping.elapsed_ms);
-    if (!ping.ok || ping.text.empty()) {
-        std::printf("[Provider 自检] FAIL：%s\n",
-                    ping.error.empty() ? "未取到文本" : ping.error.c_str());
-        return 1;
-    }
-    std::printf("[Provider 自检] 返回：%s\n", ping.text.substr(0, 120).c_str());
-    std::printf("[Provider 自检] PASS\n");
-    return offline_failed == 0 ? 0 : 1;
-}
-
-} // namespace
 
 int main(int argc, char** argv)
 {
@@ -1823,15 +125,15 @@ int main(int argc, char** argv)
             // M_patchAB §2.3（PB-06 剩余）：TTL 取自 `[credentials].ttl_days`
             //  * CLI 分支早于界面配置加载 ⇒ 这里先**只读**载入一次真实配置（与 api_probe 同口径）
             aiwrite::Config cli_config;
-            if (aiwrite::load_config(aiwrite::paths::config_file(), cli_config)) {
-                aiwrite::set_app_config(cli_config);
+            if (aiwrite::loadConfig(aiwrite::paths::configFile(), cli_config)) {
+                aiwrite::setAppConfig(cli_config);
             }
-            const int ttl_days = aiwrite::app_config().credentials.ttl_days;
+            const int ttl_days = aiwrite::appConfig().credentials.ttl_days;
             const std::vector<aiwrite::utils::CredentialInfo> items =
-                aiwrite::utils::list_credentials(ttl_days);
+                aiwrite::utils::listCredentials(ttl_days);
             std::printf("凭据库（%s）：%zu 条（后端 %s / 保留 %d 天）\n",
-                        aiwrite::utils::credentials_dir().c_str(), items.size(),
-                        aiwrite::app_config().credentials.backend.c_str(), ttl_days);
+                        aiwrite::utils::credentialsDir().c_str(), items.size(),
+                        aiwrite::appConfig().credentials.backend.c_str(), ttl_days);
             for (const aiwrite::utils::CredentialInfo& info : items) {
                 std::printf("  %-28s 更新=%lld 剩余TTL=%d 天\n", info.ref.c_str(),
                             info.updated_at, info.ttl_remaining_days);
@@ -1845,29 +147,29 @@ int main(int argc, char** argv)
             }
             const std::string target = argv[++i];
             std::string       erase_error;
-            const bool        erased = aiwrite::utils::erase_credential(target, &erase_error);
+            const bool        erased = aiwrite::utils::eraseCredential(target, &erase_error);
             std::printf("凭据 %s：%s\n", target.c_str(),
                         erased ? "已删除" : erase_error.c_str());
             return erased ? 0 : 1;
         }
         else if (arg == "--export-selftest") {
-            const int failed = aiwrite::utils::text_export_selftest();
+            const int failed = aiwrite::utils::textExportSelftest();
             std::printf("文本导出自检：%s（失败 %d 项，详见日志）\n", failed == 0 ? "PASS" : "FAIL", failed);
             return failed == 0 ? 0 : 1;
         }
         else if (arg == "--cred-selftest") {
-            const int failed = aiwrite::utils::credential_selftest();
+            const int failed = aiwrite::utils::credentialSelftest();
             std::printf("凭据自检：%s（失败 %d 项，详见日志）\n", failed == 0 ? "PASS" : "FAIL", failed);
             return failed == 0 ? 0 : 1;
         }
         else if (arg == "--cred-purge") {
             aiwrite::Config cli_config;
-            if (aiwrite::load_config(aiwrite::paths::config_file(), cli_config)) {
-                aiwrite::set_app_config(cli_config);
+            if (aiwrite::loadConfig(aiwrite::paths::configFile(), cli_config)) {
+                aiwrite::setAppConfig(cli_config);
             }
-            const int   ttl_days = aiwrite::app_config().credentials.ttl_days;
+            const int   ttl_days = aiwrite::appConfig().credentials.ttl_days;
             std::string purge_error;
-            const int   removed = aiwrite::utils::purge_expired_credentials(ttl_days, &purge_error);
+            const int   removed = aiwrite::utils::purgeExpiredCredentials(ttl_days, &purge_error);
             std::printf("已清理过期凭据 %d 个（TTL %d 天，取自 [credentials].ttl_days）\n", removed,
                         ttl_days);
             return 0;
@@ -1982,12 +284,12 @@ int main(int argc, char** argv)
             selftest_timeout = std::atoi(argv[++i]);
         }
         else if (arg == "--help" || arg == "-h") {
-            print_usage();
+            printUsage();
             return 0;
         }
         else {
             std::fprintf(stderr, "未知参数: %s\n", arg.c_str());
-            print_usage();
+            printUsage();
             return 2;
         }
     }
@@ -1995,16 +297,16 @@ int main(int argc, char** argv)
     aiwrite::log::init(options.console);
     aiwrite::log::info("AIwrite 启动（M1 技术验证 + 项目骨架）");
 
-    const int dir_failures = aiwrite::paths::ensure_data_dirs();
+    const int dir_failures = aiwrite::paths::ensureDataDirs();
     if (dir_failures != 0) {
         aiwrite::log::warn("有 " + std::to_string(dir_failures) + " 个数据目录创建失败，请检查权限");
     }
-    aiwrite::log::info("数据目录: " + aiwrite::paths::data_root().string());
+    aiwrite::log::info("数据目录: " + aiwrite::paths::dataRoot().string());
 
     // M7B 批 1 step 2（M7B-02）：命名管道冒烟（起 Python 守护进程 → hello → ready → shutdown）
     if (pipe_selftest_flag) {
         // --timeout 的口径是**秒**（与 --login-selftest 一致）→ 本函数用毫秒
-        const int code = pipe_selftest(selftest_timeout * 1000);
+        const int code = pipeSelftest(selftest_timeout * 1000);
         aiwrite::log::info("AIwrite 管道自检退出，返回码 " + std::to_string(code));
         aiwrite::log::shutdown();
         return code;
@@ -2018,7 +320,7 @@ int main(int argc, char** argv)
         return code;
     }
     if (!pydoll_login_id.empty()) {
-        const int code = aiwrite::web::channel::pydoll_login(pydoll_login_id, selftest_timeout);
+        const int code = aiwrite::web::channel::pydollLogin(pydoll_login_id, selftest_timeout);
         aiwrite::log::info("AIwrite 新通道登录退出，返回码 " + std::to_string(code));
         aiwrite::log::shutdown();
         return code;
@@ -2026,7 +328,7 @@ int main(int argc, char** argv)
 
     // 网页版会话自动引导回归（窗口已开但内存无凭证 → ensure_session 应自动补探测）
     if (web_session_selftest_flag) {
-        const int session_code = web_session_selftest();
+        const int session_code = webSessionSelftest();
         aiwrite::log::info("AIwrite 会话自检退出，返回码 " + std::to_string(session_code));
         aiwrite::log::shutdown();
         return session_code;
@@ -2034,7 +336,7 @@ int main(int argc, char** argv)
 
     // 批 3（FEA-L02）：会话 / 登录态清单（**报告命令**：有没有会话都算成功）
     if (web_session_list_flag) {
-        const int list_code = web_session_list(report_json_path);
+        const int list_code = webSessionList(report_json_path);
         aiwrite::log::info("AIwrite 会话清单退出，返回码 " + std::to_string(list_code));
         aiwrite::log::shutdown();
         return list_code;
@@ -2054,10 +356,10 @@ int main(int argc, char** argv)
         if (provider_id == "all") {
             // ---- 批量：全部 `adapter=dom` 条目（表驱动；逐站独立）----
             nlohmann::json report;
-            code = aiwrite::ai::dom_probe_all(selftest_timeout, &report, nullptr);
+            code = aiwrite::ai::domProbeAll(selftest_timeout, &report, nullptr);
             if (!report_json_path.empty()) {
                 std::string write_error;
-                if (write_text_file(report_json_path, report.dump(2) + "\n", &write_error)) {
+                if (writeTextFile(report_json_path, report.dump(2) + "\n", &write_error)) {
                     std::printf("[批量探测] 机器读版已写入：%s\n", report_json_path.c_str());
                 }
                 else {
@@ -2068,7 +370,7 @@ int main(int argc, char** argv)
             if (!report_prev_path.empty()) {
                 std::string prev_text;
                 std::string read_error;
-                if (!read_text_file(report_prev_path, &prev_text, &read_error)) {
+                if (!readTextFile(report_prev_path, &prev_text, &read_error)) {
                     std::printf("[批量探测] 读上一轮报告失败：%s\n", read_error.c_str());
                     code = (code == 0) ? 1 : code;
                 }
@@ -2106,12 +408,12 @@ int main(int argc, char** argv)
         }
         else if (provider_id.empty()) {
             std::printf("[选择器探测] 请用 --provider <id> 指定要诊断的网页版条目；当前表里的 web 条目：\n");
-            for (const aiwrite::ai::ProviderSpec& spec : aiwrite::ai::provider_specs().items) {
+            for (const aiwrite::ai::ProviderSpec& spec : aiwrite::ai::providerSpecs().items) {
                 if (spec.kind != "web") {
                     continue;
                 }
                 const char* kind_text = (spec.web.adapter == "dom")
-                                            ? (aiwrite::ai::web_login_only(&spec) ? "dom · 未回填"
+                                            ? (aiwrite::ai::webLoginOnly(&spec) ? "dom · 未回填"
                                                                                   : "dom")
                                             : spec.web.adapter.c_str();
                 std::printf("   %-16s %-28s %s\n", spec.id.c_str(), spec.display.c_str(), kind_text);
@@ -2120,7 +422,7 @@ int main(int argc, char** argv)
             std::printf("      aiwrite.exe --web-adapter-selftest --provider all --json build\\loop\\probe.json\n");
         }
         else {
-            code = aiwrite::ai::dom_adapter_selftest(provider_id, selftest_timeout);
+            code = aiwrite::ai::domAdapterSelftest(provider_id, selftest_timeout);
         }
         aiwrite::log::info("AIwrite 选择器探测退出，返回码 " + std::to_string(code));
         aiwrite::log::shutdown();
@@ -2135,7 +437,7 @@ int main(int argc, char** argv)
                         "（例：--web-dom-dump --provider kimi-web）\n");
         }
         else {
-            code = aiwrite::ai::dom_selector_dump(provider_id, selftest_timeout);
+            code = aiwrite::ai::domSelectorDump(provider_id, selftest_timeout);
         }
         aiwrite::log::info("AIwrite 选择器候选枚举退出，返回码 " + std::to_string(code));
         aiwrite::log::shutdown();
@@ -2145,7 +447,7 @@ int main(int argc, char** argv)
     // 网页版协议探测（需要 profile 里已有登录态）
     // M8（Phase 2 · Gate）：C++ 供料探针 —— WebView2 会话能否为 C++ 原生 HTTP 供料
     if (supply_probe_flag) {
-        const int code = aiwrite::ai::upload_supply_probe(provider_id, selftest_timeout, supply_get_path);
+        const int code = aiwrite::ai::uploadSupplyProbe(provider_id, selftest_timeout, supply_get_path);
         aiwrite::log::info("AIwrite 供料探针退出，返回码 " + std::to_string(code));
         aiwrite::log::shutdown();
         return code;
@@ -2158,15 +460,15 @@ int main(int argc, char** argv)
         std::printf("=== 站点上传模板自检（M8-14 · 方案 E）===\n");
         std::printf("-- ① 图片准备（格式识别 → 白名单 / 限额 → 缩放 + 转码）--\n");
         int group = 0;
-        failed += aiwrite::ai::image_convert_selftest(&group);
+        failed += aiwrite::ai::imageConvertSelftest(&group);
         passed += group;
         std::printf("-- ② 上传双证据判定（I18：无证据不发送）--\n");
         group = 0;
-        failed += aiwrite::ai::upload_evidence_selftest(&group);
+        failed += aiwrite::ai::uploadEvidenceSelftest(&group);
         passed += group;
         std::printf("-- ③ 站点注册表与契约（每站独立实现）--\n");
         group = 0;
-        failed += aiwrite::ai::upload_registry_selftest(&group);
+        failed += aiwrite::ai::uploadRegistrySelftest(&group);
         passed += group;
 
         int code = failed == 0 ? 0 : 1;
@@ -2177,7 +479,7 @@ int main(int argc, char** argv)
         }
         else {
             const aiwrite::ai::ProviderSpec* spec = nullptr;
-            for (const aiwrite::ai::ProviderSpec& candidate : aiwrite::ai::provider_specs().items) {
+            for (const aiwrite::ai::ProviderSpec& candidate : aiwrite::ai::providerSpecs().items) {
                 if (candidate.id == provider_id) {
                     spec = &candidate;
                     break;
@@ -2188,8 +490,8 @@ int main(int argc, char** argv)
                             provider_id.c_str());
                 code = 2;
             }
-            else if (!aiwrite::ai::web_site_error(spec).empty()) {
-                std::printf("[真机] ✗ 站点不可用：%s\n", aiwrite::ai::web_site_error(spec).c_str());
+            else if (!aiwrite::ai::webSiteError(spec).empty()) {
+                std::printf("[真机] ✗ 站点不可用：%s\n", aiwrite::ai::webSiteError(spec).c_str());
                 code = 2;
             }
             else {
@@ -2213,14 +515,14 @@ int main(int argc, char** argv)
                             plan.site.adapter.empty() ? "(空=内置默认)" : plan.site.adapter.c_str(),
                             plan.site.answer_selector.empty() ? "(未声明)"
                                                               : plan.site.answer_selector.c_str(),
-                            aiwrite::ai::web_login_only(spec)
+                            aiwrite::ai::webLoginOnly(spec)
                                 ? "未回填（**运行时会自动识别**，M8-37）"
                                 : "齐全");
                 if (plan.site.adapter != "dom") {
                     std::printf("[真机] ⚠ 该条目 adapter=%s（图片上传当前只支持 dom 站点 + 上传单元）\n",
                                 plan.site.adapter.c_str());
                 }
-                if (aiwrite::ai::web_login_only(spec)) {
+                if (aiwrite::ai::webLoginOnly(spec)) {
                     std::printf("[真机] 提示：生成字段未回填**不影响本次运行** —— 发送 / 取答案会"
                                 "自动识别选择器（识别结果打印在 Console / 日志里）。"
                                 "若要固化为数据（可选）：\n"
@@ -2237,7 +539,7 @@ int main(int argc, char** argv)
                                 provider_id.c_str());
                 }
                 else {
-                    const aiwrite::ai::UploadResult result = aiwrite::ai::upload_images(plan);
+                    const aiwrite::ai::UploadResult result = aiwrite::ai::uploadImages(plan);
                     for (const std::string& line : result.conversions) {
                         std::printf("[真机] 转换：%s\n", line.c_str());
                     }
@@ -2275,8 +577,8 @@ int main(int argc, char** argv)
         // M_patchB L1 修订（PB2-23）：`--web-probe --provider <id>` = 按**条目**的站点（严格解析，不回落）
         const int probe_code =
             provider_id.empty()
-                ? aiwrite::web::protocol_probe(selftest_timeout)
-                : aiwrite::web::protocol_probe_for_provider(provider_id, selftest_timeout);
+                ? aiwrite::web::protocolProbe(selftest_timeout)
+                : aiwrite::web::protocolProbeForProvider(provider_id, selftest_timeout);
         aiwrite::log::info("AIwrite 协议探测退出，返回码 " + std::to_string(probe_code));
         aiwrite::log::shutdown();
         return probe_code;
@@ -2284,7 +586,7 @@ int main(int argc, char** argv)
 
     // 网页版生成（PoW + SSE；需要 profile 里已有登录态）
     if (!web_chat_prompt.empty()) {
-        const int chat_code = web_chat_selftest(web_chat_prompt);
+        const int chat_code = webChatSelftest(web_chat_prompt);
         aiwrite::log::info("AIwrite 网页版生成退出，返回码 " + std::to_string(chat_code));
         aiwrite::log::shutdown();
         return chat_code;
@@ -2320,7 +622,7 @@ int main(int argc, char** argv)
 
     // Provider 配置表（M_patchB L1）：打印生效表 / 表校验 + 离线断言（+ 可选联网 ping）
     if (provider_dump_flag) {
-        const int dump_code = provider_dump();
+        const int dump_code = providerDump();
         aiwrite::log::shutdown();
         return dump_code;
     }
@@ -2336,8 +638,8 @@ int main(int argc, char** argv)
         // M_patchAB §2.4（PB-09）：`--run-selftest --official` = 有 Key 时**真实生成一次**
         // （与 `--run-selftest` / `--run-selftest --web` 并列；缺 Key ⇒ 2，语义同其余自检）
         const int selftest_code = run_selftest_official && !run_selftest_web
-                                      ? official_generate_selftest(provider_id)
-                                      : run_selftest(run_selftest_web, provider_id);
+                                      ? officialGenerateSelftest(provider_id)
+                                      : runSelftest(run_selftest_web, provider_id);
         aiwrite::log::info("AIwrite 运行自检退出，返回码 " + std::to_string(selftest_code));
         aiwrite::log::shutdown();
         return selftest_code;
@@ -2347,11 +649,11 @@ int main(int argc, char** argv)
 
     // 退出前收尾：后台诊断线程（`PB2-07` / `PB2-30②`）→「生成提示词」（L1-d）→ 再关网页版窗口 → 最后关日志
     //  * 顺序理由：诊断 / 生成可能正在用站点窗口 / 写日志 ⇒ 先等它结束（超时则分离并如实记日志）
-    aiwrite::ui::stop_diagnostics();
-    aiwrite::ui::stop_prompt_generation();
+    aiwrite::ui::stopDiagnostics();
+    aiwrite::ui::stopPromptGeneration();
 
     // 若用户留着网页版登录窗口就退出了程序：先收尾（关窗口、等线程结束），再关日志
-    aiwrite::web::stop_login_window();
+    aiwrite::web::stopLoginWindow();
 
     aiwrite::log::info("AIwrite 退出，返回码 " + std::to_string(exit_code));
     aiwrite::log::shutdown();

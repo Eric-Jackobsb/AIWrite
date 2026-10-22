@@ -96,7 +96,7 @@ int composite_selftest()
         std::filesystem::temp_directory_path(ec) / "aiwrite_composite_selftest";
     std::filesystem::remove_all(temp_root, ec);
     std::filesystem::create_directories(temp_root, ec);
-    eng::CompositeRegistry::instance().set_root(temp_root);
+    eng::CompositeRegistry::instance().setRoot(temp_root);
 
     // ---------------------------------------------------- 1. 规格校验 ----
     {
@@ -158,10 +158,10 @@ int composite_selftest()
     // ---------------------------------------------------- 2. JSON 往返 ----
     {
         const eng::CompositeSpec spec = make_selftest_spec();
-        const nlohmann::json     json = eng::composite_to_json(spec);
+        const nlohmann::json     json = eng::compositeToJson(spec);
         eng::CompositeSpec       round;
         std::string              error;
-        expect(check, eng::composite_from_json(json, round, &error), "JSON 往返：反序列化成功",
+        expect(check, eng::compositeFromJson(json, round, &error), "JSON 往返：反序列化成功",
                error);
         expect(check, round.id == "c1" && round.name == "自检上级" && round.inputs.size() == 1 &&
                           round.outputs.size() == 1 && round.exposed_params.size() == 1 &&
@@ -224,12 +224,12 @@ int composite_selftest()
                "图集成：暴露参数 template（值取内部默认）");
 
         // 工作流 JSON 往返：composite_id 被序列化与恢复
-        const nlohmann::json doc = eng::graph_to_json(graph);
+        const nlohmann::json doc = eng::graphToJson(graph);
         expect(check, !doc["nodes"][0].value("composite_id", std::string()).empty(),
                "图集成：工作流 JSON 含 composite_id");
         eng::Graph loaded;
         std::string load_error;
-        expect(check, eng::graph_from_json(doc, loaded, &load_error),
+        expect(check, eng::graphFromJson(doc, loaded, &load_error),
                "图集成：工作流 JSON 往返成功", load_error);
         const eng::Node* cn2 = loaded.findNode(cn1_id);
         expect(check, cn2 != nullptr && cn2->composite_id == "c1" &&
@@ -395,14 +395,14 @@ int composite_selftest()
         const eng::CompositeSpec builtin_spec = make_selftest_spec();
         {
             std::ofstream out(builtin_root8 / "c1.json", std::ios::binary | std::ios::trunc);
-            out << eng::composite_to_json(builtin_spec).dump(4);
+            out << eng::compositeToJson(builtin_spec).dump(4);
         }
-        eng::CompositeRegistry::instance().set_roots(builtin_root8, user_root8);
+        eng::CompositeRegistry::instance().setRoots(builtin_root8, user_root8);
 
         std::string error8;
         expect(check, eng::CompositeRegistry::instance().find("c1") != nullptr,
                "双源：内置源扫描命中");
-        expect(check, eng::CompositeRegistry::instance().source_of("c1") ==
+        expect(check, eng::CompositeRegistry::instance().sourceOf("c1") ==
                           eng::CompositeSource::Builtin,
                "双源：内置来源标记 = Builtin");
 
@@ -417,10 +417,10 @@ int composite_selftest()
                "双源：内置源 remove 被拒（只读）", error8);
 
         // 「复制到我的节点库」→ 用户源落盘 + 来源切 User + 可编辑
-        expect(check, eng::CompositeRegistry::instance().copy_to_user("c1", &error8),
+        expect(check, eng::CompositeRegistry::instance().copyToUser("c1", &error8),
                "双源：copy_to_user 成功", error8);
         expect(check, std::filesystem::exists(user_root8 / "c1.json"), "双源：用户源文件已落盘");
-        expect(check, eng::CompositeRegistry::instance().source_of("c1") ==
+        expect(check, eng::CompositeRegistry::instance().sourceOf("c1") ==
                           eng::CompositeSource::User,
                "双源：复制后来源 = User");
         expect(check, eng::CompositeRegistry::instance().save(modified, &error8),
@@ -431,7 +431,7 @@ int composite_selftest()
         // 删除用户副本 → 来源回落 Builtin（官方预设恢复，只读回归）
         expect(check, eng::CompositeRegistry::instance().remove("c1", &error8),
                "双源：删除用户副本成功", error8);
-        expect(check, eng::CompositeRegistry::instance().source_of("c1") ==
+        expect(check, eng::CompositeRegistry::instance().sourceOf("c1") ==
                           eng::CompositeSource::Builtin,
                "双源：删除后来源回落 Builtin");
         expect(check, eng::CompositeRegistry::instance().find("c1")->name == "自检上级",
@@ -441,9 +441,174 @@ int composite_selftest()
                "双源：回落后 save 再次被拒（只读回归）", error8);
 
         // 回到单源临时根（后续清理按 temp_root 进行）
-        eng::CompositeRegistry::instance().set_root(temp_root);
+        eng::CompositeRegistry::instance().setRoot(temp_root);
         std::filesystem::remove_all(builtin_root8, ec8);
         std::filesystem::remove_all(user_root8, ec8);
+    }
+
+    // ----------------------------------------- 9. 热重载（保存后同步实例）--------
+    // 上级节点编辑器「保存」→ 主画布已放置的旧实例按新规格就地重建
+    {
+        std::string error9;
+        const eng::CompositeSpec base9 = make_selftest_spec(); // id=c1 · 暴露 template
+        expect(check, eng::CompositeRegistry::instance().save(base9, &error9),
+               "热重载：初始规格保存成功", error9);
+
+        // 画布放置两个同规格实例并接边（TextOutput 单输入非变长 ⇒ 每个输出节点只接一条）
+        eng::Graph graph9;
+        const std::string text9  = graph9.addNode("TextInput", 0.0f, 0.0f, nullptr);
+        const std::string comp9  = graph9.addCompositeNode("c1", 0.0f, 0.0f, &error9);
+        const std::string comp9b = graph9.addCompositeNode("c1", 80.0f, 0.0f, &error9);
+        const std::string out9   = graph9.addNode("TextOutput", 0.0f, 0.0f, nullptr);
+        const std::string out9b  = graph9.addNode("TextOutput", 0.0f, 80.0f, nullptr);
+        expect(check, !comp9.empty() && !comp9b.empty(), "热重载：两个实例创建成功", error9);
+        graph9.addEdge(text9, "text", comp9, "in1", &error9);
+        graph9.addEdge(comp9, "out1", out9, "text", &error9);
+        graph9.addEdge(comp9b, "out1", out9b, "text", &error9);
+        expect(check, graph9.edges.size() == 3, "热重载：初始 3 条边",
+               std::to_string(graph9.edges.size()));
+
+        // 实例 A：默认标题（= 旧规格名）+ 已填模板参数值
+        if (eng::Node* n = graph9.findNode(comp9)) {
+            if (eng::Param* p = n->findParam("template")) {
+                p->value = std::string("旧模板{vars}");
+            }
+        }
+        // 实例 B：自定义标题（不应被新规格名覆盖）
+        if (eng::Node* n = graph9.findNode(comp9b)) {
+            n->title = "我的自定义标题";
+        }
+
+        // 新规格：改名 + 新增暴露参数 temperature + 移除对外输入（触发失效边清理）
+        eng::CompositeSpec updated9 = base9;
+        updated9.name              = "自检上级-新名";
+        updated9.inputs.clear(); // 不再暴露输入 → 连向 in1 的边应被清理
+        eng::CompositeParamRef temp_ref;
+        temp_ref.internal_node = updated9.exposed_params.front().internal_node;
+        temp_ref.param_id      = "temperature";
+        temp_ref.display_name  = "温度";
+        updated9.exposed_params.push_back(temp_ref);
+
+        expect(check, eng::CompositeRegistry::instance().save(updated9, &error9),
+               "热重载：新规格保存成功", error9);
+        const int refreshed = eng::refresh_composite_instances(graph9, "c1", base9.name, &error9);
+        expect(check, refreshed == 2, "热重载：返回 2（两个实例被同步）", error9);
+
+        // 实例 A：标题跟随新规格名、模板值保留、temperature 新参数出现、输入端口清空
+        const eng::Node* a = graph9.findNode(comp9);
+        expect(check, a != nullptr && a->title == "自检上级-新名", "热重载：默认标题跟随新规格名",
+               a != nullptr ? a->title : "");
+        if (a != nullptr) {
+            const eng::Param* tpl = a->findParam("template");
+            expect(check, tpl != nullptr && tpl->text() == "旧模板{vars}",
+                   "热重载：已填模板参数值保留");
+            const eng::Param* temperature = a->findParam("temperature");
+            expect(check, temperature != nullptr && temperature->number() == 0.7,
+                   "热重载：新增暴露参数 temperature 出现（取默认值）");
+            expect(check, a->inputs.empty(), "热重载：实例 A 输入端口已按新规格清空");
+        }
+        // 实例 B：自定义标题保留、位置保留、实例 id 不变
+        const eng::Node* b = graph9.findNode(comp9b);
+        expect(check, b != nullptr && b->title == "我的自定义标题", "热重载：自定义标题保留",
+               b != nullptr ? b->title : "");
+        expect(check, b != nullptr && b->x == 80.0f && b->y == 0.0f, "热重载：实例位置保留");
+        expect(check, b != nullptr && b->id == comp9b, "热重载：实例 id 不变");
+
+        // 边：连向已移除 in1 的边被清理；仍有效的 out1 边保留
+        expect(check, graph9.edges.size() == 2, "热重载：失效输入边被清理（3 → 2）",
+               std::to_string(graph9.edges.size()));
+        expect(check, graph9.findEdgeIntoInput(comp9, "in1") == nullptr,
+               "热重载：in1 已无入边");
+
+        // 清理临时注册表
+        eng::CompositeRegistry::instance().remove("c1", nullptr);
+    }
+
+    // -------------------------------------------------- 10. 试运行沙箱 ----
+    // 「执行连线」：build_composite_test_graph 为暴露输入接测试源，让内部图脱离父工作流也能跑
+    {
+        // 内部图：TextSplit（必填输入 text）→ TextOutput；暴露输入 = TextSplit.text（必填）
+        eng::Graph internal10;
+        const std::string tsp10  = internal10.addNode("TextSplit", 0.0f, 0.0f, nullptr);
+        const std::string tout10 = internal10.addNode("TextOutput", 0.0f, 80.0f, nullptr);
+        internal10.addEdge(tsp10, "texts", tout10, "text", nullptr);
+
+        eng::CompositeSpec spec10;
+        spec10.id   = "c10";
+        spec10.name = "试运行自检";
+        eng::CompositePortRef in10;
+        in10.internal_node = tsp10;
+        in10.internal_port = "text";
+        in10.display_name  = "文本";
+        in10.type          = eng::PortType::Text;
+        spec10.inputs.push_back(in10);
+        eng::CompositePortRef out10;
+        out10.internal_node = tsp10;
+        out10.internal_port = "texts";
+        out10.display_name  = "分块";
+        out10.type          = eng::PortType::Text;
+        spec10.outputs.push_back(out10);
+        spec10.internal_graph = std::move(internal10);
+
+        // 无沙箱时：必填输入 text 未连接 ⇒ 运行前校验必须拒绝
+        {
+            eng::Graph raw = spec10.internal_graph;
+            eng::ValidationMessages raw_err;
+            eng::ValidationMessages raw_warn;
+            expect(check, !eng::validateBeforeRun(raw, &raw_err, &raw_warn),
+                   "试运行：无沙箱时必填输入未连接 → 运行前校验拒绝");
+        }
+
+        // 构建沙箱：暴露输入自动接测试源
+        eng::Graph sandbox10;
+        std::string err10;
+        expect(check, eng::buildCompositeTestGraph(spec10, &sandbox10, &err10),
+               "试运行：沙箱图构建成功", err10);
+
+        int source_count10 = 0;
+        for (const eng::Node& n : sandbox10.nodes) {
+            if (n.id.rfind("__ce_src_", 0) == 0) {
+                ++source_count10;
+            }
+        }
+        expect(check, source_count10 == 1, "试运行：暴露输入生成了 1 个测试源节点",
+               std::to_string(source_count10));
+        expect(check, sandbox10.nodes.size() == 3, "试运行：内部 2 节点 + 1 测试源",
+               std::to_string(sandbox10.nodes.size()));
+        expect(check, sandbox10.findEdgeIntoInput(tsp10, "text") != nullptr,
+               "试运行：暴露输入端口已接测试源");
+
+        // 规格本身不被沙箱构建改动（内部图原样保留）
+        expect(check, spec10.internal_graph.nodes.size() == 2 &&
+                          spec10.internal_graph.edges.size() == 1,
+               "试运行：构建沙箱不改动规格内部图");
+
+        // 带沙箱：运行前校验通过；给测试源填值 → 整图跑通
+        if (eng::Node* src10 = sandbox10.findNode("__ce_src_1")) {
+            if (eng::Param* p = src10->findParam("text")) {
+                p->value = std::string("试运行你好");
+            }
+        }
+        {
+            eng::ValidationMessages verr10;
+            eng::ValidationMessages vwarn10;
+            expect(check, eng::validateBeforeRun(sandbox10, &verr10, &vwarn10),
+                   "试运行：运行前校验通过（测试源已喂必填输入）",
+                   verr10.empty() ? "" : verr10.front());
+        }
+
+        eng::Executor ex10;
+        ex10.setConsoleHandler([](const std::string&) {}); // 静音执行器
+        expect(check, ex10.start(sandbox10, &err10), "试运行：执行器启动", err10);
+        const bool completed10 = ex10.runToCompletion(&sandbox10, 64);
+        expect(check, completed10, "试运行：整图执行完成");
+
+        const eng::Node* done_tsp10 = sandbox10.findNode(tsp10);
+        expect(check, done_tsp10 != nullptr && done_tsp10->state == eng::NodeState::Done,
+               "试运行：TextSplit 执行成功（Done）",
+               done_tsp10 != nullptr ? eng::nodeStateName(done_tsp10->state) : "missing");
+        expect(check, ex10.outputs().find(tsp10, "texts") != nullptr,
+               "试运行：TextSplit 已产出输出值 texts");
     }
 
     // 清理临时目录

@@ -48,7 +48,7 @@ struct ArchiveResult {
 };
 
 // 执行归档；run_summary 为 Executor::summary()（写入 run.json 与文件头）
-ArchiveResult archive_run(const ArchiveRequest& request, const std::vector<ArchiveNode>& nodes,
+ArchiveResult archiveRun(const ArchiveRequest& request, const std::vector<ArchiveNode>& nodes,
                           const std::string& run_summary);
 
 } // namespace aiwrite::utils

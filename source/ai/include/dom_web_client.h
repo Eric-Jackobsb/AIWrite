@@ -78,7 +78,7 @@ struct DomChatResult {
 };
 
 // 轮询参数钳制：poll_ms ∈ [200, 2000]、max_polls ∈ [10, 600]（R13：有硬上限）
-void clamp_poll_params(const ProviderWebSpec& site, int* poll_ms, int* max_polls);
+void clampPollParams(const ProviderWebSpec& site, int* poll_ms, int* max_polls);
 
 // ---- PW-07g（**答案文本排版** · 纯函数 · 离线可断言 `VB2-22⑦`）----
 //  真机反例：页面侧 `norm`（`\s+` → 单空格）把段落换行压成空格 ⇒ 输出文件整篇 1 行。
@@ -88,38 +88,38 @@ void clamp_poll_params(const ProviderWebSpec& site, int* poll_ms, int* max_polls
 //  ④ **空行规范化（A2）**：**空行 = 段界** —— 连续 `\n{3,}` → `\n\n`（≥1 个空行 → 恰好 1 个空行；
 //     行内软换行保留为 `\n`）⑤ 首尾 trim；纯空白 → 空串。
 //  **不改写** Markdown 语法（`- ` / `1. ` / `# ` / 代码围栏原样）。
-std::string format_answer_text(const std::string& raw);
+std::string formatAnswerText(const std::string& raw);
 
 // 注入给页面的配置 JSON（**转义安全**：提示词含引号 / 换行也不会破坏脚本）
-std::string dom_cfg_json(const DomChatRequest& request);
+std::string domCfgJson(const DomChatRequest& request);
 // 常量脚本（读 `window.__aiwriteDom`）：kickoff = 写入提示词 + 触发发送；poll = 取答案 + 判结束
-std::string dom_kickoff_script();
+std::string domKickoffScript();
 // PW-07f（**真实发送链路** · 自 `wip/pw07n-20261008` 移植）：三段式配套脚本
 //  * ① `dom_prepare_script`    发现输入框 + 聚焦 + 清空 + 记答案基线（**不写入、不发送**）
 //  * ② `dom_send_verify_script` 发送回执（URL 变化 / 出现新消息节点 ⇒ 才算发出去了）
 //  * ③ `dom_click_send_script`  兜底：点可见「发送」按钮（CDP 回车无效时）
 //  文本与回车由 `web::cdp_input_text`（CDP `Input.insertText` / `dispatchKeyEvent`）真实输入
-std::string dom_prepare_script();
-std::string dom_send_verify_script();
-std::string dom_click_send_script();
-std::string dom_poll_script();
+std::string domPrepareScript();
+std::string domSendVerifyScript();
+std::string domClickSendScript();
+std::string domPollScript();
 // PB2-15：选择器探测脚本（读 `window.__aiwriteDomProbe`；返回各选择器命中数 / 可见性 / done_when 现状 / token 形状）
-std::string dom_probe_script();
+std::string domProbeScript();
 
 // 执行（需要已登录窗口；内部完成 ensure_session + 页面交互）
-DomChatResult dom_chat(const DomChatRequest& request);
+DomChatResult domChat(const DomChatRequest& request);
 
 // PB2-15：**选择器探测 / 诊断**（只读，不发送任何内容）—— 按条目诊断 dom 站点
 //  * 打印：当前页面 URL/标题、各选择器命中数、`done_when` 现状、`token_expr` 取值形状、Cookie 可读性
 //  * 并给**可操作修复建议**（F12 Copy selector / 改 send 方式 / 修 token_expr）
 //  * 返回码：0 = 必需选择器全部命中；1 = 有缺项 / 页面异常；2 = 站点不可用 / 非 dom 条目；
 //            3 = **需人工介入**（需登录：登录墙下选择器缺项属「没法测」而非「真失败」，`loop_dev` §6.3）
-int dom_adapter_selftest(const std::string& provider_id, int timeout_ms);
+int domAdapterSelftest(const std::string& provider_id, int timeout_ms);
 
 // M_patchB L4（PB2-29 / v15）：**选择器候选枚举**（只读）—— 让「填选择器」不必靠人肉 F12
 //  * 在当前页面枚举候选 input / textarea / contenteditable、发送按钮、回答容器，打印指纹 + **建议选择器**
 //  * 返回码：0 = 枚举成功；1 = 页面 / 脚本未就绪；2 = 条目不可用（非网页版条目 / 缺 login_url / 表外 id）
-int dom_selector_dump(const std::string& provider_id, int timeout_ms);
+int domSelectorDump(const std::string& provider_id, int timeout_ms);
 
 // ============================================================================
 //  Loop Dev（批 3）：**批量只读探测 + 机器可读报告**（`FEA-L01` / `FEA-L03`）
@@ -168,11 +168,11 @@ struct DomSiteProbe {
 // 纯解析（**离线可断言** · `api_probe --selftest`）：探测脚本 JSON → 页面事实
 //  * 字段缺失 = 「无事实」（不猜、不默认成功）；返回 false 仅当 JSON 非法 / 非对象
 //  * **不**重算 `needs_login`（判据在页面脚本里）—— 只搬运，含 `login_evidence`
-bool dom_probe_result_from_json(const std::string& raw, DomSiteProbe* out);
+bool domProbeResultFromJson(const std::string& raw, DomSiteProbe* out);
 
 // 单站只读探测（会**起窗口 / 页面**；只读 DOM：不写入、不发送、不读任何值）
 //  返回码：0 = 探测成功；1 = 探测失败（会话 / 脚本 / 解析）；2 = 条目不可用（非 dom / 表外 id）
-int dom_site_probe(const std::string& provider_id, int timeout_ms, DomSiteProbe* out);
+int domSiteProbe(const std::string& provider_id, int timeout_ms, DomSiteProbe* out);
 
 // 批量只读探测：**全部** `kind=web 且 web.adapter=dom` 的条目（`loop_dev` §2.2 的 11 条）
 //  * 逐站独立：一站失败不影响其他站；每站打印紧凑块（命令输出即报告素材）
@@ -182,7 +182,7 @@ int dom_site_probe(const std::string& provider_id, int timeout_ms, DomSiteProbe*
 //  * `probes`（可空）：结构化明细，供调用方自行组织输出
 //  * 返回码（§6.3）：0 = 全部探测成功且无需登录；3 = 有站需人工介入（需登录）；
 //    1 = 有真失败（探测失败 / 页面异常）；2 = 没有可诊断的 DOM 站点
-int dom_probe_all(int timeout_ms, nlohmann::json* report, std::vector<DomSiteProbe>* probes);
+int domProbeAll(int timeout_ms, nlohmann::json* report, std::vector<DomSiteProbe>* probes);
 
 // 报告 diff（`FEA-L01`：与上一轮报告对比）—— 打印每站的**状态变化**与**判据变化**
 //  * 状态 5 态：可用 / 需登录 / 失败 / 未测 / 新增 · 消失（`lines` 逐行输出，供控制台）
@@ -194,6 +194,6 @@ bool dom_report_diff(const nlohmann::json& previous, const nlohmann::json& curre
 //  * 覆盖 `FEA-L01` 的**报告链路**：`dom_probe_result_from_json`（事实搬运 / 缺字段 / 非法 JSON）
 //    + `probe_state_of`（4 态映射）+ `dom_report_diff`（5 态 + 旧报告按事实回推）
 //  * 返回失败项数；`passed_out`（可空）回填通过项数
-int dom_probe_selftest(int* passed_out = nullptr);
+int domProbeSelftest(int* passed_out = nullptr);
 
 } // namespace aiwrite::ai

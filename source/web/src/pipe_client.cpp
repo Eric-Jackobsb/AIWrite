@@ -114,27 +114,27 @@ thread_local std::uint64_t t_ipc_connects = 0;
 thread_local std::uint64_t t_ipc_commands = 0;
 } // namespace
 
-std::uint64_t ipc_connect_count()
+std::uint64_t ipcConnectCount()
 {
     return g_ipc_connects.load();
 }
 
-std::uint64_t ipc_command_count()
+std::uint64_t ipcCommandCount()
 {
     return g_ipc_commands.load();
 }
 
-std::uint64_t ipc_thread_connect_count()
+std::uint64_t ipcThreadConnectCount()
 {
     return t_ipc_connects;
 }
 
-std::uint64_t ipc_thread_command_count()
+std::uint64_t ipcThreadCommandCount()
 {
     return t_ipc_commands;
 }
 
-void ipc_reset_counters()
+void ipcResetCounters()
 {
     g_ipc_connects.store(0);
     g_ipc_commands.store(0);
@@ -142,14 +142,14 @@ void ipc_reset_counters()
     t_ipc_commands = 0;
 }
 
-std::string daemon_pipe_name(std::uint32_t pid)
+std::string daemonPipeName(std::uint32_t pid)
 {
     return "\\\\.\\pipe\\aiwrite-browser-" + std::to_string(pid);
 }
 
-std::string daemon_pipe_name()
+std::string daemonPipeName()
 {
-    return daemon_pipe_name(static_cast<std::uint32_t>(::GetCurrentProcessId()));
+    return daemonPipeName(static_cast<std::uint32_t>(::GetCurrentProcessId()));
 }
 
 PipeClient::PipeClient() = default;
@@ -159,26 +159,26 @@ PipeClient::~PipeClient()
     close();
 }
 
-std::string PipeClient::next_id()
+std::string PipeClient::nextId()
 {
     return std::to_string(next_id_.fetch_add(1));
 }
 
-EventCallback PipeClient::current_callback()
+EventCallback PipeClient::currentCallback()
 {
     std::lock_guard<std::mutex> lock(callback_mutex_);
     return event_callback_;
 }
 
-std::uint64_t PipeClient::dropped_frames() const
+std::uint64_t PipeClient::droppedFrames() const
 {
     return dropped_frames_.load();
 }
 
-bool PipeClient::connect(const std::string& pipe_name, int timeout_ms, std::string* error)
+bool PipeClient::connect(const std::string& pipeName, int timeout_ms, std::string* error)
 {
     close();
-    const std::string full = normalize_pipe_name(pipe_name);
+    const std::string full = normalize_pipe_name(pipeName);
     const std::wstring wide = to_wide(full);
     if (wide.empty() || full == "\\\\.\\pipe\\") {
         if (error != nullptr) {
@@ -247,7 +247,7 @@ bool PipeClient::connect(const std::string& pipe_name, int timeout_ms, std::stri
         closing_     = false;
         pipe_name_   = full;
     }
-    reader_ = std::thread([this, handle, read_event] { reader_loop(handle, read_event); });
+    reader_ = std::thread([this, handle, read_event] { readerLoop(handle, read_event); });
     g_ipc_connects.fetch_add(1); // `M7B-46` 护栏：全局（诊断）
     ++t_ipc_connects;            // `M7B-46` 护栏：本线程（判据）
     aiwrite::log::info("[管道] 已连接 " + full);
@@ -260,13 +260,13 @@ bool PipeClient::connected() const
     return connected_;
 }
 
-std::string PipeClient::pipe_name() const
+std::string PipeClient::pipeName() const
 {
     std::lock_guard<std::mutex> lock(mutex_);
     return pipe_name_;
 }
 
-bool PipeClient::write_line(const std::string& line, std::string* error)
+bool PipeClient::writeLine(const std::string& line, std::string* error)
 {
     const auto fail = [error](const std::string& reason) {
         aiwrite::log::warn("[管道] " + reason);
@@ -330,11 +330,11 @@ bool PipeClient::call(const std::string& name, const nlohmann::json& fields,
 {
     g_ipc_commands.fetch_add(1); // `M7B-46` 护栏：全局（入口即计，含词表校验失败 —— 宁可过报）
     ++t_ipc_commands;            // `M7B-46` 护栏：本线程（判据）
-    const std::string    id      = next_id();
+    const std::string    id      = nextId();
     const std::string    line    = channel::make_command(name, id, fields.dump());
-    const channel::Frame command = channel::parse_frame(line);
+    const channel::Frame command = channel::parseFrame(line);
     std::string          reason;
-    if (!channel::validate_command(command, &reason)) {
+    if (!channel::validateCommand(command, &reason)) {
         if (error != nullptr) {
             *error = reason;  // 词表校验失败 → **不发帧**（不静默执行）
         }
@@ -346,7 +346,7 @@ bool PipeClient::call(const std::string& name, const nlohmann::json& fields,
         std::lock_guard<std::mutex> lock(mutex_);
         pending_[id] = pending;
     }
-    if (!write_line(line, error)) {
+    if (!writeLine(line, error)) {
         std::lock_guard<std::mutex> lock(mutex_);
         pending_.erase(id);
         return false;
@@ -388,31 +388,31 @@ bool PipeClient::call(const std::string& name, const nlohmann::json& fields,
     return true;
 }
 
-bool PipeClient::send_command(const std::string& name, const nlohmann::json& fields,
+bool PipeClient::sendCommand(const std::string& name, const nlohmann::json& fields,
                               std::string* error)
 {
     g_ipc_commands.fetch_add(1); // `M7B-46` 护栏：全局（入口即计，同 `call`）
     ++t_ipc_commands;            // `M7B-46` 护栏：本线程（判据）
-    const std::string    id      = next_id();
+    const std::string    id      = nextId();
     const std::string    line    = channel::make_command(name, id, fields.dump());
-    const channel::Frame command = channel::parse_frame(line);
+    const channel::Frame command = channel::parseFrame(line);
     std::string          reason;
-    if (!channel::validate_command(command, &reason)) {
+    if (!channel::validateCommand(command, &reason)) {
         if (error != nullptr) {
             *error = reason;
         }
         return false;
     }
-    return write_line(line, error);
+    return writeLine(line, error);
 }
 
-void PipeClient::on_event(EventCallback callback)
+void PipeClient::onEvent(EventCallback callback)
 {
     std::lock_guard<std::mutex> lock(callback_mutex_);
     event_callback_ = std::move(callback);
 }
 
-bool PipeClient::complete_pending(const std::string& id, const channel::Frame& frame)
+bool PipeClient::completePending(const std::string& id, const channel::Frame& frame)
 {
     std::shared_ptr<Pending> pending;
     {
@@ -433,7 +433,7 @@ bool PipeClient::complete_pending(const std::string& id, const channel::Frame& f
     return true;
 }
 
-void PipeClient::fail_all_pending(const std::string& reason)
+void PipeClient::failAllPending(const std::string& reason)
 {
     std::unordered_map<std::string, std::shared_ptr<Pending>> pending;
     {
@@ -445,7 +445,7 @@ void PipeClient::fail_all_pending(const std::string& reason)
             std::lock_guard<std::mutex> lock(item.second->mutex);
             // 用词表构造函数生成（**转义安全**，不手拼 JSON）
             item.second->frame =
-                channel::parse_frame(channel::make_error("daemon_down", item.first, reason));
+                channel::parseFrame(channel::make_error("daemon_down", item.first, reason));
             item.second->done = true;
         }
         item.second->cv.notify_all();
@@ -459,7 +459,7 @@ void PipeClient::dispatch(const channel::Frame& frame)
         aiwrite::log::warn("[管道] 丢弃非法帧：" + frame.reason);
         // §6.1：非法行 = 丢弃 + 记日志 + 回 err{bad_frame}（不回会让对端一直等）
         std::string ignored;
-        write_line(channel::make_error(channel::error_code_bad_frame(), kEventId, "非法帧已丢弃"),
+        writeLine(channel::make_error(channel::errorCodeBadFrame(), kEventId, "非法帧已丢弃"),
                    &ignored);
         return;
     }
@@ -468,7 +468,7 @@ void PipeClient::dispatch(const channel::Frame& frame)
     //  **纯进度事件**。若把带 id 的 `stage` 也当进度事件吞掉，`call("open_tab", …)` 会等到超时。
     if (frame.kind == "evt" && is_progress_event(frame.name) && frame.id == kEventId) {
         // 纯进度事件（`id="-"`）：喂回调，**不完成**配对调用（`M7B-21` 起 `delta` 逐字呈现）
-        const EventCallback callback = current_callback();
+        const EventCallback callback = currentCallback();
         if (callback) {
             callback(frame);
         }
@@ -480,16 +480,16 @@ void PipeClient::dispatch(const channel::Frame& frame)
     }
     aiwrite::log::info("[管道] 收到 " + frame.kind + " " + frame.name + "（id=" + frame.id + "）");
     // evt / err：优先完成配对调用；无配对 → 当「无请求的事件」喂回调
-    if (complete_pending(frame.id, frame)) {
+    if (completePending(frame.id, frame)) {
         return;
     }
-    const EventCallback callback = current_callback();
+    const EventCallback callback = currentCallback();
     if (callback) {
         callback(frame);
     }
 }
 
-void PipeClient::reader_loop(void* handle_ptr, void* read_event_ptr)
+void PipeClient::readerLoop(void* handle_ptr, void* read_event_ptr)
 {
     HANDLE      handle     = static_cast<HANDLE>(handle_ptr);
     HANDLE      read_event = static_cast<HANDLE>(read_event_ptr);
@@ -542,7 +542,7 @@ void PipeClient::reader_loop(void* handle_ptr, void* read_event_ptr)
             }
             begin = end + 1;
             if (!line.empty()) {
-                dispatch(channel::parse_frame(line));
+                dispatch(channel::parseFrame(line));
             }
         }
         if (begin > 0) {
@@ -552,14 +552,14 @@ void PipeClient::reader_loop(void* handle_ptr, void* read_event_ptr)
             // 无换行的超长行 → 判非法（缓冲不无限增长）
             const std::string oversize = buffer;
             buffer.clear();
-            dispatch(channel::parse_frame(oversize));
+            dispatch(channel::parseFrame(oversize));
         }
     }
     {
         std::lock_guard<std::mutex> lock(mutex_);
         connected_ = false;
     }
-    fail_all_pending("通道已断开（守护进程已退出或管道被关闭）");
+    failAllPending("通道已断开（守护进程已退出或管道被关闭）");
 }
 
 void PipeClient::close()
@@ -603,7 +603,7 @@ void PipeClient::close()
         std::lock_guard<std::mutex> lock(mutex_);
         pipe_name_.clear();
     }
-    fail_all_pending("通道已关闭（PipeClient::close）");
+    failAllPending("通道已关闭（PipeClient::close）");
 }
 
 } // namespace aiwrite::web

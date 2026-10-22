@@ -42,7 +42,7 @@ nlohmann::json gemini_build_body(const GenerateParams& params, bool send_seed,
     for (const std::string& data_url : image_data_urls) {
         std::string mime;
         std::string base64;
-        if (!split_data_url(data_url, &mime, &base64)) {
+        if (!splitDataUrl(data_url, &mime, &base64)) {
             continue; // 非法 data URL 不静默冒充图片
         }
         parts.push_back({{"inline_data", {{"mime_type", mime}, {"data", base64}}}});
@@ -65,7 +65,7 @@ nlohmann::json gemini_build_body(const GenerateParams& params, bool send_seed,
     return body;
 }
 
-std::string gemini_extract_text(const nlohmann::json& body, std::size_t candidate)
+std::string geminiExtractText(const nlohmann::json& body, std::size_t candidate)
 {
     std::string text;
     const auto  candidates_it = body.find("candidates");
@@ -97,7 +97,7 @@ std::string gemini_extract_text(const nlohmann::json& body, std::size_t candidat
     return text;
 }
 
-std::string gemini_block_reason(const nlohmann::json& body)
+std::string geminiBlockReason(const nlohmann::json& body)
 {
     // ① 安全策略（整轮被挡）：`promptFeedback.blockReason`
     const auto feedback_it = body.find("promptFeedback");
@@ -121,13 +121,13 @@ std::string gemini_block_reason(const nlohmann::json& body)
             }
         }
     }
-    return json_error_message(body);
+    return jsonErrorMessage(body);
 }
 
 GeminiProvider::GeminiProvider(ProviderRuntimeConfig config) : config_(std::move(config))
 {
-    caps_ = caps_from_spec(config_.provider_id.empty() ? nullptr
-                                                       : provider_specs().find(config_.provider_id));
+    caps_ = capsFromSpec(config_.provider_id.empty() ? nullptr
+                                                       : providerSpecs().find(config_.provider_id));
 }
 
 std::string GeminiProvider::name() const
@@ -182,7 +182,7 @@ GenerateResult GeminiProvider::generate(const GenerateParams& params)
                                                          : config_.options.read_timeout_s;
     request.cancel            = params.cancel;
 
-    const HttpJsonResult http = http_post_json(request);
+    const HttpJsonResult http = httpPostJson(request);
     out.http_status           = http.http_status;
     out.elapsed_ms            = http.elapsed_ms;
     out.raw_head              = http.raw_head;
@@ -197,9 +197,9 @@ GenerateResult GeminiProvider::generate(const GenerateParams& params)
     }
     nlohmann::json body;
     std::string    parse_error;
-    const bool     parsed = parse_json_text(http.body, &body, &parse_error);
+    const bool     parsed = parseJsonText(http.body, &body, &parse_error);
     if (http.http_status < 200 || http.http_status >= 300) {
-        const std::string reason = parsed ? gemini_block_reason(body) : std::string();
+        const std::string reason = parsed ? geminiBlockReason(body) : std::string();
         out.error = reason.empty()
                         ? ("Gemini 调用失败（HTTP " + std::to_string(http.http_status) +
                            "）：" + parse_error)
@@ -210,9 +210,9 @@ GenerateResult GeminiProvider::generate(const GenerateParams& params)
         out.error = "Gemini 响应解析失败：" + parse_error;
         return out;
     }
-    out.text = gemini_extract_text(body);
+    out.text = geminiExtractText(body);
     if (out.text.empty()) {
-        const std::string reason = gemini_block_reason(body);
+        const std::string reason = geminiBlockReason(body);
         out.error = reason.empty()
                         ? ("Gemini 响应里没有文本内容（`candidates[0].content.parts[].text` 为空）" +
                            (http.raw_head.empty() ? std::string() : ("；原文：" + http.raw_head)))

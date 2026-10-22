@@ -232,6 +232,7 @@ endfunction()
 # 后续 M2 起把 engine / nodes / ai 也并入本库
 # -----------------------------------------------------------------------------
 add_library(aiwrite_core STATIC
+    utils/src/string_util.cpp  # CLN-05：字符串通用工具单一来源（findCi/trim/nowString/toLower/narrow）
     utils/src/paths.cpp
     utils/src/log.cpp
     utils/src/config.cpp
@@ -251,6 +252,7 @@ add_library(aiwrite_core STATIC
     engine/src/undo_stack.cpp
     engine/src/workflow_io.cpp
     engine/src/validate.cpp
+    engine/src/failure_summary.cpp     # DEBT-L8（M6-04）：运行结束失败汇总（纯函数）
     engine/src/provider_resolve.cpp
     engine/src/executor.cpp
     engine/src/composite.cpp        # CN：上级节点（模型/注册表/独立文件存储/展开执行）
@@ -278,6 +280,7 @@ add_library(aiwrite_core STATIC
     ai/src/gemini_provider.cpp        # L2（PB2-11）：Gemini generateContent 适配器
     ai/src/provider_factory.cpp       # L2（PB2-09）：按表 protocol 分派（未知 ⇒ 明确报错，R9）
     ai/src/site_template.cpp          # M_patchAB §3.5（PB2-24）：自建网页版站点模板 + 落盘
+    ai/src/official_template.cpp      # 自定义 AI 收口：自建官方 API 提供商模板 + 落盘
     nodes/src/local_nodes.cpp
     nodes/src/register_executors.cpp
     nodes/src/text_split.cpp          # M_node_expansion L2（§4.3.5.1）：文本分块
@@ -353,11 +356,16 @@ endif()
 # -----------------------------------------------------------------------------
 add_executable(aiwrite WIN32
     app/src/main.cpp
+    app/src/cli_selftest.cpp  # CLN-14 拆分（CLI 自检域：run_selftest / 各 selftest）
+    app/src/cli_diag.cpp      # CLN-14 拆分（CLI 诊断域：帮助 / pipe / 会话清单 / 表导出）
     ui/src/app.cpp
     ui/src/console_panel.cpp
     ui/src/property_panel.cpp
+    ui/src/panel_widgets.cpp  # CLN-12 拆分（参数控件域）
+    ui/src/panel_web.cpp      # CLN-12 拆分（网页会话 / 提供商域）
     ui/src/editor_state.cpp
     ui/src/node_canvas.cpp
+    ui/src/canvas_view.cpp
     ui/src/node_library.cpp
     ui/src/toolbar.cpp
     utils/src/file_dialog.cpp
@@ -366,7 +374,12 @@ add_executable(aiwrite WIN32
     ui/src/text_view.cpp
     ui/src/texture_cache.cpp
     ui/src/settings_panel.cpp
-    ui/src/composite_editor.cpp)  # CN：上级节点编辑器 / 打包 / 新建对话框
+    ui/src/composite_editor.cpp  # CN：上级节点编辑器（CLN-13 拆分：画布/上下文/改名域）
+    ui/src/ce_state.cpp          # CLN-13 拆分（会话状态 + 撤销域）
+    ui/src/ce_session.cpp        # CLN-13 拆分（会话操作域）
+    ui/src/ce_run.cpp            # CLN-13 拆分（试运行「执行连线」域）
+    ui/src/ce_pack.cpp           # CLN-13 拆分（打包选区为上级节点域）
+    ui/src/ce_draw.cpp)          # CLN-13 拆分（编辑器窗口 + 新建/打包对话框域）
 
 # M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：面板诊断按钮 + 错误条「重新登录」（PT-07）
 # M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」异步后端
@@ -398,7 +411,12 @@ aiwrite_copy_python(aiwrite)   # M7B 批 2：brain_ai_browser/*.py → <exe>/pyt
 # -----------------------------------------------------------------------------
 add_executable(api_probe tools/api_probe.cpp)
 target_sources(api_probe PRIVATE
-    tools/composite_selftest.cpp)   # CN：上级节点自检（展开执行/规格/注册表/JSON）
+    tools/api_probe_selftest.cpp        # CLN-15：协议/网络/CLI 自检段（原匿名块1）
+    tools/api_graph_selftest.cpp        # CLN-15：图模型自检段
+    tools/api_executor_selftest.cpp     # CLN-15：执行器自检段（P3-1）
+    tools/api_execution_selftest.cpp    # CLN-15：执行核心自检段（P3-2）
+    tools/api_diag.cpp                  # CLN-15：诊断/断言段
+    tools/composite_selftest.cpp)       # CN：上级节点自检（展开执行/规格/注册表/JSON）
 target_link_libraries(api_probe PRIVATE
     aiwrite_core
     httplib::httplib

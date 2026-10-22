@@ -55,9 +55,9 @@ std::filesystem::path find_package_dir()
 #ifdef AIWRITE_SOURCE_DIR
     candidates.emplace_back(std::filesystem::path(AIWRITE_SOURCE_DIR) / "python");
 #endif
-    candidates.emplace_back(paths::exe_dir() / "python");
+    candidates.emplace_back(paths::exeDir() / "python");
     // 开发态：从 exe 目录**向上**找 `source/python`（exe 通常在 <仓库根>/build/bin）≤ 6 层
-    std::filesystem::path dir = paths::exe_dir();
+    std::filesystem::path dir = paths::exeDir();
     for (int depth = 0; depth < 6 && !dir.empty(); ++depth) {
         candidates.emplace_back(dir / "source" / "python");
         candidates.emplace_back(dir / "python");
@@ -87,7 +87,7 @@ std::filesystem::path find_python(const std::filesystem::path& package_dir)
     std::error_code             ec;
     const std::filesystem::path candidates[] = {
         package_dir / ".venv" / "Scripts" / "python.exe",
-        paths::exe_dir() / "python" / ".venv" / "Scripts" / "python.exe",
+        paths::exeDir() / "python" / ".venv" / "Scripts" / "python.exe",
     };
     for (const auto& candidate : candidates) {
         if (std::filesystem::exists(candidate, ec)) {
@@ -113,7 +113,7 @@ struct DaemonProcess {
 // 起守护进程：`python -m brain_ai_browser --serve [--once] --pipe-name <名> --idle-timeout <n>`
 //  * stdout/stderr → `<日志目录>/pydoll_channel_daemon.log`（诊断可查）
 //  * stdin → NUL（避免部分 Python 构建对空句柄敏感）
-bool spawn_daemon(const std::string& pipe_name, bool once, int idle_timeout_s,
+bool spawn_daemon(const std::string& pipeName, bool once, int idle_timeout_s,
                   DaemonProcess* out, std::string* error)
 {
     const std::filesystem::path package_dir = find_package_dir();
@@ -133,7 +133,7 @@ bool spawn_daemon(const std::string& pipe_name, bool once, int idle_timeout_s,
     sa.nLength        = sizeof(sa);
     sa.bInheritHandle = TRUE;
 
-    const std::filesystem::path log_path = paths::logs_dir() / "pydoll_channel_daemon.log";
+    const std::filesystem::path log_path = paths::logsDir() / "pydoll_channel_daemon.log";
     std::error_code             dir_ec;
     std::filesystem::create_directories(log_path.parent_path(), dir_ec);
     HANDLE log_handle = ::CreateFileW(widen(log_path.string()).c_str(), GENERIC_WRITE,
@@ -152,7 +152,7 @@ bool spawn_daemon(const std::string& pipe_name, bool once, int idle_timeout_s,
     if (once) {
         command += L" --once";
     }
-    command += L" --pipe-name " + widen(pipe_name) + L" --idle-timeout " +
+    command += L" --pipe-name " + widen(pipeName) + L" --idle-timeout " +
                std::to_wstring(idle_timeout_s);
 
     STARTUPINFOW si{};
@@ -230,12 +230,12 @@ void release_daemon(DaemonProcess& daemon)
 
 int selftest(int timeout_ms)
 {
-    const std::string pipe_name = channel_pipe_name("pydoll-selftest");
+    const std::string pipeName = channel_pipe_name("pydoll-selftest");
     std::string       error;
     DaemonProcess     daemon;
 
-    log::info("[新通道] 自检：起守护进程（pipe=" + pipe_name + "）");
-    if (!spawn_daemon(pipe_name, /*once=*/true, 20, &daemon, &error)) {
+    log::info("[新通道] 自检：起守护进程（pipe=" + pipeName + "）");
+    if (!spawn_daemon(pipeName, /*once=*/true, 20, &daemon, &error)) {
         log::error("[新通道] 自检失败（依赖问题）：" + error);
         std::printf("[新通道] 依赖问题：%s\n", error.c_str());
         return 2;
@@ -245,7 +245,7 @@ int selftest(int timeout_ms)
 
     int        exit_code = 1;
     PipeClient client;
-    if (!client.connect(pipe_name, timeout_ms, &error)) {
+    if (!client.connect(pipeName, timeout_ms, &error)) {
         log::error("[新通道] 自检失败：连接管道超时 —— " + error);
         std::printf("[新通道] 失败：%s\n", error.c_str());
     } else {
@@ -264,7 +264,7 @@ int selftest(int timeout_ms)
                            std::to_string(kProtoVersion) + "，收到 " + std::to_string(proto) + "）");
             } else {
                 std::string ignored;
-                client.send_command("shutdown", nlohmann::json::object(), &ignored);
+                client.sendCommand("shutdown", nlohmann::json::object(), &ignored);
                 const int code = wait_daemon(daemon, 60'000);
                 std::printf("[新通道] 守护进程退出码=%d（0 = 干净收尾 · 未强杀）\n", code);
                 exit_code = (code == 0) ? 0 : 1;
@@ -277,11 +277,11 @@ int selftest(int timeout_ms)
     //  * 本自检**必然 >0**（`hello` + `shutdown` 各一条命令）⇒ 证明计数**真的在动**（不是死码）
     //  * 判据：`draw_property_panel()` 前后这两个数必须**不增**（渲染路径零 IPC）
     std::printf("[新通道] IPC 计数：连接=%llu 命令=%llu\n",
-                static_cast<unsigned long long>(ipc_connect_count()),
-                static_cast<unsigned long long>(ipc_command_count()));
+                static_cast<unsigned long long>(ipcConnectCount()),
+                static_cast<unsigned long long>(ipcCommandCount()));
 
     std::printf("[新通道] 守护进程日志：%s\n",
-                (paths::logs_dir() / "pydoll_channel_daemon.log").string().c_str());
+                (paths::logsDir() / "pydoll_channel_daemon.log").string().c_str());
     return exit_code;
 }
 
@@ -294,7 +294,7 @@ static constexpr const char* kDomProbeScript =
     "ids:Array.prototype.map.call(els,function(e){return e.id||e.name||e.type;})};})();";
 
 // ---- `--pydoll-script-selftest`：跨语言端到端（C++ → 管道 → Python → 浏览器 → JS）----
-int script_selftest(int timeout_seconds)
+int scriptSelftest(int timeout_seconds)
 {
     const int timeout_ms = timeout_seconds > 0 ? timeout_seconds * 1000 : 60'000;
 
@@ -314,10 +314,10 @@ int script_selftest(int timeout_seconds)
     const std::string url = "file:///" + page_path;
 
     // ② 起守护进程（**独立管道名**：不与生产守护进程 / 其他自检互相干扰）
-    const std::string pipe_name = channel_pipe_name("script-selftest");
+    const std::string pipeName = channel_pipe_name("script-selftest");
     std::string       error;
     DaemonProcess     daemon;
-    if (!spawn_daemon(pipe_name, /*once=*/true, 30, &daemon, &error)) {
+    if (!spawn_daemon(pipeName, /*once=*/true, 30, &daemon, &error)) {
         std::printf("[新通道] 依赖问题：%s\n", error.c_str());
         return 2;
     }
@@ -340,7 +340,7 @@ int script_selftest(int timeout_seconds)
     int        exit_code = 1;
     bool       closed    = false;
     PipeClient client;
-    if (!client.connect(pipe_name, timeout_ms, &error)) {
+    if (!client.connect(pipeName, timeout_ms, &error)) {
         std::printf("[新通道] 失败：连接管道超时 —— %s\n", error.c_str());
     } else {
         nlohmann::json hello;
@@ -399,7 +399,7 @@ int script_selftest(int timeout_seconds)
             //     `pipe_error`（`daemon._serve_async`）⇒ **退出码 1**。
             //     实测对照：`--pydoll-selftest` 发完就 `wait_daemon`（不 close）⇒ 退出码 0。
             std::string ignored;
-            client.send_command("shutdown", nlohmann::json::object(), &ignored);
+            client.sendCommand("shutdown", nlohmann::json::object(), &ignored);
             closed    = true;
             exit_code = (failed == 0) ? 0 : 1;
         }
@@ -419,7 +419,7 @@ int script_selftest(int timeout_seconds)
     std::filesystem::remove(page, ec);
     std::printf("[新通道] 脚本自检结果：%d 通过 / %d 失败（退出码 %d）\n", passed, failed, exit_code);
     std::printf("[新通道] 守护进程日志：%s\n",
-                (paths::logs_dir() / "pydoll_channel_daemon.log").string().c_str());
+                (paths::logsDir() / "pydoll_channel_daemon.log").string().c_str());
     return exit_code;
 }
 
@@ -439,13 +439,13 @@ std::atomic<bool> g_cancel_polls{false};
 //  * 本函数是**等价抽取**（自 step 9 起就是这段逻辑）；step 11 只为 `login_site` 复用而抽出
 std::string ensure_daemon_session(std::string* error)
 {
-    const std::string pipe_name = daemon_pipe_name();
-    if (!session_ready()) {
+    const std::string pipeName = daemonPipeName();
+    if (!sessionReady()) {
         bool alive = false;
         {
             PipeClient  probe;
             std::string probe_error;
-            if (probe.connect(pipe_name, 300, &probe_error)) {
+            if (probe.connect(pipeName, 300, &probe_error)) {
                 alive = true;
                 probe.close();
             }
@@ -453,19 +453,19 @@ std::string ensure_daemon_session(std::string* error)
         if (!alive) {
             DaemonProcess daemon;
             std::string   spawn_error;
-            if (!spawn_daemon(pipe_name, /*once=*/false, 600, &daemon, &spawn_error)) {
+            if (!spawn_daemon(pipeName, /*once=*/false, 600, &daemon, &spawn_error)) {
                 if (error != nullptr) {
                     *error = spawn_error;
                 }
                 return {};
             }
             g_session      = daemon;
-            g_session_pipe = pipe_name;
+            g_session_pipe = pipeName;
             log::info("[新通道] 会话已起（pid=" + std::to_string(daemon.pid) + " · 管道 " +
-                      pipe_name + "）");
+                      pipeName + "）");
         }
     }
-    return pipe_name;
+    return pipeName;
 }
 
 // 把「已登录」证据写进内存 `SessionStore`（`I15′`：只记**名单** —— 无 Cookie 值、不落盘；
@@ -473,7 +473,7 @@ std::string ensure_daemon_session(std::string* error)
 void remember_session(const SiteRef& site, const std::vector<std::string>& names)
 {
     Session session;
-    session.logged_in   = true;
+    session.loggedIn   = true;
     session.site        = login_request_site(site);
     session.provider_id = site.provider_id;
     session.url         = site.url;
@@ -488,7 +488,7 @@ void remember_session(const SiteRef& site, const std::vector<std::string>& names
 // 调 `login_state`（`I15′`）：
 //  * 返回 `false` = **命令失败**（*error 可操作）；
 //  * 返回 `true` 时：`*logged_in` = 是否判到已登录；`*names` = 命中名单；`*verdict` = 原判定串
-bool query_login_state(PipeClient& client, const SiteRef& site, int timeout_ms, bool* logged_in,
+bool query_login_state(PipeClient& client, const SiteRef& site, int timeout_ms, bool* loggedIn,
                        std::vector<std::string>* names, std::string* verdict, std::string* error)
 {
     nlohmann::json state;
@@ -504,8 +504,8 @@ bool query_login_state(PipeClient& client, const SiteRef& site, int timeout_ms, 
     if (verdict != nullptr) {
         *verdict = state.value("state", std::string("unknown"));
     }
-    if (logged_in != nullptr) {
-        *logged_in = state.value("state", std::string("unknown")) == "logged_in";
+    if (loggedIn != nullptr) {
+        *loggedIn = state.value("state", std::string("unknown")) == "logged_in";
     }
     if (names != nullptr) {
         *names = state.value("cookie_names", std::vector<std::string>{});
@@ -518,18 +518,18 @@ bool query_login_state(PipeClient& client, const SiteRef& site, int timeout_ms, 
 //  * 面板关窗 / 进程退出时由 `ui::wait_web_tasks()` 调用 —— 否则退出要把登录上限（120 s）干等完
 //  * **幂等 · 线程安全**；只改**轮询循环的继续条件**，不动会话、不发任何命令
 //  * 下一次 `login_site` / `pydoll_login` 进入时会**自动复位**（一次取消只作用于在跑的那一次）
-void request_cancel_session_ops()
+void requestCancelSessionOps()
 {
     g_cancel_polls = true;
     log::info("[新通道] 已请求取消登录态轮询（等待中的 `login_site` / `pydoll_login` 将尽早结束）");
 }
 
-bool session_ready()
+bool sessionReady()
 {
     return g_session.process != nullptr;
 }
 
-bool shutdown_session()
+bool shutdownSession()
 {
     if (g_session.process == nullptr) {
         return false;   // 幂等：本来就没有会话
@@ -537,7 +537,7 @@ bool shutdown_session()
     std::string ignored;
     PipeClient  closer;     // ⚠️ 作用域必须**盖过** `wait_daemon`：句柄先断会变 `pipe_error`
     if (closer.connect(g_session_pipe, 2'000, &ignored)) {
-        closer.send_command("shutdown", nlohmann::json::object(), &ignored);
+        closer.sendCommand("shutdown", nlohmann::json::object(), &ignored);
         // 发完**不主动 close**（照 `--pydoll-selftest` 做法）
     }
     const int code = wait_daemon(g_session, 60'000);
@@ -551,21 +551,21 @@ bool shutdown_session()
 }
 
 // ---- 确保会话（`M7B-18` 换代：**只读判定** → 「确保有活会话且已导航到站点」）----
-bool ensure_session(const SiteRef& site, int timeout_ms, std::string* error)
+bool ensureSession(const SiteRef& site, int timeout_ms, std::string* error)
 {
     const int boot_ms = timeout_ms > 0 ? timeout_ms : kTimeoutOpenMs;
 
     // ① 复用已有会话？（管道能连上 = 有活守护进程；连不上 → 自己起一个）
-    const std::string pipe_name = ensure_daemon_session(error);
-    if (pipe_name.empty()) {
+    const std::string pipeName = ensure_daemon_session(error);
+    if (pipeName.empty()) {
         return false;   // *error 已由 helper 填好（可操作原因，`I21`）
     }
 
     PipeClient  client;
     std::string connect_error;
-    if (!client.connect(pipe_name, boot_ms, &connect_error)) {
+    if (!client.connect(pipeName, boot_ms, &connect_error)) {
         if (error != nullptr) {
-            *error = "会话管道连不上（" + pipe_name + "）：" + connect_error;
+            *error = "会话管道连不上（" + pipeName + "）：" + connect_error;
         }
         return false;
     }
@@ -585,12 +585,12 @@ bool ensure_session(const SiteRef& site, int timeout_ms, std::string* error)
     }
 
     // ③ `I15′` 登录态判定（**未登录不算致命**：只读诊断脚本照跑 —— 由调用方决定）
-    bool                     logged_in = false;
+    bool                     loggedIn = false;
     std::vector<std::string> names;
     std::string              verdict;
     std::string              state_error;
     const bool               state_ok =
-        query_login_state(client, site, boot_ms, &logged_in, &names, &verdict, &state_error);
+        query_login_state(client, site, boot_ms, &loggedIn, &names, &verdict, &state_error);
     client.close();
     if (!state_ok) {
         if (error != nullptr) {
@@ -598,7 +598,7 @@ bool ensure_session(const SiteRef& site, int timeout_ms, std::string* error)
         }
         return false;
     }
-    if (!logged_in) {
+    if (!loggedIn) {
         if (error != nullptr) {
             *error = "该站点尚未登录（state=" + verdict + "）—— 请在参数面板点「打开登录窗口」"
                      "完成一次登录（或命令行 `--pydoll-login <id>`）；"
@@ -617,22 +617,22 @@ bool ensure_session(const SiteRef& site, int timeout_ms, std::string* error)
 //       **一旦观测失败就立即结束**（不再无视错误继续空转）；
 //    ② 判据为空（条目未配 `web.cookie_names`）⇒ **不再空转** `timeout_seconds`，立刻如实回报；
 //    ③ 每轮检查取消位（`request_cancel_session_ops()`）⇒ 退出 / 取消不再干等满上限
-bool login_site(const SiteRef& site, int timeout_seconds, std::string* error)
+bool loginSite(const SiteRef& site, int timeout_seconds, std::string* error)
 {
     // ⓪ 复位取消位：一次取消只作用于**在跑的那一次**（`wait_web_tasks()` 在退出时置位）
     g_cancel_polls = false;
 
     // ① 复用 / 起**常驻**会话（有头：`spawn_daemon` 不传 headless —— 用户要能看见窗口登录）
-    const std::string pipe_name = ensure_daemon_session(error);
-    if (pipe_name.empty()) {
+    const std::string pipeName = ensure_daemon_session(error);
+    if (pipeName.empty()) {
         return false;   // *error 已由 helper 填好（可操作原因，`I21`）
     }
 
     PipeClient  client;
     std::string connect_error;
-    if (!client.connect(pipe_name, 30'000, &connect_error)) {
+    if (!client.connect(pipeName, 30'000, &connect_error)) {
         if (error != nullptr) {
-            *error = "会话管道连不上（" + pipe_name + "）：" + connect_error;
+            *error = "会话管道连不上（" + pipeName + "）：" + connect_error;
         }
         return false;
     }
@@ -681,13 +681,13 @@ bool login_site(const SiteRef& site, int timeout_seconds, std::string* error)
             log::info("[新通道] 登录轮询已取消（站点 " + login_request_site(site) + "）");
             return false;
         }
-        bool                     logged_in = false;
+        bool                     loggedIn = false;
         std::vector<std::string> names;
         std::string              verdict;
         std::string              state_error;
-        const bool               observed = query_login_state(client, site, kTimeoutStateMs, &logged_in,
+        const bool               observed = query_login_state(client, site, kTimeoutStateMs, &loggedIn,
                                                             &names, &verdict, &state_error);
-        if (observed && logged_in) {
+        if (observed && loggedIn) {
             remember_session(site, names);
             client.close();
             log::info("[新通道] 登录成功（站点 " + login_request_site(site) + " · 名单 " +
@@ -722,7 +722,7 @@ bool login_site(const SiteRef& site, int timeout_seconds, std::string* error)
 }
 
 // ---- `logout_site`（v3 · step 11）：按站点注销（`Storage.clearDataForOrigin`）----
-bool logout_site(const SiteRef& site, int timeout_ms, std::string* error)
+bool logoutSite(const SiteRef& site, int timeout_ms, std::string* error)
 {
     const std::string origin = login_request_site(site);   // = `site_key_of(site.url)`
     if (origin.empty()) {
@@ -735,7 +735,7 @@ bool logout_site(const SiteRef& site, int timeout_ms, std::string* error)
 
     PipeClient  client;
     std::string connect_error;
-    if (!client.connect(daemon_pipe_name(), wait_ms, &connect_error)) {
+    if (!client.connect(daemonPipeName(), wait_ms, &connect_error)) {
         if (error != nullptr) {
             *error = "新通道会话未在运行（管道连不上：" + connect_error +
                      "）—— 请先「打开登录窗口」建立会话再注销；**本次未做任何改动**";
@@ -766,11 +766,11 @@ bool logout_site(const SiteRef& site, int timeout_ms, std::string* error)
 bool run_script(const SiteRef& site, const std::string& script_js, int timeout_ms,
                 std::string* json_result, std::string* error)
 {
-    const std::string pipe_name = daemon_pipe_name();
+    const std::string pipeName = daemonPipeName();
     PipeClient        client;
-    if (!client.connect(pipe_name, 2'000, error)) {
+    if (!client.connect(pipeName, 2'000, error)) {
         if (error != nullptr) {
-            *error = "Python 守护进程未在运行（管道 " + pipe_name + " 连不上）—— "
+            *error = "Python 守护进程未在运行（管道 " + pipeName + " 连不上）—— "
                      "请先建立会话（`--pydoll-login <id>`），或由执行器按需启动"
                      "（`M7B-20` 接线后自动）";
         }
@@ -806,12 +806,12 @@ namespace {
 // 连守护进程（**不自动起浏览器**：起会话归调用方 / `--pydoll-login`）
 bool connect_session(PipeClient* client, int connect_ms, std::string* error)
 {
-    const std::string pipe_name = daemon_pipe_name();
-    if (client->connect(pipe_name, connect_ms, error)) {
+    const std::string pipeName = daemonPipeName();
+    if (client->connect(pipeName, connect_ms, error)) {
         return true;
     }
     if (error != nullptr) {
-        *error = "新通道会话未在运行（管道 " + pipe_name + " 连不上）—— "
+        *error = "新通道会话未在运行（管道 " + pipeName + " 连不上）—— "
                  "请先「打开登录窗口」建立会话（`--pydoll-login <id>`），再重试";
     }
     return false;
@@ -938,11 +938,11 @@ bool read_answer(const SiteRef& site, const std::vector<std::string>& answer_sel
     return true;
 }
 
-std::string current_tab_site()
+std::string currentTabSite()
 {
     PipeClient  client;
     std::string connect_error;
-    if (!client.connect(daemon_pipe_name(), 2'000, &connect_error)) {
+    if (!client.connect(daemonPipeName(), 2'000, &connect_error)) {
         return {};   // 无会话 → 无 tab（如实回空串；**不假装**「不在任何站点」）
     }
     nlohmann::json ack;
@@ -956,19 +956,19 @@ std::string current_tab_site()
     return ack.value("site", std::string());
 }
 
-bool tab_on_site(const std::string& site)
+bool tabOnSite(const std::string& site)
 {
-    const std::string want = site_key_of(site);   // 归一：既接受 origin，也接受完整 URL
+    const std::string want = siteKeyOf(site);   // 归一：既接受 origin，也接受完整 URL
     if (want.empty()) {
         return false;
     }
-    const std::string current = current_tab_site();
-    return !current.empty() && site_key_of(current) == want;
+    const std::string current = currentTabSite();
+    return !current.empty() && siteKeyOf(current) == want;
 }
 
 namespace {
 
-std::string join_names(const std::vector<std::string>& names)
+std::string joinNames(const std::vector<std::string>& names)
 {
     std::string text;
     for (std::size_t index = 0; index < names.size(); ++index) {
@@ -984,7 +984,7 @@ std::string join_names(const std::vector<std::string>& names)
 //  * 判据（`I15′`）：条目 `cookie_names` 命中 ⇒ `logged_in`（**去 `userToken`**）
 //  * 退出码：0 = 登录成功；1 = 超时 / 失败；2 = 参数 / 依赖问题
 // ---- `--pydoll-chat-selftest`（**step 14 · P4**）：内容返回端到端（v4 三命令）----
-int chat_selftest(int timeout_seconds)
+int chatSelftest(int timeout_seconds)
 {
     const int         timeout_ms = timeout_seconds > 0 ? timeout_seconds * 1000 : 120'000;
     const std::string prompt     = "v4-chat-selftest";
@@ -1014,10 +1014,10 @@ int chat_selftest(int timeout_seconds)
     const std::string url = "file:///" + page_path;
 
     // ② 起守护进程（**独立管道名** · `--once` 单连接）
-    const std::string pipe_name = channel_pipe_name("chat-selftest");
+    const std::string pipeName = channel_pipe_name("chat-selftest");
     std::string       error;
     DaemonProcess     daemon;
-    if (!spawn_daemon(pipe_name, /*once=*/true, 30, &daemon, &error)) {
+    if (!spawn_daemon(pipeName, /*once=*/true, 30, &daemon, &error)) {
         std::printf("[新通道] 依赖问题：%s\n", error.c_str());
         return 2;
     }
@@ -1040,7 +1040,7 @@ int chat_selftest(int timeout_seconds)
     int        exit_code = 1;
     bool       closed    = false;
     PipeClient client;
-    if (!client.connect(pipe_name, timeout_ms, &error)) {
+    if (!client.connect(pipeName, timeout_ms, &error)) {
         std::printf("[新通道] 失败：连接管道超时 —— %s\n", error.c_str());
     } else {
         nlohmann::json hello;
@@ -1130,7 +1130,7 @@ int chat_selftest(int timeout_seconds)
             // ⑧ 收尾：`shutdown`（**同一连接** · `--once`）→ **不立刻 close**（否则守护进程读循环撞
             //    `pipe_error` ⇒ 退出码 1；同 `script_selftest` 的实测教训）
             std::string ignored;
-            client.send_command("shutdown", nlohmann::json::object(), &ignored);
+            client.sendCommand("shutdown", nlohmann::json::object(), &ignored);
             closed    = true;
             exit_code = (failed == 0) ? 0 : 1;
         }
@@ -1151,34 +1151,34 @@ int chat_selftest(int timeout_seconds)
     std::printf("[新通道] 内容返回自检结果：%d 通过 / %d 失败（退出码 %d）\n", passed, failed,
                 exit_code);
     std::printf("[新通道] 守护进程日志：%s\n",
-                (paths::logs_dir() / "pydoll_channel_daemon.log").string().c_str());
+                (paths::logsDir() / "pydoll_channel_daemon.log").string().c_str());
     return exit_code;
 }
 
-int pydoll_login(const std::string& provider_id, int timeout_seconds)
+int pydollLogin(const std::string& provider_id, int timeout_seconds)
 {
     // ① 解析条目（**严格**：缺 `web.login_url` 等 → 可操作错误；不发请求、不开窗）
-    const ai::ProviderSpecs& table = ai::provider_specs();
+    const ai::ProviderSpecs& table = ai::providerSpecs();
     const ai::ProviderSpec*  spec  = table.find(provider_id);
     if (spec == nullptr) {
         std::printf("[pydoll-login] 未知条目：%s（用 `--provider-dump` 查看可用 id）\n",
                     provider_id.c_str());
         return 2;
     }
-    const ai::ProviderWebSpec web        = ai::strict_web_spec_for(spec);
-    const std::string         site_error = ai::web_site_error(spec);
+    const ai::ProviderWebSpec web        = ai::strictWebSpecFor(spec);
+    const std::string         site_error = ai::webSiteError(spec);
     if (!site_error.empty()) {
         std::printf("[pydoll-login] 条目不可用：%s\n", site_error.c_str());
         return 2;
     }
-    const std::string site_id = ai::strict_web_provider_id_for(spec);
+    const std::string site_id = ai::strictWebProviderIdFor(spec);
     const SiteRef site = login_request_of(web, site_id, /*for_probe=*/false, /*offscreen=*/false);
 
     // ② 起守护进程（**非 once**：保持存活，直到我们主动 `shutdown`）
-    const std::string pipe_name = channel_pipe_name("pydoll-login");
+    const std::string pipeName = channel_pipe_name("pydoll-login");
     std::string       error;
     DaemonProcess     daemon;
-    if (!spawn_daemon(pipe_name, /*once=*/false, 30, &daemon, &error)) {
+    if (!spawn_daemon(pipeName, /*once=*/false, 30, &daemon, &error)) {
         std::printf("[pydoll-login] 依赖问题：%s\n", error.c_str());
         log::error("[pydoll-login] " + error);
         return 2;
@@ -1188,7 +1188,7 @@ int pydoll_login(const std::string& provider_id, int timeout_seconds)
 
     int        result = 1;
     PipeClient client;
-    if (!client.connect(pipe_name, 30'000, &error)) {
+    if (!client.connect(pipeName, 30'000, &error)) {
         std::printf("[pydoll-login] 守护进程未就绪：%s\n", error.c_str());
         release_daemon(daemon);
         return 1;
@@ -1204,7 +1204,7 @@ int pydoll_login(const std::string& provider_id, int timeout_seconds)
         std::printf("[pydoll-login] 已打开 %s —— 请在窗口内**手动登录**"
                     "（不代填密码、不绕过验证 · §13）\n"
                     "               判据：条目 cookie_names 命中（%s）· 超时 %d s\n",
-                    site.url.c_str(), join_names(site.cookie_names).c_str(), timeout_seconds);
+                    site.url.c_str(), joinNames(site.cookie_names).c_str(), timeout_seconds);
         g_cancel_polls = false;   // 复位取消位（一次取消只作用于在跑的那一次 · `M7B-44`）
         const auto started = std::chrono::steady_clock::now();
         bool       aborted = false;   // 非超时结束（观测失败 / 取消）—— 超时文案**不得**误报
@@ -1222,8 +1222,8 @@ int pydoll_login(const std::string& provider_id, int timeout_seconds)
                 const std::vector<std::string> names =
                     state.value("cookie_names", std::vector<std::string>{});
                 Session session;
-                session.logged_in   = true;
-                session.site        = site_key_of(site.url);
+                session.loggedIn   = true;
+                session.site        = siteKeyOf(site.url);
                 session.provider_id = site_id;
                 session.url         = site.url;
                 for (const std::string& name : names) {
@@ -1261,7 +1261,7 @@ int pydoll_login(const std::string& provider_id, int timeout_seconds)
 
     // ③ 收尾：`shutdown`（守护进程 `Browser.close` → 等进程退出 + **关闭前写 L2 快照**，`I23①`）
     std::string ignored;
-    client.send_command("shutdown", {{"grace_ms", 5'000}}, &ignored);
+    client.sendCommand("shutdown", {{"grace_ms", 5'000}}, &ignored);
     client.close();
     const int code = wait_daemon(daemon, 30'000);
     std::printf("[pydoll-login] 守护进程退出码=%d（-1 = 未在期限内退出；**未强杀** · `I23①`）\n",

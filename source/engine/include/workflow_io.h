@@ -27,13 +27,13 @@ namespace aiwrite::engine {
 constexpr const char* kWorkflowVersion = "1.0";
 
 // 图 → JSON
-nlohmann::json graph_to_json(const Graph& graph);
+nlohmann::json graphToJson(const Graph& graph);
 
 // JSON → 图；成功返回 true，失败写 error（失败时 graph 内容未定义，调用方应保持原图）
-bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* error);
+bool graphFromJson(const nlohmann::json& json, Graph& graph, std::string* error);
 
 // 文件读写（UTF-8）
-bool save_workflow(const Graph& graph, const std::filesystem::path& file, std::string* error);
-bool load_workflow(const std::filesystem::path& file, Graph& graph, std::string* error);
+bool saveWorkflow(const Graph& graph, const std::filesystem::path& file, std::string* error);
+bool loadWorkflow(const std::filesystem::path& file, Graph& graph, std::string* error);
 
 } // namespace aiwrite::engine

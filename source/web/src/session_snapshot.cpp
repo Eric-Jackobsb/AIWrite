@@ -33,17 +33,17 @@ std::string format_time(std::filesystem::file_time_type value)
 
 } // namespace
 
-std::filesystem::path snapshot_file()
+std::filesystem::path snapshotFile()
 {
-    return paths::session_snapshot_dir() / kSnapshotFileName;
+    return paths::sessionSnapshotDir() / kSnapshotFileName;
 }
 
-SnapshotInfo inspect_snapshot()
+SnapshotInfo inspectSnapshot()
 {
-    return inspect_snapshot_at(snapshot_file());
+    return inspectSnapshotAt(snapshotFile());
 }
 
-SnapshotInfo inspect_snapshot_at(const std::filesystem::path& path)
+SnapshotInfo inspectSnapshotAt(const std::filesystem::path& path)
 {
     SnapshotInfo    info;
     std::error_code ec;
@@ -65,7 +65,7 @@ SnapshotInfo inspect_snapshot_at(const std::filesystem::path& path)
     return info;
 }
 
-std::string snapshot_summary(const SnapshotInfo& info)
+std::string snapshotSummary(const SnapshotInfo& info)
 {
     if (!info.exists) {
         return "登录态快照：尚无（首次登录并干净退出后生成）";
@@ -78,7 +78,7 @@ std::string snapshot_summary(const SnapshotInfo& info)
     return text;
 }
 
-std::string snapshot_trigger_note()
+std::string snapshotTriggerNote()
 {
     return "写入时机：定时 " + std::to_string(static_cast<int>(kSnapshotRefreshPeriod)) +
            " s（< 10 s 硬上限）· 判到「已登录」即写 · 守护进程关闭前再写一次；"

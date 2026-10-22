@@ -123,23 +123,23 @@ std::string station_fields_reason(const nlohmann::json& payload, const std::stri
 
 } // namespace
 
-const char* error_code_bad_frame()
+const char* errorCodeBadFrame()
 {
     return "bad_frame";
 }
 
-bool frame_within_limit(const std::string& line)
+bool frameWithinLimit(const std::string& line)
 {
     return line.size() <= kMaxFrameBytes;
 }
 
-Frame parse_frame(const std::string& line)
+Frame parseFrame(const std::string& line)
 {
     const std::string text = strip_eol(line);
     if (is_blank(text)) {
         return bad("空行（帧内不得有裸换行）", line);
     }
-    if (!frame_within_limit(text)) {
+    if (!frameWithinLimit(text)) {
         return bad("超过单帧上限 65536 字节", text);
     }
 
@@ -243,7 +243,7 @@ std::string make_error(const std::string& code, const std::string& id, const std
     return obj.dump();
 }
 
-const std::vector<std::string>& known_commands()
+const std::vector<std::string>& knownCommands()
 {
     static const std::vector<std::string> commands = {"hello",        "open_tab",     "login_state",
                                                      "upload_image", "send_prompt",  "read_answer",
@@ -252,7 +252,7 @@ const std::vector<std::string>& known_commands()
     return commands;
 }
 
-const std::vector<std::string>& known_events()
+const std::vector<std::string>& knownEvents()
 {
     static const std::vector<std::string> events = {"stage",       "evidence",    "delta",
                                                     "answer_done", "script_done", "tab",
@@ -260,13 +260,13 @@ const std::vector<std::string>& known_events()
     return events;
 }
 
-bool is_known_command(const std::string& name)
+bool isKnownCommand(const std::string& name)
 {
-    const std::vector<std::string>& commands = known_commands();
+    const std::vector<std::string>& commands = knownCommands();
     return std::find(commands.begin(), commands.end(), name) != commands.end();
 }
 
-std::vector<std::string> required_fields_of(const std::string& command)
+std::vector<std::string> requiredFieldsOf(const std::string& command)
 {
     if (command == "open_tab" || command == "login_state" || command == "logout_site") {
         return {"provider"};
@@ -286,7 +286,7 @@ std::vector<std::string> required_fields_of(const std::string& command)
     return {}; // hello / shutdown / current_tab：无必需字段
 }
 
-bool validate_command(const Frame& frame, std::string* reason)
+bool validateCommand(const Frame& frame, std::string* reason)
 {
     const auto fail = [reason](const std::string& text) {
         if (reason != nullptr) {
@@ -300,9 +300,9 @@ bool validate_command(const Frame& frame, std::string* reason)
     if (frame.kind != kKindCmd) {
         return fail("不是命令帧（kind=" + frame.kind + "）");
     }
-    if (!is_known_command(frame.name)) {
+    if (!isKnownCommand(frame.name)) {
         std::string known;
-        for (const std::string& name : known_commands()) {
+        for (const std::string& name : knownCommands()) {
             known += (known.empty() ? "" : " / ") + name;
         }
         return fail("未知命令 " + frame.name + "（已知：" + known + "）");
@@ -310,7 +310,7 @@ bool validate_command(const Frame& frame, std::string* reason)
 
     const nlohmann::json payload = parse_object(frame.payload_json);
     std::string          missing;
-    for (const std::string& field : required_fields_of(frame.name)) {
+    for (const std::string& field : requiredFieldsOf(frame.name)) {
         if (!payload.contains(field)) {
             missing += (missing.empty() ? "" : " / ") + field;
         }
@@ -350,7 +350,7 @@ bool validate_command(const Frame& frame, std::string* reason)
     return true;
 }
 
-std::string delta_text_of_frame(const std::string& payload_json, bool* explicit_non_stream)
+std::string deltaTextOfFrame(const std::string& payload_json, bool* explicit_non_stream)
 {
     const auto flag = [explicit_non_stream](bool value) {
         if (explicit_non_stream != nullptr) {

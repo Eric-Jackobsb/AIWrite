@@ -2,7 +2,7 @@
 
 > 本目录存放**已完成**的文档：里程碑 Action Plan、功能补丁计划、验证报告。
 > 归档原则：**只增不改** —— 归档后内容保持原样（仅允许修正链接与补归档标记）；当前计划与任务看板见 [../actionPlan/](../actionPlan/) 与 [../DevPlan.todo](../DevPlan.todo)。
-> 首次归档：2026-09-26；**最近归档：2026-10-18**（**`Composition_node.md` 指令式归档** —— 实施完成、仅剩人工验收 ⇒ 按 §三 5 直接归档；人工验收 + 待拍板项迁 [../actionPlan/ToVerify.todo](../actionPlan/ToVerify.todo)；承接位 = `ToVerify.todo` + [../draft/M_preset_library.md](../draft/M_preset_library.md)（组合层落地 PS-01…））；上一批 **2026-10-11**（**M4 / M5 / M7 三份里程碑计划 `git mv` 入库** —— M4「文本生成链路」核心完成、M5「多模态 · M5-C 核心切片」完成、M7「图片输入收口 + P7-a」固定；三份均加 `📦 已归档` 标记行 + 相对链接层级修正 + 7 处索引同步）；再上一批 **2026-10-10** = `网页版协议实测记录.md`（**停止维护**：M4/M7 时期的网页版协议取证（DeepSeek 取值 · 豆包 / Kimi 站点证据）冻结，现行「站点能不能用」的结论改由 `TST-L05` 台账（[../AI_Status.md](../AI_Status.md) §二）+ [../loop_dev.md](../loop_dev.md) 承载）；再上一批 **2026-10-05** = `M7B` · `M7_P7b_pydollRoute`，**网页通道路线退场**：`M7B` 的 Pydoll 路线被 **方案 E** 取代，现行计划 [../actionPlan/M8.md](../actionPlan/M8.md)）
+> 首次归档：2026-09-26；**最近归档：2026-10-18**（**`Composition_node.md` 指令式归档** —— 实施完成、仅剩人工验收 ⇒ 按 §三 5 直接归档；人工验收 + 待拍板项迁 [../DevPlan.todo](../DevPlan.todo) Test（2026-10-21 由 `ToVerify.todo` 并入）；承接位 = `DevPlan.todo Test` + [../draft/M_preset_library.md](../draft/M_preset_library.md)（组合层落地 PS-01…））；上一批 **2026-10-11**（**M4 / M5 / M7 三份里程碑计划 `git mv` 入库** —— M4「文本生成链路」核心完成、M5「多模态 · M5-C 核心切片」完成、M7「图片输入收口 + P7-a」固定；三份均加 `📦 已归档` 标记行 + 相对链接层级修正 + 7 处索引同步）；再上一批 **2026-10-10** = `网页版协议实测记录.md`（**停止维护**：M4/M7 时期的网页版协议取证（DeepSeek 取值 · 豆包 / Kimi 站点证据）冻结，现行「站点能不能用」的结论改由 `TST-L05` 台账（[../AI_Status.md](../AI_Status.md) §二）+ [../loop_dev.md](../loop_dev.md) 承载）；再上一批 **2026-10-05** = `M7B` · `M7_P7b_pydollRoute`，**网页通道路线退场**：`M7B` 的 Pydoll 路线被 **方案 E** 取代，现行计划 [../actionPlan/M8.md](../actionPlan/M8.md)）
 
 ---
 
@@ -24,7 +24,7 @@
 | [actionPlan/M7_P7b_pydollRoute.md](actionPlan/M7_P7b_pydollRoute.md) | **摘录归档**（`M7.md` 的 Pydoll 章节） | 2026-10-05 | `M7.md` §9 `D5`/`D6` · §12.1 全表（含 B0~B3 实测结论）· §12.2 通道类条目 · §16 旧实施顺序 · §17 `Q2`/`Q3` 的**原文照录**（`M7.md` 正本原位保留 + 📦 指针） |
 | [M1_技术验证报告.md](M1_技术验证报告.md) | 验证报告 | 2026-09-23 | M1 实测环境、分层验证结果、V/A 验收对照、问题与解决记录 |
 | [网页版协议实测记录.md](网页版协议实测记录.md) | 实测记录（**停止维护**） | 2026-10-10 | 网页版协议取值取证（M4-06/08/09 · DeepSeek 取值 / 豆包真视觉 / Kimi 站点证据）；**方案 E 取代后不再维护** ⇒ 只作**追溯资料**（新实测证据改记 `source/assets/site_capability_evidence.json` + [../AI_Status.md](../AI_Status.md) §二 台账） |
-| [actionPlan/Composition_node.md](actionPlan/Composition_node.md) | 架构设计（**指令式归档**） | 2026-10-18 | **上级节点（Composite Node · 组合层 L4 重启）**：设计定稿 + 实施完成（模型/注册表/独立文件存储/展开执行/编辑器/节点库分类/紫条视觉/新建草稿修正 · `composite_selftest` 51 断言 · exec 681/0 · graph 151/0）—— **仅剩人工验收** ⇒ 按 §三 5 指令式归档；**人工验收 + 待拍板项 → [../actionPlan/ToVerify.todo](../actionPlan/ToVerify.todo)**（新建 → 编辑 → 打包 → 父画布运行 → 展开执行结果正确；待拍板 = `VCN-*`/`ACN-*` 验收框架 · 程序化生成规则 · 调试设施去留）；承接位 = `ToVerify.todo` + [../draft/M_preset_library.md](../draft/M_preset_library.md) |
+| [actionPlan/Composition_node.md](actionPlan/Composition_node.md) | 架构设计（**指令式归档**） | 2026-10-18 | **上级节点（Composite Node · 组合层 L4 重启）**：设计定稿 + 实施完成（模型/注册表/独立文件存储/展开执行/编辑器/节点库分类/紫条视觉/新建草稿修正 · `composite_selftest` 51 断言 · exec 681/0 · graph 151/0）—— **仅剩人工验收** ⇒ 按 §三 5 指令式归档；**人工验收 + 待拍板项 → [../DevPlan.todo](../DevPlan.todo) Test**（2026-10-21 由 `ToVerify.todo` 并入 · 新建 → 编辑 → 打包 → 父画布运行 → 展开执行结果正确；待拍板 = `VCN-*`/`ACN-*` 验收框架 · 程序化生成规则 · 调试设施去留）；承接位 = `DevPlan.todo Test` + [../draft/M_preset_library.md](../draft/M_preset_library.md) |
 
 ---
 

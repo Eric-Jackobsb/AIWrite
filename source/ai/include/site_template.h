@@ -49,30 +49,36 @@ struct WebSiteTemplate {
 };
 
 // 内置最小模板（不依赖磁盘表；`登录型` 形态：只有站点身份，选择器留给用户按 §3.4 实测填）
-WebSiteTemplate site_template_default();
+WebSiteTemplate siteTemplateDefault();
 
 // 从表内条目**照抄**模板（R18：照抄也能建出站点）
 //  * 源条目是 `web.adapter=dom` ⇒ 连选择器一起抄（改 id 即可用）
 //  * 源条目是内建站点（`builtin:*` / 空 adapter）⇒ 只抄站点身份（登录页 / 标题 / Cookie 名 /
 //    取数表达式），**不抄**内建专属字段 ⇒ 生成「登录型」条目（守 §8 附录 D 的边界）
 //  * `spec` 为空 / 非 `kind=web` ⇒ 退回 `site_template_default()`
-WebSiteTemplate site_template_from_spec(const ProviderSpec* spec);
+WebSiteTemplate siteTemplateFromSpec(const ProviderSpec* spec);
 
 // ----------------------------------------------------------------- 校验 / 落盘 --
 
 // 站点 id 合法性（**可操作**错误文案；空串 = 合法）
 //  * 允许 `[A-Za-z0-9._-]`，长度 1〜64，首字符须为字母或数字（防路径穿越：`/` `\` `..` 一律拒）
-std::string site_id_error(const std::string& id);
+std::string siteIdError(const std::string& id);
+
+// **共享**的条目 id 合法性（站点 / 官方 API 提供商共用，自定义 AI 收口批抽出）
+//  * 与 `siteIdError` 同一规则、同一文案：`siteIdError(id)` ≡ `providerIdError(id, "站点")`
+//  * `kind_label` = 「站点」/「提供商」（决定报错文案里的前缀）
+std::string providerIdError(const std::string& id, const std::string& kind_label);
+
 
 // 模板整体校验（空串 = 可写盘）：id + 登录页（站点身份的唯一来源）
-std::string site_template_error(const WebSiteTemplate& tpl);
+std::string siteTemplateError(const WebSiteTemplate& tpl);
 
 // 模板**待实测**清单（空串 = 生成字段齐全）：缺 `input_selector` / `send` / `answer_selector`
 //  * 缺失 ⇒ 条目仍是**合法的登录型站点**（登录 / 登录态可用；生成在运行期**明确报错**，PB2-26）
-std::string site_template_pending(const WebSiteTemplate& tpl);
+std::string siteTemplatePending(const WebSiteTemplate& tpl);
 
 // 生成的**用户层文件全文**（带 `schema_version` 信封；纯函数 ⇒ 离线断言）
-std::string site_file_json(const WebSiteTemplate& tpl);
+std::string siteFileJson(const WebSiteTemplate& tpl);
 
 // 写 `dir/<id>.json`（目录不存在则创建；原子落盘 = 先写 `.tmp` 再改名）
 //  * 同名文件已存在且 `overwrite=false` ⇒ 失败 + 可操作文案
@@ -81,14 +87,22 @@ bool write_user_site_file(const WebSiteTemplate& tpl, const std::filesystem::pat
                           bool overwrite, std::string* error,
                           std::filesystem::path* written = nullptr);
 
+// **共享**底层写盘：`dir/<id>.json`（站点 / 官方 API 提供商共用，自定义 AI 收口批抽出）
+//  * **不校验** id / 内容 —— 调用方须先过各自的校验（`siteTemplateError` / `officialTemplateError`）
+//  * 原子落盘 / 拒覆盖策略 / 文案与 `write_user_site_file` 完全一致
+bool writeUserProviderFile(const std::string& id, const std::string& json,
+                           const std::filesystem::path& dir, bool overwrite,
+                           std::string* error, std::filesystem::path* written = nullptr);
+
+
 // 逗号分隔串 ↔ Cookie 名清单（去空 / 去重 / 保序；界面与 JSON 共用同一口径）
-std::vector<std::string> split_names(const std::string& text);
-std::string              join_names(const std::vector<std::string>& names);
+std::vector<std::string> splitNames(const std::string& text);
+std::string              joinNames(const std::vector<std::string>& names);
 
 // ---- 自检（离线断言；返回失败项数；`api_probe --site-assert` 调用）----
 // 覆盖：id 合法性（含路径穿越）/ 登录页必填 / 生成的 JSON 带信封 / 未知字段零告警口径 /
 //       DOM 字段嵌套形状（`send` / `done_when`）/ 缺信封 ⇒ 整层失效（R8 回归护栏）/
 //       坏 id 不落盘 / 已存在文件默认拒写 / 覆盖写成功 / 转义与中文往返
-int site_template_selftest(int* passed_out = nullptr);
+int siteTemplateSelftest(int* passed_out = nullptr);
 
 } // namespace aiwrite::ai

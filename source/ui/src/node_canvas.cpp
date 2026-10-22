@@ -1,6 +1,7 @@
 #include "node_canvas.h"
 
 #include "composite.h"        // CN：上级节点实例识别 / 创建
+#include "canvas_view.h"      // CN_editor_refactor：共享只读绘制层（CEA-01 / CEA-02）
 #include "composite_editor.h" // CN：双击/右键打开上级节点编辑器
 #include "node_registry.h"
 #include "provider_resolve.h"
@@ -64,78 +65,13 @@ bool          g_alt_pan_active        = false;                   // 当前是否
 
 // 颜色（分类 / 端口类型 / 节点状态）统一由 ui/theme.h 提供（设计 §14.3 / §4.5 / §4.6）
 
-// ------------------------------------------------- 稳定手柄映射（id ↔ handle）---
-// 节点 "n12" → 12；端口 = (节点序号 << 8) | (输出位 0x80) | 端口下标
-ed::NodeId node_handle(const std::string& node_id)
-{
-    return ed::NodeId(static_cast<uintptr_t>(engine::numericIdOf(node_id)));
-}
-
-ed::LinkId link_handle(const std::string& edge_id)
-{
-    return ed::LinkId(static_cast<uintptr_t>(engine::numericIdOf(edge_id)));
-}
-
-ed::PinId pin_handle(const Node& node, PortDirection direction, int index)
-{
-    const uintptr_t base  = static_cast<uintptr_t>(engine::numericIdOf(node.id)) << 8;
-    const uintptr_t flags = (direction == PortDirection::Output) ? 0x80u : 0x00u;
-    return ed::PinId(base | flags | static_cast<uintptr_t>(index & 0x7F));
-}
-
-struct PinRef {
-    std::string   node_id;
-    std::string   port_id;
-    PortDirection direction = PortDirection::Input;
-    bool          valid     = false;
-};
-
-PinRef resolve_pin(ed::PinId id, const Graph& graph)
-{
-    PinRef ref;
-    const uintptr_t value = id.Get();
-    if (value == 0) {
-        return ref;
-    }
-    const int node_seq = static_cast<int>((value >> 8) & 0x7FFFFF);
-    const PortDirection direction =
-        ((value & 0x80u) != 0) ? PortDirection::Output : PortDirection::Input;
-    const int index = static_cast<int>(value & 0x7F);
-
-    const Node* node = graph.findNode("n" + std::to_string(node_seq));
-    if (node == nullptr) {
-        return ref;
-    }
-    const std::vector<Port>& ports = (direction == PortDirection::Input) ? node->inputs : node->outputs;
-    if (index < 0 || index >= static_cast<int>(ports.size())) {
-        return ref;
-    }
-
-    ref.node_id   = node->id;
-    ref.port_id   = ports[static_cast<std::size_t>(index)].id;
-    ref.direction = direction;
-    ref.valid     = true;
-    return ref;
-}
+// 手柄映射（node_handle / link_handle / pin_handle / resolve_pin / PinRef）
+// 已上移 canvas_view.{h,cpp}（CN_editor_refactor CEA-01：主画布与上级编辑器共用
+// 同一套整数手柄，避免映射逻辑漂移）。
 
 // ------------------------------------------------------------- 初始化 -------
-// 设计 §14.4：画布/节点/边框/选中 配色
-void apply_editor_style()
-{
-    ed::Style& style              = ed::GetStyle();
-    style.NodeRounding            = 4.0f;
-    style.NodeBorderWidth         = 1.5f;
-    style.SelectedNodeBorderWidth = 2.5f;
-    style.NodePadding             = ImVec4(10.0f, 8.0f, 10.0f, 8.0f);
-    // 说明（PA-08 治理）：vendored imgui-node-editor 的 Style **没有网格间距字段**，
-    // 因此 ui.grid_size 目前无法生效 —— 已在 unwired_config_fields() 中如实登记并在启动日志提示
-    style.Colors[ed::StyleColor_Bg]            = ImColor(30, 30, 30, 255);
-    style.Colors[ed::StyleColor_Grid]          = ImColor(42, 42, 42, 255);
-    style.Colors[ed::StyleColor_NodeBg]        = ImColor(45, 45, 45, 255);
-    style.Colors[ed::StyleColor_NodeBorder]    = ImColor(58, 58, 58, 255);
-    style.Colors[ed::StyleColor_SelNodeBorder] = ImColor(74, 144, 226, 255);
-    style.Colors[ed::StyleColor_HovNodeBorder] = ImColor(74, 144, 226, 200);
-}
+// 设计 §14.4：画布/节点/边框/选中 配色 —— 由共享 canvas_view 主题统一管理（CEA-D5）。
+// 主画布 = canvas_theme_main()（现状配色，零行为变更）；样式按编辑器上下文隔离。
 
 // ---------------------------------------------------------- 设置文件净化 -----
 // node-editor 会把节点位置与视图（scroll / visible_rect / zoom）持久化到
@@ -236,7 +172,7 @@ void ensure_context()
         return;
     }
 
-    static std::string settings_file = (paths::data_root() / "node_editor.json").string();
+    static std::string settings_file = (paths::dataRoot() / "node_editor.json").string();
 
     // 启动前净化：损坏的坐标/视图会让 node-editor 的网格计算爆量（CPU 打满、界面无响应）
     sanitize_editor_settings(settings_file);
@@ -255,7 +191,7 @@ void ensure_context()
 
     // 注意：GetStyle/PushStyleColor 作用于"当前编辑器"，必须先 SetCurrentEditor
     ed::SetCurrentEditor(g_context);
-    apply_editor_style();
+    canvasApplyEditorStyle(canvasThemeMain());
     log::info("[画布] 编辑器样式已应用（缩放范围 0.1x ~ 4.0x）");
 
     // 设计 §6.7：MVP 不保留任何快捷键，全部改为鼠标操作（右键菜单 / 工具栏 / 菜单栏）
@@ -263,519 +199,19 @@ void ensure_context()
     log::info("[画布] 已关闭画布键盘快捷键（仅保留鼠标操作）");
 }
 
-// 节点宽度：**由「输入/输出标签实测最宽」决定，且全画布所有节点共用同一个值**
-//   · 宽度 = max(所有节点里最宽的一行端口标签, 下限 `kNodeContentWidthMin`) —— 见 `update_content_width()`
-//   · 因此节点的左边界（输入圆点）与右边界（输出圆点）在**所有节点上对齐**，且**与文本长度无关**
-//   · 配套约束：节点内**任何文本都必须收口**（单行 `elide_to_width` / 多行 `wrap_to_width`），
-//     否则长标题 / 长参数 / 长错误文案会把节点撑宽，端口边界随之漂移（同一画布上节点宽度不一致）
-constexpr float kNodeContentWidthMin = 160.0f;              // 内容区下限（保证标题行 / 参数预览可读）
-float           g_content_width      = kNodeContentWidthMin; // 每帧由 update_content_width() 重算
-constexpr float kPinRadius        = 5.0f;
-constexpr float kPinDotSize       = kPinRadius * 2.0f;
-constexpr float kPinTextGap       = 6.0f;
-constexpr float kNodeTitleIndent  = 15.0f; // 标题行左侧占位（分类色条 + 状态圆点）
-constexpr float kLabelGap         = 4.0f;  // 同一行内文本片段之间的间隙
-constexpr int   kNodeSummaryLines = 6;     // 节点卡片上多行文本（运行结果 / 必失败原因）最多几行
+// 节点宽度 / 文本收口 / 端口绘制 / 节点卡片等只读绘制层已上移 canvas_view.{h,cpp}
+// （CN_editor_refactor CEA-01）。主画布每帧用 g_canvas（CanvasContext）驱动共享绘制。
+CanvasContext g_canvas;
 
-// 只裁剪、**不加**省略号：返回不超过 max_width 像素的最长前缀（不切断 UTF-8 多字节序列）。
-std::string clip_to_width(const std::string& text, float max_width)
-{
-    if (text.empty()) {
-        return std::string();
-    }
-    if (ImGui::CalcTextSize(text.c_str()).x <= max_width) {
-        return text;
-    }
-    std::string out = text;
-    while (!out.empty()) {
-        std::size_t cut = out.size() - 1; // 回退一个 UTF-8 字符（绝不切断多字节序列）
-        while (cut > 0 && (static_cast<unsigned char>(out[cut]) & 0xC0u) == 0x80u) {
-            --cut;
-        }
-        out.erase(cut);
-        if (ImGui::CalcTextSize(out.c_str()).x <= max_width) {
-            return out;
-        }
-    }
-    return std::string();
-}
+// 单行省略 elide_to_width 已上移 canvas_view.{h,cpp}（CEA-01）
 
-// 单行省略 = clip 到「max_width − 省略号宽度」再补 …（**保证结果 ≤ max_width**）。
-// 按**像素**而非字符数裁剪 → 中英混排 / 全角半角 / 数字串都不会把节点撑宽。
-std::string elide_to_width(const std::string& text, float max_width)
-{
-    const std::string ellipsis   = "…";
-    const float       ellipsis_w = ImGui::CalcTextSize(ellipsis.c_str()).x;
-    if (max_width <= ellipsis_w) {
-        return ellipsis; // 连省略号都放不下
-    }
-    if (ImGui::CalcTextSize(text.c_str()).x <= max_width) {
-        return text; // 放得下 → 原样返回（零开销路径）
-    }
-    return clip_to_width(text, max_width - ellipsis_w) + ellipsis;
-}
+// 端口绘制 draw_pin 已上移 canvas_view.{h,cpp}（CEA-01，含 PinPivotAlignment 锚点契约）
 
-// ------------------------------------------------------------- 端口绘制 -----
-// 设计 §14.7：**输入端口在节点左侧、输出端口在节点右侧**
-//   · 输入行：[圆点][名称]          —— 圆点贴左边缘，连线接在左侧
-//   · 输出行：[        名称][圆点]  —— 名称与圆点右对齐，圆点贴右边缘，连线接在右侧
-//   · 颜色按端口类型（§4.5）；可变长端口多一圈描边
-void draw_pin(const Node& node, const Port& port, int index)
-{
-    const bool is_input = (port.direction == PortDirection::Input);
+// 折行 wrap_to_width 已上移 canvas_view.{h,cpp}（CEA-01）
 
-    ed::BeginPin(pin_handle(node, port.direction, index),
-                 is_input ? ed::PinKind::Input : ed::PinKind::Output);
-    // 连线锚点：输入取端口矩形左中，输出取右中
-    ed::PinPivotAlignment(is_input ? ImVec2(0.0f, 0.5f) : ImVec2(1.0f, 0.5f));
-
-    ImDrawList* draw_list   = ImGui::GetWindowDrawList();
-    const float line_height = ImGui::GetTextLineHeight();
-    const ImU32 dot_color   = port_color(port.type);
-
-    // 在"圆点占位 Dummy"的位置上画圆（占位 Dummy 同时保证端口矩形覆盖圆点）
-    const auto draw_dot = [&](const ImVec2& dummy_top_left) {
-        const ImVec2 center(dummy_top_left.x + kPinRadius, dummy_top_left.y + line_height * 0.5f);
-        draw_list->AddCircleFilled(center, kPinRadius, dot_color, 16);
-        draw_list->AddCircle(center, kPinRadius, IM_COL32(20, 20, 20, 255), 16, 1.5f);
-        if (port.is_variadic) {
-            draw_list->AddCircle(center, kPinRadius + 2.5f, dot_color, 16, 1.0f);
-        }
-    };
-
-    if (is_input) {
-        // ---- 左列：圆点 + 名称 ----
-        const ImVec2 dot_pos = ImGui::GetCursorScreenPos();
-        ImGui::Dummy(ImVec2(kPinDotSize, line_height));
-        draw_dot(dot_pos);
-
-        ImGui::SameLine(0.0f, kPinTextGap);
-        // 端口名按「内容宽度 − 圆点 − 间隙」收口（宽度由端口标签自适应，见 update_content_width）
-        ImGui::TextUnformatted(
-            elide_to_width(port.display_name, g_content_width - kPinDotSize - kPinTextGap)
-                .c_str());
-    }
-    else {
-        // ---- 右列：名称 + 圆点（名称先按可用宽度收口，再用占位 Dummy 推到右边界）----
-        const std::string shown_name =
-            elide_to_width(port.display_name, g_content_width - kPinDotSize - kPinTextGap);
-        const float text_width = ImGui::CalcTextSize(shown_name.c_str()).x;
-        const float spacer     = g_content_width - kPinDotSize - kPinTextGap - text_width;
-        if (spacer > 0.0f) {
-            ImGui::Dummy(ImVec2(spacer, line_height));
-            ImGui::SameLine(0.0f, 0.0f);
-        }
-
-        ImGui::TextUnformatted(shown_name.c_str());
-
-        ImGui::SameLine(0.0f, kPinTextGap);
-        const ImVec2 dot_pos = ImGui::GetCursorScreenPos();
-        ImGui::Dummy(ImVec2(kPinDotSize, line_height));
-        draw_dot(dot_pos);
-    }
-
-    ed::EndPin();
-}
-
-// 折行（多行文本用）：按**像素**把文本切成若干行 —— **不依赖 ImGui 的自动换行**（它对中文这种
-// 「无空格长词」的行为不可靠），所以中文也能在任意字符间断行；每行 ≤ max_width，
-// 超过 max_lines 行或字符预算时在末行补 …（节点卡片是摘要，完整正文在输出面板）。
-std::string wrap_to_width(const std::string& text, float max_width, int max_lines)
-{
-    constexpr std::size_t kCharBudget = 2000; // 性能兜底：超长正文只折前 2000 字节
-    const std::string     source = (text.size() > kCharBudget) ? text.substr(0, kCharBudget) : text;
-    const bool            budget_cut = source.size() != text.size();
-
-    std::vector<std::string> lines;
-    std::string              line;
-    std::size_t              i = 0;
-    while (i < source.size()) {
-        std::size_t next = i + 1; // 取一个完整 UTF-8 字符（绝不切断多字节序列）
-        while (next < source.size() &&
-               (static_cast<unsigned char>(source[next]) & 0xC0u) == 0x80u) {
-            ++next;
-        }
-        const std::string ch = source.substr(i, next - i);
-        i = next;
-
-        if (ch == "\n") { // 原文自带换行 → 直接断行
-            lines.push_back(line);
-            line.clear();
-            continue;
-        }
-        if (!line.empty() && ImGui::CalcTextSize((line + ch).c_str()).x > max_width) {
-            lines.push_back(line); // 放不下 → 在此字符前断行
-            line = ch;
-            continue;
-        }
-        line += ch;
-    }
-    if (!line.empty()) {
-        lines.push_back(line);
-    }
-
-    const bool line_cut = max_lines > 0 && static_cast<int>(lines.size()) > max_lines;
-    if (line_cut) {
-        lines.resize(static_cast<std::size_t>(max_lines));
-    }
-
-    // 收口保证①：任何一行都必须 ≤ max_width（修掉「单字符就超宽」「删行后末行过长」两种情形）
-    for (std::string& item : lines) {
-        if (ImGui::CalcTextSize(item.c_str()).x > max_width) {
-            item = clip_to_width(item, max_width);
-        }
-    }
-
-    // 收口保证②：要补 … 时，先给末行让出「省略号的宽度」（否则末行会超宽 —— 自检抓到过 220 > 215）
-    const bool mark = line_cut || budget_cut;
-    if (mark) {
-        const float marker_w = ImGui::CalcTextSize("…").x;
-        if (lines.empty()) {
-            lines.emplace_back();
-        }
-        lines.back() = clip_to_width(lines.back(), max_width - marker_w);
-    }
-
-    std::string out;
-    for (std::size_t index = 0; index < lines.size(); ++index) {
-        if (index != 0) {
-            out += "\n";
-        }
-        out += lines[index];
-    }
-    if (mark) {
-        out += "…";
-    }
-    return out;
-}
-
-// 一行端口标签占用的宽度（左列 = [圆点][间隙][名称]，右列同宽）
-float port_row_width(const Port& port)
-{
-    return kPinDotSize + kPinTextGap + ImGui::CalcTextSize(port.display_name.c_str()).x;
-}
-
-// 按当前图重算「全画布共用的内容区宽度」：取所有节点里**最宽的一行端口标签**（下限 kNodeContentWidthMin）。
-// 每帧重算（代价 = 节点数 × 端口数 次 CalcTextSize，可忽略）→ 换工作流 / 增删节点即时生效。
-void update_content_width(const Graph& graph)
-{
-    float width = kNodeContentWidthMin;
-    for (const Node& node : graph.nodes) {
-        for (const Port& port : node.inputs) {
-            width = (std::max)(width, port_row_width(port));
-        }
-        for (const Port& port : node.outputs) {
-            width = (std::max)(width, port_row_width(port));
-        }
-    }
-    g_content_width = width;
-}
-
-// ------------------------------------------------------------- 节点绘制 -----
-// 设计 §14.1：标题栏（分类色 + 状态圆点）+ 端口 + 参数预览 + 错误提示
-// ------------------------------------------------- 运行结果摘要（PA-03）----
-// 节点内只读展示运行结果（与输出面板 / 参数面板「运行结果」同源 ui::node_output_text）。
-// 用「运行信息条数 + 状态 + 错误长度 + 输出字节数」做轻量签名缓存，避免每帧重算长文本。
-struct NodeResultView {
-    std::string text;
-    bool        has_content = false;
-    bool        is_error    = false;
-    bool        is_skipped  = false;
-};
-
-std::size_t result_signature(const Node& node, const engine::RunSnapshot& snapshot)
-{
-    std::size_t signature = snapshot.nodes.size() * 1000003u;
-    signature += static_cast<std::size_t>(node.state) * 10007u;
-    signature += node.error_message.size() * 31u;
-    if (const engine::RunNodeView* view = snapshot.find(node.id)) {
-        signature += view->text.size() * 17u; // PB-01：读快照文本长度（含流式增长）
-    }
-    return signature;
-}
-
-NodeResultView result_view_of(const Node& node)
-{
-    struct Cached {
-        std::size_t    signature = 0;
-        NodeResultView view;
-        bool           valid = false;
-    };
-    static std::unordered_map<std::string, Cached> cache;
-
-    const engine::RunSnapshot& snapshot = editor().run_snapshot_view();
-    const std::size_t       signature = result_signature(node, snapshot);
-    Cached&                 entry     = cache[node.id];
-    if (entry.valid && entry.signature == signature) {
-        return entry.view;
-    }
-
-    entry.valid     = true;
-    entry.signature = signature;
-    entry.view      = NodeResultView{};
-
-    if (node.state == NodeState::Error) {
-        std::string first = node.error_message;
-        if (const std::size_t pos = first.find('\n'); pos != std::string::npos) {
-            first.resize(pos);
-        }
-        if (first.size() > 120) {
-            first.resize(117);
-            first += "…";
-        }
-        entry.view.has_content = true;
-        entry.view.is_error    = true;
-        entry.view.text        = first.empty() ? std::string("执行失败") : first;
-        return entry.view;
-    }
-    if (node.state == NodeState::Skipped) {
-        entry.view.has_content = true;
-        entry.view.is_skipped  = true;
-        entry.view.text        = "已跳过（上游失败）";
-        return entry.view;
-    }
-    if (node.state == NodeState::Running) {
-        // PB-08：流式进度（增量字节数来自读模型；无增量时退回"运行中…"）
-        const engine::RunNodeView* live  = snapshot.find(node.id);
-        const std::size_t          bytes = (live != nullptr) ? live->delta_bytes : 0;
-        entry.view.has_content = true;
-        entry.view.text        = (bytes > 0) ? ("生成中…（" + std::to_string(bytes) + " 字）")
-                                            : std::string("运行中…");
-        return entry.view;
-    }
-
-    const std::string body = node_output_text(editor().graph, editor().run_snapshot_view(), node.id);
-    if (!body.empty()) {
-        std::string preview;
-        for (const char ch : body) {
-            if (preview.size() >= 160) {
-                break;
-            }
-            preview += (ch == '\n' || ch == '\r') ? ' ' : ch;
-        }
-        std::string prefix = "结果： ";
-        if (node.type == "TextOutput") { // M_textio P3：最终输出
-            std::string label;
-            if (const engine::Param* label_param = node.findParam("label")) {
-                label = label_param->text();
-            }
-            prefix = label.empty() ? std::string("最终输出： ") : ("最终输出（" + label + "）： ");
-        }
-        entry.view.has_content = true;
-        entry.view.text        = prefix + preview +
-                          (body.size() > preview.size() ? "…" : "") +
-                          "（" + std::to_string(body.size()) + " 字符）";
-    }
-    return entry.view;
-}
-
-// P7a-16：节点卡片要显示的图片
-//  * 优先**本次运行结果**（RunNodeView.images，任意节点）
-//  * 其次「图片输入」节点的参数（解析资源令牌 → 真实路径）
-std::string node_card_image(const Node& node)
-{
-    const engine::RunSnapshot& snapshot = editor().run_snapshot_view();
-    if (const engine::RunNodeView* view = snapshot.find(node.id);
-        view != nullptr && !view->images.empty()) {
-        return view->images.front();
-    }
-    if (node.type != "ImageInput") {
-        return {};
-    }
-    const engine::Param* path_param = node.findParam("path");
-    if (path_param == nullptr) {
-        return {};
-    }
-    const std::vector<std::string> entries = paths::split_path_list(path_param->text());
-    if (entries.empty()) {
-        return {};
-    }
-    bool              missing = false;
-    std::string       error;
-    const std::string local = asset::to_local_path(entries.front(), &missing, &error);
-    return missing ? std::string() : local;
-}
-
-// 节点内条件分隔线：clamp 到节点内容区宽度（g_content_width），不超出节点边框。
-// 不能直接用 ImGui::Separator() —— 节点内容是「画布窗口里的一个 Group」（NodeBuilder::Begin
-// 只 SetCursorPos + NodePadding + BeginGroup），Separator 会按**画布窗口**的 Pos/Size 横跨
-// 整个画布宽度（远宽于节点），视觉上就是「超出节点框的长灰线」（2026-10-15 修复）。
-// 这里在光标当前 y 自绘一条恰好 g_content_width 宽的线，配色与垂直间距和 Separator 完全一致：
-// 线画在光标处，随后推进一个 ItemSpacing.y（等价 Separator 的 ItemSize(0,0)）。
-void draw_node_separator()
-{
-    ImDrawList* draw_list = ImGui::GetWindowDrawList();
-    const ImVec2 p        = ImGui::GetCursorScreenPos();
-    draw_list->AddLine(p, ImVec2(p.x + g_content_width, p.y),
-                       ImGui::GetColorU32(ImGuiCol_Separator), 1.0f);
-    ImGui::Dummy(ImVec2(g_content_width, 0.0f)); // 占位推进一行；宽度顺带加固内容区宽度锚点
-}
-
-void draw_node_body(const Node& node)
-{
-    engine::registerAllNodes();
-    const engine::Definition* definition = engine::NodeRegistry::instance().find(node.type);
-    const NodeCategory category =
-        (definition != nullptr) ? definition->category : NodeCategory::Process;
-
-    ed::BeginNode(node_handle(node.id));
-
-    ImDrawList* draw_list = ImGui::GetWindowDrawList();
-    {
-        const ImVec2 cursor = ImGui::GetCursorScreenPos();
-        const float  height = ImGui::GetTextLineHeight() + 8.0f;
-        // 分类色条 + 状态圆点；CN：上级节点用紫色条区分
-        const ImU32 stripe = !node.composite_id.empty()
-                                 ? IM_COL32(150, 110, 220, 255)
-                                 : category_color(category);
-        draw_list->AddRectFilled(ImVec2(cursor.x - 4.0f, cursor.y),
-                                 ImVec2(cursor.x, cursor.y + height), stripe, 2.0f);
-        draw_list->AddCircleFilled(ImVec2(cursor.x + 7.0f, cursor.y + height * 0.5f), 4.0f,
-                                   state_color(node.state), 12);
-        // PA-08：ui.running_animation 开 → 运行中节点状态点加脉冲光环（关闭则静止）
-        if (node.state == NodeState::Running && aiwrite::app_config().ui.running_animation) {
-            const ImVec2 dot_center(cursor.x + 7.0f, cursor.y + height * 0.5f);
-            const float  pulse = 0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 5.0f);
-            ImVec4       glow  = ImGui::ColorConvertU32ToFloat4(state_color(node.state));
-            glow.w             = 0.30f + 0.45f * pulse;
-            draw_list->AddCircle(dot_center, 6.0f + 3.0f * pulse,
-                                 ImGui::ColorConvertFloat4ToU32(glow), 20, 1.5f);
-        }
-        ImGui::Dummy(ImVec2(13.0f, height));
-        ImGui::SameLine(0.0f, 2.0f);
-        // 宽度约束：标题 + (id) 合计必须落在内容宽度内（超出按像素省略，不撑宽节点）
-        const float       title_avail = g_content_width - kNodeTitleIndent;
-        const std::string id_text     = "(" + node.id + ")";
-        const float       id_w        = ImGui::CalcTextSize(id_text.c_str()).x;
-        const std::string shown_title =
-            elide_to_width(node.title, title_avail - id_w - kLabelGap);
-        ImGui::TextUnformatted(shown_title.c_str());
-        ImGui::SameLine(0.0f, kLabelGap);
-        const float id_room =
-            title_avail - ImGui::CalcTextSize(shown_title.c_str()).x - kLabelGap;
-        ImGui::TextDisabled("%s", elide_to_width(id_text, id_room).c_str());
-    }
-
-    // 宽度（**唯一**的宽度来源）：这一行占位把内容区宽度钉死为 g_content_width（全画布共用值），
-    // 配合节点内所有文本的收口（elide / wrap）→ 画布上**所有节点等宽**。
-    // 2026-10-15 确认：标题下方的 Separator 被用户视为「每个节点上面自带的长灰线」→ 移除（网格保留）。
-    ImGui::Dummy(ImVec2(g_content_width, 1.0f));
-
-    // ---- 输入端口（左列）----
-    int index = 0;
-    for (const Port& port : node.inputs) {
-        draw_pin(node, port, index++);
-    }
-    // ---- 输出端口（右列）----
-    index = 0;
-    for (const Port& port : node.outputs) {
-        draw_pin(node, port, index++);
-    }
-
-    if (!node.params.empty()) { // 参数预览
-        draw_node_separator();
-        int shown = 0;
-        for (const engine::Param& param : node.params) {
-            if (!engine::param_visible(node, param)) {
-                continue; // 条件隐藏的参数不预览（如 web 模式下的 API Key / API 地址）
-            }
-            if (shown >= 2) {
-                break;
-            }
-            std::string value = param.text();
-            if (param.is_secret && !value.empty()) {
-                value = "******";
-            }
-            if (value.size() > 18) {
-                value = value.substr(0, 18) + "…";
-            }
-            // 宽度约束：整行（参数名 + 值）按像素收口，避免长参数名撑宽节点
-            const std::string line =
-                param.display_name + ": " + (value.empty() ? std::string("(空)") : value);
-            ImGui::TextDisabled("%s", elide_to_width(line, g_content_width).c_str());
-            ++shown;
-        }
-    }
-
-    // ---- P7a-16：图片卡片（缩略图 + 尺寸 + 格式徽标；格式取内容嗅探结果）----
-    if (const std::string card_image = node_card_image(node); !card_image.empty()) {
-        const TextureInfo texture = texture_for(card_image);
-        draw_node_separator();
-        if (texture.texture != 0) {
-            float width  = static_cast<float>(texture.width);
-            float height = static_cast<float>(texture.height);
-            if (width > g_content_width && width > 0.0f) {
-                const float shrink = g_content_width / width;
-                width *= shrink;
-                height *= shrink;
-            }
-            ImGui::Image(
-                reinterpret_cast<ImTextureID>(static_cast<std::intptr_t>(texture.texture)),
-                ImVec2(width, height));
-            ImGui::TextDisabled("%d×%d · %s", texture.width, texture.height,
-                                texture.format.empty() ? "未知格式" : texture.format.c_str());
-        }
-        else {
-            // 宽度约束：解码失败文案可能很长（含魔数 / 扩展名建议）→ 按像素收口
-            const std::string reason =
-                "图片预览失败：" + (texture.error.empty() ? std::string("未知原因") : texture.error);
-            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s",
-                               elide_to_width(reason, g_content_width).c_str());
-        }
-    }
-
-    // ---- 生效提供商提示（P1-a：provider 输入优先；official 未接线 → 必定失败）----
-    if (engine::uses_provider(node.type)) {
-        const engine::EffectiveProvider effective =
-            engine::resolve_effective_provider(editor().graph, node);
-        const std::string reason = engine::unwired_reason(editor().graph, node);
-
-        draw_node_separator();
-        if (node.type == "LLMGenerate") {
-            // 固定宽度约束：来源节点标题长度不可控 → 按像素收口
-            const std::string line =
-                effective.from_edge
-                    ? ("生效 " + effective.mode + " ← " + effective.source_node)
-                    : ("生效 " + effective.mode + "（节点自身）");
-            ImGui::TextDisabled("%s", elide_to_width(line, g_content_width).c_str());
-        }
-        if (!reason.empty()) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
-            // 自绘折行（每行 ≤ 内容宽度），不靠 ImGui 自动换行 → 长文案不撑宽节点
-            ImGui::TextUnformatted(
-                wrap_to_width(reason + "：必定失败", g_content_width, kNodeSummaryLines).c_str());
-            ImGui::PopStyleColor();
-        }
-    }
-
-    std::vector<std::string> errors;
-    editor().graph.validateParams(node, &errors);
-    if (!errors.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "参数校验 %d 项错误",
-                           static_cast<int>(errors.size()));
-    }
-
-    // ---- 运行结果摘要（PA-03：只读；与输出面板 / 参数面板同源）----
-    const NodeResultView result_view = result_view_of(node);
-    if (result_view.has_content) {
-        draw_node_separator();
-        if (result_view.is_error) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
-        }
-        else if (result_view.is_skipped) {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.70f, 0.30f, 1.0f));
-        }
-        else {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.31f, 0.75f, 0.42f, 1.0f));
-        }
-        // 自绘折行（每行 ≤ 内容宽度）+ 只显示前 kNodeSummaryLines 行 → 长正文不撑宽节点
-        ImGui::TextUnformatted(
-            wrap_to_width(result_view.text, g_content_width, kNodeSummaryLines).c_str());
-        ImGui::PopStyleColor();
-    }
-
-    ed::EndNode();
-}
+// 节点卡片只读绘制层（NodeResultView / result_view_of / node_card_image /
+// draw_node_separator / draw_node_body）已整体上移 canvas_view.{h,cpp}
+// （CN_editor_refactor CEA-01：主画布与上级编辑器共用同一实现，杜绝「简化副本」漂移）。
 
 // ------------------------------------------------------------- 连线创建 -----
 // 设计 §6.2：拖拽创建连接；类型不兼容变红并拒绝；输入端口已连接则替换
@@ -794,8 +230,8 @@ void handle_create_link()
     ed::PinId start_pin;
     ed::PinId end_pin;
     if (creating && ed::QueryNewLink(&start_pin, &end_pin) && start_pin && end_pin) {
-        PinRef from = resolve_pin(start_pin, state.graph);
-        PinRef to   = resolve_pin(end_pin, state.graph);
+        PinRef from = resolvePin(start_pin, state.graph);
+        PinRef to   = resolvePin(end_pin, state.graph);
 
         // 统一成"输出 → 输入"
         if (from.valid && to.valid && from.direction == PortDirection::Input &&
@@ -815,7 +251,7 @@ void handle_create_link()
                 ed::RejectNewItem(ImVec4(1.0f, 0.30f, 0.30f, 1.0f), 2.0f);
                 if (ImGui::IsMouseReleased(0)) {
                     log::warn("[连线] 被拒绝：" + reason);
-                    state.set_status("连线被拒绝：" + reason);
+                    state.setStatus("连线被拒绝：" + reason);
                 }
             }
             else {
@@ -826,12 +262,12 @@ void handle_create_link()
                         from.node_id, from.port_id, to.node_id, to.port_id, &error);
                     if (edge_id.empty()) {
                         log::error("[连线] 创建失败：" + error);
-                        state.set_status("连线失败：" + error);
+                        state.setStatus("连线失败：" + error);
                     }
                     else {
-                        state.log_summary("[连线] " + from.node_id + "." + from.port_id + " → " +
+                        state.logSummary("[连线] " + from.node_id + "." + from.port_id + " → " +
                                           to.node_id + "." + to.port_id);
-                        state.set_status("已连线 " + from.node_id + " → " + to.node_id +
+                        state.setStatus("已连线 " + from.node_id + " → " + to.node_id +
                                          (would_replace ? "（替换了原连线）" : ""));
                     }
                 }
@@ -843,8 +279,8 @@ void handle_create_link()
     //  * QueryNewLink 已在上面调用过（end_pin 可能为 0 = 还没拖到目标端口）
     //  * 「类型不兼容变红」由 RejectNewItem 已提供（既有），这里补充文字提示
     if (creating && start_pin.Get() != 0) {
-        const PinRef from = resolve_pin(start_pin, state.graph);
-        const PinRef to   = resolve_pin(end_pin, state.graph);
+        const PinRef from = resolvePin(start_pin, state.graph);
+        const PinRef to   = resolvePin(end_pin, state.graph);
         const Node*  fnode = from.valid ? state.graph.findNode(from.node_id) : nullptr;
         const Node*  tnode = to.valid ? state.graph.findNode(to.node_id) : nullptr;
         const Port*  fport = (fnode != nullptr) ? fnode->findPort(from.port_id, from.direction) : nullptr;
@@ -901,8 +337,8 @@ void handle_delete_items()
                 const std::string edge_id = "e" + std::to_string(deleted_link.Get());
                 state.snapshot("删除连线");
                 if (state.graph.removeEdge(edge_id)) {
-                    state.log_summary("[连线] 删除 " + edge_id);
-                    state.set_status("已删除连线 " + edge_id);
+                    state.logSummary("[连线] 删除 " + edge_id);
+                    state.setStatus("已删除连线 " + edge_id);
                 }
             }
         }
@@ -912,9 +348,9 @@ void handle_delete_items()
             if (ed::AcceptDeletedItem()) {
                 const std::string node_id = "n" + std::to_string(deleted_node.Get());
                 state.snapshot("删除节点");
-                if (state.delete_node(node_id)) {
-                    state.log_summary("[节点] 删除 " + node_id);
-                    state.set_status("已删除节点 " + node_id + "（含其连线）");
+                if (state.deleteNode(node_id)) {
+                    state.logSummary("[节点] 删除 " + node_id);
+                    state.setStatus("已删除节点 " + node_id + "（含其连线）");
                 }
             }
         }
@@ -968,6 +404,44 @@ void sync_selection(EditorState& state)
     }
 }
 
+// ------------------------------------------------------- Delete 键（打磨）----
+// 设计 §6.7 原本「全部鼠标可达」；这里只补回 Delete 键这一个快捷键（不调
+// ed::EnableShortcuts(true)，避免连带恢复 Ctrl+A / Ctrl+C/V/X / Ctrl+Z/Y 等整套
+// 内置快捷键 —— 复制/粘贴曾因坐标同步问题暂停过，见 CHANGELOG「粘贴坐标修复」）。
+// 触发条件（全部满足才删除）：
+//  · 画布窗口在前台（聚焦含子窗口）或鼠标悬停其上
+//  · 未在输入文本 / 无 ImGui 控件激活 / 无弹出层（参数面板改名、节点库搜索、右键菜单不误删）
+//  · 左键未按住（拖节点 / 框选 / 拉连线过程中不触发）
+//  · 存在选中内容（与工具栏「删除选中」同判据）
+// 与工具栏 / 右键菜单走同一路径 state.delete_selected()：一次删除批次只压一次撤销快照。
+void handle_delete_key()
+{
+    EditorState& state = editor();
+
+    if (!state.has_selection()) {
+        return;
+    }
+
+    const ImGuiIO& io = ImGui::GetIO();
+    if (io.WantTextInput || ImGui::IsAnyItemActive() ||
+        ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
+        return;
+    }
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        return;
+    }
+    if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
+        !ImGui::IsWindowHovered()) {
+        return;
+    }
+    if (!ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
+        return;
+    }
+
+    state.deleteSelected();
+    ed::ClearSelection(); // 删除后清空编辑器内部选中，避免残留选中框/状态
+}
+
 // 位置同步（双向）：
 //   · 编辑器已认识该节点  → 读回位置写进 Graph（对应拖拽移动）
 //   · 编辑器还不认识（ed::GetNodePosition 对未知手柄返回 FLT_MAX，见 imgui_node_editor.cpp:1676）
@@ -978,14 +452,14 @@ void sync_positions(EditorState& state)
 {
     bool moved = false;
     for (Node& node : state.graph.nodes) {
-        const ImVec2 position = ed::GetNodePosition(node_handle(node.id));
+        const ImVec2 position = ed::GetNodePosition(nodeHandle(node.id));
 
         const bool editor_knows =
             std::isfinite(position.x) && std::isfinite(position.y) &&
             std::fabs(position.x) < kPositionLimit && std::fabs(position.y) < kPositionLimit;
 
         if (!editor_knows) {
-            ed::SetNodePosition(node_handle(node.id), ImVec2(node.x, node.y)); // 模型 → 编辑器
+            ed::SetNodePosition(nodeHandle(node.id), ImVec2(node.x, node.y)); // 模型 → 编辑器
             continue;
         }
 
@@ -1020,7 +494,7 @@ void show_add_node_menu(EditorState& state, const ImVec2& spawn)
         for (const engine::Definition* definition : registry.listByCategory(category)) {
             if (ImGui::MenuItem(definition->display_name.c_str())) {
                 state.snapshot(std::string("创建节点 ") + definition->display_name);
-                const std::string id = state.create_node(definition->type, spawn.x, spawn.y);
+                const std::string id = state.createNode(definition->type, spawn.x, spawn.y);
                 if (!id.empty()) {
                     state.selected_nodes = {id};
                     state.selected_node  = id;
@@ -1054,10 +528,10 @@ void show_add_node_menu(EditorState& state, const ImVec2& spawn)
                     if (!id.empty()) {
                         state.selected_nodes = {id};
                         state.selected_node  = id;
-                        state.set_status("已创建上级节点：" + spec->name);
+                        state.setStatus("已创建上级节点：" + spec->name);
                     }
                     else {
-                        state.set_status("创建上级节点失败：" + error);
+                        state.setStatus("创建上级节点失败：" + error);
                     }
                 }
             }
@@ -1067,7 +541,7 @@ void show_add_node_menu(EditorState& state, const ImVec2& spawn)
 }
 
 // ------------------------------------------------- 宽度自检（不变量）----
-// 画布上**所有节点必须等宽**：宽度 = g_content_width + 节点内边距（g_content_width 由「输入/输出
+// 画布上**所有节点必须等宽**：宽度 = g_canvas.content_width + 节点内边距（内容宽度由「输入/输出
 // 标签实测最宽」算出、全画布共用）。任何文本项漏了收口、或新加了无界控件，都会在这里被抓到。
 // 尺寸 / 节点数一变就写一条 INFO（可直接拿去核对），破坏不变量时写 WARN（限流 2 秒一条）。
 std::string px_text(float value)
@@ -1092,7 +566,7 @@ void check_uniform_node_width(const Graph& graph)
     std::string max_id;
     int         counted = 0;
     for (const Node& node : graph.nodes) {
-        const ImVec2 size = ed::GetNodeSize(node_handle(node.id));
+        const ImVec2 size = ed::GetNodeSize(nodeHandle(node.id));
         if (size.x <= 0.0f) {
             continue; // 编辑器本帧才认识该节点 → 尺寸还没结算
         }
@@ -1116,7 +590,7 @@ void check_uniform_node_width(const Graph& graph)
     if (signature != last_signature) {
         last_signature = signature; // 尺寸/节点数一变就重新采样并留证（换工作流也能被记录）
         log::info("[画布] 节点宽度自检：" + std::to_string(counted) + " 个节点，宽 " + px_text(min_w) +
-                  " ~ " + px_text(max_w) + " px（内容区 " + px_text(g_content_width) +
+                  " ~ " + px_text(max_w) + " px（内容区 " + px_text(g_canvas.content_width) +
                   " px · 按输入/输出标签自适应；最窄 " + min_id + " / 最宽 " + max_id + "）→ " +
                   (uniform ? "全部等宽 ✅" : "宽度不一致 ❌"));
     }
@@ -1150,7 +624,7 @@ void log_wrap_selftest()
 
     float worst = 0.0f;
     for (const std::string& sample : samples) {
-        const std::string wrapped = wrap_to_width(sample, g_content_width, kNodeSummaryLines);
+        const std::string wrapped = wrapToWidth(sample, g_canvas.content_width, kNodeSummaryLines);
         std::size_t       begin   = 0;
         while (true) {
             const std::size_t end  = wrapped.find('\n', begin);
@@ -1165,8 +639,8 @@ void log_wrap_selftest()
         }
     }
     log::info("[画布] 折行自检：" + std::to_string(samples.size()) + " 个样例，最长行 " + px_text(worst) +
-              " px（上限 " + px_text(g_content_width) + " px）→ " +
-              (worst <= g_content_width + 0.5f ? "全部收口 ✅" : "有行超宽 ❌"));
+              " px（上限 " + px_text(g_canvas.content_width) + " px）→ " +
+              (worst <= g_canvas.content_width + 0.5f ? "全部收口 ✅" : "有行超宽 ❌"));
 }
 
 // --------------------------------- Alt + 左键拖拽平移（新增：无中键 / 笔记本可用）----
@@ -1257,7 +731,7 @@ void log_canvas_diagnostic(const EditorState& state, float zoom, double width_ms
     const double elapsed = std::chrono::duration<double>(now - diag.last).count();
     const double frames  = (diag.frames > 0) ? static_cast<double>(diag.frames) : 1.0;
 
-    const ui::TextureCacheStats stats = ui::texture_cache_stats();
+    const ui::TextureCacheStats stats = ui::textureCacheStats();
     const auto delta = [&diag, &stats](std::size_t TextureCacheStats::*member) {
         return stats.*member - (diag.has_prev ? diag.prev.*member : 0);
     };
@@ -1320,102 +794,18 @@ float g_snap_distance = 8.0f; // 吸附距离（**屏幕像素**，换算画布�
 //  · 只做「查看缩略 + 点击/拖动 → 视口中心平移到对应画布位置」（快速挪动 / 查询）；
 //  · 严禁在小地图区域触发任何画布编辑（选中 / 拖节点 / 框选 / 右键 / 平移）。
 //  实现：ed::Begin 之前把该区域的鼠标事件从 io 中摘除（ed 完全感知不到），
-//       小地图交互由 draw_minimap 用「屏蔽前的快照」自行驱动。
-//  废弃：旧版用 ed::CenterNodeOnScreen —— 它在 NodeBuilder::Begin 里会**平移节点
-//       世界坐标**（m_Bounds.Translate + MakeDirty(User)），等于在小地图里改布局。
+//       小地图交互由共享 draw_minimap 用「屏蔽前的快照」自行驱动。
+//  CLN-09：几何 / 输入屏蔽 / 绘制已上移 canvas_view 单一来源，本 TU 只留开关与状态。
 // ----------------------------------------------------------------------------
-bool    g_minimap_blocking = false;                 // 本帧鼠标位于小地图区域（已对 ed 屏蔽输入）
-bool    g_minimap_clicked  = false;                 // 屏蔽前快照：左键本帧点击
-bool    g_minimap_down     = false;                 // 屏蔽前快照：左键按住中
-ImVec2  g_minimap_mouse    = ImVec2(0.0f, 0.0f);    // 屏蔽前快照：鼠标屏幕坐标
+MinimapState g_minimap; // CLN-09：输入屏蔽快照（blocking/clicked/down/mouse）
 
-// 小地图矩形（与 draw_minimap 共用同一套几何，单一来源）
-void minimap_rect(ImVec2& out_min, ImVec2& out_max)
-{
-    const ImVec2 window_pos  = ImGui::GetWindowPos();
-    const ImVec2 window_size = ImGui::GetWindowSize();
-    const float  margin      = 10.0f;
-    out_min = ImVec2(window_pos.x + window_size.x - 190.0f - margin,
-                     window_pos.y + window_size.y - 130.0f - margin);
-    out_max = ImVec2(out_min.x + 190.0f, out_min.y + 130.0f);
-}
-
-bool minimap_hit(const ImVec2& mouse, const ImVec2& min, const ImVec2& max)
-{
-    return mouse.x >= min.x && mouse.x <= max.x && mouse.y >= min.y && mouse.y <= max.y;
-}
-
-// 在 ed::Begin 之前调用：小地图区域的鼠标事件只属于小地图，画布不得参与。
-void block_minimap_input()
-{
-    g_minimap_blocking = false;
-    g_minimap_clicked  = false;
-    g_minimap_down     = false;
-    if (!g_show_minimap) {
-        return;
-    }
-
-    ImVec2 map_min, map_max;
-    minimap_rect(map_min, map_max);
-
-    ImGuiIO&    io    = ImGui::GetIO();
-    const ImVec2 mouse = io.MousePos;
-    if (!minimap_hit(mouse, map_min, map_max)) {
-        return;
-    }
-
-    // 快照原始输入（draw_minimap 用；io 随后被清空，画布拿不到这些事件）
-    g_minimap_blocking = true;
-    g_minimap_mouse    = mouse;
-    g_minimap_clicked  = io.MouseClicked[0];
-    g_minimap_down     = io.MouseDown[0];
-
-    for (int i = 0; i < 5; ++i) {
-        io.MouseClicked[i]  = false;
-        io.MouseDown[i]     = false;
-        io.MouseReleased[i] = false;
-    }
-    io.MouseWheel  = 0.0f;
-    io.MouseWheelH = 0.0f;
-    io.MouseDelta  = ImVec2(0.0f, 0.0f);
-}
 
 // 上一帧节点位置（对齐辅助判断「谁在拖动」：imgui-node-editor 无公开拖动查询 API）
 std::unordered_map<std::string, ImVec2> g_prev_positions;
 
-// 拖拽中的节点 id：左键按住 + 位置相对上一帧移动 → 判定为拖动中
-std::string find_dragged_node(const Graph& graph)
-{
-    if (g_alt_pan_active || !ImGui::IsMouseDown(kNodeEditorDragButton)) {
-        g_prev_positions.clear();
-        return {};
-    }
-    for (const Node& node : graph.nodes) {
-        const ImVec2 current = ed::GetNodePosition(node_handle(node.id));
-        const auto   it      = g_prev_positions.find(node.id);
-        if (it == g_prev_positions.end()) {
-            g_prev_positions[node.id] = current;
-            continue;
-        }
-        if (std::fabs(current.x - it->second.x) > 0.5f ||
-            std::fabs(current.y - it->second.y) > 0.5f) {
-            return node.id;
-        }
-    }
-    return {};
-}
-
-// 对齐辅助：拖动中把节点吸附到其它节点的左/右/中心X、上/下/中心Y
-//  * 对齐线以屏幕坐标输出（紫色实线，仅拖动中显示）
-struct SnapResult {
-    bool   applied    = false;
-    bool   line_v     = false; // 垂直对齐线
-    bool   line_h     = false; // 水平对齐线
-    ImVec2 v_a = ImVec2(0.0f, 0.0f);
-    ImVec2 v_b = ImVec2(0.0f, 0.0f);
-    ImVec2 h_a = ImVec2(0.0f, 0.0f);
-    ImVec2 h_b = ImVec2(0.0f, 0.0f);
-};
+// 拖拽中的节点 id：已上移 canvas_view 共享（CLN-10），主画布传 g_alt_pan_active 互斥。
+// 对齐吸附封装（CLN-10）：开关 + 拖拽判定 + 调共享核心 + 状态更新。
+// 对齐核心逻辑（三边对 / 辅助线端点）已上移 canvas_view::apply_alignment_snap_core 单一来源。
 SnapResult apply_alignment_snap(const Graph& graph)
 {
     SnapResult result;
@@ -1423,180 +813,27 @@ SnapResult apply_alignment_snap(const Graph& graph)
         g_prev_positions.clear();
         return result;
     }
-    const std::string dragged = find_dragged_node(graph);
+    const std::string dragged = find_dragged_node(graph, g_alt_pan_active, g_prev_positions);
     if (dragged.empty()) {
         return result;
     }
     if (graph.findNode(dragged) == nullptr) {
         return result;
     }
-
     const float zoom        = ed::GetCurrentZoom();
     const float snap_canvas = (zoom > 1e-6f) ? g_snap_distance / zoom : g_snap_distance;
-
-    const ImVec2 dpos  = ed::GetNodePosition(node_handle(dragged));
-    const ImVec2 dsize = ed::GetNodeSize(node_handle(dragged));
+    const ImVec2 dpos  = ed::GetNodePosition(nodeHandle(dragged));
+    const ImVec2 dsize = ed::GetNodeSize(nodeHandle(dragged));
     const float  dw    = dsize.x > 1.0f ? dsize.x : 80.0f;
     const float  dh    = dsize.y > 1.0f ? dsize.y : 40.0f;
-    const float  dleft  = dpos.x;
-    const float  dright = dpos.x + dw;
-    const float  dcx    = dpos.x + dw * 0.5f;
-    const float  dtop    = dpos.y;
-    const float  dbottom = dpos.y + dh;
-    const float  dcy     = dpos.y + dh * 0.5f;
-
-    float       dx = 0.0f;
-    float       dy = 0.0f;
-    bool        have_x = false;
-    bool        have_y = false;
-    ImVec2      v_a, v_b, h_a, h_b;
-
+    result = apply_alignment_snap_core(graph, dragged, dpos, dw, dh, snap_canvas);
     for (const Node& node : graph.nodes) {
-        if (node.id == dragged) {
-            continue;
-        }
-        const ImVec2 pos  = ed::GetNodePosition(node_handle(node.id));
-        const ImVec2 size = ed::GetNodeSize(node_handle(node.id));
-        const float  w    = size.x > 1.0f ? size.x : 80.0f;
-        const float  h    = size.y > 1.0f ? size.y : 40.0f;
-        const float  left   = pos.x;
-        const float  right  = pos.x + w;
-        const float  cx     = pos.x + w * 0.5f;
-        const float  top    = pos.y;
-        const float  bottom = pos.y + h;
-        const float  cy     = pos.y + h * 0.5f;
-
-        // X 方向：取 |delta| 最小的那对「拖拽边 ↔ 目标边」
-        const float dx_left  = left - dleft;
-        const float dx_right = right - dright;
-        const float dx_cx    = cx - dcx;
-        float       dx_best  = dx_left;
-        if (std::fabs(dx_right) < std::fabs(dx_best)) {
-            dx_best = dx_right;
-        }
-        if (std::fabs(dx_cx) < std::fabs(dx_best)) {
-            dx_best = dx_cx;
-        }
-        if (std::fabs(dx_best) <= snap_canvas && (!have_x || std::fabs(dx_best) < std::fabs(dx))) {
-            dx     = dx_best;
-            have_x = true;
-            const float align_x = dleft + dx_best;
-            v_a = ed::CanvasToScreen(ImVec2(align_x, std::min(dtop, top)));
-            v_b = ed::CanvasToScreen(ImVec2(align_x, std::max(dbottom, bottom)));
-        }
-
-        // Y 方向
-        const float dy_top    = top - dtop;
-        const float dy_bottom = bottom - dbottom;
-        const float dy_cy     = cy - dcy;
-        float       dy_best   = dy_top;
-        if (std::fabs(dy_bottom) < std::fabs(dy_best)) {
-            dy_best = dy_bottom;
-        }
-        if (std::fabs(dy_cy) < std::fabs(dy_best)) {
-            dy_best = dy_cy;
-        }
-        if (std::fabs(dy_best) <= snap_canvas && (!have_y || std::fabs(dy_best) < std::fabs(dy))) {
-            dy     = dy_best;
-            have_y = true;
-            const float align_y = dtop + dy_best;
-            h_a = ed::CanvasToScreen(ImVec2(std::min(dleft, left), align_y));
-            h_b = ed::CanvasToScreen(ImVec2(std::max(dright, right), align_y));
-        }
-    }
-
-    if (have_x || have_y) {
-        ImVec2 new_pos = dpos;
-        if (have_x) {
-            new_pos.x = dpos.x + dx;
-            result.line_v = true;
-            result.v_a = v_a;
-            result.v_b = v_b;
-        }
-        if (have_y) {
-            new_pos.y = dpos.y + dy;
-            result.line_h = true;
-            result.h_a = h_a;
-            result.h_b = h_b;
-        }
-        ed::SetNodePosition(node_handle(dragged), new_pos);
-        result.applied = true;
-    }
-
-    for (const Node& node : graph.nodes) {
-        g_prev_positions[node.id] = ed::GetNodePosition(node_handle(node.id));
+        g_prev_positions[node.id] = ed::GetNodePosition(nodeHandle(node.id));
     }
     return result;
 }
-// 小地图（左下角缩略图；点击 / 按住拖动 → 视口中心平移到对应画布位置；右上角 ✕ 关闭）
-// 纯导航：绝不选中 / 移动 / 框选节点 —— 输入已在 block_minimap_input 中与画布彻底隔离。
-void draw_minimap(const Graph& graph)
-{
-    if (!g_show_minimap) {
-        return;
-    }
-    ImDrawList* draw_list = ImGui::GetWindowDrawList();
-
-    ImVec2 map_min, map_max;
-    minimap_rect(map_min, map_max);
-
-    draw_list->AddRectFilled(map_min, map_max, IM_COL32(18, 20, 26, 215), 4.0f);
-    draw_list->AddRect(map_min, map_max, IM_COL32(130, 130, 145, 210), 4.0f, 0, 1.0f);
-    draw_list->AddText(map_min + ImVec2(6.0f, 3.0f), IM_COL32(200, 200, 210, 235), "小地图");
-
-    const ImVec2 close_pos(map_max.x - 18.0f, map_min.y + 2.0f);
-    if (g_minimap_blocking && g_minimap_clicked && g_minimap_mouse.x >= close_pos.x &&
-        g_minimap_mouse.x <= close_pos.x + 14.0f && g_minimap_mouse.y >= close_pos.y &&
-        g_minimap_mouse.y <= close_pos.y + 14.0f) {
-        g_show_minimap = false;
-        return;
-    }
-    draw_list->AddText(close_pos, IM_COL32(225, 90, 90, 235), "✕");
-
-    const ImVec2 area_min(map_min.x + 6.0f, map_min.y + 20.0f);
-    const ImVec2 area_max(map_max.x - 6.0f, map_max.y - 6.0f);
-    if (graph.nodes.empty()) {
-        draw_list->AddText(area_min, IM_COL32(120, 120, 135, 200), "空画布");
-        return;
-    }
-
-    ImVec2 bbox_min(FLT_MAX, FLT_MAX);
-    ImVec2 bbox_max(-FLT_MAX, -FLT_MAX);
-    for (const Node& node : graph.nodes) {
-        const ImVec2 sz = ed::GetNodeSize(node_handle(node.id));
-        const float  w  = (sz.x > 1.0f) ? sz.x : 80.0f;
-        const float  h  = (sz.y > 1.0f) ? sz.y : 40.0f;
-        bbox_min.x = std::min(bbox_min.x, node.x);
-        bbox_min.y = std::min(bbox_min.y, node.y);
-        bbox_max.x = std::max(bbox_max.x, node.x + w);
-        bbox_max.y = std::max(bbox_max.y, node.y + h);
-    }
-    const ImVec2 bbox_size(std::max(bbox_max.x - bbox_min.x, 1.0f),
-                           std::max(bbox_max.y - bbox_min.y, 1.0f));
-    const ImVec2 area_size(area_max.x - area_min.x, area_max.y - area_min.y);
-    const float  scale = std::min(area_size.x / bbox_size.x, area_size.y / bbox_size.y);
-
-    for (const Node& node : graph.nodes) {
-        const ImVec2 sz = ed::GetNodeSize(node_handle(node.id));
-        const float  w  = std::max((sz.x > 1.0f ? sz.x : 80.0f) * scale, 3.0f);
-        const float  h  = std::max((sz.y > 1.0f ? sz.y : 40.0f) * scale, 3.0f);
-        const ImVec2 p(area_min.x + (node.x - bbox_min.x) * scale,
-                       area_min.y + (node.y - bbox_min.y) * scale);
-        draw_list->AddRectFilled(ImVec2(p.x, p.y), ImVec2(p.x + w, p.y + h),
-                                 state_color(node.state), 1.0f);
-        draw_list->AddRect(ImVec2(p.x, p.y), ImVec2(p.x + w, p.y + h),
-                           IM_COL32(0, 0, 0, 190), 1.0f);
-    }
-
-    // 点击 / 按住拖动 → 视口中心平移到鼠标对应的世界坐标（保持当前缩放，快速挪动）。
-    // 只用屏蔽前的快照；ed::NavigateToCenter 只动视口、不移动任何节点（旧版 CenterNodeOnScreen 已废弃）。
-    if (g_minimap_blocking && (g_minimap_clicked || g_minimap_down) &&
-        minimap_hit(g_minimap_mouse, area_min, area_max)) {
-        const float cx = (g_minimap_mouse.x - area_min.x) / scale + bbox_min.x;
-        const float cy = (g_minimap_mouse.y - area_min.y) / scale + bbox_min.y;
-        ed::NavigateToCenter(ImVec2(cx, cy), 0.0f);
-    }
-}
+// 小地图（左下角缩略图）已上移 canvas_view::draw_minimap 共享（CLN-09），
+// 主画布在 ed::End 之后以 canvas_theme_main() + 状态着色回调调用（见 draw 循环尾）。
 
 // 画布辅助开关弹窗（小地图 / 对齐吸附 / 吸附距离）
 void draw_canvas_assist_popup()
@@ -1616,7 +853,7 @@ void draw_canvas_assist_popup()
 
 
 
-void draw_node_canvas(const char* title, CanvasOptions& options)
+void drawNodeCanvas(const char* title, CanvasOptions& options)
 {
     ensure_context();
     EditorState& state = editor();
@@ -1636,7 +873,7 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
 
     ImGui::TextDisabled("输入端口在节点左侧、输出端口在右侧 ｜ 拖左侧圆点连线，类型不符会变红被拒");
     ImGui::SameLine();
-    ImGui::TextDisabled("｜ 右键：画布新建 / 节点复制·删除 / 连线删除 ｜ 左键点连线可选中，再点工具栏「删除选中」");
+    ImGui::TextDisabled("｜ 右键：画布新建 / 节点复制·删除 / 连线删除 ｜ 左键点连线可选中 → Delete 或工具栏「删除选中」");
     if (g_alt_pan_active) {
         ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f),
                            "Alt 平移模式：按住左键拖拽即可平移画布（松开 Alt 即恢复拖动节点/框选）");
@@ -1651,7 +888,7 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
     ed::SetCurrentEditor(g_context);
     // 小地图 = 纯导航：该区域鼠标事件只属于小地图（查看 / 跳转），画布不得选中或编辑节点。
     // 必须放在 ed::Begin 之前（ed 在 Begin 内处理鼠标）。
-    block_minimap_input();
+    blockMinimapInput(g_show_minimap, g_minimap);
     // CS-01：诊断用的缩放值（必须在 ed::Begin 内取；ed::End() 之后打印整行）
     float diag_zoom = 1.0f;
     ed::Begin("##NodeCanvas", ImVec2(0.0f, 0.0f));
@@ -1668,7 +905,7 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
             ed::NavigateToContent(0.0f);
             log::warn("[画布] 检测到异常视图（zoom=" + std::to_string(zoom) +
                       "，原点 x=" + std::to_string(origin.x) + "），已重置为跟随内容");
-            state.set_status("已重置画布视图（检测到异常缩放/原点）");
+            state.setStatus("已重置画布视图（检测到异常缩放/原点）");
         }
     }
 
@@ -1680,14 +917,18 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
 
     // 位置同步：新建 / 粘贴的节点在这里落到 Graph 记录的位置
     for (const Node& node : state.graph.nodes) {
-        ed::SetNodePosition(node_handle(node.id), ImVec2(node.x, node.y));
+        ed::SetNodePosition(nodeHandle(node.id), ImVec2(node.x, node.y));
     }
-    // 宽度自适应：按当前图的「输入/输出标签实测最宽」算出**全画布共用的内容区宽度**（每帧重算，代价可忽略）
+    // 宽度自适应 + 节点卡片绘制：走共享 canvas_view 只读绘制层（CEA-01 / CEA-02）
+    //   —— 主题 = 主画布默认主题；运行读模型 = editor().run_snapshot_view()
+    g_canvas.graph        = &state.graph;
+    g_canvas.theme        = &canvasThemeMain();
+    g_canvas.run_snapshot = [&state]() -> const engine::RunSnapshot& { return state.run_snapshot_view(); };
     const auto diag_t0 = std::chrono::steady_clock::now();
-    update_content_width(state.graph);
+    updateContentWidth(state.graph, g_canvas);
     const auto diag_t1 = std::chrono::steady_clock::now();
     for (const Node& node : state.graph.nodes) {
-        draw_node_body(node);
+        drawNodeBody(g_canvas, node);
     }
     const auto diag_t2 = std::chrono::steady_clock::now();
     log_wrap_selftest();                   // 折行自检（一次性：每条输出行都必须放得下）
@@ -1703,8 +944,8 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         if (from_index < 0 || to_index < 0) {
             continue;
         }
-        ed::Link(link_handle(edge.id), pin_handle(*from, PortDirection::Output, from_index),
-                 pin_handle(*to, PortDirection::Input, to_index));
+        ed::Link(linkHandle(edge.id), pinHandle(*from, PortDirection::Output, from_index),
+                 pinHandle(*to, PortDirection::Input, to_index));
     }
     const auto diag_t3 = std::chrono::steady_clock::now();
 
@@ -1737,13 +978,13 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         ImGui::Separator();
         // 设计 §6.1：右键画布 → 粘贴
         if (ImGui::MenuItem("粘贴", nullptr, false, state.has_clipboard())) {
-            state.paste_clipboard();
+            state.pasteClipboard();
         }
         if (ImGui::IsItemHovered() && !state.has_clipboard()) {
             ImGui::SetTooltip("剪贴板为空：先在节点右键菜单里「复制」");
         }
         if (ImGui::MenuItem("删除选中（节点 / 连线）", nullptr, false, state.has_selection())) {
-            state.delete_selected();
+            state.deleteSelected();
         }
         ImGui::EndPopup();
     }
@@ -1753,7 +994,7 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         ImGui::Separator();
         // 设计 §6.1：右键节点 → 复制（粘贴在画布右键菜单）
         if (ImGui::MenuItem("复制", nullptr, false, state.has_selection())) {
-            state.copy_selection();
+            state.copySelection();
         }
         if (ImGui::MenuItem("改名（右侧参数面板）")) {
             state.request_focus_title = true;
@@ -1764,7 +1005,7 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
             if (ctx_node != nullptr && !ctx_node->composite_id.empty()) {
                 ImGui::Separator();
                 if (ImGui::MenuItem("编辑内部图…")) {
-                    composite_editor_open(ctx_node->composite_id);
+                    compositeEditorOpen(ctx_node->composite_id);
                 }
             }
         }
@@ -1776,10 +1017,10 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
                 ctx_node != nullptr && ctx_node->state != engine::NodeState::Waiting &&
                 !state.session_active();
             if (ImGui::MenuItem("重跑该节点", nullptr, false, ctx_rerun_ok)) {
-                state.start_rerun_async(context_node, engine::RerunScope::NodeOnly);
+                state.startRerunAsync(context_node, engine::RerunScope::NodeOnly);
             }
             if (ImGui::MenuItem("重跑该节点及下游", nullptr, false, ctx_rerun_ok)) {
-                state.start_rerun_async(context_node, engine::RerunScope::Downstream);
+                state.startRerunAsync(context_node, engine::RerunScope::Downstream);
             }
             if (ImGui::IsItemHovered() && ctx_node != nullptr &&
                 ctx_node->state == engine::NodeState::Waiting) {
@@ -1787,7 +1028,7 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
             }
         }
         if (ImGui::MenuItem("删除该节点")) {
-            state.delete_selected();
+            state.deleteSelected();
         }
         ImGui::EndPopup();
     }
@@ -1801,17 +1042,18 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         state.selected_node       = node_id;
         if (const engine::Node* node = state.graph.findNode(node_id);
             node != nullptr && !node->composite_id.empty()) {
-            composite_editor_open(node->composite_id);
-            state.set_status("已打开上级节点编辑器：" + node->title + "（" +
+            compositeEditorOpen(node->composite_id);
+            state.setStatus("已打开上级节点编辑器：" + node->title + "（" +
                              node->composite_id + "）");
         }
         else {
             state.request_focus_title = true;
-            state.set_status("可在右侧参数面板修改标题与参数：" + node_id);
+            state.setStatus("可在右侧参数面板修改标题与参数：" + node_id);
         }
     }
 
     sync_selection(state);
+    handle_delete_key();
 
     // 视图跟随前先确认坐标正常（历史卡死根因：异常坐标 + NavigateToContent 会让视图落到天文数字区间）
     const bool positions_sane =
@@ -1827,7 +1069,7 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
         }
         else {
             log::warn("[画布] 跳过视图跟随：存在异常节点坐标（已按上限夹紧）");
-            state.set_status("已跳过视图跟随（检测到异常节点坐标）");
+            state.setStatus("已跳过视图跟随（检测到异常节点坐标）");
         }
         g_first_frame                     = false;
         state.request_navigate_to_content = false;
@@ -1844,19 +1086,15 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
     ed::End();
 
     // ---- M_node_expansion L3（§4.4.3）：对齐辅助 ⑤+⑥ + 小地图 ④（ed::End 之后、画布上下文失效前）----
+    // CLN-10：辅助线绘制上移共享 draw_snap_lines（颜色/线宽传 canvas_theme_main() 的 snap_line）
+    // CLN-09：小地图上移共享 draw_minimap（主题 + 节点块色按状态着色回调）
     {
         const SnapResult snap = apply_alignment_snap(state.graph);
         if (snap.applied) {
-            // 紫色实线（仅拖动中显示；state_color 之外的专属色）
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-            if (snap.line_v) {
-                dl->AddLine(snap.v_a, snap.v_b, IM_COL32(0x9C, 0x6C, 0xFF, 230), 1.6f);
-            }
-            if (snap.line_h) {
-                dl->AddLine(snap.h_a, snap.h_b, IM_COL32(0x9C, 0x6C, 0xFF, 230), 1.6f);
-            }
+            drawSnapLines(snap, ImGui::GetWindowDrawList(), canvasThemeMain().snap_line, 1.6f);
         }
-        draw_minimap(state.graph);
+        draw_minimap(state.graph, canvasThemeMain(), g_show_minimap, g_minimap,
+                     [](const Node& n) { return state_color(n.state); });
     }
 
     // CS-01：画布诊断（每 2 秒一行；把「帧预算归因 + 纹理请求/解码」写进 app.log）
@@ -1894,7 +1132,7 @@ void draw_node_canvas(const char* title, CanvasOptions& options)
     ImGui::End();
 }
 
-std::string canvas_add_node_at_center(const std::string& type)
+std::string canvasAddNodeAtCenter(const std::string& type)
 {
     ensure_context();
     EditorState& state = editor();
@@ -1904,7 +1142,7 @@ std::string canvas_add_node_at_center(const std::string& type)
     ed::SetCurrentEditor(nullptr);
 
     state.snapshot("创建节点");
-    const std::string id = state.create_node(type, center_canvas.x, center_canvas.y);
+    const std::string id = state.createNode(type, center_canvas.x, center_canvas.y);
     if (!id.empty()) {
         state.selected_nodes = {id};
         state.selected_node  = id;
@@ -1913,7 +1151,7 @@ std::string canvas_add_node_at_center(const std::string& type)
 }
 
 // CN（Composition_node）：依据规格在画布可视中心创建上级节点
-std::string canvas_add_composite_at_center(const std::string& composite_id)
+std::string canvasAddCompositeAtCenter(const std::string& composite_id)
 {
     ensure_context();
     EditorState& state = editor();
@@ -1930,11 +1168,11 @@ std::string canvas_add_composite_at_center(const std::string& composite_id)
         state.selected_nodes = {id};
         state.selected_node  = id;
         if (const engine::Node* node = state.graph.findNode(id)) {
-            state.set_status("已创建上级节点：" + node->title + "（双击进入内部图编辑）");
+            state.setStatus("已创建上级节点：" + node->title + "（双击进入内部图编辑）");
         }
     }
     else {
-        state.set_status("创建上级节点失败：" + error);
+        state.setStatus("创建上级节点失败：" + error);
     }
     return id;
 }

@@ -29,7 +29,7 @@ CancelWatch::~CancelWatch()
     }
 }
 
-bool run_cancellable(const CancelToken* token, std::function<void()> work, int poll_ms)
+bool runCancellable(const CancelToken* token, std::function<void()> work, int poll_ms)
 {
     if (!work) {
         return false;
@@ -61,7 +61,7 @@ bool run_cancellable(const CancelToken* token, std::function<void()> work, int p
     return false;
 }
 
-bool sleep_interruptible(const CancelToken* token, int ms, int poll_ms)
+bool sleepInterruptible(const CancelToken* token, int ms, int poll_ms)
 {
     const int total = ms > 0 ? ms : 0;
     if (token == nullptr) {

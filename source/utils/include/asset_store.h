@@ -22,41 +22,41 @@ namespace aiwrite::asset {
 inline constexpr const char* kTokenPrefix = "aiwrite-asset:";
 
 // 资源根（= paths::assets_images_dir()）
-std::filesystem::path images_root();
+std::filesystem::path imagesRoot();
 
 // 值是否为资源令牌（前缀 + 64 位十六进制摘要）
-bool is_token(const std::string& value);
+bool isToken(const std::string& value);
 // 令牌 → 摘要（非令牌 / 格式不合法 → 空）
-std::string token_digest(const std::string& value);
+std::string tokenDigest(const std::string& value);
 // 摘要 → 令牌
-std::string make_token(const std::string& digest);
+std::string makeToken(const std::string& digest);
 
 // 文件内容摘要（SHA3-256 小写十六进制；读不到 → 空 + error）
-std::string digest_of_file(const std::string& path, std::string* error);
+std::string digestOfFile(const std::string& path, std::string* error);
 
 // 规范扩展名（**内容嗅探优先**：内容 WebP 却叫 .png → `.webp`；认不出来回退原扩展名）
-std::string canonical_extension(const std::string& path);
+std::string canonicalExtension(const std::string& path);
 
 // 归档：把外部图片复制进资源根，返回令牌（同内容已存在 → 直接返回既有令牌，不重复存）
-std::string import_file(const std::string& path, std::string* error);
+std::string importFile(const std::string& path, std::string* error);
 
 // 令牌 → 资源根内的绝对路径
 //  * 找到 → 返回路径，*missing = false
 //  * 没找到 → 返回空字符串，*missing = true，*error 写出可操作文案（P7a-07）
-std::string resolve_token(const std::string& token, bool* missing, std::string* error);
+std::string resolveToken(const std::string& token, bool* missing, std::string* error);
 
 // 值 → 本地可读路径
 //  * 令牌 → 解析后的绝对路径（缺失 → 空 + *missing = true + *error）
 //  * 普通路径 / 空值 → **原样返回**（旧工作流语义不变，`I19`）
-std::string to_local_path(const std::string& value, bool* missing, std::string* error);
-std::string to_local_path(const std::string& value);
+std::string toLocalPath(const std::string& value, bool* missing, std::string* error);
+std::string toLocalPath(const std::string& value);
 // 多值：逐项转换（保留顺序；空项忽略；缺失项 → 空串占位并记入 *problems）
-std::vector<std::string> to_local_paths(const std::vector<std::string>& values,
+std::vector<std::string> toLocalPaths(const std::vector<std::string>& values,
                                         std::vector<std::string>* problems);
 
 // P7a-06：是否需要迁移（非空且不是令牌 = 外部路径）
-bool needs_migration(const std::string& value);
+bool needsMigration(const std::string& value);
 // P7a-06：迁移提示文案（纯函数；Console 与面板共用同一句话）
-std::string migration_hint(const std::string& value);
+std::string migrationHint(const std::string& value);
 
 } // namespace aiwrite::asset

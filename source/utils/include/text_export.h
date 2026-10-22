@@ -44,30 +44,30 @@ struct ExportResult {
 };
 
 // 文件名主干清洗：非法字符 → _，去掉首尾空白与点，限制长度（不切坏 UTF-8）
-std::string sanitize_file_stem(const std::string& stem);
+std::string sanitizeFileStem(const std::string& stem);
 
 // <清洗后的工作流名>-<stamp>.<ext>
-std::string render_document_name(const std::string& workflow, const std::string& stamp,
+std::string renderDocumentName(const std::string& workflow, const std::string& stamp,
                                  const std::string& ext);
 
 // 正文拼接（include_meta=true 时加标题与元信息块；header_template 非空 = 自定义头模板）
-std::string build_document_body(const std::string& text, const std::string& label,
+std::string buildDocumentBody(const std::string& text, const std::string& label,
                                 const DocumentMeta& meta, bool include_meta,
                                 const std::string& header_template = {});
 
 // 原子写（临时文件 + rename）；overwrite=false 且同名存在时自动加 -1/-2…
-bool write_document(const std::string& path, const std::string& body, bool overwrite,
+bool writeDocument(const std::string& path, const std::string& body, bool overwrite,
                     std::string* final_path, std::string* error);
 
-ExportResult export_text_document(const ExportRequest& request);
+ExportResult exportTextDocument(const ExportRequest& request);
 
 // 文件名用时间戳 yyyyMMdd-HHmmss
-std::string document_stamp_now();
+std::string documentStampNow();
 
 // 人类可读时间（yyyy-MM-dd HH:mm:ss）：用于文档元信息头
-std::string document_time_text();
+std::string documentTimeText();
 
 // P2 的 7 条离线断言；返回失败条数（跑完清理自己的临时目录）
-int text_export_selftest();
+int textExportSelftest();
 
 } // namespace aiwrite::utils

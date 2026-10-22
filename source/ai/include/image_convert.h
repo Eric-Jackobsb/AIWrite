@@ -34,7 +34,7 @@ namespace aiwrite::ai {
 //  → {"png","jpeg","jpg","webp"}）
 //  * 只保留图片扩展名：站点 accept 里常混着文档 / 音频 —— 绝不能把 mp3 当图上传
 //  * 大小写不敏感、去前导点、去空项；去重并**保持原顺序**（便于人工核对）
-std::vector<std::string> image_exts_from_accept(const std::string& accept);
+std::vector<std::string> imageExtsFromAccept(const std::string& accept);
 
 // 白名单是否放行该文件（纯函数）
 //  * `accept` 空 → 放行（站点未声明 = 不限制）
@@ -68,12 +68,12 @@ ConvertOutcome convert_for_upload(const std::string& local_path,
 
 // 默认临时目录：`%TEMP%\aiwrite-upload`（取不到临时目录 → `~/.brain-ai/tmp/upload`）
 //  * 目录不存在时由 `convert_for_upload` 按需创建
-std::string default_upload_tmp_dir();
+std::string defaultUploadTmpDir();
 
 // 离线自检（返回**失败项数**；`passed_out` 回传通过项数 → 调用方并入总计数）
 // 覆盖：accept 解析（含非图片混入 / 大小写 / 去重）/ 放行判定（jpeg↔jpg / Unknown 回退 /
 //       空白名单）/ 转换判定（白名单 / 体积 / 长边）/ 真实转码（webp→png、超限缩放、
 //       扩展名骗人）/ 失败路径（缺文件 / 非图片 / 空文件 → 可操作文案）
-int image_convert_selftest(int* passed_out = nullptr);
+int imageConvertSelftest(int* passed_out = nullptr);
 
 } // namespace aiwrite::ai

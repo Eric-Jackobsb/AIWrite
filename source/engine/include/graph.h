@@ -70,11 +70,11 @@ struct Param {
     //    本字段只被参数面板渲染与 --graph-selftest 断言读取。
     std::string group;
 
-    void        reset_to_default() { value = default_value; }
+    void        resetToDefault() { value = default_value; }
     std::string text() const;                       // 取字符串值（非字符串返回 dump）
     double      number(double fallback = 0.0) const;
     bool        flag(bool fallback = false) const;
-    bool        is_empty() const;
+    bool        isEmpty() const;
 };
 
 // ------------------------------------------------------------------- Node ----
@@ -103,8 +103,8 @@ struct Node {
 // 参数条件可见性（M2 扩展）：param.visible_when_param 指向同一节点内的另一个参数，
 // 当该参数的值等于 param.visible_when_value 时本参数可见；未设置条件 = 始终可见。
 // 参数面板、画布预览与 Graph::validateParams 共用本判定，保证"隐藏即不校验"。
-bool param_visible(const Node& node, const Param& param);
-bool param_visible(const Node& node, const std::string& param_id);
+bool paramVisible(const Node& node, const Param& param);
+bool paramVisible(const Node& node, const std::string& param_id);
 
 // ------------------------------------------------------------------- Edge ----
 struct Edge {

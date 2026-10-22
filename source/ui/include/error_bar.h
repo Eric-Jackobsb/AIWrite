@@ -12,6 +12,6 @@
 
 namespace aiwrite::ui {
 
-void draw_error_bar(EditorState& state);
+void drawErrorBar(EditorState& state);
 
 } // namespace aiwrite::ui

@@ -70,13 +70,13 @@ std::string timestamp_for_header()
 fs::path resolve_archive_root(const std::string& archive_dir)
 {
     if (archive_dir.empty()) {
-        return paths::outputs_dir();
+        return paths::outputsDir();
     }
     if (archive_dir == "~") {
-        return paths::data_root().parent_path();
+        return paths::dataRoot().parent_path();
     }
     if (archive_dir.rfind("~/", 0) == 0 || archive_dir.rfind("~\\", 0) == 0) {
-        return paths::data_root().parent_path() / archive_dir.substr(2);
+        return paths::dataRoot().parent_path() / archive_dir.substr(2);
     }
     return fs::path(archive_dir);
 }
@@ -125,7 +125,7 @@ std::string node_file_name(const ArchiveNode& node)
 
 } // namespace
 
-ArchiveResult archive_run(const ArchiveRequest& request, const std::vector<ArchiveNode>& nodes,
+ArchiveResult archiveRun(const ArchiveRequest& request, const std::vector<ArchiveNode>& nodes,
                           const std::string& run_summary)
 {
     ArchiveResult result;

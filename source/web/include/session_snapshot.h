@@ -29,7 +29,7 @@ inline constexpr double      kSnapshotRefreshPeriod = 5.0;            // `sessio
 inline constexpr std::uintmax_t kSnapshotMaxBytes   = 1024u * 1024u;  // `session.MAX_SNAPSHOT_BYTES`（1 MiB）
 
 // 快照路径（`~/.brain-ai/session/cookies.dat`；**只拼路径，不检查存在性**）
-std::filesystem::path snapshot_file();
+std::filesystem::path snapshotFile();
 
 struct SnapshotInfo {
     bool          exists      = false;   // 文件是否存在
@@ -39,15 +39,15 @@ struct SnapshotInfo {
 };
 
 // **只读元数据**（不打开文件内容）；任何异常 → `exists=false`（如实回报，不假装）
-SnapshotInfo inspect_snapshot();
+SnapshotInfo inspectSnapshot();
 
 // 同上，但**指定路径** —— 供离线断言（可在临时目录造样本）与将来「多 profile」扩展
-SnapshotInfo inspect_snapshot_at(const std::filesystem::path& path);
+SnapshotInfo inspectSnapshotAt(const std::filesystem::path& path);
 
 // 一行状态文案（UI / 诊断用）；**只含路径 / 大小 / 时间**（零 Cookie 信息）
-std::string snapshot_summary(const SnapshotInfo& info);
+std::string snapshotSummary(const SnapshotInfo& info);
 
 // 触发时机口径（UI 帮助文本 / 文档同源；不参与运行逻辑）
-std::string snapshot_trigger_note();
+std::string snapshotTriggerNote();
 
 } // namespace aiwrite::web

@@ -2,6 +2,7 @@
 
 #include "log.h"
 #include "paths.h"
+#include "string_util.h"   // CLN-05：nowString 收敛
 
 #include <algorithm>
 #include <ctime>
@@ -15,16 +16,6 @@ namespace aiwrite::engine {
 namespace {
 
 constexpr const char* kRecentVersion = "1.0";
-
-std::string now_string()
-{
-    const std::time_t now = std::time(nullptr);
-    std::tm           local{};
-    localtime_s(&local, &now);
-    char buffer[32] = {};
-    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &local);
-    return buffer;
-}
 
 bool same_path(const std::string& left, const std::string& right)
 {
@@ -48,7 +39,7 @@ void save_recent(const std::vector<RecentEntry>& entries)
             {"path", entry.path}, {"name", entry.name}, {"openedAt", entry.opened_at}});
     }
 
-    const std::filesystem::path file = paths::recent_file();
+    const std::filesystem::path file = paths::recentFile();
     std::error_code             ec;
     std::filesystem::create_directories(file.parent_path(), ec);
 
@@ -62,11 +53,11 @@ void save_recent(const std::vector<RecentEntry>& entries)
 
 } // namespace
 
-std::vector<RecentEntry> load_recent_files()
+std::vector<RecentEntry> loadRecentFiles()
 {
     std::vector<RecentEntry> result;
 
-    const std::filesystem::path file = paths::recent_file();
+    const std::filesystem::path file = paths::recentFile();
     std::ifstream               stream(file, std::ios::binary);
     if (!stream) {
         return result; // 尚未创建过：空列表
@@ -94,13 +85,13 @@ std::vector<RecentEntry> load_recent_files()
     return result;
 }
 
-void push_recent_file(const std::string& path, const std::string& name)
+void pushRecentFile(const std::string& path, const std::string& name)
 {
     if (path.empty()) {
         return;
     }
 
-    std::vector<RecentEntry> entries = load_recent_files();
+    std::vector<RecentEntry> entries = loadRecentFiles();
     entries.erase(std::remove_if(entries.begin(), entries.end(),
                                  [&path](const RecentEntry& entry) {
                                      return same_path(entry.path, path);
@@ -110,7 +101,7 @@ void push_recent_file(const std::string& path, const std::string& name)
     RecentEntry entry;
     entry.path = path;
     entry.name = name.empty() ? std::filesystem::path(path).stem().string() : name;
-    entry.opened_at = now_string();
+    entry.opened_at = utils::nowString();
     entries.insert(entries.begin(), std::move(entry));
 
     if (entries.size() > kMaxRecentFiles) {
@@ -119,17 +110,17 @@ void push_recent_file(const std::string& path, const std::string& name)
     save_recent(entries);
 }
 
-void clear_recent_files()
+void clearRecentFiles()
 {
     save_recent({});
 }
 
 // ---- M_patchAB §4（PC-03 / FEA-M2-02）：最近列表治理 ----
 
-std::vector<RecentStatus> recent_with_status()
+std::vector<RecentStatus> recentWithStatus()
 {
     std::vector<RecentStatus> result;
-    for (const RecentEntry& entry : load_recent_files()) {
+    for (const RecentEntry& entry : loadRecentFiles()) {
         RecentStatus status;
         status.entry  = entry;
         std::error_code ec;
@@ -139,10 +130,10 @@ std::vector<RecentStatus> recent_with_status()
     return result;
 }
 
-std::size_t count_missing_recent()
+std::size_t countMissingRecent()
 {
     std::size_t missing = 0;
-    for (const RecentStatus& status : recent_with_status()) {
+    for (const RecentStatus& status : recentWithStatus()) {
         if (!status.exists) {
             ++missing;
         }
@@ -150,9 +141,9 @@ std::size_t count_missing_recent()
     return missing;
 }
 
-std::size_t prune_missing_recent()
+std::size_t pruneMissingRecent()
 {
-    const std::vector<RecentEntry>  entries = load_recent_files();
+    const std::vector<RecentEntry>  entries = loadRecentFiles();
     std::vector<RecentEntry>        kept;
     std::size_t                     removed = 0;
     for (const RecentEntry& entry : entries) {

@@ -6,15 +6,15 @@
 
 namespace aiwrite::ai {
 
-std::vector<std::string> factory_protocols()
+std::vector<std::string> factoryProtocols()
 {
     return {"openai", "anthropic", "gemini", "deepseek-web"};
 }
 
-std::string factory_protocols_text()
+std::string factoryProtocolsText()
 {
     std::string text;
-    for (const std::string& protocol : factory_protocols()) {
+    for (const std::string& protocol : factoryProtocols()) {
         if (!text.empty()) {
             text += " / ";
         }
@@ -23,9 +23,9 @@ std::string factory_protocols_text()
     return text;
 }
 
-bool factory_implements(const std::string& protocol)
+bool factoryImplements(const std::string& protocol)
 {
-    for (const std::string& item : factory_protocols()) {
+    for (const std::string& item : factoryProtocols()) {
         if (item == protocol) {
             return true;
         }
@@ -33,7 +33,7 @@ bool factory_implements(const std::string& protocol)
     return false;
 }
 
-ProviderCreation create_provider(const ProviderSpec& spec, ProviderRuntimeConfig config)
+ProviderCreation createProvider(const ProviderSpec& spec, ProviderRuntimeConfig config)
 {
     ProviderCreation out;
     // 能力快照 / 诊断字段一律对齐到**本条**（换条目即换能力，`PB2-12`）
@@ -74,7 +74,7 @@ ProviderCreation create_provider(const ProviderSpec& spec, ProviderRuntimeConfig
 
     // R9：表里有、程序没实现 ⇒ 明确报错（绝不静默回落到别的协议）
     out.unsupported_protocol = true;
-    out.error = "未知 protocol「" + protocol + "」：本版本工厂已实现 " + factory_protocols_text() +
+    out.error = "未知 protocol「" + protocol + "」：本版本工厂已实现 " + factoryProtocolsText() +
                 "（另 `dom` 由 DOM 适配器承载）——请在 providers.json 里改用已实现协议，"
                 "或等待该协议接入（表可以写，程序必须说清「还没实现」）";
     log::info("[Provider 工厂] 未实现 protocol：" + protocol + "（条目 " + spec.id + "）");

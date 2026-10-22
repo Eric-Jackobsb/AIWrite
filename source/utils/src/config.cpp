@@ -18,20 +18,20 @@ Config     g_config;
 
 } // namespace
 
-const Config& app_config()
+const Config& appConfig()
 {
     std::lock_guard<std::mutex> lock(g_config_mutex);
     return g_config;
 }
 
-void set_app_config(Config config)
+void setAppConfig(Config config)
 {
     std::lock_guard<std::mutex> lock(g_config_mutex);
     g_config = std::move(config);
 }
 
 // PA-08：尚未接线的配置字段清单（见 config.h 注释；加载时写日志 + 文档标注）
-std::vector<std::string> unwired_config_fields()
+std::vector<std::string> unwiredConfigFields()
 {
     return {
         // `PQ-18②`（2026-10-09）：general.language / general.startup **已移除** ——
@@ -240,16 +240,16 @@ toml::table to_table(const Config& c)
 } // namespace
 
 // ---- M_patchAB §4（`PC-04`）：配置文件版本迁移（纯逻辑；`save_config` 的护栏同源）----
-int current_config_version()
+int currentConfigVersion()
 {
     return 1;
 }
 
-ConfigMigrationOutcome migrate_config(Config& config)
+ConfigMigrationOutcome migrateConfig(Config& config)
 {
     ConfigMigrationOutcome outcome;
     outcome.from = config.config_version;
-    outcome.to   = current_config_version();
+    outcome.to   = currentConfigVersion();
 
     if (config.config_version <= 0) {
         config.config_version               = outcome.to; // 老文件（无 config_version 键）
@@ -274,14 +274,14 @@ ConfigMigrationOutcome migrate_config(Config& config)
 }
 
 
-bool load_config(const std::filesystem::path& file, Config& out)
+bool loadConfig(const std::filesystem::path& file, Config& out)
 {
     out = Config{};
 
     std::error_code ec;
     if (!std::filesystem::exists(file, ec)) {
         log::info("配置文件不存在，生成默认配置: " + file.string());
-        return save_config(file, out);
+        return saveConfig(file, out);
     }
     try {
         const toml::table root = toml::parse_file(file.string());
@@ -315,7 +315,7 @@ bool load_config(const std::filesystem::path& file, Config& out)
         }
 
         // M_patchAB §4（PC-04）：版本迁移（补齐版本号 / 未来版本标记）
-        const ConfigMigrationOutcome migration = migrate_config(out);
+        const ConfigMigrationOutcome migration = migrateConfig(out);
         for (const std::string& note : migration.notes) {
             log::info("[配置迁移] " + note);
         }
@@ -334,14 +334,14 @@ bool load_config(const std::filesystem::path& file, Config& out)
     }
 }
 
-bool save_config(const std::filesystem::path& file, const Config& config)
+bool saveConfig(const std::filesystem::path& file, const Config& config)
 {
     // ---- M_patchAB §4（PC-04）：**拒绝降级写回** ----
     //  * 磁盘上的配置文件版本比本程序新（`load_config` 已标记）⇒ 保存会被拒绝：
     //    否则会先把用户的新版配置备份成 `.bak`、再用旧格式覆盖主文件（等于降级写坏）
     if (config.version_newer_than_supported) {
         log::error("[配置] 保存被拒绝：磁盘配置版本比本程序支持的 " +
-                   std::to_string(current_config_version()) +
+                   std::to_string(currentConfigVersion()) +
                    " 更新（请升级 AIwrite；原文件未改动）");
         return false;
     }

@@ -60,13 +60,21 @@ bool validate_composite_spec(const CompositeSpec& spec, std::string* error,
                              bool allow_incomplete_draft = false);
 
 // JSON 序列化 / 反序列化（独立文件 schema）
-nlohmann::json composite_to_json(const CompositeSpec& spec);
-bool composite_from_json(const nlohmann::json& json, CompositeSpec& spec, std::string* error);
+nlohmann::json compositeToJson(const CompositeSpec& spec);
+bool compositeFromJson(const nlohmann::json& json, CompositeSpec& spec, std::string* error);
 
 // 依据规格构建 Composite 节点实例（端口/参数按规格；不含连线；值取默认）
 //  * 外部输入端口 id = "in1"…"inN"、输出端口 id = "out1"…（稳定，供边引用与序列化）
 //  * 外部参数 id = 内部 param_id；实例参数值 = 内部默认值（实例可独立修改）
-bool build_composite_node(Node* node, const CompositeSpec& spec, std::string* error);
+bool buildCompositeNode(Node* node, const CompositeSpec& spec, std::string* error);
+
+// 热重载：把图中全部同 id 的 Composite 实例按新规格**就地重建**（返回重建的实例数）
+//  * 保留实例 id / 位置 / 自定义标题（标题 == old_name 视为「未自定义」→ 跟随新规格名）/ 已填参数值（按 id；新增参数取默认）
+//  * 清理失效连边（端口已不存在 / 类型不兼容 / 自环 / 重复，同 4 元组只留一条）
+//  * 画布没有该规格的实例时返回 0 且不改动图；error 仅记录异常（如规格缺失）
+//  * 用途：上级节点编辑器「保存」后同步已放置的旧实例（composite_editor.cpp 调用；UI 负责撤销快照）
+int refresh_composite_instances(Graph& graph, const std::string& composite_id,
+                                const std::string& old_name, std::string* error = nullptr);
 
 // 把图中全部 Composite 节点就地展开（供 Executor 在工作副本上调用）
 //  * 内部节点以 "<composite节点id>__<内部节点id>" 前缀 id 加入图
@@ -76,6 +84,15 @@ bool build_composite_node(Node* node, const CompositeSpec& spec, std::string* er
 bool expand_composites(Graph& graph,
                        std::unordered_map<std::string, std::vector<std::string>>* replaced_out,
                        std::string* error);
+
+// 构建「上级节点编辑器·执行连线」的试运行沙箱图：内部图 + 为每个暴露输入接一个测试源节点
+//  * 源节点类型按目标端口类型映射：Text/Any→TextInput、Image→ImageInput、Provider→ProviderConfig
+//  * 源节点 id = "__ce_src_<k>"（不与内部 n1.. 冲突）；源输出接向 spec.inputs[k] 指向的内部输入端口
+//  * 仅当目标端口当前无内部入边时才补源（规格校验已保证无内部入边，防御性跳过）
+//  * 暴露输出无需汇点：执行器按拓扑序跑完全图，结果从源端起一路产出
+//  * 用途：上级节点编辑器「执行连线」—— 让内部图在编辑器里可被直接运行（执行器跑沙箱副本，
+//    状态按内部 id 映射回编辑器画布；UI 负责构建/泵事件，见 composite_editor.cpp）
+bool buildCompositeTestGraph(const CompositeSpec& spec, Graph* out, std::string* error);
 
 // ------------------------------------------------------------ 注册表 ----
 // PS-D9：规格来源（双源）—— 内置只读官方资产 / 用户节点
@@ -87,10 +104,10 @@ public:
 
     // 双源根目录（默认 paths::builtin_composites_dir() / user_composites_dir()；测试可覆盖）
     //  * set_root = 单源测试模式：内置/用户均指向同一 root（隔离，不触碰用户真实数据）
-    void set_root(std::filesystem::path root);
-    void set_roots(std::filesystem::path builtin_root, std::filesystem::path user_root);
-    const std::filesystem::path& builtin_root() const;
-    const std::filesystem::path& user_root() const;
+    void setRoot(std::filesystem::path root);
+    void setRoots(std::filesystem::path builtinRoot, std::filesystem::path userRoot);
+    const std::filesystem::path& builtinRoot() const;
+    const std::filesystem::path& userRoot() const;
     std::filesystem::path root() const; // 兼容旧调用：返回用户根（写入口）
 
     // 全量重扫（先内置后用户；用户源覆盖内置源；旧目录首次迁移入用户源）
@@ -102,8 +119,8 @@ public:
     std::size_t size() const { return specs_.size(); }
 
     // 来源映射：内置项只读（无删除/编辑入口）；用户项可读写
-    CompositeSource source_of(const std::string& id) const;
-    bool is_builtin(const std::string& id) const { return source_of(id) == CompositeSource::Builtin; }
+    CompositeSource sourceOf(const std::string& id) const;
+    bool is_builtin(const std::string& id) const { return sourceOf(id) == CompositeSource::Builtin; }
 
     // 保存（校验通过才写盘并进内存）；失败返回 false 并写 error
     //  * allow_incomplete_draft=true：跳过「内部图为空 / 未标记输出」校验（新建草稿用）
@@ -112,10 +129,10 @@ public:
     // 删除用户项；内置项被拒；删除后若内置仍有同 id ⇒ 来源回落 Builtin
     bool remove(const std::string& id, std::string* error);
     // 「复制到我的节点库」：把某规格以同 id 写入用户源（用户接管后来源切 User、可编辑）
-    bool copy_to_user(const std::string& id, std::string* error);
+    bool copyToUser(const std::string& id, std::string* error);
 
     // 生成新 id（扫描合并后的全部规格 + 用户目录文件，避免冲突）
-    std::string make_id() const;
+    std::string makeId() const;
 
 private:
     CompositeRegistry() = default;

@@ -35,10 +35,10 @@ nlohmann::json anthropic_build_body(const GenerateParams& params, const std::str
                                     const std::vector<std::string>& image_data_urls);
 
 // 响应文本：`content[*].text`（type == "text"）逐块拼接
-std::string anthropic_extract_text(const nlohmann::json& body);
+std::string anthropicExtractText(const nlohmann::json& body);
 
 // 响应里的可操作错误（`error.message`；另含 `stop_reason` 说明）——空串 = 未识别
-std::string anthropic_error_text(int http_status, const nlohmann::json& body);
+std::string anthropicErrorText(int http_status, const nlohmann::json& body);
 
 // 实现（`protocol = "anthropic"`）
 class AnthropicProvider final : public InferenceProvider {
@@ -51,7 +51,7 @@ public:
 
 private:
     ProviderRuntimeConfig config_;
-    ProviderCaps          caps_ = permissive_caps();
+    ProviderCaps          caps_ = permissiveCaps();
 };
 
 } // namespace aiwrite::ai

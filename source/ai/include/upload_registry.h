@@ -27,21 +27,21 @@
 namespace aiwrite::ai {
 
 // 本版本已实现的站点上传单元（例：{"builtin:doubao", "builtin:kimi"}）
-std::vector<std::string> implemented_site_uploads();
+std::vector<std::string> implementedSiteUploads();
 
 // 站点单元表（注册点；每站一个入口见 `ai/upload/site_uploads.h`）
-const std::vector<SiteUpload>& site_uploads();
+const std::vector<SiteUpload>& siteUploads();
 
 // 按 id 取单元（空 / 未实现 → nullptr）
-const SiteUpload* site_upload_for(const std::string& id);
+const SiteUpload* siteUploadFor(const std::string& id);
 
 // 未实现（或未声明）时的**可操作**文案；已实现 → 空串
 //  * 空 id：条目没写 `web.upload_adapter`
 //  * 有 id 但没实现：写明「已实现清单」+ 下一步（先在浏览器手动上传 / 改用文本链路）
-std::string site_upload_error(const std::string& id);
+std::string siteUploadError(const std::string& id);
 
 // 表字段 `web.upload_adapter` → 单元（空 / 未实现 → nullptr；原因用 `site_upload_error`）
-const SiteUpload* site_upload_of(const ProviderWebSpec& site);
+const SiteUpload* siteUploadOf(const ProviderWebSpec& site);
 
 // 生效的准备参数：站点单元常量 → 表字段覆盖（`web.upload_accept`）→ 调用方限额（max_bytes）
 //  * `tmp_dir` 为空时补 `default_upload_tmp_dir()`
@@ -49,9 +49,9 @@ UploadPrepareOptions resolve_prepare_options(const SiteUpload& unit, const Provi
                                              std::size_t max_bytes);
 
 // 执行一次上传（**唯一入口**；顺序与铁律见文件头）
-UploadResult upload_images(const UploadPlan& plan);
+UploadResult uploadImages(const UploadPlan& plan);
 
 // 离线自检（返回失败项数；`passed_out` 回传通过项数）
-int upload_registry_selftest(int* passed_out = nullptr);
+int uploadRegistrySelftest(int* passed_out = nullptr);
 
 } // namespace aiwrite::ai

@@ -32,7 +32,7 @@ namespace aiwrite::web {
 
 // 渲染「协议探测 kickoff 脚本」：把站点路径从 LoginRequest 注入 JS 模板
 //  * 不传任何站点参数时，渲染结果与改造前的常量脚本**逐字一致**
-std::string probe_kickoff_script(const LoginRequest& request);
+std::string probeKickoffScript(const LoginRequest& request);
 
 // 会话自动引导决策（`SessionBoot` / `plan_session_boot`）**同样已迁移到 `web/site_ref.h`**（见上）。
 
@@ -60,7 +60,7 @@ public:
     bool start(const LoginRequest& request, std::string* error);
 
     bool        running() const;
-    void        request_close();  // 请求关闭（UI 线程可调，异步）
+    void        requestClose();  // 请求关闭（UI 线程可调，异步）
     void        join();           // 等待线程结束
     int         result() const;   // -1 未结束 / 0 成功 / 1 失败 / 2 超时
     std::string status() const;
@@ -76,15 +76,15 @@ int selftest(int timeout_seconds);
 
 // 在**已打开**的登录窗口里请求一次协议探测（异步；结果写入 web::SessionStore.probe）
 // 典型用途：用户登录后点参数面板的「探测网页版协议」，把真实协议（challenge / Token / 端点）取回来
-void request_protocol_probe();
+void requestProtocolProbe();
 
 // 协议探测自检：离屏起登录窗口 → 页面加载后自动探测 → 打印结果（脱敏）
 // 前置：profile 里已有登录态（用户至少登录过一次）；返回 0=探测成功 / 1=失败
-int protocol_probe(int timeout_seconds);
+int protocolProbe(int timeout_seconds);
 
 // M_patchB L1 修订（PB2-23）：按**配置表条目**的站点探测（严格解析，**不**回落）
 //  * 站点不可用（非网页版条目 / 缺 web.login_url / 表外 id）→ 打印原因并返回 2（**不发请求、不开窗**）
-int protocol_probe_for_provider(const std::string& provider_id, int timeout_seconds);
+int protocolProbeForProvider(const std::string& provider_id, int timeout_seconds);
 
 // ---- M_patchB L3（PB2-13 / PB2-15）：在**已登录窗口**内同步执行一段 JS 并取回结果 ----
 //  * 内部：按站点 `ensure_session` → 把脚本 marshal 到窗口线程执行 → 返回 `ExecuteScript` 的**原始 JSON 结果**
@@ -108,12 +108,12 @@ struct WebResourceRecord {          // WebView2 网络回执（**站点无关**�
 };
 
 // 清空网络采集缓冲（一次上传开始前调用；只清**本归属本窗口**的内存）
-void begin_resource_capture(const WebOwner& owner, const std::string& site_key);
+void beginResourceCapture(const WebOwner& owner, const std::string& site_key);
 // 取走并清空缓冲（**增量**语义；只返回**本归属**的回执；跨归属 / 未绑定 ⇒ 丢弃并告警）
 std::vector<WebResourceRecord> take_resource_capture(const WebOwner& owner,
                                                     const std::string& site_key);
 // 采集是否已挂钩（诊断：取不到 `ICoreWebView2_2` 时为 false —— 退化为「仅页面证据」）
-bool resource_capture_ready(const WebOwner& owner, const std::string& site_key);
+bool resourceCaptureReady(const WebOwner& owner, const std::string& site_key);
 
 // 把本地文件交给页面的 `<input type="file">`：
 //   CDP 三步 = `DOM.getDocument` → `DOM.querySelector` → `DOM.setFileInputFiles`
@@ -154,7 +154,7 @@ bool cdp_input_text(const LoginRequest& site_request, const std::string& text, b
 //    `ready_missing_text(need, reached)` —— 归因分离，绝不含「形态不支持」）
 //  * 逐级等待 + 逐级日志（带 `owner` 标签）；L1 复用「等 controller」既有写法
 //  * **只读**：只读页面状态（URL / readyState / 候选计数），不点击、不写入、不改导航
-int  wait_ready(const LoginRequest& site_request, int need, int timeout_ms, std::string* error);
+int  waitReady(const LoginRequest& site_request, int need, int timeout_ms, std::string* error);
 
 // 页面状态探针（只读；供诊断 / 断言 / `wait_ready` 内部使用）
 struct WebPageState {
@@ -166,7 +166,7 @@ struct WebPageState {
     int         composer_hits        = 0; // **可见**输入候选数（textarea / contenteditable / textbox …）
     int         file_inputs          = 0; // `input[type=file]` 命中数（含隐藏）
 };
-bool peek_page_state(const LoginRequest& site_request, WebPageState* out, std::string* error);
+bool peekPageState(const LoginRequest& site_request, WebPageState* out, std::string* error);
 
 // ---- M8-37（零开关）：attach_selector 未回填 / 未命中时的**只读自动识别** ----
 //  * 枚举页面 `input[type=file]` → 取值策略：accept 含 image → 隐藏且带 accept → 文档顺序首个
@@ -188,7 +188,7 @@ long long solve_pow_via_page(const std::string& site_url, const std::string& cha
 
 // 确保内存会话里有可用凭证（Cookie + userToken）：没有则离屏起登录窗口并等一次协议探测完成
 // 返回 true 表示已具备凭证（幂等，已有凭证时立即返回）
-bool ensure_session(int timeout_ms, std::string* error);
+bool ensureSession(int timeout_ms, std::string* error);
 
 // ---- M_patchB L1 续（PB2-17/18/19）+ M_patchC（`PW-02` / `PW-06` · 不变量 `I24`）：按站点 ----
 // 窗口归属（`PW-02`）：所有取窗 / 判窗都按 `(owner, 站点)` —— **同站点不同 owner 各有各的窗口**
@@ -196,22 +196,22 @@ bool ensure_session(int timeout_ms, std::string* error);
 //  * `window_on_site(owner, site)`：该归属在该站点是否有**活着的**窗口
 //  * `windows_report()`：窗口表诊断行（`#1 run1#n7@https://… ｜ #2 界面#登录窗口@https://…`）
 //  * `close_owner_window(owner, site_key)`：**显式**关闭某归属的窗口（不碰别的归属）
-std::string current_window_site(const WebOwner& owner, const std::string& site_key);
-bool        window_on_site(const WebOwner& owner, const std::string& site);
-std::string windows_report();
-void        close_owner_window(const WebOwner& owner, const std::string& site_key);
+std::string currentWindowSite(const WebOwner& owner, const std::string& site_key);
+bool        windowOnSite(const WebOwner& owner, const std::string& site);
+std::string windowsReport();
+void        closeOwnerWindow(const WebOwner& owner, const std::string& site_key);
 // 按**站点**确保凭证：该归属在该站点**没有**窗口时开**自己的**（不再关别人的窗口 —— `I24`）；
 // 轮询期间只补探测，不重复开窗
-bool        ensure_session(const LoginRequest& site_request, int timeout_ms, std::string* error);
+bool        ensureSession(const LoginRequest& site_request, int timeout_ms, std::string* error);
 // 按**站点**注销：清该站点的内存会话 + 删除该站点 origin 的 Cookie 与 localStorage
 // （不删除整个 profile，故不影响其他站点；PB2-19）
-bool        logout_site(const LoginRequest& site_request, int timeout_ms, std::string* error);
+bool        logoutSite(const LoginRequest& site_request, int timeout_ms, std::string* error);
 
 // 界面登录窗口（`界面#登录窗口` 归属）的句柄：**故意不析构**，避免退出期竞态
 //  * `PW-02`：它现在是**独立窗口** —— 不再被节点的 `ensure_session` 抢占
-LoginWindow& login_window();
+LoginWindow& loginWindow();
 
 // 请求关闭并**逐窗口**等待线程结束（退出主流程前调用；顺序由窗口表给出：后开的先关）
-void stop_login_window();
+void stopLoginWindow();
 
 } // namespace aiwrite::web

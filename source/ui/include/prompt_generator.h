@@ -17,16 +17,16 @@
 namespace aiwrite::ui {
 
 // 请求生成（异步）：`params` 为节点参数的**快照**（生成线程只读，不碰 UI 线程的 graph）
-void request_prompt_generation(const std::string& node_id, const nlohmann::json& params);
+void requestPromptGeneration(const std::string& node_id, const nlohmann::json& params);
 
 // 正在生成？（面板据此显示「正在生成…」并禁用按钮）
-bool prompt_generation_running();
+bool promptGenerationRunning();
 
 // 主线程消费：若最近一次结果属于 `node_id` → 取出 result / error（成功 result 非空）并清空；
 // 返回 true 表示有结果可取。
-bool prompt_generation_consume(const std::string& node_id, std::string* result, std::string* error);
+bool promptGenerationConsume(const std::string& node_id, std::string* result, std::string* error);
 
 // 退出前收尾：等待生成线程结束（同 stop_diagnostics 口径）
-void stop_prompt_generation(int wait_ms = 4000);
+void stopPromptGeneration(int wait_ms = 4000);
 
 } // namespace aiwrite::ui

@@ -40,7 +40,7 @@ double sane_zoom(double value)
 } // namespace
 
 // ------------------------------------------------------------------ 序列化 ----
-nlohmann::json graph_to_json(const Graph& graph)
+nlohmann::json graphToJson(const Graph& graph)
 {
     nlohmann::json document;
     document["version"]     = kWorkflowVersion;
@@ -91,7 +91,7 @@ nlohmann::json graph_to_json(const Graph& graph)
 }
 
 // ------------------------------------------------------------------ 反序列化 --
-bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* error)
+bool graphFromJson(const nlohmann::json& json, Graph& graph, std::string* error)
 {
     const auto fail = [error](const std::string& text) {
         if (error != nullptr) {
@@ -111,7 +111,7 @@ bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* erro
     //  * 旧版本 ⇒ 按迁移表处理（生产表当前为空 ⇒ 记「无需迁移」说明）
     //  * **未来版本 ⇒ 明确拒绝**（旧实现只 warn 后硬读，可能把新格式读坏）
     nlohmann::json document = json; // 迁移就地改的是**副本**，不动调用方的 JSON
-    const WorkflowMigrationOutcome outcome = migrate_workflow(&document);
+    const WorkflowMigrationOutcome outcome = migrateWorkflow(&document);
     for (const std::string& note : outcome.notes) {
         log::info("[工作流迁移] " + note);
     }
@@ -148,9 +148,9 @@ bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* erro
         if (!composite_id.empty()) {
             if (CompositeRegistry::instance().find(composite_id) == nullptr) {
                 log::warn("[工作流] 跳过上级节点（规格缺失，请确认用户源 " +
-                          CompositeRegistry::instance().user_root().string() + "\\" + composite_id +
+                          CompositeRegistry::instance().userRoot().string() + "\\" + composite_id +
                           ".json 或内置源 " +
-                          CompositeRegistry::instance().builtin_root().string() + "\\" +
+                          CompositeRegistry::instance().builtinRoot().string() + "\\" +
                           composite_id + ".json 存在）: " +
                           node_json.value("id", std::string()));
                 continue;
@@ -284,7 +284,7 @@ bool graph_from_json(const nlohmann::json& json, Graph& graph, std::string* erro
 }
 
 // ------------------------------------------------------------------ 文件 IO ----
-bool save_workflow(const Graph& graph, const std::filesystem::path& file, std::string* error)
+bool saveWorkflow(const Graph& graph, const std::filesystem::path& file, std::string* error)
 {
     const auto fail = [error](const std::string& text) {
         if (error != nullptr) {
@@ -305,7 +305,7 @@ bool save_workflow(const Graph& graph, const std::filesystem::path& file, std::s
     if (!stream) {
         return fail("无法写入文件 " + file.string());
     }
-    stream << graph_to_json(graph).dump(2) << "\n";
+    stream << graphToJson(graph).dump(2) << "\n";
     stream.close();
     if (!stream) {
         return fail("写入文件失败 " + file.string());
@@ -317,7 +317,7 @@ bool save_workflow(const Graph& graph, const std::filesystem::path& file, std::s
     return true;
 }
 
-bool load_workflow(const std::filesystem::path& file, Graph& graph, std::string* error)
+bool loadWorkflow(const std::filesystem::path& file, Graph& graph, std::string* error)
 {
     const auto fail = [error](const std::string& text) {
         if (error != nullptr) {
@@ -334,7 +334,7 @@ bool load_workflow(const std::filesystem::path& file, Graph& graph, std::string*
     stream.close();
 
     try {
-        return graph_from_json(nlohmann::json::parse(raw), graph, error);
+        return graphFromJson(nlohmann::json::parse(raw), graph, error);
     }
     catch (const std::exception& ex) {
         return fail(std::string("JSON 解析失败: ") + ex.what());

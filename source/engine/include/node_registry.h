@@ -78,19 +78,19 @@ void registerAllNodes();
 // ============================================================================
 
 // 当前配置表里的提供商 id（official 在前、web 在后；与 N-05 注册时的口径完全一致）
-std::vector<std::string> provider_option_ids();
+std::vector<std::string> providerOptionIds();
 
 // 只刷新**注册表 Definition**（之后新建的节点实例用新枚举）
-void refresh_provider_options();
+void refreshProviderOptions();
 
 // 刷新注册表 + **已有图**里所有节点实例的 `provider` 枚举（运行前校验因此不再误判）
-void refresh_provider_options(Graph& graph);
+void refreshProviderOptions(Graph& graph);
 
 // 重载配置表 + 刷新下游（UI / CLI 只需调用这一个；`graph` 可为 nullptr）
 //  * 单一入口：避免「谁 reload 谁忘了刷新」——`R8` 的配套要求
-void reload_provider_specs_and_refresh(Graph* graph = nullptr);
+void reloadProviderSpecsAndRefresh(Graph* graph = nullptr);
 
 // 只读：当前注册表里 `ProviderConfig.provider` 的枚举选项（自检 / 界面提示用；空 = 未注册）
-std::vector<std::string> provider_param_options();
+std::vector<std::string> providerParamOptions();
 
 } // namespace aiwrite::engine

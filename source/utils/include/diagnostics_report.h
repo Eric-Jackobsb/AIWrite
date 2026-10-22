@@ -35,13 +35,13 @@ struct DiagnosticsReport {
 
     // 取「键 = 值」中的值（去掉键与空白）；键不存在返回空串
     //  * 只取**第一个**匹配；值里允许再出现 " = "
-    std::string key_value(const std::string& key) const;
+    std::string keyValue(const std::string& key) const;
 };
 
 // 采集诊断信息（只读；任何单项失败都降级为一行说明，不抛异常）
-DiagnosticsReport collect_diagnostics();
+DiagnosticsReport collectDiagnostics();
 
 // 便捷：collect_diagnostics().text()
-std::string diagnostics_report_text();
+std::string diagnosticsReportText();
 
 } // namespace aiwrite::utils

@@ -73,10 +73,10 @@ private:
 //    * 线程结束时把结果写入调用方传入的 shared_ptr 槽（调用方取消后不再读取它）。
 //  ⚠️ 契约（重要）：`work` 用到的**所有对象必须由 work 自己持有**（值捕获 / `shared_ptr`），
 //     因为取消后 work 可能仍在使用它们 —— 栈上引用一旦返回就会悬垂。
-bool run_cancellable(const CancelToken* token, std::function<void()> work, int poll_ms = 50);
+bool runCancellable(const CancelToken* token, std::function<void()> work, int poll_ms = 50);
 
 // 可中断等待（重试间隔 / 退避用）：置位令牌 ⇒ **立即返回 true**（调用方据此放弃等待）
 //  * `token == nullptr` ⇒ 普通睡眠后返回 false（与改造前行为一致）
-bool sleep_interruptible(const CancelToken* token, int ms, int poll_ms = 50);
+bool sleepInterruptible(const CancelToken* token, int ms, int poll_ms = 50);
 
 } // namespace aiwrite::ai

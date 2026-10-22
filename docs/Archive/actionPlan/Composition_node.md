@@ -1,7 +1,7 @@
 ﻿# Composite_Node_Design：上级节点设计文档
 
 > 📦 **已归档（2026-10-18 · 指令式归档）** —— 实施完成、仅剩**人工验收**，按 `Archive/README.md` §三 5 直接归档。
-> **人工验证 / 待拍板承接位** → [../../actionPlan/ToVerify.todo](../../actionPlan/ToVerify.todo)（CN-01 人工验收十项清单 + §14 待拍板项）
+> **人工验证 / 待拍板承接位** → [../../DevPlan.todo](../../DevPlan.todo) Test（CN-01 人工验收十项清单 + §14 待拍板项 · 2026-10-21 由 `ToVerify.todo` 并入）
 > **后续实施承接位** → [../../draft/M_preset_library.md](../../draft/M_preset_library.md)（官方预设节点库 · 组合层落地 · PS-01…）
 > 归档原则：**只增不改** —— 除本标记行与相对链接层级修正外，正文保持原样。
 
@@ -9,7 +9,7 @@
 > 定位：定义「**上级节点（Composite Node）**」——由基础节点有机组合形成的迷你工作流，可命名、可自定义、可放入其他工作流。
 > 上游依据：开发者 2026-10-16 拍板（可组合节点思路 + 10 项设计决策 + `CN-D20` L4 重启）
 > 编号空间：`CN-*`（Composite Node 任务）· `CN-D*`（决议）· `CN-Q*`（待确认）—— 已登记 [../../../AI_README.md](../../../AI_README.md) §5
-> 状态：✅ **已归档（2026-10-18 · 指令式）** —— 设计定稿 + 实施完成（代码 2026-10-16）；⏳ **人工验收 → [ToVerify.todo](../../actionPlan/ToVerify.todo)**
+> 状态：✅ **已归档（2026-10-18 · 指令式）** —— 设计定稿 + 实施完成（代码 2026-10-16）；⏳ **人工验收 → [DevPlan.todo](../../DevPlan.todo) Test**（2026-10-21 由 `ToVerify.todo` 并入）
 > 相关：[M_node_expansion.md](../../actionPlan/M_node_expansion.md) · [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) · [M_8nodes_extension.md](../../actionPlan/M_8nodes_extension.md) · [../../ai_writer_nodes.md](../../ai_writer_nodes.md) · [../../roadmap.md](../../roadmap.md)
 > 建立：**2026-10-16**（v1）
 
@@ -638,4 +638,4 @@
 ---
 
 **文档结束。**
-**状态：✅ 已归档（2026-10-18 · 指令式）—— 设计定稿（2026-10-16）· 实施完成（代码 2026-10-16）· ⏳ 人工验收 → [../../actionPlan/ToVerify.todo](../../actionPlan/ToVerify.todo)。**
+**状态：✅ 已归档（2026-10-18 · 指令式）—— 设计定稿（2026-10-16）· 实施完成（代码 2026-10-16）· ⏳ 人工验收 → [../../DevPlan.todo](../../DevPlan.todo) Test（2026-10-21 由 `ToVerify.todo` 并入）。**

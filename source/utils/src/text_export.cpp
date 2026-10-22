@@ -38,7 +38,7 @@ std::string local_time_text(const char* format)
 
 } // namespace
 
-std::string sanitize_file_stem(const std::string& stem)
+std::string sanitizeFileStem(const std::string& stem)
 {
     std::string out;
     for (const unsigned char ch : stem) {
@@ -59,7 +59,7 @@ std::string sanitize_file_stem(const std::string& stem)
     return out.empty() ? std::string("未命名") : out;
 }
 
-std::string render_document_name(const std::string& workflow, const std::string& stamp,
+std::string renderDocumentName(const std::string& workflow, const std::string& stamp,
                                  const std::string& ext)
 {
     std::string normalized = ext.empty() ? std::string("md") : ext;
@@ -69,11 +69,11 @@ std::string render_document_name(const std::string& workflow, const std::string&
     for (char& ch : normalized) {
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
     }
-    return sanitize_file_stem(workflow) + "-" + (stamp.empty() ? document_stamp_now() : stamp) + "." +
+    return sanitizeFileStem(workflow) + "-" + (stamp.empty() ? documentStampNow() : stamp) + "." +
            normalized;
 }
 
-std::string build_document_body(const std::string& text, const std::string& label,
+std::string buildDocumentBody(const std::string& text, const std::string& label,
                                 const DocumentMeta& meta, bool include_meta,
                                 const std::string& header_template)
 {
@@ -114,7 +114,7 @@ std::string build_document_body(const std::string& text, const std::string& labe
     return body;
 }
 
-bool write_document(const std::string& path, const std::string& body, bool overwrite,
+bool writeDocument(const std::string& path, const std::string& body, bool overwrite,
                     std::string* final_path, std::string* error)
 {
     if (path.empty()) {
@@ -181,33 +181,33 @@ bool write_document(const std::string& path, const std::string& body, bool overw
     return true;
 }
 
-std::string document_stamp_now()
+std::string documentStampNow()
 {
     return local_time_text("%Y%m%d-%H%M%S");
 }
 
-std::string document_time_text()
+std::string documentTimeText()
 {
     return local_time_text("%Y-%m-%d %H:%M:%S");
 }
 
-ExportResult export_text_document(const ExportRequest& request)
+ExportResult exportTextDocument(const ExportRequest& request)
 {
     ExportResult result;
     std::filesystem::path target(request.path);
     if (target.empty()) {
-        const std::string dir = request.dir.empty() ? (paths::data_root() / "outputs").string() : request.dir;
+        const std::string dir = request.dir.empty() ? (paths::dataRoot() / "outputs").string() : request.dir;
         // M_8nodes_extension L1-b（§4.8）：自动导出文件名主干可由 file_stem 覆盖（空 = 工作流名）
         target = std::filesystem::path(dir) /
-                 render_document_name(request.file_stem.empty() ? request.meta.workflow
+                 renderDocumentName(request.file_stem.empty() ? request.meta.workflow
                                                                 : request.file_stem,
-                                      document_stamp_now(), request.ext);
+                                      documentStampNow(), request.ext);
     }
-    const std::string body = build_document_body(request.text, request.label, request.meta,
+    const std::string body = buildDocumentBody(request.text, request.label, request.meta,
                                                 request.include_meta, request.header_template);
     std::string       final_path;
     std::string       error;
-    if (!write_document(target.string(), body, request.overwrite, &final_path, &error)) {
+    if (!writeDocument(target.string(), body, request.overwrite, &final_path, &error)) {
         result.error = error;
         return result;
     }
@@ -217,7 +217,7 @@ ExportResult export_text_document(const ExportRequest& request)
     return result;
 }
 
-int text_export_selftest()
+int textExportSelftest()
 {
     int               failed = 0;
     std::error_code   ec;
@@ -235,8 +235,8 @@ int text_export_selftest()
 
     // 1) 文件名渲染 + 清洗
     {
-        const std::string name = render_document_name(meta.workflow, stamp, ".MD");
-        const std::string dirty = sanitize_file_stem("a/b:c*?d " );
+        const std::string name = renderDocumentName(meta.workflow, stamp, ".MD");
+        const std::string dirty = sanitizeFileStem("a/b:c*?d " );
         const bool ok = name == "我的工作流-20260925-213000.md" && dirty.find_first_of("<>:\"/\\|?*") == std::string::npos &&
                         dirty.find("_") != std::string::npos;
         if (!ok) { ++failed; log::error("[导出自检] 1 文件名渲染/清洗：失败 name=" + name + " dirty=" + dirty); }
@@ -245,8 +245,8 @@ int text_export_selftest()
 
     // 2) 正文（无元信息头 == text；有则包含 label/工作流/节点）
     {
-        const std::string plain = build_document_body(text, "最终输出", meta, false);
-        const std::string full  = build_document_body(text, "最终输出", meta, true);
+        const std::string plain = buildDocumentBody(text, "最终输出", meta, false);
+        const std::string full  = buildDocumentBody(text, "最终输出", meta, true);
         const bool ok = plain == text && full.find("最终输出") != std::string::npos &&
                         full.find(meta.workflow) != std::string::npos && full.find("n4") != std::string::npos &&
                         full.size() > text.size();
@@ -264,13 +264,13 @@ int text_export_selftest()
     request.dir          = dir;
     request.ext          = "md";
     {
-        const ExportResult first = export_text_document(request);
+        const ExportResult first = exportTextDocument(request);
         std::string        read_back;
         {
             std::ifstream stream(first.path, std::ios::binary);
             read_back.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
         }
-        const bool ok = first.ok && read_back == build_document_body(text, request.label, meta, true);
+        const bool ok = first.ok && read_back == buildDocumentBody(text, request.label, meta, true);
         if (!ok) { ++failed; log::error("[导出自检] 3 写盘回读：失败 " + first.error); }
         else { log::info("[导出自检] 3 写盘内容 == 内存正文：OK"); }
     }
@@ -279,8 +279,8 @@ int text_export_selftest()
     {
         ExportRequest      safe     = request;
         safe.overwrite              = false;
-        const ExportResult keep     = export_text_document(safe);
-        const ExportResult replaced = export_text_document(request);
+        const ExportResult keep     = exportTextDocument(safe);
+        const ExportResult replaced = exportTextDocument(request);
         const bool ok = keep.ok && replaced.ok && keep.path != replaced.path;
         if (!ok) { ++failed; log::error("[导出自检] 4 同名自动改名：失败"); }
         else { log::info("[导出自检] 4 同名策略（不覆盖→改名）：OK"); }
@@ -290,7 +290,7 @@ int text_export_selftest()
     {
         ExportRequest bad = request;
         bad.path          = "Z:\\aiwrite_should_not_exist\\x.md";
-        const ExportResult result = export_text_document(bad);
+        const ExportResult result = exportTextDocument(bad);
         if (result.ok || result.error.empty()) { ++failed; log::error("[导出自检] 5 不可写路径：失败"); }
         else { log::info("[导出自检] 5 不可写路径返回明确错误：OK"); }
     }
@@ -307,7 +307,7 @@ int text_export_selftest()
 
     // 7) label 生效（标题行包含标签）
     {
-        const std::string body = build_document_body(text, "我的标签", meta, true);
+        const std::string body = buildDocumentBody(text, "我的标签", meta, true);
         if (body.find("# 我的标签") == std::string::npos) { ++failed; log::error("[导出自检] 7 label：失败"); }
         else { log::info("[导出自检] 7 label 进入标题：OK"); }
     }

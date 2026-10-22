@@ -28,19 +28,19 @@ std::string node_output_text(const engine::Graph& graph, const engine::Executor&
 
 // 全部结果文本（含每节点标题行：id · 类型 · 状态 · 耗时；失败节点带错误行）
 // 供「复制全文 / 导出到文件」与无界面自检使用
-std::string run_output_text(const engine::Graph& graph, const engine::Executor& executor);
+std::string runOutputText(const engine::Graph& graph, const engine::Executor& executor);
 
 // ---- PB-01：读模型重载（GUI 用；运行中读快照，避免跨线程读 Executor 运行态）----
 //  * 快照中的节点文本已由 makeSnapshot 用同一 nodeOutputText 规则落定 → 与上面两个重载逐字符一致
 std::string node_output_text(const engine::Graph& graph, const engine::RunSnapshot& snapshot,
                              const std::string& node_id);
-std::string run_output_text(const engine::Graph& graph, const engine::RunSnapshot& snapshot);
+std::string runOutputText(const engine::Graph& graph, const engine::RunSnapshot& snapshot);
 
 // 绘制输出面板（可停靠；默认不显示由调用方控制）
 // M_textio P3：把某节点的结果导出为文档（TextOutput = 最终输出）
 //  * 正文与预览同源（node_output_text）；路径由保存对话框给出；失败写状态栏
-bool export_node_document(EditorState& state, const std::string& node_id);
+bool exportNodeDocument(EditorState& state, const std::string& node_id);
 
-void draw_output_panel(const char* title, bool* open, EditorState& state);
+void drawOutputPanel(const char* title, bool* open, EditorState& state);
 
 } // namespace aiwrite::ui

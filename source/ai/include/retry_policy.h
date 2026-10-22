@@ -16,12 +16,12 @@
 namespace aiwrite::ai {
 
 // 该 HTTP 状态（0 = 网络/超时类失败）是否值得重试
-bool http_status_retryable(int http_status);
+bool httpStatusRetryable(int http_status);
 
 // 第 `attempt` 次失败后（attempt 从 0 开始）重试前的等待毫秒；`base_ms<=0` 取 2000
-int retry_delay_ms(int base_ms, int attempt);
+int retryDelayMs(int base_ms, int attempt);
 
 // 重试总次数（`retry_enabled=false` ⇒ 0；负数按 0；上限 5 —— 防呆）
-int clamp_retry_count(bool retry_enabled, int retry_count);
+int clampRetryCount(bool retry_enabled, int retry_count);
 
 } // namespace aiwrite::ai

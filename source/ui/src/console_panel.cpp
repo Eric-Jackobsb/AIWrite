@@ -52,7 +52,7 @@ log::Level min_level_of(LevelFilter filter)
 } // namespace
 
 // 过滤后的日志纯文本（与面板渲染共用同一个 log::filter，保证"复制的内容 == 屏幕可见"）
-std::string console_visible_text(int level_filter, const std::string& search)
+std::string consoleVisibleText(int level_filter, const std::string& search)
 {
     const LevelFilter             filter = static_cast<LevelFilter>(level_filter);
     const std::vector<log::Entry> rows =
@@ -66,7 +66,7 @@ std::string console_visible_text(int level_filter, const std::string& search)
     return text;
 }
 
-void draw_console_panel(const char* title, bool* open, float default_height)
+void drawConsolePanel(const char* title, bool* open, float default_height)
 {
     if (open != nullptr && !*open) {
         return;
@@ -92,7 +92,7 @@ void draw_console_panel(const char* title, bool* open, float default_height)
     ImGui::Checkbox("自动滚动", &g_auto_scroll);
     ImGui::SameLine();
     if (ImGui::Button("清空")) {
-        log::clear_entries();
+        log::clearEntries();
     }
     ImGui::SameLine();
     ImGui::TextDisabled("上限 %zu 条", log::kMaxEntries);
@@ -102,11 +102,11 @@ void draw_console_panel(const char* title, bool* open, float default_height)
     const std::vector<log::Entry> rows =
         log::filter(min_level_of(g_level_filter), use_level_filter, std::string(g_search));
     const std::string visible_text =
-        console_visible_text(static_cast<int>(g_level_filter), std::string(g_search));
+        consoleVisibleText(static_cast<int>(g_level_filter), std::string(g_search));
 
     ImGui::Separator();
     if (ImGui::Button("复制可见")) {
-        copy_text(visible_text, "[Console] 可见");
+        copyText(visible_text, "[Console] 可见");
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("复制当前级别过滤 + 搜索后的 %zu 行（与屏幕上可见内容一致）", rows.size());
@@ -119,7 +119,7 @@ void draw_console_panel(const char* title, bool* open, float default_height)
             all += entry.text;
             all += '\n';
         }
-        copy_text(all, "[Console] 全部");
+        copyText(all, "[Console] 全部");
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("复制缓冲区内的全部 %zu 行（不受过滤/搜索影响）", log::entries().size());
@@ -183,7 +183,7 @@ void draw_console_panel(const char* title, bool* open, float default_height)
     }
 
     ImGui::TextDisabled("显示 %zu / %zu 条  |  日志文件: %s", rows.size(), log::entries().size(),
-                        log::file_path_string().c_str());
+                        log::filePathString().c_str());
 
     ImGui::End();
 }

@@ -141,7 +141,7 @@ Fonts load_fonts(float scale)
     Fonts fonts;
 
     const std::vector<std::filesystem::path> dirs = {
-        paths::assets_dir() / "fonts", std::filesystem::path("C:/Windows/Fonts")};
+        paths::assetsDir() / "fonts", std::filesystem::path("C:/Windows/Fonts")};
     const std::vector<std::string> cjk_names = {
         "msyh.ttc", "msyh.ttf", "simhei.ttf", "Deng.ttf", "segoeui.ttf"};
 
@@ -263,18 +263,18 @@ std::string provider_mode_text(const EditorState& state)
         if (mode_value != "web") {
             return "推理模式: 官方 API";
         }
-        const engine::EffectiveProvider effective = engine::resolve_self_provider(node);
-        const ai::ProviderWebSpec       site      = ai::strict_web_spec_for(effective.spec);
-        const std::string               site_key  = web::site_key_of(site.login_url);
+        const engine::EffectiveProvider effective = engine::resolveSelfProvider(node);
+        const ai::ProviderWebSpec       site      = ai::strictWebSpecFor(effective.spec);
+        const std::string               site_key  = web::siteKeyOf(site.login_url);
         const web::Session              session   = web::SessionStore::instance().snapshot(site_key);
         const ai::WebSessionVerdict     verdict =
-            ai::web_session_state(effective.spec, web::web_session_evidence(session));
-        if (verdict.state == ai::WebSessionState::logged_in) {
+            ai::webSessionState(effective.spec, web::webSessionEvidence(session));
+        if (verdict.state == ai::WebSessionState::loggedIn) {
             return "推理模式: 网页版（已登录 " +
                    (site_key.empty() ? std::string("该站点") : site_key) + "，Cookie " +
-                   std::to_string(session.cookie_count()) + " 条）";
+                   std::to_string(session.cookieCount()) + " 条）";
         }
-        return "推理模式: 网页版（" + ai::web_session_state_label(verdict.state) +
+        return "推理模式: 网页版（" + ai::webSessionStateLabel(verdict.state) +
                (site_key.empty() ? std::string() : "：" + site_key) + "）";
     }
     return "推理模式: 未配置（缺少提供商配置节点）";
@@ -287,7 +287,7 @@ std::string provider_summary_text(const EditorState& state)
         if (node.type != "ProviderConfig") {
             continue;
         }
-        const engine::EffectiveProvider effective = engine::resolve_self_provider(node);
+        const engine::EffectiveProvider effective = engine::resolveSelfProvider(node);
         if (!effective.resolved || effective.display.empty()) {
             return "提供商: 未选择";
         }
@@ -347,9 +347,9 @@ void draw_info_panel(const char* title, bool* open)
     }
 
     if (ImGui::CollapsingHeader("数据目录", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::TextWrapped("数据根目录 : %s", paths::data_root().string().c_str());
-        ImGui::TextWrapped("配置文件   : %s", paths::config_file().string().c_str());
-        ImGui::TextWrapped("日志文件   : %s", log::file_path_string().c_str());
+        ImGui::TextWrapped("数据根目录 : %s", paths::dataRoot().string().c_str());
+        ImGui::TextWrapped("配置文件   : %s", paths::configFile().string().c_str());
+        ImGui::TextWrapped("日志文件   : %s", log::filePathString().c_str());
     }
 
     const EditorState& state = editor();
@@ -413,15 +413,15 @@ void draw_first_run_guide(Config& config, EditorState& state,
     const auto finish = [&](bool started) {
         g_done                   = true;
         config.ui.first_run_done = true;
-        if (save_config(paths::config_file(), config)) {
-            set_app_config(config);
+        if (saveConfig(paths::configFile(), config)) {
+            setAppConfig(config);
             log::info("[首启] 引导已结束（" + std::string(started ? "开始使用" : "跳过") +
                       "）；已写入 ui.first_run_done = true");
         }
         else {
             log::warn("[首启] 引导结束但 config.toml 写入失败（下次启动会再显示）");
         }
-        state.set_status(started ? "欢迎使用！建议先点工具栏「运行」跑一次示例"
+        state.setStatus(started ? "欢迎使用！建议先点工具栏「运行」跑一次示例"
                                  : "已跳过首次引导（帮助 → 首次使用引导 可再看）");
     };
 
@@ -439,7 +439,7 @@ void draw_first_run_guide(Config& config, EditorState& state,
         if (!g_dep.installed) {
             ImGui::TextWrapped("%s", utils::webview2_install_advice().c_str());
             // PQ-02：安装包**附带** Bootstrapper 时给「随包安装」；未附带则只给官方下载页
-            const std::string bundled = utils::bundled_bootstrapper_path();
+            const std::string bundled = utils::bundledBootstrapperPath();
             if (!bundled.empty()) {
                 if (ImGui::Button("安装 WebView2 运行时（随包附带）")) {
                     open_url(bundled); // 交给对方安装程序；需要管理员时 Windows 会弹 UAC
@@ -454,7 +454,7 @@ void draw_first_run_guide(Config& config, EditorState& state,
             ImGui::TextDisabled("（装完回来点「重新检测」；系统通常已自带）");
         }
         if (ImGui::Button("重新检测")) {
-            g_dep = utils::detect_webview2_runtime();
+            g_dep = utils::detectWebview2Runtime();
             log::info("[首启] 重新检测依赖：" + utils::webview2_runtime_summary(g_dep));
         }
         ImGui::Separator();
@@ -462,8 +462,8 @@ void draw_first_run_guide(Config& config, EditorState& state,
         ImGui::Text("第 2 步 · 用示例工作流试跑一次");
         ImGui::TextWrapped("先不配任何 Key 也能看到界面与流程：点下面的按钮载入示例，再点工具栏「运行」。");
         if (ImGui::Button("载入示例工作流")) {
-            state.create_sample_workflow();
-            state.set_status("已载入示例工作流：点工具栏「运行」试跑");
+            state.createSampleWorkflow();
+            state.setStatus("已载入示例工作流：点工具栏「运行」试跑");
         }
         ImGui::Separator();
 
@@ -472,7 +472,7 @@ void draw_first_run_guide(Config& config, EditorState& state,
             "在画布上选中 ProviderConfig 节点 → 右侧「参数」面板里选提供商与模型。\n"
             "官方 API 需要 Key（存进本地凭据库，加密保存、不写明文）；网页版站点用内嵌浏览器登录一次即可。");
         if (ImGui::Button("打开设置面板")) {
-            open_settings_panel();
+            openSettingsPanel();
         }
         ImGui::Separator();
 
@@ -507,16 +507,16 @@ int run(const AppOptions& options)
 
     // 配置（M1-07：读配置 / 写日志）—— 必须早于窗口创建：窗口几何（F3 / PD-04）来自 config.toml [ui]
     Config config;
-    (void)load_config(paths::config_file(), config);
+    (void)loadConfig(paths::configFile(), config);
     // PA-07：灌入进程级缓存，供非 UI 代码（provider / 工具）读取
-    set_app_config(config);
+    setAppConfig(config);
 
     // PA-08：明确"哪些配置已生效 / 哪些还没接线"，消除"改了 config 却没效果"的困惑
     {
         log::info("[配置] 已接线：ui.show_grid / ui.console_height / ui.running_animation / "
                   "面板可见性 / 窗口几何（window_*）/ output.archive_dir 等");
         std::string unwired;
-        for (const std::string& field : unwired_config_fields()) {
+        for (const std::string& field : unwiredConfigFields()) {
             unwired += (unwired.empty() ? "" : "、") + field;
         }
         log::info("[配置] 以下字段尚未生效（归口补丁见使用说明）：" + unwired);
@@ -524,9 +524,9 @@ int run(const AppOptions& options)
 
     // PB-06 / M_patchAB §2.3（`PB-06` 剩余）：凭据库启动惰性清理（TTL 取自 `[credentials].ttl_days`）
     {
-        const int   ttl_days = aiwrite::app_config().credentials.ttl_days;
+        const int   ttl_days = aiwrite::appConfig().credentials.ttl_days;
         std::string purge_error;
-        const int   removed = utils::purge_expired_credentials(ttl_days, &purge_error);
+        const int   removed = utils::purgeExpiredCredentials(ttl_days, &purge_error);
         if (removed > 0) {
             log::info("[凭据] 启动清理：已移除 " + std::to_string(removed) + " 个过期条目（TTL " +
                       std::to_string(ttl_days) + " 天）");
@@ -536,7 +536,7 @@ int run(const AppOptions& options)
     // ---- M6：依赖自检（WebView2 运行时）----
     //  * 面向非技术用户：缺依赖时**日志写明「缺什么、去哪装」**，界面另有首启引导窗口
     //  * 探测是只读的（不下载、不安装、不改配置）
-    const utils::WebView2RuntimeInfo webview2 = utils::detect_webview2_runtime();
+    const utils::WebView2RuntimeInfo webview2 = utils::detectWebview2Runtime();
     log::info("[依赖] " + utils::webview2_runtime_summary(webview2));
     if (!webview2.installed) {
         log::warn("[依赖] 网页版站点不可用：请安装 WebView2 运行时"
@@ -546,11 +546,11 @@ int run(const AppOptions& options)
     // ---- M6 接线：`advanced.log_ttl_days`（启动清理旧日志；活动文件永不删）----
     {
         std::string purge_error;
-        const int   removed = log::purge_old_files(config.advanced.log_ttl_days, &purge_error);
+        const int   removed = log::purgeOldFiles(config.advanced.log_ttl_days, &purge_error);
         if (removed > 0) {
             log::info("[日志] 已清理 " + std::to_string(removed) + " 个超过 " +
                       std::to_string(config.advanced.log_ttl_days) + " 天的旧日志（" +
-                      paths::logs_dir().string() + "）");
+                      paths::logsDir().string() + "）");
         }
         if (!purge_error.empty()) {
             log::warn("[日志] 旧日志清理未全部成功：" + purge_error);
@@ -581,7 +581,7 @@ int run(const AppOptions& options)
 
     const bool        has_saved_geometry = config.ui.window_width > 0 && config.ui.window_height > 0;
     const bool        has_saved_position =
-        utils::has_position(utils::WindowRect{config.ui.window_pos_x, config.ui.window_pos_y, 0, 0});
+        utils::hasPosition(utils::WindowRect{config.ui.window_pos_x, config.ui.window_pos_y, 0, 0});
     utils::WindowRect desired{};
     desired.width  = has_saved_geometry ? config.ui.window_width : window_width;
     desired.height = has_saved_geometry ? config.ui.window_height : window_height;
@@ -626,7 +626,7 @@ int run(const AppOptions& options)
     io.ConfigWindowsMoveFromTitleBarOnly = true;
 
     // 布局文件放在数据目录，避免污染程序目录
-    static std::string ini_path = (paths::data_root() / "imgui.ini").string();
+    static std::string ini_path = (paths::dataRoot() / "imgui.ini").string();
     io.IniFilename = ini_path.c_str();
 
     float xscale = 1.0f;
@@ -640,6 +640,7 @@ int run(const AppOptions& options)
     }
 
     const Fonts fonts = load_fonts(ui_scale);
+    io.FontDefault = fonts.ui; // DEBT-L11（M6-05）：显式指定默认字体（= CJK 主字体；回退路径亦正确）
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
@@ -668,13 +669,13 @@ int run(const AppOptions& options)
               (canvas_options.show_grid ? "开" : "关"));
 
     // 启动即创建示例工作流，便于直接验证节点操作（可用工具栏「新建（清空）」重来）
-    editor().create_sample_workflow();
+    editor().createSampleWorkflow();
 
     // --open <路径>：启动即打开指定工作流（覆盖上面的示例工作流）
     //  * 存在性/解析失败只告警并保留示例工作流（不阻塞启动）
     if (!options.open_workflow.empty()) {
         std::string open_error;
-        if (editor().open_workflow_from(options.open_workflow, &open_error)) {
+        if (editor().openWorkflowFrom(options.open_workflow, &open_error)) {
             log::info("[启动] 已按 --open 打开工作流：" + options.open_workflow + "（节点 " +
                       std::to_string(editor().graph.nodes.size()) + " / 连线 " +
                       std::to_string(editor().graph.edges.size()) + "）");
@@ -701,7 +702,7 @@ int run(const AppOptions& options)
         log::warn("[自动保存] " + autosave_temp_error);
     }
 
-    engine::AutosaveInfo autosave_info   = engine::autosave_probe();
+    engine::AutosaveInfo autosave_info   = engine::autosaveProbe();
     std::string          autosave_reason;
     bool                 autosave_ask    = false; // 需要弹恢复询问
     bool                 autosave_popup_opened = false;
@@ -716,7 +717,7 @@ int run(const AppOptions& options)
     }
     const bool autosave_should_ask =
         config.ui.autosave_restore_prompt &&
-        engine::autosave_should_offer_restore(autosave_info, &autosave_reason);
+        engine::autosaveShouldOfferRestore(autosave_info, &autosave_reason);
     if (autosave_should_ask) {
         autosave_ask = true;
         log::info("[自动保存] 将询问是否恢复未保存的更改（判据：" + autosave_reason + "）");
@@ -724,14 +725,14 @@ int run(const AppOptions& options)
     else {
         // 无需询问（无快照 / 快照不比工作流新 / 用户选过「不再提示」）⇒ 直接放行自动保存
         log::info("[自动保存] 无需恢复询问（" + autosave_reason + "）→ 自动保存已放行");
-        editor().mark_autosave_baseline();
-        editor().pause_autosave(false);
+        editor().markAutosaveBaseline();
+        editor().pauseAutosave(false);
     }
 
     // 诊断：安装首异常计数器（VEH）——用于定位第三方依赖反复抛异常 / 内存增长问题，
     // 结果会以「[诊断]」行写入 app.log（带限流）
-    utils::diagnostics::install_exception_counter();
-    utils::diagnostics::log_memory_sample("启动基线");
+    utils::diagnostics::installExceptionCounter();
+    utils::diagnostics::logMemorySample("启动基线");
 
     log::info("主窗口已创建 " + std::to_string(window_width) + "x" + std::to_string(window_height) +
               "，DPI 缩放 " + std::to_string(ui_scale));
@@ -778,8 +779,8 @@ int run(const AppOptions& options)
                 else if (geometry_dirty &&
                          now - last_geometry_change >= std::chrono::seconds(2)) {
                     geometry_dirty = false;
-                    if (save_config(paths::config_file(), config)) {
-                        set_app_config(config); // PA-07：保持进程缓存与磁盘一致
+                    if (saveConfig(paths::configFile(), config)) {
+                        setAppConfig(config); // PA-07：保持进程缓存与磁盘一致
                         log::info("[窗口几何] 已保存到 config.toml（" + std::to_string(width) + "x" +
                                   std::to_string(height) + " @ " + std::to_string(window_x) + "," +
                                   std::to_string(window_y) + (maximized ? "，最大化=是" : "") + "）");
@@ -792,23 +793,23 @@ int run(const AppOptions& options)
         }
 
         // ---- 执行会话推进（M2-04：一帧最多推进一个节点；无运行会话时为空操作）----
-        editor().tick_run();
+        editor().tickRun();
 
         // ---- PC-01：自动保存节流（1 Hz 探测 + 静默 3 秒后写快照；暂停/无变更时零写盘）----
-        editor().tick_autosave();
+        editor().tickAutosave();
 
         // ---- M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：后台诊断结论 → 状态栏 ----
         //  * 工作线程只**投递**结论（post_background_status）；此处（主线程）才写 UI 状态
         std::string background_status;
-        if (editor().take_background_status(&background_status)) {
-            editor().set_status(background_status);
+        if (editor().takeBackgroundStatus(&background_status)) {
+            editor().setStatus(background_status);
         }
 
         // ---- 诊断（限流输出）：放在"最小化检查"之前，保证窗口不可见时也能采样 ----
         //  · 首异常累计（有变化才输出，限流）
         //  · 心跳（每 300 帧）：确认渲染循环真的在跑
         //  · 每 30 秒一次内存采样（工作集 / 私有 / 峰值 + 业务计数）
-        utils::diagnostics::log_exception_summary();
+        utils::diagnostics::logExceptionSummary();
         const bool window_iconified = (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0);
         if (frame_index <= 5 || frame_index % 3600 == 0) { // 启动前几帧 + 之后约每 1 分钟
             log::info("[诊断] 心跳 帧=" + std::to_string(frame_index) + " 最小化=" +
@@ -820,7 +821,7 @@ int run(const AppOptions& options)
         if (diagnostic_now - last_memory_sample >= std::chrono::seconds(30)) {
             last_memory_sample = diagnostic_now;
             const EditorState& diagnostic_state = editor();
-            utils::diagnostics::log_memory_sample(
+            utils::diagnostics::logMemorySample(
                 "节点 " + std::to_string(diagnostic_state.graph.nodes.size()) + " / 连线 " +
                 std::to_string(diagnostic_state.graph.edges.size()) + " / 撤销栈 " +
                 std::to_string(diagnostic_state.undo.undoDepth()));
@@ -838,32 +839,32 @@ int run(const AppOptions& options)
 
         // P0（2026-10-09）：纹理缓存「逐帧标记」——本帧用到的纹理本轮不淘汰。
         // 必须紧跟 NewFrame()（在画布/面板开始取纹理之前），见 ui/texture_cache.h 说明。
-        ui::begin_frame();
+        ui::beginFrame();
 
         // [调试·自动复现] --auto-open-composite：程序化走「新建上级节点」路径。
         // 第 6 帧打开对话框并在其可见帧自动点「创建并打开编辑器」（与手工同路径）。
         if (options.auto_open_composite && frame_index == 6) {
-            composite_editor_test_drive_new_dialog();
+            compositeEditorTestDriveNewDialog();
             log::info("[自动复现] 已触发「新建上级节点」对话框（第 6 帧）");
         }
         // 若新建因规格校验失败而未打开编辑器：第 12 帧再走「内存会话」路径（旧实现），
         // 以判定断言是否来自「无文件支撑的内存会话」（composite_editor_open 的 find 落空回退）。
-        if (options.auto_open_composite && frame_index == 12 && !composite_editor_state().active) {
+        if (options.auto_open_composite && frame_index == 12 && !compositeEditorState().active) {
             engine::CompositeSpec fresh;
-            fresh.id   = engine::CompositeRegistry::instance().make_id();
+            fresh.id   = engine::CompositeRegistry::instance().makeId();
             fresh.name = "内存会话复现";
-            composite_editor_open(fresh.id);
+            compositeEditorOpen(fresh.id);
             log::info("[自动复现] 走内存会话路径打开编辑器 " + fresh.id + "（第 12 帧）");
         }
         // 编辑器已打开后：第 16 帧添加一个内部节点（覆盖非空内部图的 BeginNode 绘制路径），
         // 第 24 帧点「保存」（应因未标记输出被严格校验拦截 → 属预期行为，非崩溃）。
-        if (options.auto_open_composite && frame_index == 16 && composite_editor_state().active) {
-            const std::string nid = composite_editor_add_node("TextInput", 0.0f, 0.0f);
+        if (options.auto_open_composite && frame_index == 16 && compositeEditorState().active) {
+            const std::string nid = compositeEditorAddNode("TextInput", 0.0f, 0.0f);
             log::info("[自动复现] 编辑器内添加内部节点 " + nid + "（第 16 帧）");
         }
-        if (options.auto_open_composite && frame_index == 24 && composite_editor_state().active) {
+        if (options.auto_open_composite && frame_index == 24 && compositeEditorState().active) {
             std::string save_err;
-            const bool  saved = composite_editor_save(&save_err);
+            const bool  saved = compositeEditorSave(&save_err);
             log::info(std::string("[自动复现] 编辑器保存（预期失败：未标记输出）ok=") +
                       (saved ? "1" : "0") + "  err=" + save_err + "（第 24 帧）");
         }
@@ -891,23 +892,23 @@ int run(const AppOptions& options)
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("文件")) {
                 if (ImGui::MenuItem("新建（清空画布）")) {
-                    state.clear_workflow();
+                    state.clearWorkflow();
                 }
                 if (ImGui::MenuItem("示例工作流")) {
-                    state.create_sample_workflow();
+                    state.createSampleWorkflow();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("打开工作流…")) {
-                    open_workflow_dialog();
+                    openWorkflowDialog();
                 }
                 if (ImGui::MenuItem("保存工作流…")) {
-                    save_workflow_dialog();
+                    saveWorkflowDialog();
                 }
                 if (ImGui::BeginMenu("最近打开")) {
                     // M_patchAB §4（PC-03 / FEA-M2-02）：打开前**校验存在性** ——
                     // 失效项灰显（不可点）+ 悬停解释 + 底部一键「清理失效条目」
                     const std::vector<engine::RecentStatus> recent =
-                        engine::recent_with_status();
+                        engine::recentWithStatus();
                     if (recent.empty()) {
                         ImGui::MenuItem("（暂无记录）", nullptr, false, false);
                     }
@@ -917,8 +918,8 @@ int run(const AppOptions& options)
                         if (ImGui::MenuItem(label.c_str(), nullptr, /*selected=*/false,
                                             /*enabled=*/status.exists)) {
                             std::string error;
-                            if (!state.open_workflow_from(entry.path, &error)) {
-                                state.set_status("打开失败：" + error);
+                            if (!state.openWorkflowFrom(entry.path, &error)) {
+                                state.setStatus("打开失败：" + error);
                             }
                         }
                         if (ImGui::IsItemHovered()) {
@@ -933,23 +934,23 @@ int run(const AppOptions& options)
                             }
                         }
                     }
-                    const std::size_t missing = engine::count_missing_recent();
+                    const std::size_t missing = engine::countMissingRecent();
                     if (missing > 0) {
                         ImGui::Separator();
                         if (ImGui::MenuItem(("清理失效条目（" + std::to_string(missing) + "）").c_str())) {
-                            const std::size_t removed = engine::prune_missing_recent();
-                            state.set_status("已清理 " + std::to_string(removed) + " 条失效的最近记录");
+                            const std::size_t removed = engine::pruneMissingRecent();
+                            state.setStatus("已清理 " + std::to_string(removed) + " 条失效的最近记录");
                         }
                     }
                     ImGui::Separator();
                     if (ImGui::MenuItem("清空列表")) {
-                        engine::clear_recent_files();
+                        engine::clearRecentFiles();
                     }
                     ImGui::EndMenu();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("设置…")) { // M6-01：config.toml 的可调项集中在这里
-                    open_settings_panel();
+                    openSettingsPanel();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("退出")) {
@@ -960,22 +961,22 @@ int run(const AppOptions& options)
 
             if (ImGui::BeginMenu("编辑")) {
                 if (ImGui::MenuItem("撤销", nullptr, false, state.undo.canUndo())) {
-                    state.undo_once();
+                    state.undoOnce();
                 }
                 if (ImGui::MenuItem("重做", nullptr, false, state.undo.canRedo())) {
-                    state.redo_once();
+                    state.redoOnce();
                 }
                 ImGui::Separator();
                 // 设计 §6.1：复制（节点）/ 粘贴（画布）——菜单入口与右键菜单一致
                 if (ImGui::MenuItem("复制", nullptr, false, state.has_selection())) {
-                    state.copy_selection();
+                    state.copySelection();
                 }
                 if (ImGui::MenuItem("粘贴", nullptr, false, state.has_clipboard())) {
-                    state.paste_clipboard();
+                    state.pasteClipboard();
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("删除选中", nullptr, false, state.has_selection())) {
-                    state.delete_selected();
+                    state.deleteSelected();
                 }
                 ImGui::EndMenu();
             }
@@ -999,8 +1000,8 @@ int run(const AppOptions& options)
                     config.ui.show_property_panel = show_params;
                     config.ui.show_console        = show_console;
                     config.ui.show_output_window  = show_output;
-                    if (save_config(paths::config_file(), config)) {
-                        set_app_config(config); // PA-07：保持进程缓存与磁盘一致
+                    if (saveConfig(paths::configFile(), config)) {
+                        setAppConfig(config); // PA-07：保持进程缓存与磁盘一致
                         log::info(std::string("界面可见性已保存到 config.toml（节点库=") +
                                   (show_library ? "显示" : "隐藏") + "，参数面板=" +
                                   (show_params ? "显示" : "隐藏") + "，Console=" +
@@ -1014,11 +1015,11 @@ int run(const AppOptions& options)
 
             if (ImGui::BeginMenu("上级节点")) {
                 if (ImGui::MenuItem("新建上级节点…")) {
-                    composite_new_dialog();
+                    compositeNewDialog();
                 }
                 if (ImGui::MenuItem("打包选区为上级节点…", nullptr, false,
                                     state.selected_nodes.size() >= 2)) {
-                    composite_pack_dialog();
+                    compositePackDialog();
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("在画布上框选/多选至少 2 个节点后打包");
@@ -1027,8 +1028,8 @@ int run(const AppOptions& options)
                 if (ImGui::MenuItem("打开上级节点编辑器")) {
                     // 一律走文件路径：弹新建对话框 → 落盘空白规格 JSON → 打开编辑器读取。
                     // 不直接创建无文件支撑的内存会话（避免依赖 imgui-node-editor 上下文时序）。
-                    if (!composite_editor_state().active) {
-                        composite_new_dialog();
+                    if (!compositeEditorState().active) {
+                        compositeNewDialog();
                     }
                 }
                 ImGui::EndMenu();
@@ -1040,8 +1041,8 @@ int run(const AppOptions& options)
                                 false, false);
                 ImGui::Separator();
                 if (ImGui::MenuItem("复制诊断信息")) { // PM-04：给非技术用户的一键求助入口
-                    copy_text(utils::diagnostics_report_text(), "[帮助] 诊断");
-                    state.set_status("诊断信息已复制到剪贴板（可直接粘贴给支持人员）");
+                    copyText(utils::diagnosticsReportText(), "[帮助] 诊断");
+                    state.setStatus("诊断信息已复制到剪贴板（可直接粘贴给支持人员）");
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("版本 / 系统 / 依赖 / 路径 / 配置 / 站点表摘要\n"
@@ -1052,19 +1053,19 @@ int run(const AppOptions& options)
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("打开日志目录")) {
-                    if (utils::open_folder(paths::logs_dir().string())) {
-                        state.set_status("已打开日志目录：" + paths::logs_dir().string());
+                    if (utils::openFolder(paths::logsDir().string())) {
+                        state.setStatus("已打开日志目录：" + paths::logsDir().string());
                     }
                     else {
-                        state.set_status("打开日志目录失败（可能尚未创建）");
+                        state.setStatus("打开日志目录失败（可能尚未创建）");
                     }
                 }
                 if (ImGui::MenuItem("打开数据目录")) {
-                    if (utils::open_folder(paths::data_root().string())) {
-                        state.set_status("已打开数据目录：" + paths::data_root().string());
+                    if (utils::openFolder(paths::dataRoot().string())) {
+                        state.setStatus("已打开数据目录：" + paths::dataRoot().string());
                     }
                     else {
-                        state.set_status("打开数据目录失败（可能尚未创建）");
+                        state.setStatus("打开数据目录失败（可能尚未创建）");
                     }
                 }
                 ImGui::EndMenu();
@@ -1098,23 +1099,23 @@ int run(const AppOptions& options)
                                     "「忽略」= 删除该快照，按当前内容继续。");
 
                 const auto finish_without_restore = [&](const char* status_text) {
-                    engine::autosave_clear(nullptr); // 用户明确拒绝 ⇒ 快照不再保留（否则下次又问）
-                    state.mark_autosave_baseline();
-                    state.pause_autosave(false);
+                    engine::autosaveClear(nullptr); // 用户明确拒绝 ⇒ 快照不再保留（否则下次又问）
+                    state.markAutosaveBaseline();
+                    state.pauseAutosave(false);
                     autosave_ask = false;
-                    state.set_status(status_text);
+                    state.setStatus(status_text);
                     ImGui::CloseCurrentPopup();
                 };
 
                 if (ImGui::Button("恢复", ImVec2(160.0f, 0.0f))) {
                     std::string restore_error;
-                    if (state.restore_autosave(&restore_error)) {
-                        state.pause_autosave(false);
+                    if (state.restoreAutosave(&restore_error)) {
+                        state.pauseAutosave(false);
                         autosave_ask = false;
                         ImGui::CloseCurrentPopup();
                     }
                     else {
-                        state.set_status("恢复失败：" + restore_error);
+                        state.setStatus("恢复失败：" + restore_error);
                     }
                 }
                 ImGui::SameLine();
@@ -1124,8 +1125,8 @@ int run(const AppOptions& options)
                 ImGui::SameLine();
                 if (ImGui::Button("忽略，且不再提示", ImVec2(180.0f, 0.0f))) {
                     config.ui.autosave_restore_prompt = false; // PC-02：「可禁用该提示」
-                    if (save_config(paths::config_file(), config)) {
-                        set_app_config(config);
+                    if (saveConfig(paths::configFile(), config)) {
+                        setAppConfig(config);
                         log::info("[自动保存] 已写入 ui.autosave_restore_prompt = false（不再提示恢复）");
                     }
                     else {
@@ -1140,7 +1141,7 @@ int run(const AppOptions& options)
         // ---- 工具栏（全部鼠标操作；设计 §6.7：MVP 不设快捷键）----
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f, 4.0f));
         if (ImGui::BeginChild("##toolbar", ImVec2(0.0f, ImGui::GetFrameHeight() + 10.0f), false)) {
-            draw_toolbar_buttons();
+            drawToolbarButtons();
         }
         ImGui::EndChild();
         ImGui::PopStyleVar();
@@ -1157,12 +1158,12 @@ int run(const AppOptions& options)
 
         // ---- 面板 ----
         ImGui::PushFont(fonts.ui);
-        draw_node_canvas(kWindowCanvas, canvas_options);
+        drawNodeCanvas(kWindowCanvas, canvas_options);
         ImGui::PopFont();
 
         if (show_library) {
             ImGui::PushFont(fonts.ui);
-            draw_node_library(kWindowLibrary, &show_library);
+            drawNodeLibrary(kWindowLibrary, &show_library);
             ImGui::PopFont();
         }
 
@@ -1179,10 +1180,10 @@ int run(const AppOptions& options)
                 state.snapshot("修改参数");
             }
             if (edit.changed) {
-                state.set_status("参数已修改（可用工具栏「撤销」回退）");
+                state.setStatus("参数已修改（可用工具栏「撤销」回退）");
             }
             if (edit.renamed) {
-                state.set_status("节点标题已修改");
+                state.setStatus("节点标题已修改");
             }
             ImGui::PopFont();
         }
@@ -1190,13 +1191,13 @@ int run(const AppOptions& options)
         if (show_console) {
             ImGui::PushFont(fonts.console);
             // PA-08：初始高度来自 config.toml [ui] console_height（面板内容区 + 工具条空间）
-            draw_console_panel(kWindowConsole, &show_console,
+            drawConsolePanel(kWindowConsole, &show_console,
                                static_cast<float>(config.ui.console_height) + 100.0f);
             ImGui::PopFont();
         }
         if (show_output) { // PA-02：输出面板（结果全文 / 复制全文·该节点 / 导出）
             ImGui::PushFont(fonts.ui);
-            draw_output_panel(kWindowOutput, &show_output, state);
+            drawOutputPanel(kWindowOutput, &show_output, state);
             ImGui::PopFont();
         }
         if (show_info) {
@@ -1206,24 +1207,24 @@ int run(const AppOptions& options)
         }
 
         // ---- CN：上级节点编辑器 + 新建/打包对话框 ----
-        if (composite_editor_state().active) {
+        if (compositeEditorState().active) {
             show_composite_editor = true; // 会话打开 → 自动显示窗口
         }
         if (show_composite_editor) {
             ImGui::PushFont(fonts.ui);
-            draw_composite_editor(kWindowCompositeEditor, &show_composite_editor);
+            drawCompositeEditor(kWindowCompositeEditor, &show_composite_editor);
             ImGui::PopFont();
         }
-        if (!composite_editor_state().active) {
+        if (!compositeEditorState().active) {
             show_composite_editor = false; // 会话关闭 → 隐藏窗口
         }
-        draw_composite_dialogs();
+        drawCompositeDialogs();
 
         // ---- M6：首次使用引导 + 设置面板（未打开时为空操作 / 零副作用）----
         ImGui::PushFont(fonts.ui);
         draw_first_run_guide(config, state, webview2, request_first_run_guide);
         request_first_run_guide = false;
-        const SettingsPanelResult settings_result = draw_settings_panel(config);
+        const SettingsPanelResult settings_result = drawSettingsPanel(config);
         ImGui::PopFont();
         if (settings_result.saved) {
             if (settings_result.visibility_changed) {
@@ -1235,14 +1236,14 @@ int run(const AppOptions& options)
                 canvas_options.show_grid         = config.ui.show_grid;
                 canvas_options.running_animation = config.ui.running_animation;
             }
-            state.set_status(settings_result.message);
+            state.setStatus(settings_result.message);
         }
         if (settings_result.provider_table_reloaded) {
             // PB2-24 要点②：配置表重载 ⇒ 重建 `provider` 参数枚举（注册表 Definition + 已有节点实例）
             //  * 不刷新的话：刚新建的站点 id 会在运行前校验被判「取值不在枚举范围内」
             //  * 界面下拉本身读实时表（PB2-31 合并显示）⇒ 无需额外刷新
-            engine::refresh_provider_options(state.graph);
-            state.set_status("配置表已重载：提供商下拉 / 运行前校验已同步");
+            engine::refreshProviderOptions(state.graph);
+            state.setStatus("配置表已重载：提供商下拉 / 运行前校验已同步");
         }
 
         // ---- 状态栏 ----
@@ -1269,7 +1270,7 @@ int run(const AppOptions& options)
                 ImGui::SameLine();
                 ImGui::TextDisabled("  %s", duration_text.c_str());
             }
-            const std::string run_text = state.run_status_text();
+            const std::string run_text = state.runStatusText();
             if (!run_text.empty()) {
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.40f, 0.72f, 1.0f, 1.0f), "  %s", run_text.c_str());
@@ -1280,11 +1281,11 @@ int run(const AppOptions& options)
             }
             if (state.last_error.active) { // PA-06：失败运行 → 红色错误条（点击定位节点）
                 ImGui::SameLine();
-                draw_error_bar(state);
+                drawErrorBar(state);
             }
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.55f, 0.55f, 0.55f, 1.0f), "  日志: %s",
-                               log::file_path_string().c_str());
+                               log::filePathString().c_str());
             ImGui::PopFont();
         }
         ImGui::End();
@@ -1328,10 +1329,11 @@ int run(const AppOptions& options)
     }
 
     log::info("主窗口关闭，开始清理");
-    editor().stop_run_async(); // PB-01：退出前 join 工作线程（幂等）
+    editor().stopRunAsync(); // PB-01：退出前 join 工作线程（幂等）
+    compositeEditorStopRun(); // 上级节点「执行连线」：退出前 join 试运行线程（幂等）
 
     // ---- PC-01：退出前补写快照（有未保存的更改才写；正常退出与崩溃都能在下一次启动恢复）----
-    editor().flush_autosave_on_exit();
+    editor().flushAutosaveOnExit();
 
     // ---- 窗口几何退出落盘（F3 / PD-04）：节流保存之外的最终兜底 ----
     if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) == 0) {
@@ -1341,8 +1343,8 @@ int run(const AppOptions& options)
             glfwGetWindowSize(window, &config.ui.window_width, &config.ui.window_height);
         }
         config.ui.window_maximized = maximized;
-        if (save_config(paths::config_file(), config)) {
-            set_app_config(config);
+        if (saveConfig(paths::configFile(), config)) {
+            setAppConfig(config);
             log::info("[窗口几何] 退出时已保存到 config.toml（" +
                       std::to_string(config.ui.window_width) + "x" +
                       std::to_string(config.ui.window_height) + " @ " +
@@ -1356,7 +1358,7 @@ int run(const AppOptions& options)
     }
 
     // M5-03：纹理缓存持有 GL 资源 → 必须先于上下文销毁释放
-    ui::release_textures();
+    ui::releaseTextures();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();

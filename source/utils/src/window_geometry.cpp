@@ -4,7 +4,7 @@
 
 namespace aiwrite::utils {
 
-bool has_position(const WindowRect& rect)
+bool hasPosition(const WindowRect& rect)
 {
     return rect.x >= 0 && rect.y >= 0;
 }

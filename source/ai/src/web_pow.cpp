@@ -61,7 +61,7 @@ std::string base64_encode(const std::string& data)
     return out;
 }
 
-bool parse_pow_challenge(const std::string& json_text, PowChallenge* out, std::string* error)
+bool parsePowChallenge(const std::string& json_text, PowChallenge* out, std::string* error)
 {
     const auto fail = [error](const std::string& text) {
         if (error != nullptr) {
@@ -109,7 +109,7 @@ bool parse_pow_challenge(const std::string& json_text, PowChallenge* out, std::s
     }
 }
 
-std::string solve_pow(const PowChallenge& challenge, long long* attempts, std::string* error)
+std::string solvePow(const PowChallenge& challenge, long long* attempts, std::string* error)
 {
     if (attempts != nullptr) {
         *attempts = 0;
@@ -142,7 +142,7 @@ std::string solve_pow(const PowChallenge& challenge, long long* attempts, std::s
     return {};
 }
 
-std::string make_pow_header_value(const PowChallenge& challenge, const std::string& answer)
+std::string makePowHeaderValue(const PowChallenge& challenge, const std::string& answer)
 {
     nlohmann::json json;
     json["algorithm"]   = challenge.algorithm.empty() ? std::string("DeepSeekHashV1")

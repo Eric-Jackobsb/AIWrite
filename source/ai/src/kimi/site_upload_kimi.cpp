@@ -108,7 +108,7 @@ UploadPrepareOptions kimi_prepare_options(const ProviderWebSpec& /*site*/)
 
 } // namespace
 
-const SiteUpload* site_upload_kimi()
+const SiteUpload* siteUploadKimi()
 {
     static const SiteUpload unit = {"builtin:kimi",   "Kimi 网页版（kimi.com）",
                                     kimi_prepare,     kimi_deliver,

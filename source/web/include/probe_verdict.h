@@ -42,7 +42,7 @@ struct EndpointProbeLine {
 };
 
 // 解析（容错：空报告 / 缺字段 / 畸形行都不抛异常，只跳过/留空）
-std::vector<EndpointProbeLine> parse_endpoints_report(const std::string& report);
+std::vector<EndpointProbeLine> parseEndpointsReport(const std::string& report);
 
 // 按路径查一条（找不到返回 nullptr）—— 判据只需要**指定路径**的结论
 const EndpointProbeLine* find_endpoint(const std::vector<EndpointProbeLine>& lines,
@@ -61,7 +61,7 @@ enum class ProbeVerdict {
     NotApplicable,   // 该站点不适用协议探测（只读诊断路径）
 };
 
-std::string probe_verdict_name(ProbeVerdict verdict);
+std::string probeVerdictName(ProbeVerdict verdict);
 
 struct ProbeJudgement {
     ProbeVerdict verdict        = ProbeVerdict::ScriptFailed;
@@ -94,14 +94,14 @@ struct SessionFailure {
     std::string evidence;         // 命中的判据片段（**脱敏**：只有码 / 短语，无凭证）
 };
 
-SessionFailure classify_session_failure_text(const std::string& text);
+SessionFailure classifySessionFailureText(const std::string& text);
 
 // 一句话文案（错误条 / 面板 / 状态栏共用；`provider_id` 可空）
-std::string session_relogin_text(const SessionFailure& failure, const std::string& provider_id);
+std::string sessionReloginText(const SessionFailure& failure, const std::string& provider_id);
 
 // ---------------------------------------------------------------------------
 //  ④ 离线自检（`api_probe --exec-selftest` 调用）；返回失败项数
 // ---------------------------------------------------------------------------
-int probe_verdict_selftest(int* passed_out = nullptr);
+int probeVerdictSelftest(int* passed_out = nullptr);
 
 } // namespace aiwrite::web

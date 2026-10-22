@@ -4,6 +4,7 @@
 #include "node_registry.h"
 #include "asset_store.h" // P7a-04：File 参数的资源令牌解析
 #include "paths.h"       // P7a-02：File 参数的多值路径解析
+#include "string_util.h" // CLN-05：trim 收敛
 
 #include <algorithm>
 #include <cctype>
@@ -17,16 +18,6 @@
 
 namespace aiwrite::engine {
 namespace {
-
-std::string trim(const std::string& text)
-{
-    const auto begin = text.find_first_not_of(" \t\r\n");
-    if (begin == std::string::npos) {
-        return {};
-    }
-    const auto end = text.find_last_not_of(" \t\r\n");
-    return text.substr(begin, end - begin + 1);
-}
 
 } // namespace
 
@@ -116,13 +107,13 @@ bool Param::flag(bool fallback) const
     return fallback;
 }
 
-bool Param::is_empty() const
+bool Param::isEmpty() const
 {
     if (value.is_null()) {
         return true;
     }
     if (value.is_string()) {
-        return trim(value.get<std::string>()).empty();
+        return utils::trim(value.get<std::string>()).empty();
     }
     if (value.is_array() || value.is_object()) {
         return value.empty();
@@ -341,7 +332,7 @@ std::string Graph::addCompositeNode(const std::string& composite_id, float x, fl
 
     Node node;
     node.id = makeNodeId();
-    if (!build_composite_node(&node, *spec, error)) {
+    if (!buildCompositeNode(&node, *spec, error)) {
         return {};
     }
     node.x = x;
@@ -565,10 +556,10 @@ bool Graph::validateParam(const Param& param, std::string* error)
         return stream.str();
     };
 
-    if (param.is_required && param.is_empty()) {
+    if (param.is_required && param.isEmpty()) {
         return fail("必填项不能为空");
     }
-    if (param.is_empty()) {
+    if (param.isEmpty()) {
         if (error != nullptr) {
             error->clear();
         }
@@ -598,13 +589,13 @@ bool Graph::validateParam(const Param& param, std::string* error)
     }
     case ParamType::File: {
         // P7a-02：多值（每行一个）；P7a-04：**资源令牌也合法** → 逐项解析 / 校验
-        const std::vector<std::string> values = paths::split_path_list(param.text());
+        const std::vector<std::string> values = paths::splitPathList(param.text());
         std::vector<std::string>       problems;
         for (const std::string& value : values) {
-            if (asset::is_token(value)) {
+            if (asset::isToken(value)) {
                 bool        missing = false;
                 std::string asset_error;
-                (void)asset::to_local_path(value, &missing, &asset_error); // P7a-07：文案已可操作
+                (void)asset::toLocalPath(value, &missing, &asset_error); // P7a-07：文案已可操作
                 if (missing) {
                     problems.push_back(asset_error);
                 }
@@ -669,7 +660,7 @@ bool Graph::validateParams(const Node& node, std::vector<std::string>* errors) c
 {
     bool ok = true;
     for (const Param& param : node.params) {
-        if (!param_visible(node, param)) {
+        if (!paramVisible(node, param)) {
             continue; // 条件隐藏的参数不参与校验（如 web 模式下的 API Key / API 地址）
         }
         std::string error;
@@ -754,7 +745,7 @@ bool Graph::topologicalOrder(std::vector<std::string>* order, std::string* error
     return true;
 }
 
-bool param_visible(const Node& node, const Param& param)
+bool paramVisible(const Node& node, const Param& param)
 {
     if (param.visible_when_param.empty()) {
         return true; // 未设置条件 → 始终可见
@@ -766,10 +757,10 @@ bool param_visible(const Node& node, const Param& param)
     return guard->text() == param.visible_when_value;
 }
 
-bool param_visible(const Node& node, const std::string& param_id)
+bool paramVisible(const Node& node, const std::string& param_id)
 {
     const Param* param = node.findParam(param_id);
-    return param == nullptr ? true : param_visible(node, *param);
+    return param == nullptr ? true : paramVisible(node, *param);
 }
 
 } // namespace aiwrite::engine

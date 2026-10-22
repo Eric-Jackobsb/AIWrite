@@ -132,7 +132,7 @@ std::string join_list(const std::vector<std::string>& items)
     return out;
 }
 
-std::string human_bytes(std::size_t bytes)
+std::string humanBytes(std::size_t bytes)
 {
     char buffer[64];
     std::snprintf(buffer, sizeof(buffer), "%.2f MB",
@@ -192,7 +192,7 @@ void sanitize_stem(std::string* stem)
 
 } // namespace
 
-std::vector<std::string> image_exts_from_accept(const std::string& accept)
+std::vector<std::string> imageExtsFromAccept(const std::string& accept)
 {
     std::vector<std::string> out;
     std::string              item;
@@ -252,22 +252,22 @@ bool need_convert(const utils::ImageMagic& magic, const UploadPrepareOptions& op
     }
     if (options.max_bytes > 0 && file_bytes > options.max_bytes) {
         if (reason != nullptr) {
-            *reason = "体积 " + human_bytes(file_bytes) + " 超过站点上限 " +
-                      human_bytes(options.max_bytes);
+            *reason = "体积 " + humanBytes(file_bytes) + " 超过站点上限 " +
+                      humanBytes(options.max_bytes);
         }
         return true;
     }
     return false;
 }
 
-std::string default_upload_tmp_dir()
+std::string defaultUploadTmpDir()
 {
     std::error_code ec;
     const fs::path  temp = fs::temp_directory_path(ec);
     if (!ec && !temp.empty()) {
         return (temp / "aiwrite-upload").string();
     }
-    return (aiwrite::paths::data_root() / "tmp" / "upload").string();
+    return (aiwrite::paths::dataRoot() / "tmp" / "upload").string();
 }
 
 ConvertOutcome convert_for_upload(const std::string& local_path, const UploadPrepareOptions& options)
@@ -341,8 +341,8 @@ ConvertOutcome convert_for_upload(const std::string& local_path, const UploadPre
         const int    longest    = max_of(decoded.width, decoded.height);
         edge_limit              = std::max(64, static_cast<int>(static_cast<double>(longest) * scale));
         if (reason.empty()) {
-            reason = "体积 " + human_bytes(file_bytes) + " 超过站点上限 " +
-                     human_bytes(options.max_bytes) + "（按上限反推长边 " +
+            reason = "体积 " + humanBytes(file_bytes) + " 超过站点上限 " +
+                     humanBytes(options.max_bytes) + "（按上限反推长边 " +
                      std::to_string(edge_limit) + "px）";
         }
     }
@@ -367,7 +367,7 @@ ConvertOutcome convert_for_upload(const std::string& local_path, const UploadPre
     }
 
     const std::string ext = encode_extension(options);
-    const fs::path    dir = options.tmp_dir.empty() ? fs::path(default_upload_tmp_dir())
+    const fs::path    dir = options.tmp_dir.empty() ? fs::path(defaultUploadTmpDir())
                                                     : fs::path(options.tmp_dir);
     std::string       stem = fs::path(local_path).stem().string();
     sanitize_stem(&stem);
@@ -409,8 +409,8 @@ ConvertOutcome convert_for_upload(const std::string& local_path, const UploadPre
         return fail_outcome("转换后的图片为空：" + out_path.string() + "（请重试）");
     }
     if (options.max_bytes > 0 && static_cast<std::size_t>(out_bytes) > options.max_bytes) {
-        return fail_outcome("转换后仍超过站点上限 " + human_bytes(options.max_bytes) + "（当前 " +
-                            human_bytes(static_cast<std::size_t>(out_bytes)) +
+        return fail_outcome("转换后仍超过站点上限 " + humanBytes(options.max_bytes) + "（当前 " +
+                            humanBytes(static_cast<std::size_t>(out_bytes)) +
                             "）：请先在工作流里把图片缩小，或另存为 JPEG 后重试（原图：" +
                             local_path + "）");
     }
@@ -424,7 +424,7 @@ ConvertOutcome convert_for_upload(const std::string& local_path, const UploadPre
     return outcome;
 }
 
-int image_convert_selftest(int* passed_out)
+int imageConvertSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
@@ -440,7 +440,7 @@ int image_convert_selftest(int* passed_out)
     };
 
     // ① accept 解析：非图片混入 / MIME 形式 / 大小写 / 空项 / 重复
-    check(image_exts_from_accept(".png,.PDF, .JPG,.mp3,docx,.jpeg,image/webp,*/*,") ==
+    check(imageExtsFromAccept(".png,.PDF, .JPG,.mp3,docx,.jpeg,image/webp,*/*,") ==
               std::vector<std::string>({"png", "jpg", "jpeg", "webp"}),
           "accept 解析：只留图片扩展名（mime / 大写 / 空项 / 非图片混入）");
 
@@ -478,7 +478,7 @@ int image_convert_selftest(int* passed_out)
     }
 
     // ④ 真实转码：临时目录内造图 → 转换 → 复核（离线，无网络、无窗口）
-    const fs::path dir        = fs::path(default_upload_tmp_dir()) / "selftest";
+    const fs::path dir        = fs::path(defaultUploadTmpDir()) / "selftest";
     std::error_code ec;
     fs::create_directories(dir, ec);
     const fs::path png_path   = dir / "src-64.png";
@@ -571,7 +571,7 @@ int image_convert_selftest(int* passed_out)
         check(!empty.ok && empty.error.find("空的") != std::string::npos,
               "空文件（0 字节）→ 可操作文案（含「空的」）");
     }
-    check(!default_upload_tmp_dir().empty(), "默认临时目录可解析");
+    check(!defaultUploadTmpDir().empty(), "默认临时目录可解析");
 
     // 清理（best-effort；失败不影响断言）
     std::error_code cleanup_ec;

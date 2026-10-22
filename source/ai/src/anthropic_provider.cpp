@@ -63,7 +63,7 @@ nlohmann::json anthropic_build_body(const GenerateParams& params, const std::str
         for (const std::string& data_url : image_data_urls) {
             std::string mime;
             std::string base64;
-            if (!split_data_url(data_url, &mime, &base64)) {
+            if (!splitDataUrl(data_url, &mime, &base64)) {
                 continue; // 非法 data URL 不静默冒充图片（调用方已按张数校验）
             }
             parts.push_back({{"type", "image"},
@@ -77,7 +77,7 @@ nlohmann::json anthropic_build_body(const GenerateParams& params, const std::str
     return body;
 }
 
-std::string anthropic_extract_text(const nlohmann::json& body)
+std::string anthropicExtractText(const nlohmann::json& body)
 {
     std::string text;
     const auto  content_it = body.find("content");
@@ -98,9 +98,9 @@ std::string anthropic_extract_text(const nlohmann::json& body)
     return text;
 }
 
-std::string anthropic_error_text(int http_status, const nlohmann::json& body)
+std::string anthropicErrorText(int http_status, const nlohmann::json& body)
 {
-    std::string message = json_error_message(body);
+    std::string message = jsonErrorMessage(body);
     const auto  error_it = body.find("error");
     if (error_it != body.end() && error_it->is_object() && !message.empty()) {
         const auto type_it = error_it->find("type");
@@ -116,8 +116,8 @@ std::string anthropic_error_text(int http_status, const nlohmann::json& body)
 
 AnthropicProvider::AnthropicProvider(ProviderRuntimeConfig config) : config_(std::move(config))
 {
-    caps_ = caps_from_spec(config_.provider_id.empty() ? nullptr
-                                                       : provider_specs().find(config_.provider_id));
+    caps_ = capsFromSpec(config_.provider_id.empty() ? nullptr
+                                                       : providerSpecs().find(config_.provider_id));
 }
 
 std::string AnthropicProvider::name() const
@@ -172,7 +172,7 @@ GenerateResult AnthropicProvider::generate(const GenerateParams& params)
                                                          : config_.options.read_timeout_s;
     request.cancel            = params.cancel;
 
-    const HttpJsonResult http = http_post_json(request);
+    const HttpJsonResult http = httpPostJson(request);
     out.http_status           = http.http_status;
     out.elapsed_ms            = http.elapsed_ms;
     out.raw_head              = http.raw_head;
@@ -188,8 +188,8 @@ GenerateResult AnthropicProvider::generate(const GenerateParams& params)
     if (http.http_status < 200 || http.http_status >= 300) {
         nlohmann::json body;
         std::string    parse_error;
-        if (parse_json_text(http.body, &body, &parse_error)) {
-            const std::string message = anthropic_error_text(http.http_status, body);
+        if (parseJsonText(http.body, &body, &parse_error)) {
+            const std::string message = anthropicErrorText(http.http_status, body);
             out.error = message.empty() ? ("Anthropic 调用失败：" + parse_error) : message;
         }
         else {
@@ -200,11 +200,11 @@ GenerateResult AnthropicProvider::generate(const GenerateParams& params)
     }
     nlohmann::json body;
     std::string    parse_error;
-    if (!parse_json_text(http.body, &body, &parse_error)) {
+    if (!parseJsonText(http.body, &body, &parse_error)) {
         out.error = "Anthropic 响应解析失败：" + parse_error;
         return out;
     }
-    out.text = anthropic_extract_text(body);
+    out.text = anthropicExtractText(body);
     if (out.text.empty()) {
         out.error = "Anthropic 响应里没有文本内容（`content[].text` 为空）" +
                     (http.raw_head.empty() ? std::string() : ("；原文：" + http.raw_head));

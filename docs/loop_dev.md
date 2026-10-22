@@ -55,7 +55,7 @@
 > 完整台账（含每站 `history[]` 跨轮轨迹）：`build/loop/SITE_STATUS.json`（机器读）· `build/loop/SITE_STATUS.md`（人读，随 `build/` 易失）。
 > **长期保留的人读位** = [AI_Status.md](AI_Status.md) §二（总览）+ [AI_Status_web.md](AI_Status_web.md) §二 / [AI_Status_api.md](AI_Status_api.md) §二（**两份分通道台账**）—— 都在 `docs/` 里、随版本库走，不会被清 `build/` 带走。
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-17 · 覆盖轮次 0：
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-19 · 覆盖轮次 0：
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > **判据**：**文字理解** = 「文本 → 取回文本」S3 三口径通过（``rc=0`` + ``n3=done`` + 正文非站侧错误串）；**图片理解** = 「图片 → 取回文本」链路（站点上传双证据 + 取回正文）。
 > 两列是**链路**、不是模型强弱；来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。
@@ -206,8 +206,8 @@ Start-Process -FilePath .\build\bin\aiwrite.exe -ArgumentList '--web-dom-dump','
 | 检查 | 命令 | 期望 |
 |---|---|---|
 | 构建 | `cd source; .\build.ps1` | **0 error / 0 warning** |
-| 工具 / 契约自检 | `api_probe.exe --selftest` | **十三组全 PASS · exit 0**（含 **配置表 52 / 0** · **DOM 探测 27 / 0** · 执行器 **655 / 0**（2026-10-15 L2 批 · 原 546/0 = 2026-10-11）· **V-11 无 Key 请求构造 6 / 0** · **V-12 取消与超时 17 / 0** · **V-13 Anthropic / Gemini 请求构造与解析 23 / 0** · **V-14 工厂分派 / 能力门控 13 / 0** · **V-15 Anthropic / Gemini 回环端到端 11 / 0** · **V-16 代理 / 证书 / 凭据配置 16 / 0** —— 2026-10-11 实测；同日链：2026-10-10 = 464 → **+26 = `M_patchC` 批 1**（窗口表 / 复位 / 归因）→ **+34 = `M_patchAB` 批 2**（会话诊断）→ **+20 = 批 4**（版本迁移）→ **+2 = 批 6**（配置表嵌套 schema）；**七组 → 九组** = 批 3（V-11 / V-12）· **九组 → 十二组** = 批 6（V-13 / V-14 / V-15）· **十二组 → 十三组** = 批 7（V-16）） |
-| 图模型 / 执行器自检 | `--graph-selftest` / `--exec-selftest` | **151 / 0** · **655 / 0**（2026-10-15 复测 · 原 110 / 546 = 2026-10-11） |
+| 工具 / 契约自检 | `api_probe.exe --selftest` | **十三组全 PASS · exit 0**（含 **配置表 52 / 0** · **DOM 探测 27 / 0** · 执行器 **682 / 0**（2026-10-19 复测 · 原 546/0 = 2026-10-11）· **V-11 无 Key 请求构造 6 / 0** · **V-12 取消与超时 17 / 0** · **V-13 Anthropic / Gemini 请求构造与解析 23 / 0** · **V-14 工厂分派 / 能力门控 13 / 0** · **V-15 Anthropic / Gemini 回环端到端 11 / 0** · **V-16 代理 / 证书 / 凭据配置 16 / 0** —— 2026-10-11 实测；同日链：2026-10-10 = 464 → **+26 = `M_patchC` 批 1**（窗口表 / 复位 / 归因）→ **+34 = `M_patchAB` 批 2**（会话诊断）→ **+20 = 批 4**（版本迁移）→ **+2 = 批 6**（配置表嵌套 schema）；**七组 → 九组** = 批 3（V-11 / V-12）· **九组 → 十二组** = 批 6（V-13 / V-14 / V-15）· **十二组 → 十三组** = 批 7（V-16）） |
+| 图模型 / 执行器自检 | `--graph-selftest` / `--exec-selftest` | **151 / 0** · **682 / 0**（2026-10-19 复测 · 原 110 / 546 = 2026-10-11） |
 | 提供商标记 | `aiwrite.exe --provider-selftest` / `--provider-dump` | **52 / 0** · **20 条**（official 9 / web 11）（`TST-L01` 门禁已把 `--provider-dump` 作为「条数快照」自动跑，见 `gate/dump.txt`） |
 | **站点上传模板**（离线 · 不起浏览器） | `aiwrite.exe --upload-selftest` | **72 / 0** · exit **0**（2026-10-10 实测；`M8-24`~`M8-27` 上传模板契约，站点侧接线出问题时先跑这条；门禁 `gate/upload.txt`） |
 | 离线夹具 | `node source\tools\poll_answer_gate_test.js` · `send_chain_test.js` · **`dom_gate_test.js`** | **44 / 0** · **17 / 0** · **15 / 0**（各自 `--old` 负向必 FAIL：**18 / 26** · **13 / 4** · **9 / 6** · exit 1） |

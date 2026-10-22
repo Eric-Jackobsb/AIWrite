@@ -210,7 +210,7 @@ std::vector<Param> inference_common_params(const std::string& mode_default)
     params.push_back(in_group(int_param("timeout_stream_idle_ms", "流式空闲超时(ms)", 0, 0.0, 3600000.0,
                                         "0 = 用全局 timeout.stream_idle_ms；非零 = 节点优先"),
                               "advanced"));
-    params.push_back(in_group(bool_param("retry_enabled", "重试开关", aiwrite::app_config().error.retry_enabled,
+    params.push_back(in_group(bool_param("retry_enabled", "重试开关", aiwrite::appConfig().error.retry_enabled,
                                          "仅配合下方 retry_count 使用：retry_count=0 时本项忽略（走全局）"),
                               "advanced"));
     params.push_back(in_group(int_param("retry_count", "重试次数", 0, 0.0, 5.0,
@@ -438,7 +438,7 @@ void registerAllNodes()
                 }
             }
             return params;
-        }(provider_option_ids().empty() ? std::string("deepseek") : provider_option_ids().front());
+        }(providerOptionIds().empty() ? std::string("deepseek") : providerOptionIds().front());
         registry.registerNode(std::move(definition));
     }
 
@@ -476,7 +476,7 @@ void registerAllNodes()
         // M_patchB L1（PB2-05）：提供商列表来自**配置表**（official 在前、web 在后，顺序稳定）
         // PB2-24：口径抽到 `provider_option_ids()` —— 重载配置表后由
         //         `refresh_provider_options()` 就地重建枚举（此处与刷新**同一份**逻辑）
-        std::vector<std::string> provider_ids = provider_option_ids();
+        std::vector<std::string> provider_ids = providerOptionIds();
         if (provider_ids.empty()) {
             provider_ids.push_back("deepseek"); // 极小概率（表不可用时 engine 侧兜底）
         }
@@ -798,9 +798,9 @@ void registerAllNodes()
 //  PB2-24 要点②：`provider` 动态枚举（实现）
 // ============================================================================
 
-std::vector<std::string> provider_option_ids()
+std::vector<std::string> providerOptionIds()
 {
-    const ai::ProviderSpecs& specs        = ai::provider_specs();
+    const ai::ProviderSpecs& specs        = ai::providerSpecs();
     std::vector<std::string>  official_ids = specs.ids("official");
     std::vector<std::string>  web_ids      = specs.ids("web");
     std::vector<std::string>  ids;
@@ -837,7 +837,7 @@ void apply_provider_options(Node& node, const std::vector<std::string>& ids)
             continue;
         }
         param.enum_options = ids;
-        if (param.is_empty() && !ids.empty()) {
+        if (param.isEmpty() && !ids.empty()) {
             param.value = ids.front();
         }
         return;
@@ -846,9 +846,9 @@ void apply_provider_options(Node& node, const std::vector<std::string>& ids)
 
 } // namespace
 
-void refresh_provider_options()
+void refreshProviderOptions()
 {
-    const std::vector<std::string> ids = provider_option_ids();
+    const std::vector<std::string> ids = providerOptionIds();
     if (ids.empty()) {
         return; // 表不可用（极小概率）：保留原枚举，绝不把下拉清空
     }
@@ -857,9 +857,9 @@ void refresh_provider_options()
     }
 }
 
-void refresh_provider_options(Graph& graph)
+void refreshProviderOptions(Graph& graph)
 {
-    const std::vector<std::string> ids = provider_option_ids();
+    const std::vector<std::string> ids = providerOptionIds();
     if (ids.empty()) {
         return;
     }
@@ -871,18 +871,18 @@ void refresh_provider_options(Graph& graph)
     }
 }
 
-void reload_provider_specs_and_refresh(Graph* graph)
+void reloadProviderSpecsAndRefresh(Graph* graph)
 {
-    ai::reload_provider_specs();
+    ai::reloadProviderSpecs();
     if (graph != nullptr) {
-        refresh_provider_options(*graph);
+        refreshProviderOptions(*graph);
     }
     else {
-        refresh_provider_options();
+        refreshProviderOptions();
     }
 }
 
-std::vector<std::string> provider_param_options()
+std::vector<std::string> providerParamOptions()
 {
     const Definition* definition = NodeRegistry::instance().find("ProviderConfig");
     if (definition == nullptr) {

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <map>
 #include <set>
 
 namespace aiwrite::engine {
@@ -29,6 +30,25 @@ const Param* find_internal_param(const CompositeSpec& spec, const std::string& n
 {
     const Node* node = spec.internal_graph.findNode(node_id);
     return (node != nullptr) ? node->findParam(param_id) : nullptr;
+}
+
+// 热重载连边有效性：两端节点存在、非自环、端口仍存在、类型兼容
+bool edge_still_valid(const Graph& graph, const Edge& edge)
+{
+    const Node* from = graph.findNode(edge.from_node);
+    const Node* to   = graph.findNode(edge.to_node);
+    if (from == nullptr || to == nullptr) {
+        return false;
+    }
+    if (from->id == to->id) {
+        return false; // 自环（防御性移除）
+    }
+    const Port* output = from->findPort(edge.from_port, PortDirection::Output);
+    const Port* input  = to->findPort(edge.to_port, PortDirection::Input);
+    if (output == nullptr || input == nullptr) {
+        return false; // 端口已不存在（暴露输入/输出数量或 id 变化）
+    }
+    return Graph::isPortTypeCompatible(output->type, input->type);
 }
 
 } // namespace
@@ -121,7 +141,7 @@ bool validate_composite_spec(const CompositeSpec& spec, std::string* error,
 }
 
 // ------------------------------------------------------------ 序列化 ----
-nlohmann::json composite_to_json(const CompositeSpec& spec)
+nlohmann::json compositeToJson(const CompositeSpec& spec)
 {
     nlohmann::json document;
     document["schema_version"] = kCompositeSchemaVersion;
@@ -156,11 +176,11 @@ nlohmann::json composite_to_json(const CompositeSpec& spec)
     }
     document["exposed_params"] = std::move(params);
 
-    document["internal_graph"] = graph_to_json(spec.internal_graph);
+    document["internal_graph"] = graphToJson(spec.internal_graph);
     return document;
 }
 
-bool composite_from_json(const nlohmann::json& json, CompositeSpec& spec, std::string* error)
+bool compositeFromJson(const nlohmann::json& json, CompositeSpec& spec, std::string* error)
 {
     const auto fail = [error](const std::string& text) {
         if (error != nullptr) {
@@ -241,7 +261,7 @@ bool composite_from_json(const nlohmann::json& json, CompositeSpec& spec, std::s
         return fail("上级节点缺少 internal_graph");
     }
     std::string graph_error;
-    if (!graph_from_json(*internal, parsed.internal_graph, &graph_error)) {
+    if (!graphFromJson(*internal, parsed.internal_graph, &graph_error)) {
         return fail("internal_graph 加载失败：" + graph_error);
     }
 
@@ -253,7 +273,7 @@ bool composite_from_json(const nlohmann::json& json, CompositeSpec& spec, std::s
 }
 
 // ---------------------------------------------------- 节点实例构建 ----
-bool build_composite_node(Node* node, const CompositeSpec& spec, std::string* error)
+bool buildCompositeNode(Node* node, const CompositeSpec& spec, std::string* error)
 {
     if (node == nullptr) {
         return false;
@@ -316,6 +336,179 @@ bool build_composite_node(Node* node, const CompositeSpec& spec, std::string* er
             copy.display_name = ref.display_name;
         }
         node->params.push_back(std::move(copy));
+    }
+
+    if (error != nullptr) {
+        error->clear();
+    }
+    return true;
+}
+
+
+// ------------------------------------------------------------ 热重载 ----
+// 上级节点编辑器「保存」后：把主画布中已放置的同 id 实例按新规格**就地重建**
+//  * 保留实例 id / 位置 / 自定义标题（== old_name 视为未自定义 → 跟随新规格名）/ 已填参数值
+//  * 端口 id 稳定（in1…inN / out1…）：仍在的边保留，失效的边被移除
+int refresh_composite_instances(Graph& graph, const std::string& composite_id,
+                                const std::string& old_name, std::string* error)
+{
+    const CompositeSpec* spec = CompositeRegistry::instance().find(composite_id);
+    if (spec == nullptr) {
+        if (error != nullptr) {
+            *error = "上级节点规格不存在: " + composite_id;
+        }
+        return 0;
+    }
+
+    std::vector<std::string> targets;
+    for (const Node& node : graph.nodes) {
+        if (node.composite_id == composite_id) {
+            targets.push_back(node.id);
+        }
+    }
+    if (targets.empty()) {
+        return 0; // 画布没有该规格的实例：不改动图
+    }
+
+    for (const std::string& id : targets) {
+        Node* node = graph.findNode(id);
+        if (node == nullptr) {
+            continue;
+        }
+        // 保留实例已填参数值（按 id；新增参数取默认值）
+        std::map<std::string, nlohmann::json> old_values;
+        for (const Param& p : node->params) {
+            old_values[p.id] = p.value;
+        }
+        const std::string old_title = node->title;
+        const float       ox        = node->x;
+        const float       oy        = node->y;
+
+        Node fresh;
+        fresh.id = node->id; // 保留实例 id：画布选中 / 连边 / 撤销引用不失效
+        if (!buildCompositeNode(&fresh, *spec, nullptr)) {
+            continue; // 规格已通过严格校验，正常不会走到这里
+        }
+        fresh.x = ox;
+        fresh.y = oy;
+        // 标题：用户自定义过则保留；否则跟随规格新名称
+        if (!old_title.empty() && old_title != old_name) {
+            fresh.title = old_title;
+        }
+        for (Param& p : fresh.params) {
+            const auto it = old_values.find(p.id);
+            if (it != old_values.end()) {
+                p.value = it->second;
+            }
+        }
+        fresh.state        = NodeState::Idle;
+        fresh.error_message.clear();
+        *node = std::move(fresh);
+    }
+
+    // 清理连边：端点端口已不存在 / 类型不兼容 / 自环 / 重复（同 4 元组只留一条）
+    std::set<std::string> seen;
+    graph.edges.erase(
+        std::remove_if(graph.edges.begin(), graph.edges.end(),
+                       [&](const Edge& edge) {
+                           if (!edge_still_valid(graph, edge)) {
+                               return true;
+                           }
+                           const std::string key = edge.from_node + "|" + edge.from_port + "|" +
+                                                   edge.to_node + "|" + edge.to_port;
+                           return !seen.insert(key).second;
+                       }),
+        graph.edges.end());
+
+    if (error != nullptr) {
+        error->clear();
+    }
+    return static_cast<int>(targets.size());
+}
+
+
+// ---------------------------------------------------- 编辑器试运行沙箱 ----
+// 上级节点编辑器「执行连线」：内部图脱离父工作流也能直接跑
+//  * 内部图本身没有数据源（暴露输入是“外部喂进来”的引用）⇒ 为每个暴露输入补一个
+//    「测试源节点」并接向它指向的内部输入端口，让运行前校验通过、数据从源端起产出
+//  * 源节点类型按端口类型映射：Text/Any→TextInput、Image→ImageInput、Provider→ProviderConfig
+//  * 源节点 id 用 "__ce_src_<k>"（不进入画布；内部 n1.. 不与它冲突）
+//  * 幂等无关：每次「执行连线」都新建沙箱，不改动规格内部图
+const char* test_source_type_for(engine::PortType type)
+{
+    switch (type) {
+    case engine::PortType::Image:    return "ImageInput";
+    case engine::PortType::Provider: return "ProviderConfig";
+    case engine::PortType::Text:     return "TextInput";
+    case engine::PortType::Any:      return "TextInput";
+    case engine::PortType::Number:   return "TextInput"; // 兜底（当前节点集没有 Number 输入端口）
+    }
+    return "TextInput";
+}
+
+bool buildCompositeTestGraph(const CompositeSpec& spec, Graph* out, std::string* error)
+{
+    const auto fail = [error](const std::string& text) {
+        if (error != nullptr) {
+            *error = text;
+        }
+        return false;
+    };
+
+    if (out == nullptr) {
+        return fail("输出图指针为空");
+    }
+    if (spec.id.empty()) {
+        return fail("上级节点规格 id 为空：无法构建试运行图");
+    }
+
+    *out = spec.internal_graph; // 深拷贝内部图（节点/边/参数原样保留）
+    out->refreshSequences();    // 防御：确保后续 addNode/addEdge 的 id 不与内部 n1.. 冲突
+
+    for (std::size_t k = 0; k < spec.inputs.size(); ++k) {
+        const CompositePortRef& ref = spec.inputs[k];
+        const Node*             target = out->findNode(ref.internal_node);
+        if (target == nullptr) {
+            continue; // 规格校验已保证存在；防御性跳过
+        }
+        const Port* port = target->findPort(ref.internal_port, PortDirection::Input);
+        if (port == nullptr) {
+            continue;
+        }
+        // 目标端口已有内部入边 ⇒ 不是真正的外部输入（规格校验已禁止；防御性跳过）
+        if (out->findEdgeIntoInput(ref.internal_node, ref.internal_port) != nullptr) {
+            continue;
+        }
+
+        const char* src_type = test_source_type_for(port->type);
+
+        std::string       add_error;
+        const std::string raw_id =
+            out->addNode(src_type, target->x - 240.0f, target->y, &add_error);
+        if (raw_id.empty()) {
+            return fail("添加测试源节点失败: " + add_error);
+        }
+        Node* src = out->findNode(raw_id);
+        if (src == nullptr) {
+            return fail("测试源节点查找失败: " + raw_id);
+        }
+        src->id    = "__ce_src_" + std::to_string(k + 1);
+        src->title = "测试输入 " + std::to_string(k + 1) + "（暴露输入 " +
+                     (ref.display_name.empty() ? ref.internal_port : ref.display_name) + "）";
+        // Number 端口兜底：把源输出端口类型改为目标类型，保证 canConnect 通过
+        if (!src->outputs.empty() && src->outputs[0].type != port->type &&
+            port->type != PortType::Any) {
+            src->outputs[0].type = port->type;
+        }
+        const std::string out_port = src->outputs.empty() ? std::string() : src->outputs[0].id;
+        if (out_port.empty()) {
+            return fail("测试源节点没有输出端口: " + std::string(src_type));
+        }
+        const std::string edge_id =
+            out->addEdge(src->id, out_port, ref.internal_node, ref.internal_port, &add_error);
+        if (edge_id.empty()) {
+            return fail("连接测试源失败: " + add_error);
+        }
     }
 
     if (error != nullptr) {
@@ -441,7 +634,7 @@ CompositeRegistry& CompositeRegistry::instance()
     return registry;
 }
 
-void CompositeRegistry::set_root(std::filesystem::path root)
+void CompositeRegistry::setRoot(std::filesystem::path root)
 {
     builtin_root_     = root;
     user_root_        = std::move(root);
@@ -451,38 +644,38 @@ void CompositeRegistry::set_root(std::filesystem::path root)
     reload();
 }
 
-void CompositeRegistry::set_roots(std::filesystem::path builtin_root,
-                                  std::filesystem::path user_root)
+void CompositeRegistry::setRoots(std::filesystem::path builtinRoot,
+                                  std::filesystem::path userRoot)
 {
-    builtin_root_     = std::move(builtin_root);
-    user_root_        = std::move(user_root);
+    builtin_root_     = std::move(builtinRoot);
+    user_root_        = std::move(userRoot);
     roots_overridden_ = true;
     specs_.clear();
     source_.clear();
     reload();
 }
 
-const std::filesystem::path& CompositeRegistry::builtin_root() const
+const std::filesystem::path& CompositeRegistry::builtinRoot() const
 {
-    return builtin_root_.empty() ? paths::builtin_composites_dir() : builtin_root_;
+    return builtin_root_.empty() ? paths::builtinCompositesDir() : builtin_root_;
 }
 
-const std::filesystem::path& CompositeRegistry::user_root() const
+const std::filesystem::path& CompositeRegistry::userRoot() const
 {
-    return user_root_.empty() ? paths::user_composites_dir() : user_root_;
+    return user_root_.empty() ? paths::userCompositesDir() : user_root_;
 }
 
 std::filesystem::path CompositeRegistry::root() const
 {
-    return user_root(); // 兼容旧调用：用户根 = 写入口
+    return userRoot(); // 兼容旧调用：用户根 = 写入口
 }
 
 void CompositeRegistry::reload()
 {
     specs_.clear();
     source_.clear();
-    loadFromDir(builtin_root(), CompositeSource::Builtin);
-    loadFromDir(user_root(), CompositeSource::User); // 用户源后扫 ⇒ 覆盖内置源
+    loadFromDir(builtinRoot(), CompositeSource::Builtin);
+    loadFromDir(userRoot(), CompositeSource::User); // 用户源后扫 ⇒ 覆盖内置源
     if (!roots_overridden_) {
         migrateLegacy(); // 旧 ~/.brain-ai/composites 首次并入用户源
     }
@@ -549,7 +742,7 @@ void CompositeRegistry::loadFromDir(const std::filesystem::path& dir, CompositeS
         }
         CompositeSpec spec;
         std::string   parse_error;
-        if (!composite_from_json(document, spec, &parse_error)) {
+        if (!compositeFromJson(document, spec, &parse_error)) {
             log::warn("[上级节点] 跳过无效规格 " + entry.path().string() + "：" + parse_error);
             continue;
         }
@@ -580,11 +773,11 @@ bool CompositeRegistry::save(const CompositeSpec& spec, std::string* error,
     }
 
     // PS-D9：内置源只读 —— 直接覆盖内置 id 被拒（须先「复制到我的节点库」）
-    if (source_of(spec.id) == CompositeSource::Builtin) {
+    if (sourceOf(spec.id) == CompositeSource::Builtin) {
         return fail("内置官方预设为只读：请先「复制到我的节点库」再编辑");
     }
 
-    const std::filesystem::path dir = user_root();
+    const std::filesystem::path dir = userRoot();
     std::error_code             ec;
     std::filesystem::create_directories(dir, ec);
     if (ec) {
@@ -596,7 +789,7 @@ bool CompositeRegistry::save(const CompositeSpec& spec, std::string* error,
     if (!out.is_open()) {
         return fail("无法写入文件: " + file.string());
     }
-    out << composite_to_json(spec).dump(4);
+    out << compositeToJson(spec).dump(4);
     out.close();
     if (!out.good()) {
         return fail("写入文件失败: " + file.string());
@@ -630,7 +823,7 @@ bool CompositeRegistry::remove(const std::string& id, std::string* error)
         return false;
     };
 
-    const CompositeSource source = source_of(id);
+    const CompositeSource source = sourceOf(id);
     if (source == CompositeSource::None) {
         if (error != nullptr) {
             error->clear();
@@ -641,7 +834,7 @@ bool CompositeRegistry::remove(const std::string& id, std::string* error)
         return fail("内置官方预设为只读：不能删除");
     }
 
-    const std::filesystem::path file = user_root() / (id + ".json");
+    const std::filesystem::path file = userRoot() / (id + ".json");
     std::error_code             ec;
     if (std::filesystem::exists(file, ec)) {
         if (!std::filesystem::remove(file, ec) || ec) {
@@ -657,14 +850,14 @@ bool CompositeRegistry::remove(const std::string& id, std::string* error)
     return true;
 }
 
-CompositeSource CompositeRegistry::source_of(const std::string& id) const
+CompositeSource CompositeRegistry::sourceOf(const std::string& id) const
 {
     ensureLoaded();
     const auto it = source_.find(id);
     return (it != source_.end()) ? it->second : CompositeSource::None;
 }
 
-bool CompositeRegistry::copy_to_user(const std::string& id, std::string* error)
+bool CompositeRegistry::copyToUser(const std::string& id, std::string* error)
 {
     const auto fail = [error](const std::string& text) {
         if (error != nullptr) {
@@ -677,7 +870,7 @@ bool CompositeRegistry::copy_to_user(const std::string& id, std::string* error)
     if (spec == nullptr) {
         return fail("找不到上级节点规格: " + id);
     }
-    if (source_of(id) == CompositeSource::User) {
+    if (sourceOf(id) == CompositeSource::User) {
         if (error != nullptr) {
             error->clear();
         }
@@ -685,7 +878,7 @@ bool CompositeRegistry::copy_to_user(const std::string& id, std::string* error)
     }
 
     // 写入用户源（同 id 覆盖官方资产是有意为之：用户接管后来源切 User、可编辑）
-    const std::filesystem::path dir = user_root();
+    const std::filesystem::path dir = userRoot();
     std::error_code             ec;
     std::filesystem::create_directories(dir, ec);
     if (ec) {
@@ -696,7 +889,7 @@ bool CompositeRegistry::copy_to_user(const std::string& id, std::string* error)
     if (!out.is_open()) {
         return fail("无法写入文件: " + file.string());
     }
-    out << composite_to_json(*spec).dump(4);
+    out << compositeToJson(*spec).dump(4);
     out.close();
     if (!out.good()) {
         return fail("写入文件失败: " + file.string());
@@ -732,7 +925,7 @@ void CompositeRegistry::migrateLegacy()
     }
     attempted = true;
 
-    const std::filesystem::path legacy = paths::composites_dir();
+    const std::filesystem::path legacy = paths::compositesDir();
     std::error_code             ec;
     if (!std::filesystem::is_directory(legacy, ec)) {
         return;
@@ -759,20 +952,20 @@ void CompositeRegistry::migrateLegacy()
         }
         CompositeSpec spec;
         std::string   parse_error;
-        if (!composite_from_json(document, spec, &parse_error)) {
+        if (!compositeFromJson(document, spec, &parse_error)) {
             log::warn("[上级节点] 旧目录迁移：跳过无效规格 " + entry.path().string() + "：" +
                       parse_error);
             continue;
         }
         // 复制到用户源（同 id 覆盖语义）
-        const std::filesystem::path dst = user_root() / (spec.id + ".json");
+        const std::filesystem::path dst = userRoot() / (spec.id + ".json");
         std::filesystem::create_directories(dst.parent_path(), ec);
         std::ofstream out(dst, std::ios::binary | std::ios::trunc);
         if (!out.is_open()) {
             log::error("[上级节点] 旧目录迁移：无法写入 " + dst.string());
             continue;
         }
-        out << composite_to_json(spec).dump(4);
+        out << compositeToJson(spec).dump(4);
         out.close();
         if (!out.good()) {
             log::error("[上级节点] 旧目录迁移：写入失败 " + dst.string());
@@ -797,7 +990,7 @@ void CompositeRegistry::migrateLegacy()
     }
 }
 
-std::string CompositeRegistry::make_id() const
+std::string CompositeRegistry::makeId() const
 {
     ensureLoaded();
     std::set<int> used;

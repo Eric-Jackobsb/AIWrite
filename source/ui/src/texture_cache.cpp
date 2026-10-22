@@ -148,7 +148,7 @@ void evict_if_needed()
 
 } // namespace
 
-TextureInfo texture_for(const std::string& path)
+TextureInfo textureFor(const std::string& path)
 {
     if (path.empty()) {
         TextureInfo empty;
@@ -217,46 +217,46 @@ TextureInfo texture_for(const std::string& path)
     return info;
 }
 
-bool image_size(const std::string& path, int* width, int* height, std::string* error)
+bool imageSize(const std::string& path, int* width, int* height, std::string* error)
 {
     // M7-04：实现搬到 utils::image_decode（stb 优先 / WIC 兜底 + 可操作文案）
     return utils::readImageSize(path, width, height, error);
 }
 
-void begin_frame()
+void beginFrame()
 {
     // 逐帧标记（契约：每帧渲染开头调用一次，见 ui/app.cpp）
     ++g_frame;
 }
 
-void set_texture_capacity(std::size_t capacity)
+void setTextureCapacity(std::size_t capacity)
 {
     g_capacity = capacity;
     evict_if_needed();
 }
 
-std::size_t texture_capacity()
+std::size_t textureCapacity()
 {
     return g_capacity;
 }
 
-void set_texture_byte_budget(std::size_t bytes)
+void setTextureByteBudget(std::size_t bytes)
 {
     g_byte_budget = bytes;
     evict_if_needed();
 }
 
-std::size_t texture_byte_budget()
+std::size_t textureByteBudget()
 {
     return g_byte_budget;
 }
 
-std::size_t cached_texture_count()
+std::size_t cachedTextureCount()
 {
     return g_cache.size();
 }
 
-TextureCacheStats texture_cache_stats()
+TextureCacheStats textureCacheStats()
 {
     TextureCacheStats stats;
     stats.requests    = g_requests;
@@ -272,7 +272,7 @@ TextureCacheStats texture_cache_stats()
     return stats;
 }
 
-void release_textures()
+void releaseTextures()
 {
     for (auto& item : g_cache) {
         release_entry(item.second);

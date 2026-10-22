@@ -40,7 +40,7 @@ std::string append_query_param(const std::string& url, const std::string& name,
     return out;
 }
 
-bool parse_json_text(const std::string& text, nlohmann::json* out, std::string* error)
+bool parseJsonText(const std::string& text, nlohmann::json* out, std::string* error)
 {
     if (out == nullptr) {
         return false;
@@ -64,7 +64,7 @@ bool parse_json_text(const std::string& text, nlohmann::json* out, std::string* 
     }
 }
 
-std::string json_error_message(const nlohmann::json& body)
+std::string jsonErrorMessage(const nlohmann::json& body)
 {
     if (body.is_object()) {
         const auto error_it = body.find("error");
@@ -99,7 +99,7 @@ std::string json_error_message(const nlohmann::json& body)
     return {};
 }
 
-HttpJsonResult http_post_json(const HttpJsonRequest& request)
+HttpJsonResult httpPostJson(const HttpJsonRequest& request)
 {
     HttpJsonResult result;
     if (request.url.empty()) {
@@ -136,12 +136,12 @@ HttpJsonResult http_post_json(const HttpJsonRequest& request)
         request.max_body_bytes > 0 ? request.max_body_bytes : (4u * 1024u * 1024u);
     // M_patchAB §2.3（PB-06 剩余）：网络策略在主线程解析（读进程配置缓存），**值语义**进作业对象
     const HttpNetOptions net_options =
-        request.net.has_value() ? *request.net : resolve_http_net(request.url);
+        request.net.has_value() ? *request.net : resolveHttpNet(request.url);
     job->proxy         = net_options.proxy;
     job->verify_tls    = net_options.verify_tls;
 
     const auto started = std::chrono::steady_clock::now();
-    const bool aborted = run_cancellable(request.cancel.get(), [job] {
+    const bool aborted = runCancellable(request.cancel.get(), [job] {
         // URL 自带 query（Gemini `?key=`）⇒ 按「scheme://host + path?query」切开交给 httplib
         const std::size_t scheme_end = job->url.find("://");
         const std::size_t host_begin = (scheme_end == std::string::npos) ? 0 : scheme_end + 3;
@@ -154,7 +154,7 @@ HttpJsonResult http_post_json(const HttpJsonRequest& request)
         httplib::Client client(host);
         client.set_connection_timeout(job->connect_timeout_s, 0);
         client.set_read_timeout(job->read_timeout_s, 0);
-        apply_http_net(client, HttpNetOptions{job->proxy, std::string(), job->verify_tls});
+        applyHttpNet(client, HttpNetOptions{job->proxy, std::string(), job->verify_tls});
         const auto begin    = std::chrono::steady_clock::now();
         auto       response = client.Post(path, job->headers, job->body, "application/json");
         const double ms =

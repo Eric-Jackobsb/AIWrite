@@ -62,10 +62,10 @@ std::vector<std::string> collect_image_paths(const json& value)
     const std::string path = text_of(value);
     if (!path.empty()) {
         // P7a-04：防御 —— 上游若直接给出资源令牌（正常路径由「图片输入」已解析），这里也解析一次
-        if (aiwrite::asset::is_token(path)) {
+        if (aiwrite::asset::isToken(path)) {
             bool             missing = false;
             std::string      error;
-            const std::string local = aiwrite::asset::to_local_path(path, &missing, &error);
+            const std::string local = aiwrite::asset::toLocalPath(path, &missing, &error);
             if (!missing && !local.empty()) {
                 paths.push_back(local);
                 return paths;
@@ -198,7 +198,7 @@ OfficialKeyResolution resolve_official_key(const json& params, const json& /*inp
         resolution.source = "node";
     }
     else {
-        resolution.key = ai::resolve_api_key(std::string(), env_names);
+        resolution.key = ai::resolveApiKey(std::string(), env_names);
         if (!resolution.key.empty()) {
             resolution.source = "env";
         }
@@ -225,7 +225,7 @@ OfficialKeyResolution resolve_official_key(const json& params, const json& /*inp
         resolution.ref = effective.key_ref; // 表内默认引用名（如 brain-ai/zhipu）
     }
     const utils::ResolvedSecret resolved =
-        utils::resolve_secret(param_key_from_config, resolution.ref);
+        utils::resolveSecret(param_key_from_config, resolution.ref);
     resolution.key    = resolved.key;
     resolution.source = resolved.source;
     if (resolved.key.empty()) {
@@ -235,7 +235,7 @@ OfficialKeyResolution resolve_official_key(const json& params, const json& /*inp
                 std::to_string(resolved.key.size()) + "）");
     if (resolved.source == "node" && !resolution.ref.empty()) {
         std::string save_error;
-        if (utils::save_credential(resolution.ref, resolved.key, &save_error)) {
+        if (utils::saveCredential(resolution.ref, resolved.key, &save_error)) {
             ctx.console(tag + " 已把 API Key 存入凭据库（ref=" + resolution.ref + "），下次无需再填");
         }
         else {
@@ -255,7 +255,7 @@ engine::EffectiveProvider effective_provider_of(const engine::ExecutionContext& 
     if (node == nullptr) {
         return {};
     }
-    return engine::resolve_effective_provider(*ctx.graph, *node);
+    return engine::resolveEffectiveProvider(*ctx.graph, *node);
 }
 
 // Console 一行：让用户看清「到底用了哪家、走哪条路、地址是什么」
@@ -309,7 +309,7 @@ json execute_image_input(const json& /*inputs*/, const json& params,
                          engine::ExecutionContext& ctx)
 {
     const std::string              raw  = params.value("path", std::string());
-    std::vector<std::string>       list = aiwrite::paths::split_path_list(raw);
+    std::vector<std::string>       list = aiwrite::paths::splitPathList(raw);
 
     // M_8nodes_extension L1-c（§4.2）：目录批量 —— 扫描目录下全部图片（扩展名 + 内容嗅探）
     const std::string directory = params.value("directory", std::string());
@@ -339,12 +339,12 @@ json execute_image_input(const json& /*inputs*/, const json& params,
     std::vector<std::string> legacy;
     images.reserve(list.size());
     for (const std::string& value : list) {
-        if (aiwrite::asset::needs_migration(value)) {
+        if (aiwrite::asset::needsMigration(value)) {
             legacy.push_back(value);
         }
         bool             missing = false;
         std::string      error;
-        const std::string local = aiwrite::asset::to_local_path(value, &missing, &error);
+        const std::string local = aiwrite::asset::toLocalPath(value, &missing, &error);
         if (missing || local.empty()) {
             problems.push_back(error.empty() ? ("图片不可用: " + value) : error);
             continue;
@@ -368,7 +368,7 @@ json execute_image_input(const json& /*inputs*/, const json& params,
         throw engine::NodeError(text);
     }
     if (!legacy.empty()) {
-        ctx.console(aiwrite::asset::migration_hint(legacy.front()));
+        ctx.console(aiwrite::asset::migrationHint(legacy.front()));
     }
 
     // M_8nodes_extension L1-c（§4.2）：图片预处理 —— 读取后、编码前（零参数变化 = 零开销）
@@ -388,7 +388,7 @@ json execute_image_input(const json& /*inputs*/, const json& params,
         return images.front();
     }
     ctx.console("[图片输入] " + std::to_string(images.size()) + " 张：" +
-                aiwrite::paths::join_path_list(images));
+                aiwrite::paths::joinPathList(images));
     return images;
 }
 
@@ -586,7 +586,7 @@ json execute_provider_config(const json& /*inputs*/, const json& params,
         params.value("provider", std::string("deepseek"));
     const std::string model_custom = params.value("model_custom", std::string());
 
-    std::shared_ptr<const ai::ProviderSpecs> specs = ai::provider_specs_snapshot();
+    std::shared_ptr<const ai::ProviderSpecs> specs = ai::providerSpecsSnapshot();
     const ai::ProviderSpec*                  spec  = nullptr;
     if (specs) {
         spec = specs->find(provider_id);
@@ -596,7 +596,7 @@ json execute_provider_config(const json& /*inputs*/, const json& params,
     provider["provider"]    = provider_id;
     provider["mode"]        = params.value("mode", std::string("official"));
     provider["api_base"]    = spec != nullptr
-                                  ? ai::resolve_api_base(*spec, params.value("api_base", std::string()))
+                                  ? ai::resolveApiBase(*spec, params.value("api_base", std::string()))
                                   : params.value("api_base", std::string("https://api.deepseek.com"));
     const std::string model =
         spec != nullptr
@@ -609,7 +609,7 @@ json execute_provider_config(const json& /*inputs*/, const json& params,
     provider["display"]      = spec != nullptr ? spec->display : provider_id;
     provider["spec_origin"]  = spec != nullptr ? spec->origin : std::string();
     provider["key_ref"]      = spec != nullptr
-                                   ? ai::resolve_key_ref(*spec, params.value("api_key_ref", std::string()))
+                                   ? ai::resolveKeyRef(*spec, params.value("api_key_ref", std::string()))
                                    : params.value("api_key_ref", std::string());
     provider["has_api_key"]  = !params.value("api_key", std::string()).empty();
     if (spec != nullptr && spec->kind == "web") {
@@ -667,7 +667,7 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     //  * 无表条目时按调用通道取能力（`web` → 内置网页版协议的能力），守 `I2` 既有行为
     const std::string        system_prompt = params.value("system_prompt", std::string());
     const int                seed_param    = params.value("seed", 0);
-    const ai::ProviderCaps   caps          = ai::caps_for_call(effective.spec, mode == "web");
+    const ai::ProviderCaps   caps          = ai::capsForCall(effective.spec, mode == "web");
     ai::GenerateParams       gate_params;
     gate_params.system_prompt = system_prompt;
     gate_params.seed          = seed_param;
@@ -688,7 +688,7 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         // PB-05 + M_patchB L1：官方 / 兼容 API —— 端点·认证·超时·env 名按**配置表**取值
         ai::OfficialChatRequest official;
         if (effective.spec != nullptr) {
-            official.options         = ai::provider_options_from(*effective.spec);
+            official.options         = ai::providerOptionsFrom(*effective.spec);
             official.image_max_bytes = effective.spec->limits.image_max_bytes;
         }
         official.api_base         = effective.api_base; // 工作流参数优先 → 表默认 → 引擎默认
@@ -733,7 +733,7 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         //  * 重试：`error.retry_enabled / retry_count / retry_interval_ms` —— 只对**可重试**失败
         //    （429 / 5xx / 网络超时）重试；凭证 / 余额 / 请求不合法**不重试**（避免加剧风控）
         //  * ---- M_8nodes_extension L1-a（§3.3 / §5.3）：**节点级覆盖优先**（0 / 空 = 回落全局）----
-        const aiwrite::Config& runtime_config = aiwrite::app_config();
+        const aiwrite::Config& runtime_config = aiwrite::appConfig();
         const int              override_connect_ms     = params.value("timeout_connect_ms", 0);
         const int              override_first_byte_ms  = params.value("timeout_first_byte_ms", 0);
         const int              override_stream_idle_ms = params.value("timeout_stream_idle_ms", 0);
@@ -771,14 +771,14 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
             retry_count       = runtime_config.error.retry_count;
             retry_interval_ms = runtime_config.error.retry_interval_ms;
         }
-        const int max_retries = ai::clamp_retry_count(retry_enabled, retry_count);
+        const int max_retries = ai::clampRetryCount(retry_enabled, retry_count);
         ctx.console("[文本生成] 官方 API 请求：" + official.model + "，提示词 " +
                     std::to_string(official.prompt.size()) + " 字节" +
                     (system_prompt.empty() ? "" : "（含系统提示词）") +
                     (max_retries > 0 ? ("；重试上限 " + std::to_string(max_retries) + " 次") : ""));
         ai::OfficialChatResult official_result;
         for (int attempt = 0;; ++attempt) {
-            official_result = ai::official_chat(official);
+            official_result = ai::officialChat(official);
             if (official_result.ok && !official_result.text.empty()) {
                 break;
             }
@@ -790,14 +790,14 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
                         : official_result.error);
             }
             if (attempt >= max_retries ||
-                !ai::http_status_retryable(official_result.http_status)) {
+                !ai::httpStatusRetryable(official_result.http_status)) {
                 break; // 不可重试 / 已用尽
             }
-            const int delay_ms = ai::retry_delay_ms(retry_interval_ms, attempt);
+            const int delay_ms = ai::retryDelayMs(retry_interval_ms, attempt);
             ctx.console("[文本生成] 第 " + std::to_string(attempt + 1) + " 次重试（HTTP " +
                         std::to_string(official_result.http_status) + "，等 " +
                         std::to_string(delay_ms) + " ms；可重试失败 = 429 / 5xx / 网络超时）");
-            if (ai::sleep_interruptible(ctx.cancel_token.get(), delay_ms)) {
+            if (ai::sleepInterruptible(ctx.cancel_token.get(), delay_ms)) {
                 throw engine::NodeError("文本生成（官方 API）已取消（用户点了「停止」）：重试等待被中断");
             }
         }
@@ -816,25 +816,25 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     //  * 站点**只能**来自生效条目自己的 `web` 段（PB2-22 / 决策 D-22② / 不变量 I14：**不**回落内置默认站点）
     //  * 站点与当前登录窗口不一致时，ensure_session 按串行策略重开窗口
     //    （页面内 PoW 求解依赖该站点页面；决策 D-20）
-    const std::string site_error = ai::web_site_error(effective.spec);
+    const std::string site_error = ai::webSiteError(effective.spec);
     if (!site_error.empty()) {
         throw engine::NodeError("文本生成（网页版）不可用：" + site_error);
     }
-    const ai::ProviderWebSpec site      = ai::strict_web_spec_for(effective.spec);
-    const std::string        site_id    = ai::strict_web_provider_id_for(effective.spec);
+    const ai::ProviderWebSpec site      = ai::strictWebSpecFor(effective.spec);
+    const std::string        site_id    = ai::strictWebProviderIdFor(effective.spec);
     const std::string        site_label = site.login_url;
 
     // ---- L3（PB2-13）：通用 DOM 适配器（选择器驱动）—— 站点 = 纯数据，程序里无站点专有 C++ ----
     if (site.adapter == "dom") {
         // M8-37（零开关）：生成字段（选择器 / 发送 / 取答案）**未回填不再拦路** ——
         //  dom_chat 会在运行期自动识别（输入框打分 / 答案容器基线差分），识别结果只打印、不回写配置
-        if (ai::web_login_only(effective.spec)) {
+        if (ai::webLoginOnly(effective.spec)) {
             ctx.console("[文本生成] 站点「" + site_label +
                         "」的生成字段未回填（web.input_selector / send / answer_selector）—— "
                         "本次运行将**自动识别**（结果打印在下方；如需固化可用 --web-dom-dump "
                         "--provider " + site_id + " 取建议选择器写进 providers.json）");
         }
-        const std::string dom_field_warnings = ai::web_site_field_warnings(effective.spec);
+        const std::string dom_field_warnings = ai::webSiteFieldWarnings(effective.spec);
         if (!dom_field_warnings.empty()) {
             ctx.console("[文本生成] " + dom_field_warnings); // 决策 D-26：可回落 + 警告
         }
@@ -850,7 +850,7 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         dom_request.timeout_ms = std::max(
             dom_request.timeout_ms,
             std::max(params.value("timeout_connect_ms", 0), params.value("timeout_first_byte_ms", 0)));
-        const ai::DomChatResult dom = ai::dom_chat(dom_request);
+        const ai::DomChatResult dom = ai::domChat(dom_request);
         if (!dom.ok) {
             throw engine::NodeError("文本生成（网页版 · DOM 适配器）失败：" + dom.error);
         }
@@ -870,14 +870,14 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
         return dom.text;
     }
 
-    if (!ai::web_adapter_implemented(site.adapter)) {
+    if (!ai::webAdapterImplemented(site.adapter)) {
         // R12：表里有、程序没实现 → 运行时**明确报错**（登录 / 协议探测仍可用）
         throw engine::NodeError("文本生成（网页版）不可用：站点「" + site_label + "」的适配器 " +
                                 site.adapter +
                                 " 本版本尚未实现（已实现：builtin:deepseek、dom）"
                                 "——该站点可用于登录 / 协议探测");
     }
-    const std::string field_warnings = ai::web_site_field_warnings(effective.spec);
+    const std::string field_warnings = ai::webSiteFieldWarnings(effective.spec);
     if (!field_warnings.empty()) {
         ctx.console("[文本生成] " + field_warnings); // 决策 D-26：可回落 + 警告
     }
@@ -885,11 +885,11 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
     boot.owner = web_owner_of(ctx, site, site_id); // M_patchC（PW-02）：归属贯穿（内置协议路径）
     const std::string        site_key = web::login_request_site(boot);
 
-    if (!web::SessionStore::instance().has_token(site_key) ||
-        !web::window_on_site(boot.owner, site_key)) {
+    if (!web::SessionStore::instance().hasToken(site_key) ||
+        !web::windowOnSite(boot.owner, site_key)) {
         std::string boot_error;
         ctx.console("[文本生成] 正在准备网页版会话（站点 " + site_label + "；首次约数秒）…");
-        if (!web::ensure_session(boot, 25000, &boot_error)) {
+        if (!web::ensureSession(boot, 25000, &boot_error)) {
             throw engine::NodeError("文本生成（网页版）不可用：" + boot_error);
         }
     }
@@ -933,7 +933,7 @@ json execute_llm_generate(const json& inputs, const json& params, engine::Execut
                 std::to_string(prompt.size()) + " 字节" +
                 (system_prompt.empty() ? "" : "（含系统提示词 " +
                                                  std::to_string(system_prompt.size()) + " 字节）"));
-    const ai::WebChatResult result = ai::web_chat(session, request);
+    const ai::WebChatResult result = ai::webChat(session, request);
     if (!result.ok || result.text.empty()) {
         throw engine::NodeError("文本生成（网页版）失败：" +
                                 (result.error.empty() ? std::string("未取到文本") : result.error));
@@ -1005,30 +1005,30 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
     //    不齐备 → 本节点直接报错，**不发送**（绝不把「图没上去」当成「模型没看懂」）
     //  * 「看图」由**站点自己的能力**完成（豆包 B3 已实测真视觉；Kimi 待侦察）
     if (mode == "web") {
-        const std::string site_error = ai::web_site_error(effective.spec);
+        const std::string site_error = ai::webSiteError(effective.spec);
         if (!site_error.empty()) {
             throw engine::NodeError("图片理解（网页版）不可用：" + site_error);
         }
-        const ai::ProviderWebSpec site   = ai::strict_web_spec_for(effective.spec);
-        const std::string        site_id = ai::strict_web_provider_id_for(effective.spec);
+        const ai::ProviderWebSpec site   = ai::strictWebSpecFor(effective.spec);
+        const std::string        site_id = ai::strictWebProviderIdFor(effective.spec);
         if (site.adapter != "dom") {
             throw engine::NodeError(
                 "图片理解（网页版）不可用：站点「" + effective.display + "」的适配器 " +
                 site.adapter + " 尚未接图片上传（当前支持：adapter=dom 的站点 + 站点上传单元）");
         }
-        const std::string upload_error = ai::site_upload_error(site.upload_adapter);
+        const std::string upload_error = ai::siteUploadError(site.upload_adapter);
         if (!upload_error.empty()) {
             throw engine::NodeError("图片理解（网页版）不可用：" + upload_error);
         }
         // M8-37（零开关）：生成字段未回填**不再拦路** —— dom_chat 运行期自动识别输入框 / 答案容器
         //  （识别结果只打印；要固化可用 --web-dom-dump --provider <id> 取建议选择器）
-        if (ai::web_login_only(effective.spec)) {
+        if (ai::webLoginOnly(effective.spec)) {
             ctx.console("[图片理解] 站点「" + site.login_url +
                         "」的生成字段未回填（web.input_selector / send / answer_selector）—— "
                         "本次运行将**自动识别**；如需固化可用 --web-dom-dump --provider " + site_id +
                         " 取建议选择器写进 providers.json");
         }
-        const std::string dom_field_warnings = ai::web_site_field_warnings(effective.spec);
+        const std::string dom_field_warnings = ai::webSiteFieldWarnings(effective.spec);
         if (!dom_field_warnings.empty()) {
             ctx.console("[图片理解] " + dom_field_warnings); // 决策 D-26：可回落 + 警告
         }
@@ -1048,7 +1048,7 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
         dom_request.timeout_ms = std::max(
             dom_request.timeout_ms,
             std::max(params.value("timeout_connect_ms", 0), params.value("timeout_first_byte_ms", 0)));
-        const ai::DomChatResult dom = ai::dom_chat(dom_request);
+        const ai::DomChatResult dom = ai::domChat(dom_request);
         for (const std::string& line : dom.conversions) {
             ctx.console("[图片理解] 转换：" + line); // 每张的格式处理都如实记录（可追溯）
         }
@@ -1092,7 +1092,7 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
                         " 的视觉能力，已按允许调用处理（若失败请改用表内视觉模型）");
         }
     }
-    const ai::ProviderCaps vlm_caps = ai::caps_for_call(effective.spec, false);
+    const ai::ProviderCaps vlm_caps = ai::capsForCall(effective.spec, false);
     ai::GenerateParams     vlm_gate_params;
     vlm_gate_params.prompt = prompt;
     vlm_gate_params.images = images;
@@ -1118,7 +1118,7 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
 
     ai::OfficialChatRequest official;
     if (effective.spec != nullptr) {
-        official.options         = ai::provider_options_from(*effective.spec);
+        official.options         = ai::providerOptionsFrom(*effective.spec);
         official.image_max_bytes = effective.spec->limits.image_max_bytes;
     }
     official.api_base         = effective.api_base; // 工作流参数优先 → 表默认 → 引擎默认
@@ -1155,7 +1155,7 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
 
     // ---- M_8nodes_extension L1-a（§3.3 增量② / §5.3）：图片理解接入超时 + 重试 ----
     //  * 现状只有文本生成走重试；本项把**同一份**读取接进 N-07（节点级覆盖优先，0 = 回落全局）
-    const aiwrite::Config& runtime_config = aiwrite::app_config();
+    const aiwrite::Config& runtime_config = aiwrite::appConfig();
     const int              override_connect_ms    = params.value("timeout_connect_ms", 0);
     const int              override_first_byte_ms = params.value("timeout_first_byte_ms", 0);
     if (official.options.connect_timeout_s <= 0) {
@@ -1187,7 +1187,7 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
         retry_count       = runtime_config.error.retry_count;
         retry_interval_ms = runtime_config.error.retry_interval_ms;
     }
-    const int max_retries = ai::clamp_retry_count(retry_enabled, retry_count);
+    const int max_retries = ai::clampRetryCount(retry_enabled, retry_count);
 
     ctx.console("[图片理解] 请求：" + official.model + "，图片 " + std::to_string(images.size()) +
                 " 张，提示词 " + std::to_string(prompt.size()) + " 字节" +
@@ -1195,7 +1195,7 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
                 (max_retries > 0 ? ("；重试上限 " + std::to_string(max_retries) + " 次") : ""));
     ai::OfficialChatResult result;
     for (int attempt = 0;; ++attempt) {
-        result = ai::official_chat(official);
+        result = ai::officialChat(official);
         if (result.ok && !result.text.empty()) {
             break;
         }
@@ -1205,14 +1205,14 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
                 result.error.empty() ? std::string("图片理解已取消（用户点了「停止」）")
                                      : result.error);
         }
-        if (attempt >= max_retries || !ai::http_status_retryable(result.http_status)) {
+        if (attempt >= max_retries || !ai::httpStatusRetryable(result.http_status)) {
             break; // 不可重试 / 已用尽
         }
-        const int delay_ms = ai::retry_delay_ms(retry_interval_ms, attempt);
+        const int delay_ms = ai::retryDelayMs(retry_interval_ms, attempt);
         ctx.console("[图片理解] 第 " + std::to_string(attempt + 1) + " 次重试（HTTP " +
                     std::to_string(result.http_status) + "，等 " + std::to_string(delay_ms) +
                     " ms；可重试失败 = 429 / 5xx / 网络超时）");
-        if (ai::sleep_interruptible(ctx.cancel_token.get(), delay_ms)) {
+        if (ai::sleepInterruptible(ctx.cancel_token.get(), delay_ms)) {
             throw engine::NodeError("图片理解已取消（用户点了「停止」）：重试等待被中断");
         }
     }
@@ -1221,8 +1221,8 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
         char buffer[256] = {};
         std::snprintf(buffer, sizeof(buffer),
                       "[图片理解] 编码：%zu 张 → base64 后 %s（原始约 %s，≈1.33×），耗时 %.0f ms%s",
-                      images.size(), ai::human_bytes(result.encoded_bytes).c_str(),
-                      ai::human_bytes(static_cast<std::size_t>(
+                      images.size(), ai::humanBytes(result.encoded_bytes).c_str(),
+                      ai::humanBytes(static_cast<std::size_t>(
                           static_cast<double>(result.encoded_bytes) / 1.33)).c_str(),
                       result.encode_ms,
                       result.encode_ms < 1.0 ? "（命中编码缓存，P7a-08）" : "");

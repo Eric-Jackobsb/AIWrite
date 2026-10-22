@@ -151,27 +151,27 @@ const char* const kSignKeys[] = {"s",          "sign",      "signature",  "sig",
 } // namespace
 
 // --------------------------------------------------------------------- 主流程 --
-int upload_supply_probe(const std::string& provider_id, int timeout_s, const std::string& get_path)
+int uploadSupplyProbe(const std::string& provider_id, int timeout_s, const std::string& get_path)
 {
     try { // 兜底：把异常转成可读输出（本项目既有做法：避免 std::terminate 丢掉全部输出）
         // ---- 0) 条目（**严格解析**，不回落内置默认站点 —— 决策 `D-26`）----
         std::string id = provider_id;
         if (id.empty()) {
-            const std::vector<std::string> web_ids = provider_specs().ids("web");
+            const std::vector<std::string> web_ids = providerSpecs().ids("web");
             if (web_ids.empty()) {
                 std::printf("[供料探针] 配置表里没有 kind=web 条目\n");
                 return 2;
             }
             id = web_ids.front();
         }
-        const ProviderSpec* spec       = provider_specs().find(id);
-        const std::string   site_error = web_site_error(spec);
+        const ProviderSpec* spec       = providerSpecs().find(id);
+        const std::string   site_error = webSiteError(spec);
         if (!site_error.empty()) {
             std::printf("[供料探针] 站点不可用（条目 %s）：%s\n", id.c_str(), site_error.c_str());
             return 2;
         }
-        const ProviderWebSpec site    = strict_web_spec_for(spec);
-        const std::string     site_id = strict_web_provider_id_for(spec);
+        const ProviderWebSpec site    = strictWebSpecFor(spec);
+        const std::string     site_id = strictWebProviderIdFor(spec);
         const std::string     origin  = origin_of(site.login_url);
         if (origin.empty()) {
             std::printf("[供料探针] 无法从 web.login_url 解析 origin：%s\n", site.login_url.c_str());
@@ -205,18 +205,18 @@ int upload_supply_probe(const std::string& provider_id, int timeout_s, const std
         // ---- 1) 会话：有头 WebView2 + 人工登录 ----
         const auto      t_boot     = std::chrono::steady_clock::now();
         std::string     boot_error;
-        const bool      session_ok = web::ensure_session(request, wait_s * 1000, &boot_error);
+        const bool      session_ok = web::ensureSession(request, wait_s * 1000, &boot_error);
         const long long boot_ms    = std::chrono::duration_cast<std::chrono::milliseconds>(
                                       std::chrono::steady_clock::now() - t_boot)
                                       .count();
         const std::string site_key = web::login_request_site(request);
         const web::Session session = web::SessionStore::instance().snapshot(site_key);
         const WebSessionVerdict verdict =
-            web_session_state(spec, web::web_session_evidence(session));
+            webSessionState(spec, web::webSessionEvidence(session));
         const std::string boot_note = boot_error.empty() ? std::string() : ("｜" + boot_error);
         std::printf("\n[1] 会话\n");
         std::printf("  站点键   : %s\n", site_key.c_str());
-        std::printf("  登录态   : %s（%s）\n", web_session_state_label(verdict.state).c_str(),
+        std::printf("  登录态   : %s（%s）\n", webSessionStateLabel(verdict.state).c_str(),
                     verdict.reason.c_str());
         std::printf("  取凭证   : %s（%lld ms）%s\n", session_ok ? "OK" : "未取到", boot_ms,
                     boot_note.c_str());
@@ -226,7 +226,7 @@ int upload_supply_probe(const std::string& provider_id, int timeout_s, const std
         report["boot_ms"]        = boot_ms;
         report["boot_error"]     = boot_error;
         report["site_key"]       = site_key;
-        report["session_label"]  = web_session_state_label(verdict.state);
+        report["session_label"]  = webSessionStateLabel(verdict.state);
         report["session_reason"] = verdict.reason;
         report["cookie_count"]   = session.cookies.size();
 
@@ -300,11 +300,11 @@ int upload_supply_probe(const std::string& provider_id, int timeout_s, const std
         nlohmann::json cookie_list = nlohmann::json::array();
         for (const web::Cookie& cookie : session.cookies) {
             cookie_list.push_back({{"name", cookie.name},
-                                   {"masked", web::mask_value(cookie.value)},
+                                   {"masked", web::maskValue(cookie.value)},
                                    {"http_only", cookie.http_only},
                                    {"session", cookie.session}});
             std::printf("  %-30s %s%s\n", cookie.name.c_str(),
-                        web::mask_value(cookie.value).c_str(),
+                        web::maskValue(cookie.value).c_str(),
                         cookie.http_only ? "（HttpOnly）" : "");
         }
         std::vector<std::string> name_hits;
@@ -411,9 +411,9 @@ int upload_supply_probe(const std::string& provider_id, int timeout_s, const std
         }
 
         // ---- 5) 落盘 + 结论 ----
-        paths::ensure_data_dirs();
+        paths::ensureDataDirs();
         const std::string           out_name = "m8_supply_probe_" + now_stamp() + ".json";
-        const std::filesystem::path out_path = paths::logs_dir() / out_name;
+        const std::filesystem::path out_path = paths::logsDir() / out_name;
         {
             std::ofstream out(out_path, std::ios::binary);
             if (out) {

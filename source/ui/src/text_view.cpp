@@ -45,7 +45,7 @@ void draw_readonly_text(const char* id, const std::string& text, float height_li
     }
 }
 
-void copy_text(const std::string& text, const std::string& log_prefix)
+void copyText(const std::string& text, const std::string& log_prefix)
 {
     ImGui::SetClipboardText(text.c_str());
     log::info(log_prefix + " 已复制 " + std::to_string(text.size()) + " 字符到剪贴板");

@@ -36,7 +36,7 @@ int current_major()
 
 } // namespace
 
-std::string current_workflow_version() { return kWorkflowVersion; }
+std::string currentWorkflowVersion() { return kWorkflowVersion; }
 
 // 生产迁移表：**当前为空** —— 历史上没有「必须改文件才能载入」的破坏性变更。
 //  * 新增迁移步骤时：填 `from_version` / `to_version` / `note` / `apply` 四项，
@@ -118,7 +118,7 @@ WorkflowMigrationOutcome migrate_workflow_with(const std::vector<WorkflowMigrati
     return outcome;
 }
 
-WorkflowMigrationOutcome migrate_workflow(nlohmann::json* document)
+WorkflowMigrationOutcome migrateWorkflow(nlohmann::json* document)
 {
     return migrate_workflow_with(kWorkflowMigrations, document);
 }
@@ -127,7 +127,7 @@ WorkflowMigrationOutcome migrate_workflow(nlohmann::json* document)
 //  离线自检（`api_probe --exec-selftest`）
 //  * 生产迁移表当前为空 ⇒ 机制用**夹具表**覆盖（见下方 ③），不留死代码
 // ---------------------------------------------------------------------------
-int migration_selftest(int* passed_out)
+int migrationSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
@@ -144,18 +144,18 @@ int migration_selftest(int* passed_out)
 
     // ---- ① 工作流：当前版本 / 缺版本 / 未来版本 ----
     nlohmann::json current_doc = {{"version", kWorkflowVersion}, {"nodes", nlohmann::json::array()}};
-    const WorkflowMigrationOutcome current_outcome = migrate_workflow(&current_doc);
+    const WorkflowMigrationOutcome current_outcome = migrateWorkflow(&current_doc);
     check(current_outcome.ok && !current_outcome.migrated && current_outcome.notes.empty(),
           "工作流：同主版本 ⇒ 原样通过（不改文档、不产生说明）");
     check(current_doc["version"].get<std::string>() == kWorkflowVersion,
           "工作流：原样通过时 version 字段不变");
 
     nlohmann::json legacy_doc = {{"nodes", nlohmann::json::array()}};
-    const WorkflowMigrationOutcome legacy_outcome = migrate_workflow(&legacy_doc);
+    const WorkflowMigrationOutcome legacy_outcome = migrateWorkflow(&legacy_doc);
     check(legacy_outcome.ok && !legacy_outcome.migrated && legacy_outcome.notes.size() == 1,
           "工作流：缺 version（老文件）⇒ 按当前版本处理 + 一条说明");
     nlohmann::json future_doc = {{"version", "9.0"}, {"nodes", nlohmann::json::array()}};
-    const WorkflowMigrationOutcome future_outcome = migrate_workflow(&future_doc);
+    const WorkflowMigrationOutcome future_outcome = migrateWorkflow(&future_doc);
     check(!future_outcome.ok && future_outcome.error.find("更新") != std::string::npos &&
               future_outcome.error.find("升级") != std::string::npos,
           "工作流：未来主版本 ⇒ **明确拒绝** + 可操作错误（不猜、不降级）");
@@ -163,15 +163,15 @@ int migration_selftest(int* passed_out)
           "工作流：拒绝时**不改动**调用方文档（原文件不被降级写坏）");
 
     nlohmann::json minor_doc = {{"version", "1.7"}, {"nodes", nlohmann::json::array()}};
-    check(migrate_workflow(&minor_doc).ok && !migrate_workflow(&minor_doc).migrated,
+    check(migrateWorkflow(&minor_doc).ok && !migrateWorkflow(&minor_doc).migrated,
           "工作流：同主版本、更高次版本 ⇒ 通过（次版本不拦）");
 
     nlohmann::json bad_doc = nlohmann::json::array();
-    check(!migrate_workflow(&bad_doc).ok, "工作流：非对象文档 ⇒ 拒绝并给原因");
+    check(!migrateWorkflow(&bad_doc).ok, "工作流：非对象文档 ⇒ 拒绝并给原因");
 
     // ---- ② 生产迁移表为空时的「旧主版本」口径 ----
     nlohmann::json old_doc = {{"version", "0.9"}, {"nodes", nlohmann::json::array()}};
-    const WorkflowMigrationOutcome old_outcome = migrate_workflow(&old_doc);
+    const WorkflowMigrationOutcome old_outcome = migrateWorkflow(&old_doc);
     check(old_outcome.ok && !old_outcome.migrated && old_outcome.notes.size() == 1,
           "工作流：旧主版本且表为空 ⇒ 通过 + 「无需迁移」说明（如实登记，不假装迁移过）");
 
@@ -223,20 +223,20 @@ int migration_selftest(int* passed_out)
     // ---- ④ 配置迁移（实现归 `utils/config.cpp`；此处调用以一起断言）----
     Config fresh;
     fresh.config_version                   = 1;
-    const ConfigMigrationOutcome fresh_out = migrate_config(fresh);
+    const ConfigMigrationOutcome fresh_out = migrateConfig(fresh);
     check(fresh_out.ok && !fresh_out.future && !fresh.version_newer_than_supported,
           "配置：当前版本 ⇒ 通过且不标记「未来版本」");
 
     Config legacy_config;
     legacy_config.config_version = 0; // 模拟老文件（无版本键）
-    const ConfigMigrationOutcome legacy_cfg = migrate_config(legacy_config);
+    const ConfigMigrationOutcome legacy_cfg = migrateConfig(legacy_config);
     check(legacy_cfg.ok && legacy_cfg.migrated && legacy_cfg.from == 0 &&
               legacy_config.config_version == 1,
           "配置：缺版本（老文件）⇒ 补齐为 1 + 说明");
 
     Config future_config;
     future_config.config_version = 99;
-    const ConfigMigrationOutcome future_cfg = migrate_config(future_config);
+    const ConfigMigrationOutcome future_cfg = migrateConfig(future_config);
     check(future_cfg.ok && future_cfg.future && future_config.version_newer_than_supported,
           "配置：未来版本 ⇒ **标记拒绝降级写回**（加载继续用已知字段）");
     check(future_cfg.notes.size() == 1 &&
@@ -258,11 +258,11 @@ int migration_selftest(int* passed_out)
             out << "config_version = 99\n\n[ui]\nshow_grid = true\n";
         }
         Config loaded_future;
-        const bool load_ok = aiwrite::load_config(future_file, loaded_future);
+        const bool load_ok = aiwrite::loadConfig(future_file, loaded_future);
         check(load_ok && loaded_future.version_newer_than_supported &&
                   loaded_future.config_version == 99,
               "端到端：读到未来版本配置 ⇒ 加载成功（按已知字段）且标记「未来版本」");
-        const bool refused = !aiwrite::save_config(future_file, loaded_future);
+        const bool refused = !aiwrite::saveConfig(future_file, loaded_future);
         check(refused, "端到端：未来版本配置 ⇒ `save_config()` **拒绝写回**");
         {
             std::ifstream     in(future_file, std::ios::binary);
@@ -274,8 +274,8 @@ int migration_selftest(int* passed_out)
 
         Config normal;
         normal.ui.grid_size = 24;
-        check(aiwrite::save_config(normal_file, normal) &&
-                  aiwrite::load_config(normal_file, normal) &&
+        check(aiwrite::saveConfig(normal_file, normal) &&
+                  aiwrite::loadConfig(normal_file, normal) &&
                   normal.ui.grid_size == 24 && normal.config_version == 1,
               "端到端：正常配置 ⇒ 保存 / 回读一致（版本补齐为 1）");
 

@@ -11,7 +11,7 @@
 
 namespace aiwrite::ui {
 
-void draw_toolbar_buttons()
+void drawToolbarButtons()
 {
     EditorState& state = editor();
 
@@ -21,7 +21,7 @@ void draw_toolbar_buttons()
     // ---- 撤销 / 重做（设计 §6.6 工具栏按钮；无快捷键）----
     ImGui::BeginDisabled(!can_undo);
     if (ImGui::Button("↶ 撤销")) {
-        state.undo_once();
+        state.undoOnce();
     }
     ImGui::EndDisabled();
     if (can_undo && ImGui::IsItemHovered()) {
@@ -32,7 +32,7 @@ void draw_toolbar_buttons()
     ImGui::SameLine();
     ImGui::BeginDisabled(!can_redo);
     if (ImGui::Button("↷ 重做")) {
-        state.redo_once();
+        state.redoOnce();
     }
     ImGui::EndDisabled();
     if (can_redo && ImGui::IsItemHovered()) {
@@ -49,7 +49,7 @@ void draw_toolbar_buttons()
     ImGui::SameLine();
     ImGui::BeginDisabled(!state.has_selection());
     if (ImGui::Button("删除选中")) {
-        state.delete_selected();
+        state.deleteSelected();
     }
     ImGui::EndDisabled();
     if (state.has_selection() && ImGui::IsItemHovered()) {
@@ -62,7 +62,7 @@ void draw_toolbar_buttons()
     // ---- 工作流 ----
     ImGui::SameLine();
     if (ImGui::Button("新建（清空）")) {
-        state.clear_workflow();
+        state.clearWorkflow();
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("清空画布，并清空撤销历史（设计 §6.6：加载/新建时清空栈）");
@@ -70,12 +70,12 @@ void draw_toolbar_buttons()
 
     ImGui::SameLine();
     if (ImGui::Button("示例工作流")) {
-        state.create_sample_workflow();
+        state.createSampleWorkflow();
     }
 
     ImGui::SameLine();
     if (ImGui::Button("打开工作流")) {
-        open_workflow_dialog();
+        openWorkflowDialog();
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("从磁盘加载工作流 JSON：先做加载校验，通过后清空撤销栈并记入最近列表");
@@ -83,7 +83,7 @@ void draw_toolbar_buttons()
 
     ImGui::SameLine();
     if (ImGui::Button("保存工作流")) {
-        save_workflow_dialog();
+        saveWorkflowDialog();
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("另存为工作流 JSON（API Key 等 is_secret 参数不落盘，设计 §8.4）");
@@ -117,12 +117,12 @@ void draw_toolbar_buttons()
     const auto collect_blocked = [&state]() {
         std::vector<BlockedNode> found;
         for (const engine::Node& node : state.graph.nodes) {
-            const std::string reason = engine::unwired_reason(state.graph, node);
+            const std::string reason = engine::unwiredReason(state.graph, node);
             if (reason.empty()) {
                 continue;
             }
             const engine::EffectiveProvider effective =
-                engine::resolve_effective_provider(state.graph, node);
+                engine::resolveEffectiveProvider(state.graph, node);
             BlockedNode item;
             item.node_id    = node.id;
             item.node_title = node.title.empty() ? node.type : node.title;
@@ -150,7 +150,7 @@ void draw_toolbar_buttons()
     if (ImGui::Button(run_label)) {
         blocked_nodes = collect_blocked();
         if (blocked_nodes.empty()) {
-            state.start_run_async(); // PB-01：后台线程推进；之后每帧由主循环 tick_run 泵事件
+            state.startRunAsync(); // PB-01：后台线程推进；之后每帧由主循环 tick_run 泵事件
         }
         else {
             // P1-b：存在「未接线分支」→ 先弹窗确认（不直接运行）
@@ -186,10 +186,10 @@ void draw_toolbar_buttons()
             const engine::Node* sel = target.empty() ? nullptr : state.graph.findNode(target);
             const bool can_rerun = sel != nullptr && sel->state != engine::NodeState::Waiting;
             if (ImGui::MenuItem("重跑选中节点", nullptr, false, can_rerun)) {
-                state.start_rerun_async(target, engine::RerunScope::NodeOnly);
+                state.startRerunAsync(target, engine::RerunScope::NodeOnly);
             }
             if (ImGui::MenuItem("重跑选中节点及下游", nullptr, false, can_rerun)) {
-                state.start_rerun_async(target, engine::RerunScope::Downstream);
+                state.startRerunAsync(target, engine::RerunScope::Downstream);
             }
             if (ImGui::IsItemHovered() && !can_rerun) {
                 ImGui::SetTooltip("选中节点尚未运行过（状态为等待），暂不可重跑");
@@ -254,14 +254,14 @@ void draw_toolbar_buttons()
             log::info("[运行前提示] 已把 " + std::to_string(switched) + " 个节点的模式切换为 web，开始运行");
             blocked_nodes.clear();
             ImGui::CloseCurrentPopup();
-            state.start_run_async(); // PB-01：异步
+            state.startRunAsync(); // PB-01：异步
         }
         ImGui::SameLine();
         if (ImGui::Button("仍要运行", ImVec2(100.0f, 0.0f))) {
             log::warn("[运行前提示] 用户选择仍要运行（预期失败）");
             blocked_nodes.clear();
             ImGui::CloseCurrentPopup();
-            state.start_run_async(); // PB-01：异步
+            state.startRunAsync(); // PB-01：异步
         }
         ImGui::SameLine();
         if (ImGui::Button("取消", ImVec2(80.0f, 0.0f))) {
@@ -274,7 +274,7 @@ void draw_toolbar_buttons()
     ImGui::SameLine();
     ImGui::BeginDisabled(!running);
     if (ImGui::Button(stop_label)) {
-        state.cancel_run();
+        state.cancelRun();
     }
     ImGui::EndDisabled();
     if (running && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {

@@ -36,12 +36,12 @@ std::string lowercase(std::string text)
 
 } // namespace
 
-std::filesystem::path images_root()
+std::filesystem::path imagesRoot()
 {
-    return paths::assets_images_dir();
+    return paths::assetsImagesDir();
 }
 
-bool is_token(const std::string& value)
+bool isToken(const std::string& value)
 {
     const std::string prefix(kTokenPrefixLiteral);
     if (value.rfind(prefix, 0) != 0) {
@@ -50,15 +50,15 @@ bool is_token(const std::string& value)
     return is_hex_digest(value.substr(prefix.size()));
 }
 
-std::string token_digest(const std::string& value)
+std::string tokenDigest(const std::string& value)
 {
-    if (!is_token(value)) {
+    if (!isToken(value)) {
         return {};
     }
     return lowercase(value.substr(std::string(kTokenPrefixLiteral).size()));
 }
 
-std::string make_token(const std::string& digest)
+std::string makeToken(const std::string& digest)
 {
     if (!is_hex_digest(digest)) {
         return {};
@@ -66,7 +66,7 @@ std::string make_token(const std::string& digest)
     return std::string(kTokenPrefixLiteral) + lowercase(digest);
 }
 
-std::string digest_of_file(const std::string& path, std::string* error)
+std::string digestOfFile(const std::string& path, std::string* error)
 {
     const auto fail = [error](const std::string& message) {
         if (error != nullptr) {
@@ -104,7 +104,7 @@ std::string digest_of_file(const std::string& path, std::string* error)
     return crypto::sha3_256(bytes);
 }
 
-std::string canonical_extension(const std::string& path)
+std::string canonicalExtension(const std::string& path)
 {
     using utils::ImageFormat;
     switch (utils::sniffImage(path).format) {
@@ -131,14 +131,14 @@ std::string canonical_extension(const std::string& path)
     return ".png";
 }
 
-std::string import_file(const std::string& path, std::string* error)
+std::string importFile(const std::string& path, std::string* error)
 {
-    const std::string digest = digest_of_file(path, error);
+    const std::string digest = digestOfFile(path, error);
     if (digest.empty()) {
         return {};
     }
 
-    const std::filesystem::path root = images_root();
+    const std::filesystem::path root = imagesRoot();
     std::error_code             code;
     std::filesystem::create_directories(root, code);
     if (code) {
@@ -148,7 +148,7 @@ std::string import_file(const std::string& path, std::string* error)
         return {};
     }
 
-    const std::filesystem::path dest = root / (digest + canonical_extension(path));
+    const std::filesystem::path dest = root / (digest + canonicalExtension(path));
     if (!std::filesystem::exists(dest, code)) {
         std::error_code copy_code;
         std::filesystem::copy_file(path, dest, std::filesystem::copy_options::none, copy_code);
@@ -162,10 +162,10 @@ std::string import_file(const std::string& path, std::string* error)
         }
     }
     log::info("[资源目录] 已归档: " + path + " → " + dest.string());
-    return make_token(digest);
+    return makeToken(digest);
 }
 
-std::string resolve_token(const std::string& token, bool* missing, std::string* error)
+std::string resolveToken(const std::string& token, bool* missing, std::string* error)
 {
     const auto mark_missing = [missing, error](const std::string& message) {
         if (missing != nullptr) {
@@ -181,8 +181,8 @@ std::string resolve_token(const std::string& token, bool* missing, std::string* 
         *missing = false;
     }
 
-    const std::string           digest = token_digest(token);
-    const std::filesystem::path root   = images_root();
+    const std::string           digest = tokenDigest(token);
+    const std::filesystem::path root   = imagesRoot();
     if (digest.empty()) {
         return mark_missing("不是合法的资源令牌（应为 " + std::string(kTokenPrefixLiteral) +
                             " + 64 位十六进制摘要）: " + token);
@@ -207,23 +207,23 @@ std::string resolve_token(const std::string& token, bool* missing, std::string* 
                         ".*）→ 请重新选择图片；若图片还在本机，可点「迁移到资源目录」重新归档（P7a-07）");
 }
 
-std::string to_local_path(const std::string& value, bool* missing, std::string* error)
+std::string toLocalPath(const std::string& value, bool* missing, std::string* error)
 {
     if (missing != nullptr) {
         *missing = false;
     }
-    if (!is_token(value)) {
+    if (!isToken(value)) {
         return value; // 旧绝对路径 / 空值：原样返回（不变量 I19）
     }
-    return resolve_token(value, missing, error);
+    return resolveToken(value, missing, error);
 }
 
-std::string to_local_path(const std::string& value)
+std::string toLocalPath(const std::string& value)
 {
-    return to_local_path(value, nullptr, nullptr);
+    return toLocalPath(value, nullptr, nullptr);
 }
 
-std::vector<std::string> to_local_paths(const std::vector<std::string>& values,
+std::vector<std::string> toLocalPaths(const std::vector<std::string>& values,
                                         std::vector<std::string>*     problems)
 {
     std::vector<std::string> resolved;
@@ -234,7 +234,7 @@ std::vector<std::string> to_local_paths(const std::vector<std::string>& values,
         }
         bool             missing = false;
         std::string      error;
-        const std::string local = to_local_path(value, &missing, &error);
+        const std::string local = toLocalPath(value, &missing, &error);
         if (missing || local.empty()) {
             if (problems != nullptr) {
                 problems->push_back(error.empty() ? ("图片不可用: " + value) : error);
@@ -246,15 +246,15 @@ std::vector<std::string> to_local_paths(const std::vector<std::string>& values,
     return resolved;
 }
 
-bool needs_migration(const std::string& value)
+bool needsMigration(const std::string& value)
 {
-    return !value.empty() && !is_token(value);
+    return !value.empty() && !isToken(value);
 }
 
-std::string migration_hint(const std::string& value)
+std::string migrationHint(const std::string& value)
 {
     return "提示：该图片仍是外部路径（" + value + "）——建议点参数面板的「迁移到资源目录」把它复制进 " +
-           images_root().string() + "；之后工作流换目录 / 换机仍能取到图片（P7a-06）";
+           imagesRoot().string() + "；之后工作流换目录 / 换机仍能取到图片（P7a-06）";
 }
 
 } // namespace aiwrite::asset

@@ -10,7 +10,7 @@ namespace aiwrite::ai {
 
 // ---------------------------------------------------------------- 能力快照 --
 
-ProviderCaps permissive_caps()
+ProviderCaps permissiveCaps()
 {
     // 与表内**缺省能力**不同：这里要的是「不拦任何能力」（`vision=true`）——
     //  * 用途：无表条目时（例：老工作流 / 临时自定义地址）不新增门控 ⇒ 行为与改造前一致（`I19`）
@@ -22,12 +22,12 @@ ProviderCaps permissive_caps()
     return caps;
 }
 
-ProviderCaps caps_from_spec(const ProviderSpec* spec)
+ProviderCaps capsFromSpec(const ProviderSpec* spec)
 {
-    return spec != nullptr ? spec->caps : permissive_caps();
+    return spec != nullptr ? spec->caps : permissiveCaps();
 }
 
-ProviderCaps caps_for_call(const ProviderSpec* spec, bool web_mode)
+ProviderCaps capsForCall(const ProviderSpec* spec, bool web_mode)
 {
     if (spec != nullptr) {
         return spec->caps;
@@ -35,7 +35,7 @@ ProviderCaps caps_for_call(const ProviderSpec* spec, bool web_mode)
     if (web_mode) {
         // 无表条目的网页版调用 = 内置网页版协议（`deepseek-web`）的能力。
         //  * 表里查不到（用户把 providers.json 删了？）⇒ 用与内置条目一致的常量兜底
-        const ProviderSpec* builtin = provider_specs().find("deepseek-web");
+        const ProviderSpec* builtin = providerSpecs().find("deepseek-web");
         if (builtin != nullptr) {
             return builtin->caps;
         }
@@ -46,10 +46,10 @@ ProviderCaps caps_for_call(const ProviderSpec* spec, bool web_mode)
         caps.stream      = true;
         return caps;
     }
-    return permissive_caps();
+    return permissiveCaps();
 }
 
-bool protocol_needs_key(const ProviderOptions& options)
+bool protocolNeedsKey(const ProviderOptions& options)
 {
     return options.auth_style != "none";
 }
@@ -68,7 +68,7 @@ common_json_headers(const ProviderOptions& options, const std::string& api_key)
     return headers;
 }
 
-bool split_data_url(const std::string& data_url, std::string* mime, std::string* base64)
+bool splitDataUrl(const std::string& data_url, std::string* mime, std::string* base64)
 {
     static const std::string prefix = "data:";
     if (data_url.compare(0, prefix.size(), prefix) != 0) {
@@ -124,7 +124,7 @@ OpenAiCompatProvider::OpenAiCompatProvider(ProviderRuntimeConfig config)
     : config_(std::move(config))
 {
     if (!config_.provider_id.empty()) {
-        caps_ = caps_from_spec(provider_specs().find(config_.provider_id));
+        caps_ = capsFromSpec(providerSpecs().find(config_.provider_id));
     }
 }
 
@@ -172,7 +172,7 @@ GenerateResult OpenAiCompatProvider::generate(const GenerateParams& params)
         request.options.read_timeout_s = params.read_timeout_s;
     }
 
-    const OfficialChatResult result = official_chat(request);
+    const OfficialChatResult result = officialChat(request);
     out.ok            = result.ok;
     out.http_status   = result.http_status;
     out.text          = result.text;
@@ -194,9 +194,9 @@ GenerateResult OpenAiCompatProvider::generate(const GenerateParams& params)
 DeepSeekWebProvider::DeepSeekWebProvider(ProviderRuntimeConfig config)
     : config_(std::move(config))
 {
-    caps_ = caps_from_spec(config_.provider_id.empty()
+    caps_ = capsFromSpec(config_.provider_id.empty()
                                ? nullptr
-                               : provider_specs().find(config_.provider_id));
+                               : providerSpecs().find(config_.provider_id));
 }
 
 std::string DeepSeekWebProvider::name() const
@@ -240,7 +240,7 @@ GenerateResult DeepSeekWebProvider::generate(const GenerateParams& params)
     }
 
     const web::Session  session = config_.session_supplier();
-    const WebChatResult result  = web_chat(session, request);
+    const WebChatResult result  = webChat(session, request);
     out.ok                      = result.ok;
     out.http_status             = result.http_status;
     out.text                    = result.text;

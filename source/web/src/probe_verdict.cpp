@@ -88,7 +88,7 @@ bool extract_code_field(const std::string& body, int* out)
 
 } // namespace
 
-std::vector<EndpointProbeLine> parse_endpoints_report(const std::string& report)
+std::vector<EndpointProbeLine> parseEndpointsReport(const std::string& report)
 {
     std::vector<EndpointProbeLine> lines;
     const std::string              separator = " || ";
@@ -166,7 +166,7 @@ const EndpointProbeLine* find_endpoint(const std::vector<EndpointProbeLine>& lin
     return nullptr;
 }
 
-std::string probe_verdict_name(ProbeVerdict verdict)
+std::string probeVerdictName(ProbeVerdict verdict)
 {
     switch (verdict) {
     case ProbeVerdict::Pass:            return "通过";
@@ -195,7 +195,7 @@ ProbeJudgement judge_probe_result(const ProbeResult& probe, const std::string& r
 
     const std::string path = required_path.empty() ? std::string("/api/v0/users/current")
                                                    : required_path;
-    const std::vector<EndpointProbeLine> lines    = parse_endpoints_report(probe.endpoints_report);
+    const std::vector<EndpointProbeLine> lines    = parseEndpointsReport(probe.endpoints_report);
     const EndpointProbeLine*             required = find_endpoint(lines, path);
 
     const bool http_401 = (required != nullptr && required->status == 401);
@@ -274,7 +274,7 @@ ProbeJudgement judge_probe_result(const ProbeResult& probe, const std::string& r
     return out;
 }
 
-SessionFailure classify_session_failure_text(const std::string& text)
+SessionFailure classifySessionFailureText(const std::string& text)
 {
     SessionFailure out;
     if (text.empty()) {
@@ -347,7 +347,7 @@ SessionFailure classify_session_failure_text(const std::string& text)
     return out;
 }
 
-std::string session_relogin_text(const SessionFailure& failure, const std::string& provider_id)
+std::string sessionReloginText(const SessionFailure& failure, const std::string& provider_id)
 {
     const std::string site =
         provider_id.empty() ? std::string("该站点") : ("「" + provider_id + "」");
@@ -367,7 +367,7 @@ std::string session_relogin_text(const SessionFailure& failure, const std::strin
 // ---------------------------------------------------------------------------
 //  离线自检（`api_probe --exec-selftest`）
 // ---------------------------------------------------------------------------
-int probe_verdict_selftest(int* passed_out)
+int probeVerdictSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
@@ -386,7 +386,7 @@ int probe_verdict_selftest(int* passed_out)
     const std::string report_ok =
         "/api/v0/users/current -> 200 {\"code\":0,\"msg\":\"\"} || "
         "/api/v0/chat_session/fetch_page -> 200 {\"code\":0}";
-    const std::vector<EndpointProbeLine> lines_ok = parse_endpoints_report(report_ok);
+    const std::vector<EndpointProbeLine> lines_ok = parseEndpointsReport(report_ok);
     check(lines_ok.size() == 2, "解析：两条端点报告 ⇒ 2 行");
     check(!lines_ok.empty() && lines_ok[0].path == "/api/v0/users/current" &&
               lines_ok[0].status == 200 && lines_ok[0].has_code && lines_ok[0].code == 0,
@@ -394,24 +394,24 @@ int probe_verdict_selftest(int* passed_out)
     check(!lines_ok.empty() && !lines_ok[0].transport_error, "解析：正常行不带传输失败标记");
 
     const std::vector<EndpointProbeLine> lines_err =
-        parse_endpoints_report("/api/v0/users/current -> error TypeError: Failed to fetch");
+        parseEndpointsReport("/api/v0/users/current -> error TypeError: Failed to fetch");
     check(lines_err.size() == 1 && lines_err[0].transport_error && lines_err[0].status == 0,
           "解析：`-> error …` ⇒ 传输失败（status 0）");
 
-    const std::vector<EndpointProbeLine> lines_junk = parse_endpoints_report("just-some-text");
+    const std::vector<EndpointProbeLine> lines_junk = parseEndpointsReport("just-some-text");
     check(lines_junk.size() == 1 && lines_junk[0].status_text == "(无状态段)",
           "解析：畸形行保路径、不假装成功");
 
-    check(parse_endpoints_report("").empty(), "解析：空报告 ⇒ 0 行");
-    check(parse_endpoints_report("   ").empty(), "解析：纯空白报告 ⇒ 0 行");
+    check(parseEndpointsReport("").empty(), "解析：空报告 ⇒ 0 行");
+    check(parseEndpointsReport("   ").empty(), "解析：纯空白报告 ⇒ 0 行");
 
     const std::vector<EndpointProbeLine> lines_biz =
-        parse_endpoints_report("/api/v0/users/current -> 200 {\"biz_code\":40003}");
+        parseEndpointsReport("/api/v0/users/current -> 200 {\"biz_code\":40003}");
     check(lines_biz.size() == 1 && lines_biz[0].has_code && lines_biz[0].code == 40003,
           "解析：`biz_code` 容错取码（40003）");
 
     const std::vector<EndpointProbeLine> lines_nocode =
-        parse_endpoints_report("/api/v0/users/current -> 200 {\"ok\":true}");
+        parseEndpointsReport("/api/v0/users/current -> 200 {\"ok\":true}");
     check(lines_nocode.size() == 1 && !lines_nocode[0].has_code,
           "解析：响应体无 code 字段 ⇒ has_code=false（不默认 0）");
 
@@ -504,53 +504,53 @@ int probe_verdict_selftest(int* passed_out)
     check(judge_probe_result(probe_transport, "", true).verdict == ProbeVerdict::EndpointUnknown,
           "判据：端点传输失败 ⇒ 结论未确认");
 
-    check(probe_verdict_name(ProbeVerdict::Pass) !=
-                  probe_verdict_name(ProbeVerdict::SessionInvalid) &&
-              probe_verdict_name(ProbeVerdict::RequestRejected) !=
-                  probe_verdict_name(ProbeVerdict::SessionInvalid) &&
-              probe_verdict_name(ProbeVerdict::NotLoggedIn) !=
-                  probe_verdict_name(ProbeVerdict::SessionInvalid),
+    check(probeVerdictName(ProbeVerdict::Pass) !=
+                  probeVerdictName(ProbeVerdict::SessionInvalid) &&
+              probeVerdictName(ProbeVerdict::RequestRejected) !=
+                  probeVerdictName(ProbeVerdict::SessionInvalid) &&
+              probeVerdictName(ProbeVerdict::NotLoggedIn) !=
+                  probeVerdictName(ProbeVerdict::SessionInvalid),
           "文案：四类会话结论**互不混写**（可分辨）");
 
     // ---- ③ 错误串反查分类（`PB-07`：界面「重新登录」入口的地基）----
-    const SessionFailure f_401 = classify_session_failure_text("HTTP 401：unauthorized");
+    const SessionFailure f_401 = classifySessionFailureText("HTTP 401：unauthorized");
     check(f_401.needs_relogin && f_401.http_status == 401 && f_401.session_related,
           "分类：HTTP 401 ⇒ 需重新登录（证据只留码，守 R20）");
 
     const SessionFailure f_40002 =
-        classify_session_failure_text("HTTP 200 但解析失败；会话已失效（code 40002）");
+        classifySessionFailureText("HTTP 200 但解析失败；会话已失效（code 40002）");
     check(f_40002.needs_relogin && f_40002.biz_code == 40002 &&
               f_40002.evidence.find("40002") != std::string::npos,
           "分类：code 40002 ⇒ 需重新登录");
 
-    const SessionFailure f_biz = classify_session_failure_text("{\"biz_code\":40003,\"msg\":\"rejected\"}");
+    const SessionFailure f_biz = classifySessionFailureText("{\"biz_code\":40003,\"msg\":\"rejected\"}");
     check(f_biz.session_related && f_biz.biz_code == 40003 && !f_biz.needs_relogin,
           "分类：biz_code 40003 ⇒ 与会话有关但**不**擅自作废（请求被拒）");
 
     const SessionFailure f_phrase =
-        classify_session_failure_text("会话已失效：登录态已过期或被站点拒绝");
+        classifySessionFailureText("会话已失效：登录态已过期或被站点拒绝");
     check(f_phrase.needs_relogin && f_phrase.evidence.find("会话已失效") != std::string::npos,
           "分类：中文短语「会话已失效」⇒ 需重新登录");
 
     const SessionFailure f_timeout =
-        classify_session_failure_text("HTTP 200 但未解析出文本（请查看 raw_head 原始行）");
+        classifySessionFailureText("HTTP 200 但未解析出文本（请查看 raw_head 原始行）");
     check(!f_timeout.session_related && !f_timeout.needs_relogin,
           "分类：普通解析 / 超时错误 ⇒ **不误报**会话失效");
 
     const SessionFailure f_token =
-        classify_session_failure_text("challenge 解析失败: invalid token");
+        classifySessionFailureText("challenge 解析失败: invalid token");
     check(f_token.session_related && !f_token.needs_relogin,
           "分类：`invalid token` ⇒ 与会话有关（不擅自判必须重登）");
 
-    const SessionFailure f_boundary = classify_session_failure_text("HTTP 40010：参数错误");
+    const SessionFailure f_boundary = classifySessionFailureText("HTTP 40010：参数错误");
     check(f_boundary.http_status == 0 && !f_boundary.session_related,
           "分类：`40010` 不被误判成 401（独立数字边界）");
 
-    const std::string relogin_text = session_relogin_text(f_401, "deepseek-web");
+    const std::string relogin_text = sessionReloginText(f_401, "deepseek-web");
     check(relogin_text.find("重新登录") != std::string::npos &&
               relogin_text.find("deepseek-web") != std::string::npos,
           "文案：重登提示含站点条目 id 与可操作动作");
-    check(session_relogin_text(f_timeout, "kimi-web").empty(),
+    check(sessionReloginText(f_timeout, "kimi-web").empty(),
           "文案：与会话无关的失败 ⇒ **不生成**重登提示");
 
     if (passed_out != nullptr) {

@@ -805,7 +805,7 @@ constexpr const char* kDiscoverScript = R"JS(
 
 } // namespace
 
-void clamp_poll_params(const ProviderWebSpec& site, int* poll_ms, int* max_polls)
+void clampPollParams(const ProviderWebSpec& site, int* poll_ms, int* max_polls)
 {
     const int interval = site.answer_poll_ms > 0 ? site.answer_poll_ms : 500;
     const int polls    = site.answer_max_polls > 0 ? site.answer_max_polls : 120;
@@ -817,7 +817,7 @@ void clamp_poll_params(const ProviderWebSpec& site, int* poll_ms, int* max_polls
     }
 }
 
-std::string dom_cfg_json(const DomChatRequest& request)
+std::string domCfgJson(const DomChatRequest& request)
 {
     nlohmann::json cfg;
     cfg["prompt"]          = request.prompt;
@@ -843,19 +843,19 @@ std::string dom_cfg_json(const DomChatRequest& request)
     return cfg.dump();
 }
 
-std::string dom_kickoff_script() { return std::string(kKickoffScript); }
+std::string domKickoffScript() { return std::string(kKickoffScript); }
 // PW-07f：真实发送链路的三段式脚本（与 dom_kickoff_script 同为**常量脚本**读取者）
-std::string dom_prepare_script() { return std::string(kPrepareScript); }
-std::string dom_send_verify_script() { return std::string(kSendVerifyScript); }
-std::string dom_click_send_script() { return std::string(kClickSendScript); }
-std::string dom_poll_script() { return std::string(kPollScript); }
-std::string dom_probe_script() { return std::string(kProbeScript); }
+std::string domPrepareScript() { return std::string(kPrepareScript); }
+std::string domSendVerifyScript() { return std::string(kSendVerifyScript); }
+std::string domClickSendScript() { return std::string(kClickSendScript); }
+std::string domPollScript() { return std::string(kPollScript); }
+std::string domProbeScript() { return std::string(kProbeScript); }
 
 // ---- PW-07g：答案文本排版（纯函数 · 离线断言 `VB2-22⑦`）--------------------------------
 //  为什么放在 C++ 侧：页面脚本只做「**无损搬运**」，排版必须是**确定性 + 可离线断言**的一步
 //  （仓库既有口径：纯函数进 `api_probe`）。历史上「判据需要归一 ⇒ 顺手把产物也归一」
 //  正是本次真机事故（段落换行丢失）的成因，故这里把两步**显式分开**。
-std::string format_answer_text(const std::string& raw)
+std::string formatAnswerText(const std::string& raw)
 {
     // ① `\r\n` / 单独 `\r` → `\n`（Windows 站点 innerText 常见）
     std::string uni;
@@ -932,7 +932,7 @@ std::string format_answer_text(const std::string& raw)
     return folded.substr(b, e - b);
 }
 
-DomChatResult dom_chat(const DomChatRequest& request)
+DomChatResult domChat(const DomChatRequest& request)
 {
     DomChatResult result;
     const auto    started = std::chrono::steady_clock::now();
@@ -967,7 +967,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
         plan.max_bytes    = request.image_max_bytes;
         plan.timeout_ms   = request.timeout_ms;
         plan.owner        = request.owner; // M_patchC（PW-01）：上传证据 / 上传槽按 owner 归属
-        const UploadResult upload = upload_images(plan);
+        const UploadResult upload = uploadImages(plan);
         result.uploaded    = upload.ok;
         result.upload_page = upload.page_evidence;
         result.upload_net  = upload.net_evidence;
@@ -986,21 +986,21 @@ DomChatResult dom_chat(const DomChatRequest& request)
         web::with_owner(web::boot_login_request(request.site, request.provider_id), request.owner);
     std::string boot_error;
     const int   boot_timeout = std::max(15000, std::min(request.timeout_ms, 60000));
-    if (!web::ensure_session(site_request, boot_timeout, &boot_error)) {
+    if (!web::ensureSession(site_request, boot_timeout, &boot_error)) {
         result.warning = "未取到内存凭证（该站点可能未登录，或该站点不产生 userToken）：" + boot_error;
     }
 
     // ---- 3) 页面内驱动：注入提示词 → 触发发送 → 轮询答案（全部走 web::run_script_sync）----
     int poll_ms   = 0;
     int max_polls = 0;
-    clamp_poll_params(request.site, &poll_ms, &max_polls);
+    clampPollParams(request.site, &poll_ms, &max_polls);
 
     // ---- M_patchC PW-03（不变量 I25）：等**交互态**（可见输入候选）----
     //  * 只作为**诊断 + 短等待**：`composer` 与站点强相关，真正的自动识别在 kickoff 脚本里
     //    （打分 + 明确报错）⇒ 未达 L3 **不阻断**（避免把「选择器形态差异」升级成硬失败）
-    if (!probe_is_applicable(request.site)) { // DOM 站点才需要（内置协议站点走 web_chat）
+    if (!probeIsApplicable(request.site)) { // DOM 站点才需要（内置协议站点走 web_chat）
         std::string ready_why;
-        const int   reached = web::wait_ready(site_request, web::kReadyScript,
+        const int   reached = web::waitReady(site_request, web::kReadyScript,
                                               std::min(request.timeout_ms, 10000), &ready_why);
         if (!web::ready_satisfied(reached, web::kReadyScript)) {
             result.steps += (result.steps.empty() ? std::string() : "｜") +
@@ -1012,7 +1012,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
     std::string raw;
     std::string script_error;
     if (!web::run_script_sync(site_request,
-                              "window.__aiwriteDom = " + dom_cfg_json(request) + "; 'ok';", 10000,
+                              "window.__aiwriteDom = " + domCfgJson(request) + "; 'ok';", 10000,
                               &raw, &script_error)) {
         result.error = "注入站点配置失败：" + script_error;
         return finish();
@@ -1020,7 +1020,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
     // ---- 3a) 页面准备（JS）：发现输入框 + 聚焦 + 清空 + 记答案基线（**不写入、不发送**）----
     //  * 旧写法（`kKickoffScript`）是「脚本自己写入 + 脚本自己发合成回车」⇒ 豆包 / Kimi 这类
     //    富文本编辑器**忽略**不可信输入（真机 2026-10-08：连续三次 `候选池 0`、页面 60 秒无新消息）
-    if (!web::run_script_sync(site_request, dom_prepare_script(), 15000, &raw, &script_error)) {
+    if (!web::run_script_sync(site_request, domPrepareScript(), 15000, &raw, &script_error)) {
         result.error = "站点页面交互失败（准备阶段）：" + script_error;
         return finish();
     }
@@ -1073,7 +1073,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
             // click 模式：CDP 只负责写入文本，发送交给「点发送按钮」（声明值优先）
             std::string click_raw;
             std::string click_err;
-            if (web::run_script_sync(site_request, dom_click_send_script(), 10000, &click_raw,
+            if (web::run_script_sync(site_request, domClickSendScript(), 10000, &click_raw,
                                      &click_err)) {
                 try {
                     const nlohmann::json cj = nlohmann::json::parse(click_raw);
@@ -1095,7 +1095,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
                       " CDP 真输入失败，回退合成事件：" + cdp_error);
             std::string fb_raw;
             std::string fb_err;
-            if (!web::run_script_sync(site_request, dom_kickoff_script(), 15000, &fb_raw, &fb_err)) {
+            if (!web::run_script_sync(site_request, domKickoffScript(), 15000, &fb_raw, &fb_err)) {
                 result.error = "站点页面交互失败：" + fb_err;
                 return finish();
             }
@@ -1116,7 +1116,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
             std::string v_raw;
             std::string v_err;
-            if (!web::run_script_sync(site_request, dom_send_verify_script(), 10000, &v_raw, &v_err)) {
+            if (!web::run_script_sync(site_request, domSendVerifyScript(), 10000, &v_raw, &v_err)) {
                 verify_note = "发送回执采样失败：" + v_err;
                 continue;
             }
@@ -1136,7 +1136,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
         result.steps += "｜CDP 输入未落进输入框 → 回退合成事件";
         std::string fb_raw;
         std::string fb_err;
-        if (web::run_script_sync(site_request, dom_kickoff_script(), 15000, &fb_raw, &fb_err)) {
+        if (web::run_script_sync(site_request, domKickoffScript(), 15000, &fb_raw, &fb_err)) {
             send_mode += "+synth";
             sample_sent(12);
         }
@@ -1148,7 +1148,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
     if (!sent) {
         std::string click_raw;
         std::string click_err;
-        if (web::run_script_sync(site_request, dom_click_send_script(), 10000, &click_raw, &click_err)) {
+        if (web::run_script_sync(site_request, domClickSendScript(), 10000, &click_raw, &click_err)) {
             try {
                 if (nlohmann::json::parse(click_raw).value("clicked", false)) {
                     send_mode += "+click";
@@ -1171,13 +1171,13 @@ DomChatResult dom_chat(const DomChatRequest& request)
         result.steps += "｜CDP 输入已在框内但站点未发 → 合成事件同步内部 state 重试";
         std::string fb_raw;
         std::string fb_err;
-        if (web::run_script_sync(site_request, dom_kickoff_script(), 15000, &fb_raw, &fb_err)) {
+        if (web::run_script_sync(site_request, domKickoffScript(), 15000, &fb_raw, &fb_err)) {
             send_mode += "+synth2";
             sample_sent(12);
             if (!sent) { // 同步后再点一次可见「发送」按钮（声明值优先）
                 std::string click_raw;
                 std::string click_err;
-                if (web::run_script_sync(site_request, dom_click_send_script(), 10000, &click_raw,
+                if (web::run_script_sync(site_request, domClickSendScript(), 10000, &click_raw,
                                          &click_err)) {
                     try {
                         if (nlohmann::json::parse(click_raw).value("clicked", false)) {
@@ -1224,7 +1224,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
     {
         std::string re_raw;
         std::string re_err;
-        if (!web::run_script_sync(site_request, "window.__aiwriteDom = " + dom_cfg_json(request) + "; 'ok';",
+        if (!web::run_script_sync(site_request, "window.__aiwriteDom = " + domCfgJson(request) + "; 'ok';",
                                   10000, &re_raw, &re_err)) {
             log::warn("[dom_chat] " + std::string(web::owner_tag(request.owner)) +
                       " 轮询前重注入配置失败（继续按已注入配置轮询）：" + re_err);
@@ -1251,7 +1251,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
         result.polls = attempt;
         std::string poll_raw;
         std::string poll_error;
-        if (!web::run_script_sync(site_request, dom_poll_script(), 15000, &poll_raw, &poll_error)) {
+        if (!web::run_script_sync(site_request, domPollScript(), 15000, &poll_raw, &poll_error)) {
             last_poll_error = poll_error; // 单次失败不致命：下一轮重试
             continue;
         }
@@ -1292,7 +1292,7 @@ DomChatResult dom_chat(const DomChatRequest& request)
                 // PW-07g：**排版在 C++ 侧**（页面脚本只做无损搬运）—— 保留段落换行（`\n` 不丢）
                 //  * A2 口径：**空行 = 段界**（连续 `\n{3,}` → `\n\n`）
                 //  * 纯函数 `format_answer_text` ⇒ 可离线断言（`VB2-22⑦`）；每轮对**原始**文本重算（幂等）
-                result.text = format_answer_text(text);
+                result.text = formatAnswerText(text);
             }
             if (is_done) {
                 break; // done_when 条件成立
@@ -1420,17 +1420,17 @@ std::string suggest_selector_of(const nlohmann::json& d)
     return selector;
 }
 
-int dom_selector_dump(const std::string& provider_id, int timeout_ms)
+int domSelectorDump(const std::string& provider_id, int timeout_ms)
 {
   try { // 兜底：把任何 C++ 异常转成可读错误（否则 std::terminate → __fastfail 0xC0000409，输出全丢）
-    const ProviderSpec* spec       = provider_specs().find(provider_id);
-    const std::string   site_error = web_site_error(spec);
+    const ProviderSpec* spec       = providerSpecs().find(provider_id);
+    const std::string   site_error = webSiteError(spec);
     if (!site_error.empty()) {
         std::printf("[候选枚举] 站点不可用（条目 %s）：%s\n", provider_id.c_str(), site_error.c_str());
         return 2;
     }
-    const ProviderWebSpec   site    = strict_web_spec_for(spec);
-    const std::string       site_id = strict_web_provider_id_for(spec);
+    const ProviderWebSpec   site    = strictWebSpecFor(spec);
+    const std::string       site_id = strictWebProviderIdFor(spec);
     const web::LoginRequest request = web::interactive_login_request(site, site_id);
 
     std::printf("\n===== 选择器候选枚举（只读；用于填 input_selector / send / answer_selector）=====\n");
@@ -1441,13 +1441,13 @@ int dom_selector_dump(const std::string& provider_id, int timeout_ms)
     std::string boot_error;
     const int   boot_timeout =
         std::max(10000, std::min(timeout_ms > 0 ? timeout_ms * 1000 : 30000, 60000));
-    const bool        session_ok = web::ensure_session(request, boot_timeout, &boot_error);
+    const bool        session_ok = web::ensureSession(request, boot_timeout, &boot_error);
     const std::string site_key   = web::login_request_site(request);
     const web::Session session   = web::SessionStore::instance().snapshot(site_key);
     const WebSessionVerdict verdict =
-        web_session_state(spec, web::web_session_evidence(session));
+        webSessionState(spec, web::webSessionEvidence(session));
     std::printf("站点键   : %s\n", site_key.c_str());
-    std::printf("登录态   : %s（%s）\n", web_session_state_label(verdict.state).c_str(),
+    std::printf("登录态   : %s（%s）\n", webSessionStateLabel(verdict.state).c_str(),
                 verdict.reason.c_str());
     std::printf("说明     : %s\n",
                 session_ok ? "页面已就绪（候选来自**当前页面**）"
@@ -1666,7 +1666,7 @@ static bool run_site_probe_script(const ProviderWebSpec& site, const std::string
     std::string             boot_error;
     const int               boot_timeout =
         std::max(10000, std::min(timeout_ms > 0 ? timeout_ms * 1000 : 30000, 60000));
-    out->session_ok = web::ensure_session(request, boot_timeout, &boot_error);
+    out->session_ok = web::ensureSession(request, boot_timeout, &boot_error);
     if (!out->session_ok) {
         out->session_hint = boot_error;
     }
@@ -1687,18 +1687,18 @@ static bool run_site_probe_script(const ProviderWebSpec& site, const std::string
     std::string script_error;
     if (!web::run_script_sync(request, "window.__aiwriteDomProbe = " + probe_cfg.dump() + "; 'ok';",
                               10000, &raw, &script_error) ||
-        !web::run_script_sync(request, dom_probe_script(), 15000, &raw, &script_error)) {
+        !web::run_script_sync(request, domProbeScript(), 15000, &raw, &script_error)) {
         out->error = "探测脚本执行失败：" + script_error;
         return false;
     }
-    if (!dom_probe_result_from_json(raw, out)) {
+    if (!domProbeResultFromJson(raw, out)) {
         out->error = "探测结果解析失败（前 200 字符）：" + raw.substr(0, 200);
         return false;
     }
     return true;
 }
 
-int dom_site_probe(const std::string& provider_id, int timeout_ms, DomSiteProbe* out)
+int domSiteProbe(const std::string& provider_id, int timeout_ms, DomSiteProbe* out)
 {
     if (out == nullptr) {
         return 2;
@@ -1706,7 +1706,7 @@ int dom_site_probe(const std::string& provider_id, int timeout_ms, DomSiteProbe*
     *out    = DomSiteProbe();
     out->id = provider_id;
 
-    const ProviderSpec* spec = provider_specs().find(provider_id);
+    const ProviderSpec* spec = providerSpecs().find(provider_id);
     if (spec == nullptr) {
         out->site_error = "表里没有该条目（id 未知）";
         return 2;
@@ -1714,7 +1714,7 @@ int dom_site_probe(const std::string& provider_id, int timeout_ms, DomSiteProbe*
     out->display = spec->display;
     out->adapter = spec->web.adapter;
 
-    const std::string site_error = web_site_error(spec);
+    const std::string site_error = webSiteError(spec);
     if (!site_error.empty()) {
         out->site_error = site_error;
         return 2;
@@ -1724,15 +1724,15 @@ int dom_site_probe(const std::string& provider_id, int timeout_ms, DomSiteProbe*
         return 2;
     }
 
-    const ProviderWebSpec site    = strict_web_spec_for(spec);
-    const std::string     site_id = strict_web_provider_id_for(spec);
+    const ProviderWebSpec site    = strictWebSpecFor(spec);
+    const std::string     site_id = strictWebProviderIdFor(spec);
     if (!run_site_probe_script(site, site_id, timeout_ms, out)) {
         return 1;
     }
     return 0;
 }
 
-bool dom_probe_result_from_json(const std::string& raw, DomSiteProbe* out)
+bool domProbeResultFromJson(const std::string& raw, DomSiteProbe* out)
 {
     if (out == nullptr) {
         return false;
@@ -1787,11 +1787,11 @@ bool dom_probe_result_from_json(const std::string& raw, DomSiteProbe* out)
     return true;
 }
 
-int dom_probe_all(int timeout_ms, nlohmann::json* report, std::vector<DomSiteProbe>* probes)
+int domProbeAll(int timeout_ms, nlohmann::json* report, std::vector<DomSiteProbe>* probes)
 {
     // 站点集合：`kind=web 且 web.adapter=dom` —— 表驱动，**不写死站点清单**
     std::vector<const ProviderSpec*> targets;
-    for (const ProviderSpec& spec : provider_specs().items) {
+    for (const ProviderSpec& spec : providerSpecs().items) {
         if (spec.kind == "web" && spec.web.adapter == "dom") {
             targets.push_back(&spec);
         }
@@ -1818,7 +1818,7 @@ int dom_probe_all(int timeout_ms, nlohmann::json* report, std::vector<DomSitePro
     int index = 0;
     for (const ProviderSpec* spec : targets) {
         DomSiteProbe p;
-        dom_site_probe(spec->id, timeout_ms, &p);
+        domSiteProbe(spec->id, timeout_ms, &p);
         // ---- 环境级失败 ⇒ **重试 1 次**（`loop_dev` §3.2 行 3 + §5.1③；§3.3：同轮同站上限 2 次）----
         //  * 只对「探测没跑通（窗口 / 页面未就绪）」与「页面异常」重试 —— 二者可能是重站首屏慢；
         //  * **不**对「需登录」重试（登录墙不会自己消失；重试只会白等一轮）
@@ -1828,7 +1828,7 @@ int dom_probe_all(int timeout_ms, nlohmann::json* report, std::vector<DomSitePro
                         p.page_abnormal ? "页面异常" : "探测未跑通");
             std::fflush(stdout);
             DomSiteProbe again;
-            dom_site_probe(spec->id, timeout_ms, &again);
+            domSiteProbe(spec->id, timeout_ms, &again);
             again.attempts = 2;
             p              = again;
         }
@@ -1840,7 +1840,7 @@ int dom_probe_all(int timeout_ms, nlohmann::json* report, std::vector<DomSitePro
         //  * 这里仍**每站完全销毁本站窗口**（`close_owner_window` 等待窗口线程结束 ⇒ 控制器 Close +
         //    浏览器进程退出），再按 `kReopenSettleMs` 同口径避让后探下一站 ⇒ 全程只存活一个窗口，
         //    给下一站新环境创建留出浏览器侧释放时间（`D-35③`），同时消除 10 窗并存的资源风暴。
-        web::close_owner_window(web::WebOwner{}, web::site_key_of(spec->web.login_url));
+        web::closeOwnerWindow(web::WebOwner{}, web::siteKeyOf(spec->web.login_url));
         std::this_thread::sleep_for(std::chrono::milliseconds(kProbeSiteSettleMs));
         print_probe_block(++index, static_cast<int>(targets.size()), p);
 
@@ -2010,10 +2010,10 @@ bool dom_report_diff(const nlohmann::json& previous, const nlohmann::json& curre
     return true;
 }
 
-int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
+int domAdapterSelftest(const std::string& provider_id, int timeout_ms)
 {
-    const ProviderSpec* spec       = provider_specs().find(provider_id);
-    const std::string   site_error = web_site_error(spec);
+    const ProviderSpec* spec       = providerSpecs().find(provider_id);
+    const std::string   site_error = webSiteError(spec);
     if (!site_error.empty()) {
         std::printf("[选择器探测] 站点不可用（条目 %s）：%s\n", provider_id.c_str(),
                     site_error.c_str());
@@ -2025,8 +2025,8 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
         return 2;
     }
 
-    const ProviderWebSpec   site    = strict_web_spec_for(spec);
-    const std::string       site_id = strict_web_provider_id_for(spec);
+    const ProviderWebSpec   site    = strictWebSpecFor(spec);
+    const std::string       site_id = strictWebProviderIdFor(spec);
     const web::LoginRequest request = web::interactive_login_request(site, site_id);
 
     std::printf("\n===== 选择器探测 / 诊断（只读，不发送任何内容）=====\n");
@@ -2036,11 +2036,11 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
     if (!site.window_title.empty()) {
         std::printf("窗口标题    : %s\n", site.window_title.c_str());
     }
-    const std::string field_warnings = web_site_field_warnings(spec);
+    const std::string field_warnings = webSiteFieldWarnings(spec);
     if (!field_warnings.empty()) {
         std::printf("字段缺失    : %s\n", field_warnings.c_str());
     }
-    if (web_login_only(spec)) {
+    if (webLoginOnly(spec)) {
         std::printf("⚠️ 缺生成字段（选择器 / 发送 / 取答案）：**生成仍可用** —— 运行期会自动识别"
                     "（M8-37，结果只打印）；本自检仅用于只读复核命中数 + 固化建议值\n");
     }
@@ -2049,7 +2049,7 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
     std::string boot_error;
     const int   boot_timeout =
         std::max(10000, std::min(timeout_ms > 0 ? timeout_ms * 1000 : 30000, 60000));
-    const bool        session_ok = web::ensure_session(request, boot_timeout, &boot_error);
+    const bool        session_ok = web::ensureSession(request, boot_timeout, &boot_error);
     const std::string site_key   = web::login_request_site(request);
     const web::Session session   = web::SessionStore::instance().snapshot(site_key);
     std::printf("站点键      : %s\n", site_key.c_str());
@@ -2075,7 +2075,7 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
     std::string script_error;
     if (!web::run_script_sync(request, "window.__aiwriteDomProbe = " + probe_cfg.dump() + "; 'ok';",
                               10000, &raw, &script_error) ||
-        !web::run_script_sync(request, dom_probe_script(), 15000, &raw, &script_error)) {
+        !web::run_script_sync(request, domProbeScript(), 15000, &raw, &script_error)) {
         std::printf("探测失败    : %s\n", script_error.c_str());
         std::printf("（提示：窗口 / 页面未就绪，或站点拒绝脚本执行；可重跑本命令）\n");
         return 1;
@@ -2143,7 +2143,7 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
     facts.id      = spec->id;
     facts.display = spec->display;
     facts.adapter = site.adapter;
-    if (!dom_probe_result_from_json(raw, &facts)) {
+    if (!domProbeResultFromJson(raw, &facts)) {
         std::printf("\n需登录判据  : **解析失败**（探测结果不是 JSON 对象）—— 归失败\n");
         return 1;
     }
@@ -2222,7 +2222,7 @@ int dom_adapter_selftest(const std::string& provider_id, int timeout_ms)
 //  * 不开窗口、不联网、不写文件（`FEA-L01` 的回归资产；真机走 `--web-adapter-selftest`）
 //  * 断言口径 = `docs/loop_dev.md` §3.2（判据）+ §6.2（五态）+ §6.3（退出码）
 // ----------------------------------------------------------------------------
-int dom_probe_selftest(int* passed_out)
+int domProbeSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
@@ -2248,7 +2248,7 @@ int dom_probe_selftest(int* passed_out)
     p.id      = "kimi-web";
     p.display = "Kimi";
     p.adapter = "dom";
-    check(dom_probe_result_from_json(full, &p), "解析：合法 JSON 对象 ⇒ true");
+    check(domProbeResultFromJson(full, &p), "解析：合法 JSON 对象 ⇒ true");
     check(p.url == "https://x/login" && p.title == "T" && p.answer_hits == 2 &&
               p.answer_chars == 7,
           "解析：页面事实逐项搬运（url / title / answer）");
@@ -2262,20 +2262,20 @@ int dom_probe_selftest(int* passed_out)
           "解析：入口字段（id / display / adapter）与 attempts 不被脚本结果覆盖");
 
     DomSiteProbe bare;
-    check(dom_probe_result_from_json(R"({"url":"https://y/"})", &bare) &&
+    check(domProbeResultFromJson(R"({"url":"https://y/"})", &bare) &&
               bare.input_hits == 0 && bare.input_candidates == 0 && bare.token_len == -1 &&
               !bare.needs_login && !bare.page_abnormal && bare.login_evidence.empty(),
           "解析：字段缺失 = 「无事实」（不猜、不默认成功；token_len 回 -1）");
 
     DomSiteProbe bad;
     bad.input_hits = 9;
-    check(!dom_probe_result_from_json("{not json", &bad) && bad.input_hits == 9,
+    check(!domProbeResultFromJson("{not json", &bad) && bad.input_hits == 9,
           "解析：非法 JSON ⇒ false（**不改**调用方结构体）");
-    check(!dom_probe_result_from_json("[1,2,3]", &bad), "解析：JSON 数组（非对象）⇒ false");
-    check(!dom_probe_result_from_json(full, nullptr), "解析：空指针 ⇒ false（不崩）");
+    check(!domProbeResultFromJson("[1,2,3]", &bad), "解析：JSON 数组（非对象）⇒ false");
+    check(!domProbeResultFromJson(full, nullptr), "解析：空指针 ⇒ false（不崩）");
 
     DomSiteProbe err;
-    check(dom_probe_result_from_json(R"({"url":"https://z/","error":"boom"})", &err) &&
+    check(domProbeResultFromJson(R"({"url":"https://z/","error":"boom"})", &err) &&
               !err.probe_ok && err.error.find("boom") != std::string::npos,
           "解析：脚本自身报错 ⇒ probe_ok = false（事实可能不完整）");
 

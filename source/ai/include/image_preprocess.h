@@ -43,6 +43,6 @@ PreprocessOutcome preprocess_image(const std::string& local_path,
 
 // 离线自检（返回**失败项数**；`passed_out` 回传通过项数 → 调用方并入总计数）
 // 覆盖：零开销路径 / 裁剪 / 缩放（fit / fill）/ 裁剪+缩放组合 / 缺文件失败文案
-int image_preprocess_selftest(int* passed_out = nullptr);
+int imagePreprocessSelftest(int* passed_out = nullptr);
 
 } // namespace aiwrite::ai

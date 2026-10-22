@@ -75,7 +75,7 @@ std::uint64_t ref_hash(const std::string& ref)
 
 std::string file_for(const std::string& ref)
 {
-    return credentials_dir() + "/" + safe_ref_name(ref) + ".bin";
+    return credentialsDir() + "/" + safe_ref_name(ref) + ".bin";
 }
 
 void append_u32(std::string& out, std::uint32_t value)
@@ -185,25 +185,25 @@ bool dpapi_unprotect(const std::string&, std::string*, std::string* error)
 
 } // namespace
 
-std::string credentials_dir()
+std::string credentialsDir()
 {
     // M_patchAB §2.3（`PB-06` 剩余）：目录取自 `config.toml [credentials].dir`
     //  * 空 ⇒ 默认 `~/.brain-ai/credentials`（与改造前逐字一致）
     //  * 未初始化配置缓存（进程早期 / 工具）⇒ `app_config()` 返回默认值 ⇒ 仍是默认目录
-    const Config& config = app_config();
+    const Config& config = appConfig();
     if (!config.credentials.dir.empty()) {
         const std::filesystem::path expanded = paths::expand(config.credentials.dir);
         if (!expanded.empty()) {
             return expanded.string();
         }
     }
-    return (paths::data_root() / "credentials").string();
+    return (paths::dataRoot() / "credentials").string();
 }
 
-std::string credentials_backend_error()
+std::string credentialsBackendError()
 {
     // 只实现 dpapi（Windows 当前用户作用域）；其它 backend ⇒ **明确报错**而不是静默降级
-    const Config& config = app_config();
+    const Config& config = appConfig();
     if (config.credentials.backend.empty() || config.credentials.backend == "dpapi") {
         return {};
     }
@@ -211,18 +211,18 @@ std::string credentials_backend_error()
            "」尚未实现（本版本只支持 dpapi；请在 config.toml [credentials].backend 改回 dpapi）";
 }
 
-bool save_credential(const std::string& ref, const std::string& secret, std::string* error)
+bool saveCredential(const std::string& ref, const std::string& secret, std::string* error)
 {
     if (ref.empty() || secret.empty()) {
         if (error != nullptr) { *error = "ref 或 secret 为空"; }
         return false;
     }
     // M_patchAB §2.3（PB-06 剩余）：凭据后端未实现 ⇒ 明确拒绝（不静默降级成明文）
-    if (const std::string backend_error = credentials_backend_error(); !backend_error.empty()) {
+    if (const std::string backend_error = credentialsBackendError(); !backend_error.empty()) {
         if (error != nullptr) { *error = backend_error; }
         return false;
     }
-    const std::string dir = credentials_dir();
+    const std::string dir = credentialsDir();
     std::error_code   ec;
     std::filesystem::create_directories(dir, ec);
     harden_acl(dir);
@@ -254,14 +254,14 @@ bool save_credential(const std::string& ref, const std::string& secret, std::str
     stream.close();
     harden_acl(path);
     log::info("[凭据] 已保存 ref=" + ref + "（长度 " + std::to_string(secret.size()) + "，密文仅落盘）");
-    invalidate_credential_cache(ref); // 可用性缓存立即刷新（界面提示同一帧就能变）
+    invalidateCredentialCache(ref); // 可用性缓存立即刷新（界面提示同一帧就能变）
     return true;
 }
 
-std::string load_credential(const std::string& ref, std::string* error)
+std::string loadCredential(const std::string& ref, std::string* error)
 {
     // M_patchAB §2.3（PB-06 剩余）：后端未实现 ⇒ 直接给出**可操作**原因（不是「凭据不存在」）
-    if (const std::string backend_error = credentials_backend_error(); !backend_error.empty()) {
+    if (const std::string backend_error = credentialsBackendError(); !backend_error.empty()) {
         if (error != nullptr) { *error = backend_error; }
         return {};
     }
@@ -298,7 +298,7 @@ std::string load_credential(const std::string& ref, std::string* error)
     return plain;
 }
 
-void invalidate_credential_cache(const std::string& ref)
+void invalidateCredentialCache(const std::string& ref)
 {
     if (ref.empty()) {
         g_availability.clear();
@@ -307,7 +307,7 @@ void invalidate_credential_cache(const std::string& ref)
     g_availability.erase(ref);
 }
 
-bool credential_available(const std::string& ref)
+bool credentialAvailable(const std::string& ref)
 {
     if (ref.empty()) {
         return false;
@@ -315,7 +315,7 @@ bool credential_available(const std::string& ref)
     // 文件不存在（或刚被外部删掉）→ 直接否，不进缓存（下次存在时立刻能看见）
     std::error_code ec;
     if (!std::filesystem::exists(file_for(ref), ec)) {
-        invalidate_credential_cache(ref);
+        invalidateCredentialCache(ref);
         return false;
     }
 
@@ -326,13 +326,13 @@ bool credential_available(const std::string& ref)
     }
 
     // 判据与 load_credential 一致（magic/长度/CRC/DPAPI 任一失败或明文为空 → 不可用）
-    entry.available  = !load_credential(ref, nullptr).empty();
+    entry.available  = !loadCredential(ref, nullptr).empty();
     entry.loaded     = true;
     entry.checked_at = now;
     return entry.available;
 }
 
-bool erase_credential(const std::string& ref, std::string* error)
+bool eraseCredential(const std::string& ref, std::string* error)
 {
     std::error_code ec;
     const std::string path = file_for(ref);
@@ -346,15 +346,15 @@ bool erase_credential(const std::string& ref, std::string* error)
         return false;
     }
     log::info("[凭据] 已删除 ref=" + ref);
-    invalidate_credential_cache(ref);
+    invalidateCredentialCache(ref);
     return true;
 }
 
-std::vector<CredentialInfo> list_credentials(int ttl_days)
+std::vector<CredentialInfo> listCredentials(int ttl_days)
 {
     std::vector<CredentialInfo> items;
     std::error_code             ec;
-    const std::string           dir = credentials_dir();
+    const std::string           dir = credentialsDir();
     if (!std::filesystem::exists(dir, ec)) {
         return items;
     }
@@ -377,14 +377,14 @@ std::vector<CredentialInfo> list_credentials(int ttl_days)
     return items;
 }
 
-int purge_expired_credentials(int ttl_days, std::string* error)
+int purgeExpiredCredentials(int ttl_days, std::string* error)
 {
     if (ttl_days <= 0) {
         return 0; // 0/负数 = 不清理
     }
     const long long   now = static_cast<long long>(std::time(nullptr));
     std::error_code   ec;
-    const std::string dir = credentials_dir();
+    const std::string dir = credentialsDir();
     if (!std::filesystem::exists(dir, ec)) {
         return 0;
     }
@@ -433,12 +433,12 @@ int purge_expired_credentials(int ttl_days, std::string* error)
         error->clear();
     }
     if (removed > 0) {
-        invalidate_credential_cache(std::string()); // 有删除 → 可用性缓存整体失效
+        invalidateCredentialCache(std::string()); // 有删除 → 可用性缓存整体失效
     }
     return removed;
 }
 
-ResolvedSecret resolve_secret(const std::string& param_key, const std::string& ref)
+ResolvedSecret resolveSecret(const std::string& param_key, const std::string& ref)
 {
     ResolvedSecret resolved;
     if (!param_key.empty()) {
@@ -454,7 +454,7 @@ ResolvedSecret resolve_secret(const std::string& param_key, const std::string& r
     }
     if (!ref.empty()) {
         std::string       error;
-        const std::string stored = load_credential(ref, &error);
+        const std::string stored = loadCredential(ref, &error);
         if (!stored.empty()) {
             resolved.key    = stored;
             resolved.source = "store";
@@ -467,7 +467,7 @@ ResolvedSecret resolve_secret(const std::string& param_key, const std::string& r
     return resolved;
 }
 
-int credential_selftest()
+int credentialSelftest()
 {
     int               failed = 0;
     const std::string ref    = "selftest/_tmp";
@@ -477,8 +477,8 @@ int credential_selftest()
     std::string       bytes;
 
     // 1) 可逆
-    const bool        saved  = save_credential(ref, secret, &error);
-    const std::string loaded = load_credential(ref, &error);
+    const bool        saved  = saveCredential(ref, secret, &error);
+    const std::string loaded = loadCredential(ref, &error);
     if (!saved || loaded != secret) { ++failed; log::error("[凭据自检] 1 加密可逆：失败 " + error); }
     else { log::info("[凭据自检] 1 加密可逆：OK"); }
 
@@ -499,15 +499,15 @@ int credential_selftest()
             std::ofstream out(path, std::ios::binary | std::ios::trunc);
             out.write(bad.data(), static_cast<std::streamsize>(bad.size()));
         }
-        if (!load_credential(ref, &error).empty()) { ++failed; log::error("[凭据自检] 3：失败"); }
+        if (!loadCredential(ref, &error).empty()) { ++failed; log::error("[凭据自检] 3：失败"); }
         else { log::info("[凭据自检] 3 CRC/格式篡改被拒：OK"); }
-        (void)save_credential(ref, secret, &error);
+        (void)saveCredential(ref, secret, &error);
     }
 
     // 4) 未知 ref
     {
         std::string unknown_error;
-        if (!load_credential("selftest/does-not-exist", &unknown_error).empty() || unknown_error.empty()) {
+        if (!loadCredential("selftest/does-not-exist", &unknown_error).empty() || unknown_error.empty()) {
             ++failed; log::error("[凭据自检] 4：失败");
         }
         else { log::info("[凭据自检] 4 未知 ref 返回空+错误：OK"); }
@@ -515,9 +515,9 @@ int credential_selftest()
 
     // 5) 三级优先级
     {
-        const ResolvedSecret a = resolve_secret("node-key", ref);
-        const ResolvedSecret b = resolve_secret("", ref);
-        const ResolvedSecret c = resolve_secret("", "selftest/no-such");
+        const ResolvedSecret a = resolveSecret("node-key", ref);
+        const ResolvedSecret b = resolveSecret("", ref);
+        const ResolvedSecret c = resolveSecret("", "selftest/no-such");
         if (a.source != "node" || b.source != "store" || c.source != "none") { ++failed; log::error("[凭据自检] 5：失败"); }
         else { log::info("[凭据自检] 5 三级优先级（node/store/none）：OK"); }
     }
@@ -525,7 +525,7 @@ int credential_selftest()
     // 6) list 不含密文
     {
         bool leaked = false;
-        for (const CredentialInfo& item : list_credentials(30)) {
+        for (const CredentialInfo& item : listCredentials(30)) {
             if (item.ref.find(secret) != std::string::npos) { leaked = true; }
         }
         if (leaked) { ++failed; log::error("[凭据自检] 6：失败"); }
@@ -534,7 +534,7 @@ int credential_selftest()
 
     // 7) TTL 清理 —— 当前“待修·不致命”：只输出诊断，不计入失败
     {
-        (void)purge_expired_credentials(0, &error);
+        (void)purgeExpiredCredentials(0, &error);
         {
             std::ifstream in(path, std::ios::binary);
             std::string   aged((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -548,7 +548,7 @@ int credential_selftest()
                 out.write(aged.data(), static_cast<std::streamsize>(aged.size()));
             }
         }
-        const int removed = purge_expired_credentials(1, &error);
+        const int removed = purgeExpiredCredentials(1, &error);
         std::error_code after_ec;
         const bool      exists = std::filesystem::exists(path, after_ec);
         if (removed != 1 || exists) {
@@ -562,7 +562,7 @@ int credential_selftest()
     // 8) 自清理
     {
         std::string erase_error;
-        (void)erase_credential(ref, &erase_error);
+        (void)eraseCredential(ref, &erase_error);
         std::error_code after_ec;
         if (std::filesystem::exists(path, after_ec)) { ++failed; log::error("[凭据自检] 8：失败"); }
         else { log::info("[凭据自检] 8 测试条目已清理：OK"); }

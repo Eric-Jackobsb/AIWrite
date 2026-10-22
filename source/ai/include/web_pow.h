@@ -32,13 +32,13 @@ struct PowChallenge {
 };
 
 // 解析挑战响应；失败写 error
-bool parse_pow_challenge(const std::string& json_text, PowChallenge* out, std::string* error);
+bool parsePowChallenge(const std::string& json_text, PowChallenge* out, std::string* error);
 
 // 求解；成功返回 nonce（十进制字符串）并写 attempts（尝试次数），失败返回空串
-std::string solve_pow(const PowChallenge& challenge, long long* attempts, std::string* error);
+std::string solvePow(const PowChallenge& challenge, long long* attempts, std::string* error);
 
 // x-ds-pow-response 头值（base64(JSON)）
-std::string make_pow_header_value(const PowChallenge& challenge, const std::string& answer);
+std::string makePowHeaderValue(const PowChallenge& challenge, const std::string& answer);
 
 // 标准 Base64（带 '=' 补齐）
 std::string base64_encode(const std::string& data);

@@ -1,0 +1,120 @@
+=== 帧 1 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 Appearing !WasActive
+=== 帧 2 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 3 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 4 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 5 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 6 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 7 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 8 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 9 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 10 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 11 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 12 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 13 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 14 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 15 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 16 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 17 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 18 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 19 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 20 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 21 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 22 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 23 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 24 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 25 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 26 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 27 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 28 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 29 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 30 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 31 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 32 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 33 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 34 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 35 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 36 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 37 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 38 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 39 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
+=== 帧 40 ===
+栈深=1
+  [0] Debug##Default [window] BeginCount=1 !WasActive
