@@ -1,5 +1,6 @@
 #include "toolbar.h"
 
+#include "commands.h"         // ARCH-R4：命令路由层（三入口收敛：工具栏 → dispatchCommand）
 #include "provider_resolve.h"
 #include "editor_state.h"
 #include "log.h"
@@ -19,9 +20,10 @@ void drawToolbarButtons()
     const bool can_redo = state.undo.canRedo();
 
     // ---- 撤销 / 重做（设计 §6.6 工具栏按钮；无快捷键）----
+    // ARCH-R4：三入口收敛 —— 按钮执行统一走 dispatchCommand（与菜单/快捷键同一实现）
     ImGui::BeginDisabled(!can_undo);
     if (ImGui::Button("↶ 撤销")) {
-        state.undoOnce();
+        dispatchCommand(AppCommand::Undo, CommandContext{});
     }
     ImGui::EndDisabled();
     if (can_undo && ImGui::IsItemHovered()) {
@@ -32,7 +34,7 @@ void drawToolbarButtons()
     ImGui::SameLine();
     ImGui::BeginDisabled(!can_redo);
     if (ImGui::Button("↷ 重做")) {
-        state.redoOnce();
+        dispatchCommand(AppCommand::Redo, CommandContext{});
     }
     ImGui::EndDisabled();
     if (can_redo && ImGui::IsItemHovered()) {
@@ -49,7 +51,7 @@ void drawToolbarButtons()
     ImGui::SameLine();
     ImGui::BeginDisabled(!state.has_selection());
     if (ImGui::Button("删除选中")) {
-        state.deleteSelected();
+        dispatchCommand(AppCommand::DeleteSelection, CommandContext{});
     }
     ImGui::EndDisabled();
     if (state.has_selection() && ImGui::IsItemHovered()) {
@@ -59,10 +61,10 @@ void drawToolbarButtons()
     ImGui::SameLine();
     ImGui::TextDisabled("|");
 
-    // ---- 工作流 ----
+    // ---- 工作流 ----（ARCH-R4：三入口收敛 → dispatchCommand 单一实现）
     ImGui::SameLine();
     if (ImGui::Button("新建（清空）")) {
-        state.clearWorkflow();
+        dispatchCommand(AppCommand::NewWorkflow, CommandContext{});
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("清空画布，并清空撤销历史（设计 §6.6：加载/新建时清空栈）");
@@ -70,12 +72,12 @@ void drawToolbarButtons()
 
     ImGui::SameLine();
     if (ImGui::Button("示例工作流")) {
-        state.createSampleWorkflow();
+        dispatchCommand(AppCommand::SampleWorkflow, CommandContext{});
     }
 
     ImGui::SameLine();
     if (ImGui::Button("打开工作流")) {
-        openWorkflowDialog();
+        dispatchCommand(AppCommand::OpenWorkflow, CommandContext{});
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("从磁盘加载工作流 JSON：先做加载校验，通过后清空撤销栈并记入最近列表");
@@ -83,7 +85,7 @@ void drawToolbarButtons()
 
     ImGui::SameLine();
     if (ImGui::Button("保存工作流")) {
-        saveWorkflowDialog();
+        dispatchCommand(AppCommand::SaveWorkflow, CommandContext{});
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("另存为工作流 JSON（API Key 等 is_secret 参数不落盘，设计 §8.4）");

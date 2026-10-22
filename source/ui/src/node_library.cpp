@@ -2,6 +2,7 @@
 
 #include "composite.h"          // CN：上级节点注册表
 #include "composite_editor.h"   // CN：新建/打包对话框 + 编辑器会话状态（删除前 force_close）
+#include "commands.h"           // ARCH-R4：命令路由层（新建/打包上级节点 → dispatchCommand）
 #include "editor_state.h"       // PS-04：删除结果回写状态栏
 #include "log.h"
 #include "node_registry.h"
@@ -239,10 +240,10 @@ void drawNodeLibrary(const char* title, bool* open)
             }
             ImGui::Separator();
             if (ImGui::Button("新建上级节点…", ImVec2(-1.0f, 0.0f))) {
-                compositeNewDialog();
+                dispatchCommand(AppCommand::CompositeNew, CommandContext{}); // ARCH-R4：与菜单同一实现
             }
             if (ImGui::Button("打包选区为上级节点…", ImVec2(-1.0f, 0.0f))) {
-                compositePackDialog();
+                dispatchCommand(AppCommand::CompositePack, CommandContext{}); // ARCH-R4：与菜单同一实现
             }
             ImGui::Spacing();
             ImGui::Separator();

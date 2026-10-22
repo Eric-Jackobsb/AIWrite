@@ -11,6 +11,7 @@
 #include "editor_state.h"
 #include "output_panel.h"
 #include "readonly_view.h"   // ARCH-R3：ReadOnlyView 渲染视图断言（零拷贝 / 同源）
+#include "commands.h"        // ARCH-R4：命令路由层断言（快捷键表完整性 / 唯一性）
 #include "deepseek_official_provider.h"
 #include "provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）
 #include "provider_factory.h"    // L2（B2-b · PB2-09）：按表 protocol 分派
@@ -904,9 +905,54 @@ int runSelftest(bool use_web, const std::string& provider_id)
                     cfg_same ? "是" : "否", sel_same ? "是" : "否");
     }
 
+    // ---- ARCH-R4：命令路由层断言（快捷键表完整性 / 唯一性）----
+    //  * 四组绑定齐全：Main 的 Delete / Ctrl+S（保存工作流）·
+    //    CompositeEditor 的 Delete / Ctrl+S（保存上级节点）—— 修 Ctrl+S 的静态证据
+    //  * 同一作用域 × 命令在表内不重复（表驱动唯一性，避免二义触发）
+    bool command_route_ok = false;
+    {
+        bool has_main_delete = false;
+        bool has_main_save   = false;
+        bool has_ce_delete   = false;
+        bool has_ce_save     = false;
+        bool table_unique    = true;
+        for (std::size_t i = 0; i < aiwrite::ui::shortcutTableCount(); ++i) {
+            const aiwrite::ui::ShortcutBinding& binding = aiwrite::ui::shortcutTable()[i];
+            for (std::size_t j = i + 1; j < aiwrite::ui::shortcutTableCount(); ++j) {
+                const aiwrite::ui::ShortcutBinding& other = aiwrite::ui::shortcutTable()[j];
+                if (binding.scope == other.scope && binding.command == other.command) {
+                    table_unique = false;
+                }
+            }
+            if (binding.scope == aiwrite::ui::CommandScope::Main) {
+                if (binding.command == aiwrite::ui::AppCommand::DeleteSelection) {
+                    has_main_delete = true;
+                }
+                if (binding.command == aiwrite::ui::AppCommand::SaveWorkflow) {
+                    has_main_save = true;
+                }
+            }
+            else if (binding.scope == aiwrite::ui::CommandScope::CompositeEditor) {
+                if (binding.command == aiwrite::ui::AppCommand::CompositeDeleteSelection) {
+                    has_ce_delete = true;
+                }
+                if (binding.command == aiwrite::ui::AppCommand::CompositeSave) {
+                    has_ce_save = true;
+                }
+            }
+        }
+        command_route_ok = has_main_delete && has_main_save && has_ce_delete && has_ce_save &&
+                           table_unique;
+        std::printf("[运行自检] 命令路由：%s（Main.Delete=%s / Main.Ctrl+S=%s / ce.Delete=%s / "
+                    "ce.Ctrl+S=%s / 表内唯一=%s）\n",
+                    command_route_ok ? "OK" : "失败", has_main_delete ? "有" : "无",
+                    has_main_save ? "有" : "无", has_ce_delete ? "有" : "无",
+                    has_ce_save ? "有" : "无", table_unique ? "是" : "否");
+    }
+
     const bool pass = finished && saved && opened && same && json_clean && archive_ok && doc_found &&
                       consistency_ok && param_driven_ok && async_ok && session_ok && sink_ok && seed_ok &&
-                      param_range_ok && paste_ok && readonly_view_ok;
+                      param_range_ok && paste_ok && readonly_view_ok && command_route_ok;
     std::printf("[运行自检] %s\n", pass ? "PASS" : "FAIL");
     return pass ? 0 : 1;
 }

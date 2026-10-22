@@ -87,6 +87,12 @@ std::string compositePackSelection(const std::string& name, std::string* error);
 
 // 画布窗口（dock 进主布局；未打开时为空操作）
 void drawCompositeEditor(const char* title, bool* open);
+// ce 窗口当前是否聚焦/悬停（ARCH-R4：主循环据此判断 Ctrl+S 作用域归属；
+// 由 ce_draw 每帧在窗口上下文内更新）
+bool compositeEditorWindowFocused();
+// 删除选中的内部节点/连线（ARCH-R4：ce Delete 快捷键 → 命令路由层单一实现；
+// 一次批次只压一次撤销快照；无选中时静默返回）
+void compositeEditorDeleteSelection();
 
 // 新建/打包名称对话框（主循环每帧调用；内部用 PopupModal）
 void drawCompositeDialogs();

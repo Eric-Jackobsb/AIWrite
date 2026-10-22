@@ -1,6 +1,7 @@
 #include "composite_editor.h"
 #include "ce_internal.h"
 #include "canvas_view.h"
+#include "commands.h"      // ARCH-R4：命令路由层（快捷键表 / dispatchCommand / handleShortcut）
 #include "editor_state.h"
 #include "log.h"
 #include "node_registry.h"
@@ -52,26 +53,19 @@ std::array<char, 128>& ce_name_buffer(const std::string& key, const std::string&
 
 } // namespace
 
-// ---------------------------------------------------- Delete 键（打磨）----
-// 与主画布一致：画布聚焦/悬停 + 无文本输入 + 无激活控件/弹出层 + 左键未按住时，
-// Delete 键删除选中的内部节点与连线（一次批次只压一次撤销快照；ce_push_snapshot 内含 dirty 标记）。
-void ce_handle_delete_key(CompositeEditorState& state)
+// ---------------------------------------------------- 命令路由层（ARCH-R4）----
+// ce 的 Delete / Ctrl+S 快捷键统一走命令路由层：快捷键表（ShortcutBinding）
+// + handleShortcut(CommandScope::CompositeEditor, ...) + dispatchCommand ——
+// 与主画布 Delete / 菜单 / 工具栏同一实现，见 draw_composite_editor 末尾调用点。
+// 本文件保留两件事：
+//   * compositeEditorDeleteSelection —— ce Delete 的**执行**（无窗口/按键检测；
+//     由 handleShortcut 命中后经 dispatchCommand 调用；需在 ed::Begin/End 之间）
+//   * compositeEditorWindowFocused —— 主循环据此判断 Ctrl+S 作用域归属
+//     （ce 窗口聚焦/悬停 → Ctrl+S 保存上级节点；否则归主窗口保存工作流）
+// 窗口/按键检测统一在 handleShortcut（commands.cpp）内，本函数只做删除本身。
+void compositeEditorDeleteSelection()
 {
-    const ImGuiIO& io = ImGui::GetIO();
-    if (io.WantTextInput || ImGui::IsAnyItemActive() ||
-        ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
-        return;
-    }
-    if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        return;
-    }
-    if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
-        !ImGui::IsWindowHovered()) {
-        return;
-    }
-    if (!ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
-        return;
-    }
+    CompositeEditorState& state = compositeEditorState();
 
     const int count = ed::GetSelectedObjectCount();
     if (count <= 0) {
@@ -97,54 +91,36 @@ void ce_handle_delete_key(CompositeEditorState& state)
     ed::ClearSelection(); // 清掉内部选中 → 右侧「参数编辑」回落「未选中」（下一帧再同步）
 }
 
-// ------------------------------------------------ Ctrl+S 保存（DEBT-B1）----
+namespace {
+// ce 窗口当前聚焦/悬停（上一帧 draw_composite_editor 在窗口上下文内更新；
+// 主循环经 compositeEditorWindowFocused() 读取 —— ARCH-R4 Ctrl+S 作用域归属）
+bool g_ce_window_focused = false;
+} // namespace
+
+bool compositeEditorWindowFocused()
+{
+    return g_ce_window_focused;
+}
+
+// ------------------------------------------------ Ctrl+S 保存（DEBT-B1 历史）----
 // 用户验收记录（ToVerify #305 子项）：Ctrl+S 未保存成功、按键保存可成功 ——
 // 根因 = 上级节点编辑器从未实现 Ctrl+S 快捷键（仅有「保存」按钮）。
-// 修复（2026-10-21 复测静默失败 → 二修）：
-//   ① 原隔离条件「IsWindowFocused(ChildWindows) || IsWindowHovered()」只认画布容器
-//      （##ce_canvas_host child），而 Ctrl+S 的使用场景是「编辑完按保存」——
-//      此时鼠标/焦点常在右侧规格面板或顶栏，不在画布上 → 条件拦截 → 静默失败。
-//      放宽为「根窗口（上级节点编辑器主窗口）聚焦或悬停」：
-//        * IsWindowFocused(RootAndChildWindows)：键盘焦点在主窗口或任一子窗口内；
-//        * IsWindowHovered(RootAndChildWindows) ：鼠标在主窗口任意区域。
-//   ② io.KeyCtrl（1.90 起 deprecated 的兼容字段）改走新 API ImGui::IsKeyDown(ImGuiMod_Ctrl)，
-//      不依赖废弃字段的同步路径，与 backend 的 AddKeyEvent(ImGuiMod_Ctrl) 直接对齐。
-//   ③ 保留与 Delete 键一致的其余隔离条件（无文本输入 / 无激活控件 / 无弹层 / 左键未按住）。
-// 二修验证（2026-10-21 真机实测）：SendKeys 注入真实 Ctrl+S，诊断日志确认
-//   Focused=1 Hovered=1 Ctrl=1 → 保存函数真实执行（compositeEditorSave 失败路径）
-//   —— 触发链路完整；诊断日志已清理（本次提交不留残留）。
-// 保存成功/失败路径与「保存」按钮完全一致（compositeEditorSave → 顶栏 dirty 指示器 /
-// state.error 红色提示反馈）。
-void ce_handle_save_key(CompositeEditorState& state)
-{
-    const ImGuiIO& io = ImGui::GetIO();
-
-    if (io.WantTextInput || ImGui::IsAnyItemActive() ||
-        ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
-        return;
-    }
-    if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        return;
-    }
-    // 窗口条件：放宽为根窗口（主窗口 CeCanvas 聚焦/悬停），见函数头注释 ①。
-    if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-        !ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows)) {
-        return;
-    }
-    if (!(ImGui::IsKeyDown(ImGuiMod_Ctrl) && ImGui::IsKeyPressed(ImGuiKey_S, false))) {
-        return;
-    }
-
-    std::string error;
-    if (compositeEditorSave(&error)) {
-        log::info("[上级节点] 已保存 " + state.working.id + "（" + state.working.name + "）");
-    } else {
-        log::warn("[上级节点] 保存失败: " + error);
-    }
-}
+// 原修复（2026-10-21 二修）要点（本批 ARCH-R4 已收敛进命令路由层，语义不变）：
+//   ① 窗口条件放宽为「根窗口（上级节点编辑器主窗口）聚焦或悬停」——
+//      IsWindowFocused/Hovered(RootAndChildWindows)；现由 draw_composite_editor
+//      末尾的 handleShortcut(CompositeEditor) 调用点传入同一判定。
+//   ② io.KeyCtrl（1.90 起 deprecated）改走 IsKeyChordPressed（handleShortcut 内部）。
+//   ③ 其余隔离条件（无文本输入 / 无激活控件 / 无弹层 / 左键未按住）统一在
+//      handleShortcut（commands.cpp）内判定。
+// 保存成功/失败路径与「保存」按钮完全一致 —— 现在两者都经
+// dispatchCommand(AppCommand::CompositeSave) 同一实现。
 
 void drawCompositeEditor(const char* title, bool* open)
 {
+    // ARCH-R4：ce 窗口聚焦/悬停（主循环判断 Ctrl+S 作用域归属）。每帧在 ce 窗口
+    // 上下文内更新；未进入窗口绘制（ce 未打开/折叠）时保持 false → Ctrl+S 归主窗口。
+    g_ce_window_focused = false;
+
     CompositeEditorState& state = compositeEditorState();
     if (!state.active) {
         return;
@@ -171,6 +147,9 @@ void drawCompositeEditor(const char* title, bool* open)
         ImGui::End();
         return;
     }
+    // 窗口 Begin 成功后计算聚焦/悬停（RootAndChildWindows：顶栏 / 规格面板 / 画布都算）
+    g_ce_window_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) ||
+                          ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 
     // ---- 顶栏 ----
     ImGui::SetNextItemWidth(200.0f);
@@ -230,13 +209,8 @@ void drawCompositeEditor(const char* title, bool* open)
     }
     ImGui::SameLine();
     if (ImGui::Button("保存")) {
-        std::string error;
-        if (compositeEditorSave(&error)) {
-            log::info("[上级节点] 已保存 " + state.working.id + "（" + state.working.name + "）");
-        }
-        else {
-            log::warn("[上级节点] 保存失败: " + error);
-        }
+        // ARCH-R4：与 Ctrl+S 同一路径（dispatchCommand 单一实现）
+        dispatchCommand(AppCommand::CompositeSave, CommandContext{});
     }
     ImGui::SameLine();
     if (ImGui::Button("关闭")) {
@@ -524,10 +498,15 @@ void drawCompositeEditor(const char* title, bool* open)
             }
         }
 
-        // Delete 键：删除画布中选中的内部节点/连线（与主画布一致的快捷键）
-        ce_handle_delete_key(state);
-        // Ctrl+S：保存上级节点（DEBT-B1 修复 · 与「保存」按钮同一路径）
-        ce_handle_save_key(state);
+        // ARCH-R4：Delete / Ctrl+S 统一走命令路由层（快捷键表 + dispatchCommand）。
+        //  * 作用域 = CompositeEditor；窗口条件 = 上级节点编辑器根窗口聚焦/悬停
+        //    （RootAndChildWindows：画布 / 顶栏 / 规格面板都算 —— DEBT-B1 修复语义）
+        //  * 通用隔离（文本输入 / 激活控件 / 弹层 / 左键）在 handleShortcut 内判定
+        //  * 与主画布 Delete / 菜单 / 工具栏同一实现（三入口收敛）
+        handleShortcut(CommandScope::CompositeEditor,
+                       /*window_active=*/ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) ||
+                           ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows),
+                       CommandContext{});
 
         ed::End();
 

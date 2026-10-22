@@ -2,6 +2,7 @@
 
 #include "composite.h"        // CN：上级节点实例识别 / 创建
 #include "canvas_view.h"      // CN_editor_refactor：共享只读绘制层（CEA-01 / CEA-02）
+#include "commands.h"         // ARCH-R4：命令路由层（快捷键表 / handleShortcut）
 #include "composite_editor.h" // CN：双击/右键打开上级节点编辑器
 #include "node_registry.h"
 #include "provider_resolve.h"
@@ -404,42 +405,21 @@ void sync_selection(EditorState& state)
     }
 }
 
-// ------------------------------------------------------- Delete 键（打磨）----
+// ------------------------------------------------------- Delete 键（ARCH-R4）----
 // 设计 §6.7 原本「全部鼠标可达」；这里只补回 Delete 键这一个快捷键（不调
 // ed::EnableShortcuts(true)，避免连带恢复 Ctrl+A / Ctrl+C/V/X / Ctrl+Z/Y 等整套
 // 内置快捷键 —— 复制/粘贴曾因坐标同步问题暂停过，见 CHANGELOG「粘贴坐标修复」）。
-// 触发条件（全部满足才删除）：
-//  · 画布窗口在前台（聚焦含子窗口）或鼠标悬停其上
-//  · 未在输入文本 / 无 ImGui 控件激活 / 无弹出层（参数面板改名、节点库搜索、右键菜单不误删）
-//  · 左键未按住（拖节点 / 框选 / 拉连线过程中不触发）
-//  · 存在选中内容（与工具栏「删除选中」同判据）
-// 与工具栏 / 右键菜单走同一路径 state.delete_selected()：一次删除批次只压一次撤销快照。
+// ARCH-R4：快捷键统一走命令路由层 —— 窗口条件（画布窗口聚焦/悬停）+ 通用隔离
+// （文本输入 / 激活控件 / 弹层 / 左键按住）+ Delete 键检测统一在 handleShortcut
+// （commands.cpp）内完成；删除执行经 dispatchCommand(AppCommand::DeleteSelection)
+// —— 与工具栏 / 菜单走**同一实现**（三入口收敛；无选中时静默，与 Delete 键原行为一致）。
 void handle_delete_key()
 {
-    EditorState& state = editor();
-
-    if (!state.has_selection()) {
-        return;
-    }
-
-    const ImGuiIO& io = ImGui::GetIO();
-    if (io.WantTextInput || ImGui::IsAnyItemActive() ||
-        ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
-        return;
-    }
-    if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        return;
-    }
-    if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
-        !ImGui::IsWindowHovered()) {
-        return;
-    }
-    if (!ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
-        return;
-    }
-
-    state.deleteSelected();
-    ed::ClearSelection(); // 删除后清空编辑器内部选中，避免残留选中框/状态
+    handleShortcut(CommandScope::Main,
+                   /*window_active=*/ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) ||
+                       ImGui::IsWindowHovered(),
+                   CommandContext{},
+                   /*only=*/AppCommand::DeleteSelection);
 }
 
 // 位置同步（双向）：

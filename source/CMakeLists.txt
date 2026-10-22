@@ -380,7 +380,8 @@ add_executable(aiwrite WIN32
     ui/src/ce_session.cpp        # CLN-13 拆分（会话操作域）
     ui/src/ce_run.cpp            # CLN-13 拆分（试运行「执行连线」域）
     ui/src/ce_pack.cpp           # CLN-13 拆分（打包选区为上级节点域）
-    ui/src/ce_draw.cpp)          # CLN-13 拆分（编辑器窗口 + 新建/打包对话框域）
+    ui/src/ce_draw.cpp           # CLN-13 拆分（编辑器窗口 + 新建/打包对话框域）
+    ui/src/commands.cpp)         # ARCH-R4 拆分（命令路由层：AppCommand + 快捷键表 + dispatchCommand）
 
 # M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：面板诊断按钮 + 错误条「重新登录」（PT-07）
 # M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」异步后端

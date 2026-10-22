@@ -2,6 +2,7 @@
 
 #include "console_panel.h"
 #include "composite_editor.h"   // CN：上级节点编辑器 / 打包 / 新建
+#include "commands.h"           // ARCH-R4：命令路由层（菜单收敛 + 主窗口 Ctrl+S）
 #include "editor_state.h"
 #include "error_bar.h"
 #include "node_canvas.h"
@@ -902,20 +903,24 @@ int run(const AppOptions& options)
         ImGui::Begin("##DockHost", nullptr, host_flags);
         ImGui::PopStyleVar(3);
 
+        // ARCH-R4：命令路由上下文（承载主循环局部状态：退出窗口 / 首启引导标志）。
+        // 菜单 / 工具栏 / 快捷键三入口统一经 dispatchCommand —— 同一实现、行为一致。
+        const CommandContext cmd_ctx{window, &request_first_run_guide};
+
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("文件")) {
                 if (ImGui::MenuItem("新建（清空画布）")) {
-                    state.clearWorkflow();
+                    dispatchCommand(AppCommand::NewWorkflow, cmd_ctx);
                 }
                 if (ImGui::MenuItem("示例工作流")) {
-                    state.createSampleWorkflow();
+                    dispatchCommand(AppCommand::SampleWorkflow, cmd_ctx);
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("打开工作流…")) {
-                    openWorkflowDialog();
+                    dispatchCommand(AppCommand::OpenWorkflow, cmd_ctx);
                 }
                 if (ImGui::MenuItem("保存工作流…")) {
-                    saveWorkflowDialog();
+                    dispatchCommand(AppCommand::SaveWorkflow, cmd_ctx);
                 }
                 if (ImGui::BeginMenu("最近打开")) {
                     // M_patchAB §4（PC-03 / FEA-M2-02）：打开前**校验存在性** ——
@@ -963,33 +968,33 @@ int run(const AppOptions& options)
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("设置…")) { // M6-01：config.toml 的可调项集中在这里
-                    openSettingsPanel();
+                    dispatchCommand(AppCommand::Settings, cmd_ctx);
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("退出")) {
-                    glfwSetWindowShouldClose(window, GLFW_TRUE);
+                    dispatchCommand(AppCommand::Exit, cmd_ctx);
                 }
                 ImGui::EndMenu();
             }
 
             if (ImGui::BeginMenu("编辑")) {
                 if (ImGui::MenuItem("撤销", nullptr, false, state.undo.canUndo())) {
-                    state.undoOnce();
+                    dispatchCommand(AppCommand::Undo, cmd_ctx);
                 }
                 if (ImGui::MenuItem("重做", nullptr, false, state.undo.canRedo())) {
-                    state.redoOnce();
+                    dispatchCommand(AppCommand::Redo, cmd_ctx);
                 }
                 ImGui::Separator();
                 // 设计 §6.1：复制（节点）/ 粘贴（画布）——菜单入口与右键菜单一致
                 if (ImGui::MenuItem("复制", nullptr, false, state.has_selection())) {
-                    state.copySelection();
+                    dispatchCommand(AppCommand::Copy, cmd_ctx);
                 }
                 if (ImGui::MenuItem("粘贴", nullptr, false, state.has_clipboard())) {
-                    state.pasteClipboard();
+                    dispatchCommand(AppCommand::Paste, cmd_ctx);
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("删除选中", nullptr, false, state.has_selection())) {
-                    state.deleteSelected();
+                    dispatchCommand(AppCommand::DeleteSelection, cmd_ctx);
                 }
                 ImGui::EndMenu();
             }
@@ -1028,22 +1033,20 @@ int run(const AppOptions& options)
 
             if (ImGui::BeginMenu("上级节点")) {
                 if (ImGui::MenuItem("新建上级节点…")) {
-                    compositeNewDialog();
+                    dispatchCommand(AppCommand::CompositeNew, cmd_ctx);
                 }
                 if (ImGui::MenuItem("打包选区为上级节点…", nullptr, false,
                                     state.selected_nodes.size() >= 2)) {
-                    compositePackDialog();
+                    dispatchCommand(AppCommand::CompositePack, cmd_ctx);
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("在画布上框选/多选至少 2 个节点后打包");
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("打开上级节点编辑器")) {
-                    // 一律走文件路径：弹新建对话框 → 落盘空白规格 JSON → 打开编辑器读取。
-                    // 不直接创建无文件支撑的内存会话（避免依赖 imgui-node-editor 上下文时序）。
-                    if (!compositeEditorState().active) {
-                        compositeNewDialog();
-                    }
+                    // 一律走文件路径：弹新建对话框 → 落盘空白规格 JSON → 打开编辑器读取
+                    // （不直接创建无文件支撑的内存会话，避免依赖 imgui-node-editor 上下文时序）
+                    dispatchCommand(AppCommand::CompositeOpenEditor, cmd_ctx);
                 }
                 ImGui::EndMenu();
             }
@@ -1054,32 +1057,21 @@ int run(const AppOptions& options)
                                 false, false);
                 ImGui::Separator();
                 if (ImGui::MenuItem("复制诊断信息")) { // PM-04：给非技术用户的一键求助入口
-                    copyText(utils::diagnosticsReportText(), "[帮助] 诊断");
-                    state.setStatus("诊断信息已复制到剪贴板（可直接粘贴给支持人员）");
+                    dispatchCommand(AppCommand::CopyDiagnostics, cmd_ctx);
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("版本 / 系统 / 依赖 / 路径 / 配置 / 站点表摘要\n"
                                       "（**不含**任何密钥或 Cookie 内容）");
                 }
                 if (ImGui::MenuItem("首次使用引导")) {
-                    request_first_run_guide = true; // 重置「已看过」的会话内标记
+                    dispatchCommand(AppCommand::FirstRunGuide, cmd_ctx);
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("打开日志目录")) {
-                    if (utils::openFolder(paths::logsDir().string())) {
-                        state.setStatus("已打开日志目录：" + paths::logsDir().string());
-                    }
-                    else {
-                        state.setStatus("打开日志目录失败（可能尚未创建）");
-                    }
+                    dispatchCommand(AppCommand::OpenLogDir, cmd_ctx);
                 }
                 if (ImGui::MenuItem("打开数据目录")) {
-                    if (utils::openFolder(paths::dataRoot().string())) {
-                        state.setStatus("已打开数据目录：" + paths::dataRoot().string());
-                    }
-                    else {
-                        state.setStatus("打开数据目录失败（可能尚未创建）");
-                    }
+                    dispatchCommand(AppCommand::OpenDataDir, cmd_ctx);
                 }
                 ImGui::EndMenu();
             }
@@ -1168,6 +1160,18 @@ int run(const AppOptions& options)
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, -status_height),
                          ImGuiDockNodeFlags_PassthruCentralNode);
         ImGui::End();
+
+        // ---- ARCH-R4：主窗口 Ctrl+S（**修 Ctrl+S**：主窗口此前无保存快捷键）----
+        // 快捷键表驱动（CommandScope::Main · SaveWorkflow）；窗口条件 = 不在上级节点
+        // 编辑器窗口 —— ce 窗口聚焦/悬停时 Ctrl+S 归 ce（ce_draw 的
+        // handleShortcut(CompositeEditor) 处理保存上级节点，此处跳过避免双重触发）。
+        // 通用隔离（文本输入 / 激活控件 / 弹层 / 左键按住）在 handleShortcut 内判定；
+        // IsKeyChordPressed 同帧只触发一次，与各窗口内检测天然互斥、不会重复。
+        handleShortcut(CommandScope::Main,
+                       /*window_active=*/!(compositeEditorState().active &&
+                                           compositeEditorWindowFocused()),
+                       cmd_ctx,
+                       /*only=*/AppCommand::SaveWorkflow);
 
         // ---- 面板 ----
         ImGui::PushFont(fonts.ui);
