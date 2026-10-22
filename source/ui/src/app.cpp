@@ -364,8 +364,8 @@ void draw_info_panel(const char* title, bool* open, const ReadOnlyView& view)
         ImGui::Text("节点     : %d", static_cast<int>(view.nodes_for_render().size()));
         ImGui::Text("连线     : %d", static_cast<int>(view.edges_for_render().size()));
         ImGui::Text("选中     : %d", static_cast<int>(view.selection.nodes.size()));
-        ImGui::Text("撤销栈   : %d（可重做 %d）", static_cast<int>(state.undo.undoDepth()),
-                    static_cast<int>(state.undo.redoDepth()));
+        ImGui::Text("撤销栈   : %d（可重做 %d）", static_cast<int>(state.model().undo.undoDepth()),
+                    static_cast<int>(state.model().undo.redoDepth()));
         if (!state.status.empty()) {
             ImGui::TextWrapped("状态     : %s", state.status.c_str());
         }
@@ -684,8 +684,8 @@ int run(const AppOptions& options)
         std::string open_error;
         if (editor().openWorkflowFrom(options.open_workflow, &open_error)) {
             log::info("[启动] 已按 --open 打开工作流：" + options.open_workflow + "（节点 " +
-                      std::to_string(editor().graph.nodes.size()) + " / 连线 " +
-                      std::to_string(editor().graph.edges.size()) + "）");
+                      std::to_string(editor().model().graph.nodes.size()) + " / 连线 " +
+                      std::to_string(editor().model().graph.edges.size()) + "）");
         }
         else {
             log::warn("[启动] --open 打开失败：" + options.open_workflow + "（" + open_error +
@@ -829,9 +829,9 @@ int run(const AppOptions& options)
             last_memory_sample = diagnostic_now;
             const EditorState& diagnostic_state = editor();
             utils::diagnostics::logMemorySample(
-                "节点 " + std::to_string(diagnostic_state.graph.nodes.size()) + " / 连线 " +
-                std::to_string(diagnostic_state.graph.edges.size()) + " / 撤销栈 " +
-                std::to_string(diagnostic_state.undo.undoDepth()));
+                "节点 " + std::to_string(diagnostic_state.model().graph.nodes.size()) + " / 连线 " +
+                std::to_string(diagnostic_state.model().graph.edges.size()) + " / 撤销栈 " +
+                std::to_string(diagnostic_state.model().undo.undoDepth()));
         }
 
         if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0) {
@@ -885,7 +885,7 @@ int run(const AppOptions& options)
         //  * 只存引用、零拷贝（ARCH-D34）；快照空对象 = 未运行（ARCH-D32）
         const SelectionReadView selection_view{state.selected_nodes, state.selected_links,
                                                state.selected_node};
-        const ReadOnlyView view{state.graph, selection_view, state.run_snapshot_view(), config};
+        const ReadOnlyView view{state.model().graph, selection_view, state.run_snapshot_view(), config};
 
         // ---- 全屏 DockSpace 宿主窗口 ----
         ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -978,10 +978,10 @@ int run(const AppOptions& options)
             }
 
             if (ImGui::BeginMenu("编辑")) {
-                if (ImGui::MenuItem("撤销", nullptr, false, state.undo.canUndo())) {
+                if (ImGui::MenuItem("撤销", nullptr, false, state.model().undo.canUndo())) {
                     dispatchCommand(AppCommand::Undo, cmd_ctx);
                 }
-                if (ImGui::MenuItem("重做", nullptr, false, state.undo.canRedo())) {
+                if (ImGui::MenuItem("重做", nullptr, false, state.model().undo.canRedo())) {
                     dispatchCommand(AppCommand::Redo, cmd_ctx);
                 }
                 ImGui::Separator();
@@ -1187,7 +1187,7 @@ int run(const AppOptions& options)
         if (show_params) {
             ImGui::PushFont(fonts.ui);
             engine::Node* selected =
-                state.selected_node.empty() ? nullptr : state.graph.findNode(state.selected_node);
+                state.selected_node.empty() ? nullptr : state.model().graph.findNode(state.selected_node);
 
             PropertyEditResult edit;
             draw_property_panel(kWindowParams, &show_params, selected, view, edit);
@@ -1200,7 +1200,7 @@ int run(const AppOptions& options)
                 state.setStatus("参数已修改（可用工具栏「撤销」回退）");
                 // ARCH-E1：参数变化通知（未跟踪具体 key → 负载只带 node_id，通知「有参数变了」）
                 if (selected != nullptr) {
-                    state.event_bus().publish(EditEvent::node(EditEventKind::ParamChanged,
+                    state.model().event_bus().publish(EditEvent::node(EditEventKind::ParamChanged,
                                                               selected->id));
                 }
             }
@@ -1208,7 +1208,7 @@ int run(const AppOptions& options)
                 state.setStatus("节点标题已修改");
                 // ARCH-E1：标题变化通知
                 if (selected != nullptr) {
-                    state.event_bus().publish(EditEvent::node(EditEventKind::TitleChanged,
+                    state.model().event_bus().publish(EditEvent::node(EditEventKind::TitleChanged,
                                                               selected->id));
                 }
             }
@@ -1269,7 +1269,7 @@ int run(const AppOptions& options)
             // PB2-24 要点②：配置表重载 ⇒ 重建 `provider` 参数枚举（注册表 Definition + 已有节点实例）
             //  * 不刷新的话：刚新建的站点 id 会在运行前校验被判「取值不在枚举范围内」
             //  * 界面下拉本身读实时表（PB2-31 合并显示）⇒ 无需额外刷新
-            engine::refreshProviderOptions(state.graph);
+            engine::refreshProviderOptions(state.model().graph);
             state.setStatus("配置表已重载：提供商下拉 / 运行前校验已同步");
         }
 

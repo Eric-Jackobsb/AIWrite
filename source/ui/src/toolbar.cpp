@@ -16,8 +16,8 @@ void drawToolbarButtons()
 {
     EditorState& state = editor();
 
-    const bool can_undo = state.undo.canUndo();
-    const bool can_redo = state.undo.canRedo();
+    const bool can_undo = state.model().undo.canUndo();
+    const bool can_redo = state.model().undo.canRedo();
 
     // ---- 撤销 / 重做（设计 §6.6 工具栏按钮；无快捷键）----
     // ARCH-R4：三入口收敛 —— 按钮执行统一走 dispatchCommand（与菜单/快捷键同一实现）
@@ -27,8 +27,8 @@ void drawToolbarButtons()
     }
     ImGui::EndDisabled();
     if (can_undo && ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("撤销：%s（%d 步可用）", state.undo.lastUndoLabel().c_str(),
-                          static_cast<int>(state.undo.undoDepth()));
+        ImGui::SetTooltip("撤销：%s（%d 步可用）", state.model().undo.lastUndoLabel().c_str(),
+                          static_cast<int>(state.model().undo.undoDepth()));
     }
 
     ImGui::SameLine();
@@ -38,8 +38,8 @@ void drawToolbarButtons()
     }
     ImGui::EndDisabled();
     if (can_redo && ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("重做：%s（%d 步可用）", state.undo.lastRedoLabel().c_str(),
-                          static_cast<int>(state.undo.redoDepth()));
+        ImGui::SetTooltip("重做：%s（%d 步可用）", state.model().undo.lastRedoLabel().c_str(),
+                          static_cast<int>(state.model().undo.redoDepth()));
     }
 
     ImGui::SameLine();
@@ -93,11 +93,11 @@ void drawToolbarButtons()
 
     ImGui::SameLine();
     ImGui::TextDisabled("| 节点 %d  连线 %d  |  选中 节点 %d / 连线 %d  |  撤销栈 %d",
-                        static_cast<int>(state.graph.nodes.size()),
-                        static_cast<int>(state.graph.edges.size()),
+                        static_cast<int>(state.model().graph.nodes.size()),
+                        static_cast<int>(state.model().graph.edges.size()),
                         static_cast<int>(state.selected_nodes.size()),
                         static_cast<int>(state.selected_links.size()),
-                        static_cast<int>(state.undo.undoDepth()));
+                        static_cast<int>(state.model().undo.undoDepth()));
 
     // ---- 运行 / 停止（右对齐 = 顶栏右上角；设计 §6.5 / §7.1）----
     const bool  running    = state.executor().running();
@@ -118,13 +118,13 @@ void drawToolbarButtons()
     // 收集「本次运行必定失败」的节点（官方 API 未接线 / 多模态未接线）
     const auto collect_blocked = [&state]() {
         std::vector<BlockedNode> found;
-        for (const engine::Node& node : state.graph.nodes) {
-            const std::string reason = engine::unwiredReason(state.graph, node);
+        for (const engine::Node& node : state.model().graph.nodes) {
+            const std::string reason = engine::unwiredReason(state.model().graph, node);
             if (reason.empty()) {
                 continue;
             }
             const engine::EffectiveProvider effective =
-                engine::resolveEffectiveProvider(state.graph, node);
+                engine::resolveEffectiveProvider(state.model().graph, node);
             BlockedNode item;
             item.node_id    = node.id;
             item.node_title = node.title.empty() ? node.type : node.title;
@@ -148,7 +148,7 @@ void drawToolbarButtons()
     ImGui::SameLine();
     ImGui::SetCursorPosX(next_left > wanted ? next_left : wanted);
 
-    ImGui::BeginDisabled(running || state.graph.nodes.empty());
+    ImGui::BeginDisabled(running || state.model().graph.nodes.empty());
     if (ImGui::Button(run_label)) {
         blocked_nodes = collect_blocked();
         if (blocked_nodes.empty()) {
@@ -185,7 +185,7 @@ void drawToolbarButtons()
         if (ImGui::BeginPopup("##toolbar_rerun")) {
             const std::string target =
                 state.selected_nodes.empty() ? std::string() : state.selected_nodes.front();
-            const engine::Node* sel = target.empty() ? nullptr : state.graph.findNode(target);
+            const engine::Node* sel = target.empty() ? nullptr : state.model().graph.findNode(target);
             const bool can_rerun = sel != nullptr && sel->state != engine::NodeState::Waiting;
             if (ImGui::MenuItem("重跑选中节点", nullptr, false, can_rerun)) {
                 state.startRerunAsync(target, engine::RerunScope::NodeOnly);
@@ -231,7 +231,7 @@ void drawToolbarButtons()
                 for (const BlockedNode& item : items) {
                     const std::string target_id =
                         item.source_node.empty() ? item.node_id : item.source_node;
-                    if (const engine::Node* target = state.graph.findNode(target_id)) {
+                    if (const engine::Node* target = state.model().graph.findNode(target_id)) {
                         if (target->findParam("mode") != nullptr) {
                             return true;
                         }
@@ -246,7 +246,7 @@ void drawToolbarButtons()
             for (const BlockedNode& item : blocked_nodes) {
                 const std::string target_id =
                     item.source_node.empty() ? item.node_id : item.source_node;
-                if (engine::Node* target = state.graph.findNode(target_id)) {
+                if (engine::Node* target = state.model().graph.findNode(target_id)) {
                     if (engine::Param* mode = target->findParam("mode")) {
                         mode->value = std::string("web");
                         ++switched;

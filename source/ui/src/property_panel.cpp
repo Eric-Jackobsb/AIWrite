@@ -260,7 +260,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                 const std::string target_label =
                     effective.from_edge ? "提供商配置 " + target_id : std::string("本节点");
                 if (ImGui::Button(("把 " + target_label + " 改为 web").c_str())) {
-                    if (engine::Node* target = editor().graph.findNode(target_id)) {
+                    if (engine::Node* target = editor().model().graph.findNode(target_id)) {
                         if (engine::Param* mode = target->findParam("mode")) {
                             editor().snapshot("切换提供商为网页版"); // 先压快照：可撤销
                             mode->value = std::string("web");
@@ -787,7 +787,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         if (ImGui::Button("确认应用", ImVec2(120.0f, 0.0f))) {
             editor().snapshot("批量应用参数到同类节点"); // 先压快照：整批应用可一次撤销
             std::string error;
-            const int   affected = editor().graph.copyParamsToSameType(node->id, &error);
+            const int   affected = editor().model().graph.copyParamsToSameType(node->id, &error);
             if (affected > 0) {
                 result.changed = true;
                 editor().setStatus("已把 " + node->id + " 的参数应用到 " +

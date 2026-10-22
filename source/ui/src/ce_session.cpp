@@ -102,7 +102,7 @@ bool compositeEditorSave(std::string* error)
     // 热重载：把主画布中已放置的同 id 实例按新规格重建（保留 id/位置/自定义标题/已填参数值）
     EditorState& main_state = editor();
     const bool   has_instances =
-        std::any_of(main_state.graph.nodes.begin(), main_state.graph.nodes.end(),
+        std::any_of(main_state.model().graph.nodes.begin(), main_state.model().graph.nodes.end(),
                     [&](const engine::Node& n) { return n.composite_id == state.working.id; });
     if (has_instances) {
         // 改图前压主画布撤销快照（内部也会终止正在进行的运行）
@@ -110,13 +110,13 @@ bool compositeEditorSave(std::string* error)
     }
     std::string refresh_error;
     const int   refreshed = engine::refresh_composite_instances(
-        main_state.graph, state.working.id, old_name, &refresh_error);
+        main_state.model().graph, state.working.id, old_name, &refresh_error);
     if (refreshed > 0) {
         // 清理可能已失效的连线选中引用（节点 id 保留，选中节点不受影响）
         main_state.selected_links.erase(
             std::remove_if(main_state.selected_links.begin(), main_state.selected_links.end(),
                            [&](const std::string& eid) {
-                               return main_state.graph.findEdge(eid) == nullptr;
+                               return main_state.model().graph.findEdge(eid) == nullptr;
                            }),
             main_state.selected_links.end());
         main_state.setStatus("上级节点已保存：已同步画布中 " + std::to_string(refreshed) +

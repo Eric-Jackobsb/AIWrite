@@ -67,29 +67,26 @@ EditorState::EditorState()
     run_sub_handle_ = run.subscribeRunEvents(
         [this](const engine::RunEvent& event) { onRunEvent(event); });
 
-    // ARCH-E2：Undo 订阅「修改前」通道 —— 编辑操作修改前经 publish_before_edit 通知，
-    // 快照式撤销在此压栈（snapshot() 只发通知，不再直接操作 undo 栈）
-    undo_sub_handle_ = event_bus_.subscribe_before_edit(
-        [this](const std::string& label) {
-            // 运行中修改工作流 → 计划与图不再一致，先终止本次运行（M2-04 守卫）
-            abortRunIfAny("修改工作流（" + label + "）");
-            undo.push(graph, label);
-        });
+    // ARCH-E3：修改前钩子（M2-04 守卫）—— 运行中修改工作流 → 先终止本次运行。
+    // Undo 订阅在 WorkflowModel 构造时已注册（回调 = 钩子 → undo.push，顺序与 E2 一致）
+    model_.setBeforeEditHook([this](const std::string& label) {
+        abortRunIfAny("修改工作流（" + label + "）");
+    });
 
     // ARCH-E2：autosave 订阅内容类编辑事件（替代每帧 1 Hz content signature 轮询；
-    // SelectionChanged 非内容变化不订阅；收到事件 → 标记「有未保存变更」）
+    // SelectionChanged 非内容变化不订阅；收到事件 → 标记「有未保存变更」）。
+    // 挂在文档级总线（model().event_bus()，ARCH-E3 随迁）
     for (const EditEventKind kind : kAutosaveEditKinds) {
         autosave_sub_handles_.push_back(
-            event_bus_.subscribe(kind, [this](const EditEvent&) { onEditContent(); }));
+            model_.event_bus().subscribe(kind, [this](const EditEvent&) { onEditContent(); }));
     }
 }
 
 EditorState::~EditorState()
 {
     run.unsubscribeRunEvents(run_sub_handle_);
-    event_bus_.unsubscribe_before_edit(undo_sub_handle_);
     for (const std::size_t handle : autosave_sub_handles_) {
-        event_bus_.unsubscribe(handle);
+        model_.event_bus().unsubscribe(handle);
     }
 }
 
@@ -128,60 +125,52 @@ void EditorState::setStatus(const std::string& text)
 
 void EditorState::logSummary(const std::string& prefix) const
 {
-    log::info(prefix + "（节点 " + std::to_string(graph.nodes.size()) + "，连线 " +
-              std::to_string(graph.edges.size()) + "）");
+    log::info(prefix + "（节点 " + std::to_string(model_.graph.nodes.size()) + "，连线 " +
+              std::to_string(model_.graph.edges.size()) + "）");
 }
 
 // ------------------------------------------------------------------ 撤销 -----
-// ARCH-E2：修改前压快照由 Undo 订阅者完成（构造时订阅 before-edit 通道，
-// 回调 = abortRunIfAny + undo.push）；本方法只发布「修改前」通知（对外签名不变）。
+// ARCH-E3：核心操作迁 WorkflowModel（model().undoOnce 内部完成整图替换 + diff 事件）；
+// 本层保留同签名薄封装（状态栏 / 选中清空），对外调用点零改动。
+// ARCH-E2：修改前压快照由 Undo 订阅者完成（WorkflowModel 构造时订阅 before-edit 通道，
+// 回调 = 修改前钩子 + undo.push）；snapshot() 只发布「修改前」通知（对外签名不变）。
 void EditorState::snapshot(const std::string& label)
 {
-    event_bus_.publish_before_edit(label);
+    model_.snapshot(label);
 }
 
 bool EditorState::undoOnce()
 {
-    engine::Graph restored;
-    std::string   label;
-    if (!undo.undo(graph, restored, &label)) {
+    std::string label;
+    if (!model_.undoOnce(&label)) {
         setStatus("没有可撤销的操作");
         return false;
     }
-    const engine::Graph before = graph; // ARCH-E2：撤销 = 整图替换 → 逐节点 diff 事件
-    graph = std::move(restored);
     selected_nodes.clear();
     selected_node.clear();
     logSummary("[撤销] " + label);
     setStatus("已撤销：" + label);
-    publishGraphDiff(before, graph);
     return true;
 }
 
 bool EditorState::redoOnce()
 {
-    engine::Graph restored;
-    std::string   label;
-    if (!undo.redo(graph, restored, &label)) {
+    std::string label;
+    if (!model_.redoOnce(&label)) {
         setStatus("没有可重做的操作");
         return false;
     }
-    const engine::Graph before = graph; // ARCH-E2：重做 = 整图替换 → 逐节点 diff 事件
-    graph = std::move(restored);
     selected_nodes.clear();
     selected_node.clear();
     logSummary("[重做] " + label);
     setStatus("已重做：" + label);
-    publishGraphDiff(before, graph);
     return true;
 }
 
 // ----------------------------------------------------------------- 工作流 ----
 void EditorState::clearWorkflow()
 {
-    const engine::Graph before = graph; // ARCH-E2：清空 = 整图重置 → 逐节点 diff 事件
-    graph.clear();
-    undo.clear();
+    model_.clear(); // 清图 + 清撤销栈 + 逐节点 diff 事件
     selected_nodes.clear();
     selected_node.clear();
     clipboard_nodes_.clear();
@@ -189,19 +178,17 @@ void EditorState::clearWorkflow()
     logSummary("[新建] 已清空画布");
     setStatus("画布已清空（撤销栈也已清空）");
 
-    // ARCH-E2：整图重置通知（全部 NodeRemoved / EdgeRemoved；在 baseline 之前发）
-    publishGraphDiff(before, graph);
     // PC-01/02：清空画布**不删**快照（保守：不替用户决定丢弃可恢复内容），只重设基线
     markAutosaveBaseline();
 }
 
 void EditorState::createSampleWorkflow()
 {
-    graph.clear();
-    undo.clear();
+    model_.graph.clear();
+    model_.undo.clear();
 
-    graph.name        = "默认工作流";
-    graph.description = "文本输入 → 提示词模板 → 文本生成 → 文本输出（提供商配置接入文本生成的 provider 输入）";
+    model_.graph.name        = "默认工作流";
+    model_.graph.description = "文本输入 → 提示词模板 → 文本生成 → 文本输出（提供商配置接入文本生成的 provider 输入）";
 
     createNode("TextInput", -420.0f, -40.0f);
     createNode("PromptTemplate", -120.0f, -40.0f);
@@ -210,38 +197,41 @@ void EditorState::createSampleWorkflow()
     // 提供商配置放在文本生成下方，其 provider 输出接到文本生成的 provider 输入
     createNode("ProviderConfig", 220.0f, 260.0f);
 
-    if (graph.nodes.size() == 5) {
-        const std::string input_id    = graph.nodes[0].id;
-        const std::string prompt_id   = graph.nodes[1].id;
-        const std::string llm_id      = graph.nodes[2].id;
-        const std::string output_id   = graph.nodes[3].id;
-        const std::string provider_id = graph.nodes[4].id;
+    if (model_.graph.nodes.size() == 5) {
+        const std::string input_id    = model_.graph.nodes[0].id;
+        const std::string prompt_id   = model_.graph.nodes[1].id;
+        const std::string llm_id      = model_.graph.nodes[2].id;
+        const std::string output_id   = model_.graph.nodes[3].id;
+        const std::string provider_id = model_.graph.nodes[4].id;
 
         std::string error;
-        const std::string e_input_prompt = graph.addEdge(input_id, "text", prompt_id, "vars", &error);
+        const std::string e_input_prompt =
+            model_.graph.addEdge(input_id, "text", prompt_id, "vars", &error);
         if (!e_input_prompt.empty()) {
-            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, input_id, "text",
-                                               prompt_id, "vars", e_input_prompt));
+            model_.publish(EditEvent::edge(EditEventKind::EdgeAdded, input_id, "text",
+                                           prompt_id, "vars", e_input_prompt));
         }
-        const std::string e_prompt_llm = graph.addEdge(prompt_id, "text", llm_id, "prompt", &error);
+        const std::string e_prompt_llm =
+            model_.graph.addEdge(prompt_id, "text", llm_id, "prompt", &error);
         if (!e_prompt_llm.empty()) {
-            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, prompt_id, "text",
-                                               llm_id, "prompt", e_prompt_llm));
+            model_.publish(EditEvent::edge(EditEventKind::EdgeAdded, prompt_id, "text",
+                                           llm_id, "prompt", e_prompt_llm));
         }
-        const std::string e_llm_output = graph.addEdge(llm_id, "text", output_id, "text", &error);
+        const std::string e_llm_output =
+            model_.graph.addEdge(llm_id, "text", output_id, "text", &error);
         if (!e_llm_output.empty()) {
-            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, llm_id, "text",
-                                               output_id, "text", e_llm_output));
+            model_.publish(EditEvent::edge(EditEventKind::EdgeAdded, llm_id, "text",
+                                           output_id, "text", e_llm_output));
         }
         // 设计 §9.2：ProviderConfig 输出 provider 句柄 → 推理节点的 provider 输入
         const std::string e_provider_llm =
-            graph.addEdge(provider_id, "provider", llm_id, "provider", &error);
+            model_.graph.addEdge(provider_id, "provider", llm_id, "provider", &error);
         if (!e_provider_llm.empty()) {
-            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, provider_id, "provider",
-                                               llm_id, "provider", e_provider_llm));
+            model_.publish(EditEvent::edge(EditEventKind::EdgeAdded, provider_id, "provider",
+                                           llm_id, "provider", e_provider_llm));
         }
 
-        if (engine::Node* input = graph.findNode(input_id)) {
+        if (engine::Node* input = model_.graph.findNode(input_id)) {
             if (engine::Param* param = input->findParam("text")) {
                 param->value = std::string("从前有座山，山里有座庙。");
             }
@@ -252,14 +242,14 @@ void EditorState::createSampleWorkflow()
     // 注意：密钥类参数（is_secret，如 API Key）不会写入文件
     const std::filesystem::path default_file = paths::workflowsDir() / "default.json";
     std::string                 save_error;
-    if (engine::saveWorkflow(graph, default_file, &save_error)) {
+    if (engine::saveWorkflow(model_.graph, default_file, &save_error)) {
         log::info("[默认工作流] 已保存到 " + default_file.string());
     }
     else {
         log::warn("[默认工作流] 保存失败: " + save_error);
     }
 
-    undo.clear(); // 默认工作流作为初始状态，不进入撤销历史
+    model_.undo.clear(); // 默认工作流作为初始状态，不进入撤销历史
     selected_nodes.clear();
     selected_node.clear();
     request_navigate_to_content = true;
@@ -271,7 +261,7 @@ void EditorState::createSampleWorkflow()
 std::string EditorState::createNode(const std::string& type, float x, float y)
 {
     std::string error;
-    const std::string id = graph.addNode(type, x, y, &error);
+    const std::string id = model_.createNode(type, x, y, &error); // addNode + NodeAdded 事件
     if (id.empty()) {
         log::error("创建节点失败: " + error);
         setStatus("创建节点失败：" + error);
@@ -282,20 +272,19 @@ std::string EditorState::createNode(const std::string& type, float x, float y)
     const std::string name = (definition != nullptr) ? definition->display_name : type;
     log::info("创建节点 " + id + "（" + name + "）");
     setStatus("已创建节点：" + name + "（" + id + "）");
-    // ARCH-E1：编辑事件通知（形态 1：通知；消费者各自订阅处理）
-    event_bus_.publish(EditEvent::node(EditEventKind::NodeAdded, id));
     return id;
 }
 
 bool EditorState::deleteNode(const std::string& node_id)
 {
-    const engine::Node* node = graph.findNode(node_id);
+    const engine::Node* node = model_.graph.findNode(node_id);
     if (node == nullptr) {
         return false;
     }
     const std::string title = node->title;
 
-    if (!graph.removeNode(node_id)) {
+    // model_.deleteNode：removeNode + NodeRemoved 事件（连带其连线由 NodeRemoved 隐含）
+    if (!model_.deleteNode(node_id)) {
         return false;
     }
 
@@ -305,8 +294,6 @@ bool EditorState::deleteNode(const std::string& node_id)
         selected_node.clear();
     }
     log::info("删除节点 " + node_id + "（" + title + "）");
-    // ARCH-E1：编辑事件通知（连带其连线由 NodeRemoved 隐含）
-    event_bus_.publish(EditEvent::node(EditEventKind::NodeRemoved, node_id));
     return true;
 }
 
@@ -339,11 +326,11 @@ bool EditorState::deleteSelected()
     if (!selected_links.empty()) {
         snapshot("删除选中连线");
         for (const std::string& edge_id : selected_links) {
-            const engine::Edge* edge = graph.findEdge(edge_id);
-            if (graph.removeEdge(edge_id)) {
+            const engine::Edge* edge = model_.graph.findEdge(edge_id);
+            if (model_.graph.removeEdge(edge_id)) {
                 // ARCH-E1：编辑事件通知（删除前取边数据作负载）
                 if (edge != nullptr) {
-                    event_bus_.publish(EditEvent::edge(EditEventKind::EdgeRemoved, *edge));
+                    model_.publish(EditEvent::edge(EditEventKind::EdgeRemoved, *edge));
                 }
                 log::info("删除连线 " + edge_id);
             }
@@ -375,12 +362,12 @@ void EditorState::copySelection()
     }
 
     for (const std::string& id : selected_nodes) {
-        if (const engine::Node* node = graph.findNode(id)) {
+        if (const engine::Node* node = model_.graph.findNode(id)) {
             clipboard_nodes_.push_back(*node);
         }
     }
     // 只复制选区内部的连线
-    for (const engine::Edge& edge : graph.edges) {
+    for (const engine::Edge& edge : model_.graph.edges) {
         const bool from_selected = std::find(selected_nodes.begin(), selected_nodes.end(),
                                              edge.from_node) != selected_nodes.end();
         const bool to_selected   = std::find(selected_nodes.begin(), selected_nodes.end(),
@@ -409,20 +396,20 @@ bool EditorState::pasteClipboard()
 
     for (const engine::Node& source : clipboard_nodes_) {
         std::string error;
-        const std::string new_id = graph.addNode(source.type, source.x + kOffset,
-                                                 source.y + kOffset, &error);
+        const std::string new_id = model_.graph.addNode(source.type, source.x + kOffset,
+                                                        source.y + kOffset, &error);
         if (new_id.empty()) {
             log::error("粘贴节点失败: " + error);
             continue;
         }
-        if (engine::Node* node = graph.findNode(new_id)) {
+        if (engine::Node* node = model_.graph.findNode(new_id)) {
             node->title  = source.title;
             node->params = source.params; // 一并复制参数值
         }
         id_map.emplace_back(source.id, new_id);
         created.push_back(new_id);
         // ARCH-E1：粘贴创建的每个节点发 NodeAdded（与 createNode 同构）
-        event_bus_.publish(EditEvent::node(EditEventKind::NodeAdded, new_id));
+        model_.publish(EditEvent::node(EditEventKind::NodeAdded, new_id));
     }
 
     for (const engine::Edge& edge : clipboard_edges_) {
@@ -441,11 +428,11 @@ bool EditorState::pasteClipboard()
         }
         std::string error;
         const std::string edge_id =
-            graph.addEdge(from_id, edge.from_port, to_id, edge.to_port, &error);
+            model_.graph.addEdge(from_id, edge.from_port, to_id, edge.to_port, &error);
         // ARCH-E1：粘贴创建的每条连线发 EdgeAdded
         if (!edge_id.empty()) {
-            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, from_id, edge.from_port,
-                                               to_id, edge.to_port, edge_id));
+            model_.publish(EditEvent::edge(EditEventKind::EdgeAdded, from_id, edge.from_port,
+                                           to_id, edge.to_port, edge_id));
         }
     }
 
@@ -470,7 +457,7 @@ const engine::Executor& EditorState::executor() const { return run.executor(); }
 bool EditorState::startRun()
 {
     std::string error;
-    if (!run.start(graph, &error)) {
+    if (!run.start(model_.graph, &error)) {
         setStatus(error);
         return false;
     }
@@ -482,7 +469,7 @@ bool EditorState::startRun()
 bool EditorState::startRerunAsync(const std::string& node_id, engine::RerunScope scope)
 {
     std::string error;
-    if (!run.startRerunAsync(graph, node_id, scope, &error)) {
+    if (!run.startRerunAsync(model_.graph, node_id, scope, &error)) {
         setStatus(error);
         return false;
     }
@@ -508,7 +495,7 @@ void EditorState::tickRun()
 {
     // 委托 RunSession：异步会话泵事件 / 同步会话推进一节点；
     //  返回 true = 会话结束（Finished 事件 / 同步跑完）→ 本层做 UI 收尾
-    if (run.tick(graph)) {
+    if (run.tick(model_.graph)) {
         finishRunSession();
     }
 }
@@ -518,7 +505,7 @@ void EditorState::tickRun()
 bool EditorState::startRunAsync()
 {
     std::string error;
-    if (!run.startAsync(graph, &error)) {
+    if (!run.startAsync(model_.graph, &error)) {
         setStatus(error);
         return false;
     }
@@ -537,7 +524,7 @@ void EditorState::stopRunAsync()
 // 运行收尾：join 与权威快照落定归 RunSession::finish；本层只做 UI 收尾
 void EditorState::finishRunSession()
 {
-    run.finish(graph); // join → 权威快照 → 增量补回 → session_active_ = false
+    run.finish(model_.graph); // join → 权威快照 → 增量补回 → session_active_ = false
 
     const engine::RunSnapshot& snapshot = run.snapshot();
     setStatus("运行结束：" + snapshot.summary);
@@ -552,7 +539,7 @@ void EditorState::finishRunSession()
     refreshLastError();
 
     // M_textio P5 + M_8nodes_extension L1-b（§4.8）：TextOutput 的「运行后自动导出」
-    for (const engine::Node& node : graph.nodes) {
+    for (const engine::Node& node : model_.graph.nodes) {
         if (node.type != "TextOutput") {
             continue;
         }
@@ -662,7 +649,7 @@ void EditorState::clearLastError()
 void EditorState::refreshLastError()
 {
     // DEBT-L8（M6-04 步骤 5）：失败汇总 —— 收集**所有**失败节点（不只首个）
-    const std::vector<engine::FailureSummary> failures = engine::collectFailures(graph);
+    const std::vector<engine::FailureSummary> failures = engine::collectFailures(model_.graph);
     if (failures.empty()) {
         last_error = LastError{}; // 本次运行无失败 → 清空（成功运行不留旧错误）
         return;
@@ -670,7 +657,7 @@ void EditorState::refreshLastError()
 
     last_error.active       = true;
     last_error.failed_count = static_cast<int>(failures.size());
-    last_error.summary      = engine::summarizeFailures(graph);
+    last_error.summary      = engine::summarizeFailures(model_.graph);
     last_error.node_id      = failures.front().node_id; // 首个失败节点（定位 / relogin 反查）
     last_error.message =
         failures.front().message.empty() ? std::string("执行失败") : failures.front().message;
@@ -691,10 +678,10 @@ void EditorState::refreshLastError()
     //    只有判据命中才给入口（不猜、不误报：普通超时 / 解析失败不显示按钮）
     const web::SessionFailure failure = web::classifySessionFailureText(last_error.message);
     if (failure.session_related) {
-        const engine::Node* failed_node = graph.findNode(failures.front().node_id);
+        const engine::Node* failed_node = model_.graph.findNode(failures.front().node_id);
         if (failed_node != nullptr) {
             const engine::EffectiveProvider effective =
-                engine::resolveEffectiveProvider(graph, *failed_node);
+                engine::resolveEffectiveProvider(model_.graph, *failed_node);
             last_error.relogin_available   = true;
             last_error.relogin_needed      = failure.needs_relogin;
             last_error.relogin_provider_id = effective.provider;
@@ -749,7 +736,7 @@ void EditorState::archiveRunOutputs()
         item.state       = engine::nodeStateName(info.state);
         item.duration_ms = info.duration_ms;
         item.error       = info.error;
-        item.text        = node_output_text(graph, run.executor(), info.node_id);
+        item.text        = node_output_text(model_.graph, run.executor(), info.node_id);
         nodes.push_back(std::move(item));
     }
 
@@ -792,7 +779,7 @@ void EditorState::abortRunIfAny(const std::string& reason)
     if (!run.running()) {
         return;
     }
-    run.abortIfAny(graph, reason); // 终止 + 清节点状态（日志在内）
+    run.abortIfAny(model_.graph, reason); // 终止 + 清节点状态（日志在内）
     setStatus("运行已终止（" + reason + "）");
 }
 
@@ -843,11 +830,12 @@ void EditorState::tickAutosave()
 
     engine::AutosaveInfo info;
     std::string          error;
-    if (engine::autosave_write(graph, current_workflow_path, config.ui.autosave_keep, &info,
+    if (engine::autosave_write(model_.graph, current_workflow_path, config.ui.autosave_keep,
+                               &info,
                                &error)) {
         autosave_change_seen_ = false;
-        log::info("[自动保存] 已写入快照（节点 " + std::to_string(graph.nodes.size()) + " / 连线 " +
-                  std::to_string(graph.edges.size()) +
+        log::info("[自动保存] 已写入快照（节点 " + std::to_string(model_.graph.nodes.size()) +
+                  " / 连线 " + std::to_string(model_.graph.edges.size()) +
                   (current_workflow_path.empty() ? "，未命名工作流"
                                                  : "，关联 " + current_workflow_path) +
                   "）");
@@ -873,9 +861,8 @@ bool EditorState::restoreAutosave(std::string* error)
     }
 
     abortRunIfAny("恢复自动保存");
-    const engine::Graph before = graph; // ARCH-E2：恢复 = 整图替换 → 逐节点 diff 事件
-    graph = std::move(loaded);
-    undo.clear();
+    // ARCH-E3：整图替换（替换数据 + 清空撤销栈 + 逐节点 diff 事件）归 WorkflowModel::load
+    model_.load(std::move(loaded));
     selected_nodes.clear();
     selected_links.clear();
     selected_node.clear();
@@ -885,11 +872,10 @@ bool EditorState::restoreAutosave(std::string* error)
     restored_from_autosave_path = info.workflow_path;
     current_workflow_path.clear();
 
-    // ARCH-E2：整图替换通知（在 baseline 之前发）
-    publishGraphDiff(before, graph);
+    // ARCH-E2：整图替换通知已在 model_.load 内发出（在 baseline 之前发）
     markAutosaveBaseline(); // 恢复内容 = 当前状态（否则会立刻再写一份同样的快照）
-    log::info("[自动保存] 已恢复快照（节点 " + std::to_string(graph.nodes.size()) + " / 连线 " +
-              std::to_string(graph.edges.size()) + "）" +
+    log::info("[自动保存] 已恢复快照（节点 " + std::to_string(model_.graph.nodes.size()) +
+              " / 连线 " + std::to_string(model_.graph.edges.size()) + "）" +
               (restored_from_autosave_path.empty() ? "（快照未关联工作流文件）"
                                                    : "（原文件 " + restored_from_autosave_path +
                                                          "，保存将另存为新文件）"));
@@ -912,7 +898,8 @@ void EditorState::flushAutosaveOnExit()
 
     engine::AutosaveInfo info;
     std::string          error;
-    if (engine::autosave_write(graph, current_workflow_path, config.ui.autosave_keep, &info,
+    if (engine::autosave_write(model_.graph, current_workflow_path, config.ui.autosave_keep,
+                               &info,
                                &error)) {
         log::info("[自动保存] 退出前已补写快照（下次启动会询问是否恢复未保存的更改）");
     }
@@ -932,7 +919,7 @@ bool EditorState::saveWorkflowTo(const std::string& path, std::string* error)
     }
 
     std::string save_error;
-    if (!engine::saveWorkflow(graph, path, &save_error)) {
+    if (!engine::saveWorkflow(model_.graph, path, &save_error)) {
         if (error != nullptr) {
             *error = save_error;
         }
@@ -942,10 +929,10 @@ bool EditorState::saveWorkflowTo(const std::string& path, std::string* error)
     }
 
     current_workflow_path = path;
-    engine::pushRecentFile(path, graph.name);
+    engine::pushRecentFile(path, model_.graph.name);
     log::info("工作流已保存: " + path);
-    log::workflow("[工作流-保存] " + path + "（节点 " + std::to_string(graph.nodes.size()) +
-                  "，连线 " + std::to_string(graph.edges.size()) + "）");
+    log::workflow("[工作流-保存] " + path + "（节点 " + std::to_string(model_.graph.nodes.size()) +
+                  "，连线 " + std::to_string(model_.graph.edges.size()) + "）");
 
     // PC-01：显式保存成功 ⇒ 「已无未保存的更改」：清掉快照 + 重设基线（不会紧接着又写一份）
     {
@@ -994,62 +981,27 @@ bool EditorState::openWorkflowFrom(const std::string& path, std::string* error)
     }
 
     abortRunIfAny("切换工作流");
-    const engine::Graph before = graph; // ARCH-E2：换图 = 整图重置 → 逐节点 diff 事件
-    graph = std::move(loaded);
-    undo.clear(); // 设计 §6.6：加载工作流清空撤销栈
+    // ARCH-E3：整图替换（替换数据 + 清空撤销栈 + 逐节点 diff 事件）归 WorkflowModel::load
+    model_.load(std::move(loaded));
     selected_nodes.clear();
     selected_links.clear();
     selected_node.clear();
     request_navigate_to_content = true; // 视图跟随新内容
     current_workflow_path       = path;
-    engine::pushRecentFile(path, graph.name);
+    engine::pushRecentFile(path, model_.graph.name);
 
-    // ARCH-E2：整图重置通知（在 baseline 之前发）
-    publishGraphDiff(before, graph);
+    // ARCH-E2：整图重置通知已在 model_.load 内发出（在 baseline 之前发）
     // PC-01/02：换图**不删**快照（任何情况下都不丢稿；「快照 vs 工作流」的新旧由 mtime 判定），
     //  只把当前图设为「已保存」基线 ⇒ 不因换图本身触发一次写盘
     markAutosaveBaseline();
 
     log::info("工作流已打开: " + path);
-    log::workflow("[工作流-加载] " + path + "（节点 " + std::to_string(graph.nodes.size()) +
-                  "，连线 " + std::to_string(graph.edges.size()) + "）");
+    log::workflow("[工作流-加载] " + path + "（节点 " +
+                  std::to_string(model_.graph.nodes.size()) + "，连线 " +
+                  std::to_string(model_.graph.edges.size()) + "）");
     logSummary("[工作流] 已加载");
     setStatus("已打开：" + path);
     return true;
-}
-
-// ARCH-E2：整图重置（undo/redo/clear/open/restore）后的逐节点 diff 事件。
-//  * 与单点操作同构：NodeRemoved 隐含连带连线（端点已删的连线不重复发 EdgeRemoved）
-//  * 通知形态：消费者（autosave 等）只读事件，具体数据直接读当前图
-void EditorState::publishGraphDiff(const engine::Graph& before, const engine::Graph& after)
-{
-    std::vector<std::string> removed_nodes;
-    for (const engine::Node& node : before.nodes) {
-        if (after.findNode(node.id) == nullptr) {
-            removed_nodes.push_back(node.id);
-            event_bus_.publish(EditEvent::node(EditEventKind::NodeRemoved, node.id));
-        }
-    }
-    for (const engine::Node& node : after.nodes) {
-        if (before.findNode(node.id) == nullptr) {
-            event_bus_.publish(EditEvent::node(EditEventKind::NodeAdded, node.id));
-        }
-    }
-    for (const engine::Edge& edge : before.edges) {
-        const bool endpoint_gone =
-            std::find(removed_nodes.begin(), removed_nodes.end(), edge.from_node) !=
-                removed_nodes.end() ||
-            std::find(removed_nodes.begin(), removed_nodes.end(), edge.to_node) !=
-                removed_nodes.end();
-        if (!endpoint_gone && after.findEdge(edge.id) == nullptr) {
-            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeRemoved, edge));
-        }
-    }
-    for (const engine::Edge& edge : after.edges) {
-        if (before.findEdge(edge.id) == nullptr) {
-            event_bus_.publish(EditEvent::edge(EditEventKind::EdgeAdded, edge));
-        }
-    }
 }
 
 std::vector<engine::RecentEntry> EditorState::recentWorkflows() const
@@ -1088,7 +1040,8 @@ bool saveWorkflowDialog()
 {
     EditorState&      state = editor();
     const std::string default_name =
-        (state.graph.name.empty() ? std::string("workflow") : state.graph.name) + ".json";
+        (state.model().graph.name.empty() ? std::string("workflow") : state.model().graph.name) +
+        ".json";
     const std::string path =
         utils::save_file(workflow_filters(), paths::workflowsDir().string(), default_name);
     if (path.empty()) {

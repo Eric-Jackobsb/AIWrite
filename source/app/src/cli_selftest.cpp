@@ -229,7 +229,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
                         web_entry.c_str(), web_entry.c_str());
         }
     }
-    for (aiwrite::engine::Node& node : state.graph.nodes) {
+    for (aiwrite::engine::Node& node : state.model().graph.nodes) {
         if (use_web && node.type == "ProviderConfig") {
             if (aiwrite::engine::Param* provider = node.findParam("provider")) {
                 provider->value = web_entry; // 决策 D-22②：站点不回落，必须选网页版条目
@@ -247,8 +247,8 @@ int runSelftest(bool use_web, const std::string& provider_id)
         std::printf("[运行自检] 网页版条目：%s（站点取自该条目，不回落）\n", web_entry.c_str());
     }
 
-    std::printf("[运行自检] 示例工作流：节点 %zu，连线 %zu\n", state.graph.nodes.size(),
-                state.graph.edges.size());
+    std::printf("[运行自检] 示例工作流：节点 %zu，连线 %zu\n", state.model().graph.nodes.size(),
+                state.model().graph.edges.size());
     // PC-05：本次自检把运行结果归档到临时目录（不污染用户 outputs），便于断言
     {
         aiwrite::Config selftest_config         = aiwrite::appConfig();
@@ -266,7 +266,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
     // （engine/workflow_io.cpp： graph_to_json(graph).dump(2) + "\n"）。
     // 用途：网页版答案常以工作流自身的种子文本开头 ⇒「答案前缀命中 JSON」可能只是
     //       模型**合法复述参数值**；只有「命中处不在运行前基线里」才算运行结果泄漏。
-    const std::string json_before = aiwrite::engine::graphToJson(state.graph).dump(2) + "\n";
+    const std::string json_before = aiwrite::engine::graphToJson(state.model().graph).dump(2) + "\n";
 
     if (!state.startRun()) {
         std::printf("[运行自检] FAIL：start_run 被拒绝（%s）\n", state.status.c_str());
@@ -279,7 +279,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
     }
 
     std::printf("[运行自检] 状态栏文本：%s\n", state.runStatusText().c_str());
-    for (const aiwrite::engine::Node& node : state.graph.nodes) {
+    for (const aiwrite::engine::Node& node : state.model().graph.nodes) {
         std::string detail;
         if (!node.error_message.empty()) {
             detail = "（" + node.error_message + "）";
@@ -292,7 +292,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
     const bool finished = state.executor().state() == aiwrite::engine::ExecState::Finished;
 
     // ---- PA-02：输出面板数据通道（与面板「复制全文 / 导出」同一实现）----
-    const std::string output_text = aiwrite::ui::runOutputText(state.graph, state.executor());
+    const std::string output_text = aiwrite::ui::runOutputText(state.model().graph, state.executor());
     std::printf("[运行自检] 输出面板文本：%zu 字符\n", output_text.size());
     if (!output_text.empty()) {
         const std::size_t head = output_text.size() > 100 ? 100 : output_text.size();
@@ -301,9 +301,9 @@ int runSelftest(bool use_web, const std::string& provider_id)
 
     // VA-07 取样：LLMGenerate 节点的运行结果（跑完不得出现在工作流 JSON 里）
     std::string llm_result;
-    for (const aiwrite::engine::Node& node : state.graph.nodes) {
+    for (const aiwrite::engine::Node& node : state.model().graph.nodes) {
         if (node.type == "LLMGenerate") {
-            llm_result = aiwrite::ui::node_output_text(state.graph, state.executor(), node.id);
+            llm_result = aiwrite::ui::node_output_text(state.model().graph, state.executor(), node.id);
             break;
         }
     }
@@ -325,9 +325,9 @@ int runSelftest(bool use_web, const std::string& provider_id)
         std::filesystem::temp_directory_path() / "aiwrite_run_selftest_workflow.json";
     std::string file_error;
     const bool  saved      = state.saveWorkflowTo(temp_file.string(), &file_error);
-    const std::size_t nodes_before = state.graph.nodes.size();
+    const std::size_t nodes_before = state.model().graph.nodes.size();
     const bool  opened     = saved && state.openWorkflowFrom(temp_file.string(), &file_error);
-    const bool  same       = opened && state.graph.nodes.size() == nodes_before;
+    const bool  same       = opened && state.model().graph.nodes.size() == nodes_before;
     std::printf("[运行自检] 工作流文件往返：保存=%s / 打开=%s / 节点数一致=%s%s\n",
                 saved ? "OK" : "失败", opened ? "OK" : "失败", same ? "OK" : "不一致",
                 file_error.empty() ? "" : ("（" + file_error + "）").c_str());
@@ -433,12 +433,12 @@ int runSelftest(bool use_web, const std::string& provider_id)
     // ---- VA-01（PA-03）：三处呈现同源（画布节点摘要 / 参数面板结果区 / 输出面板全文）----
     bool consistency_ok = false;
     {
-        const std::string all = aiwrite::ui::runOutputText(state.graph, state.executor());
+        const std::string all = aiwrite::ui::runOutputText(state.model().graph, state.executor());
         std::size_t       compared  = 0;
         bool              contained = true;
         for (const aiwrite::engine::NodeRunInfo& info : state.executor().runInfos()) {
             const std::string per_node =
-                aiwrite::ui::node_output_text(state.graph, state.executor(), info.node_id);
+                aiwrite::ui::node_output_text(state.model().graph, state.executor(), info.node_id);
             if (per_node.empty()) {
                 continue;
             }
@@ -461,7 +461,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
         const std::string      marker     = "P1C 参数驱动：这段文本来自输入框。";
         aiwrite::engine::Node* input_node = nullptr;
         aiwrite::engine::Node* tpl_node   = nullptr;
-        for (aiwrite::engine::Node& node : state.graph.nodes) {
+        for (aiwrite::engine::Node& node : state.model().graph.nodes) {
             if (input_node == nullptr && node.type == "TextInput") {
                 input_node = &node;
             }
@@ -473,16 +473,16 @@ int runSelftest(bool use_web, const std::string& provider_id)
             (input_node != nullptr) ? input_node->findParam("text") : nullptr;
         if (input_node != nullptr && tpl_node != nullptr && text_param != nullptr) {
             const std::string before =
-                aiwrite::ui::node_output_text(state.graph, state.executor(), input_node->id);
+                aiwrite::ui::node_output_text(state.model().graph, state.executor(), input_node->id);
             text_param->value = marker; // 模拟"参数面板输入框里改写文本内容"
             state.startRun();
             int guard2 = 0;
             while (state.executor().running() && guard2++ < 4096) {
                 state.tickRun();
             }
-            const std::string after  = aiwrite::ui::node_output_text(state.graph, state.executor(),
+            const std::string after  = aiwrite::ui::node_output_text(state.model().graph, state.executor(),
                                                                      input_node->id);
-            const std::string prompt = aiwrite::ui::node_output_text(state.graph, state.executor(),
+            const std::string prompt = aiwrite::ui::node_output_text(state.model().graph, state.executor(),
                                                                      tpl_node->id);
             const bool        changed = (after == marker) && (after != before);
             const bool        flowed  = prompt.find(marker) != std::string::npos;
@@ -502,13 +502,13 @@ int runSelftest(bool use_web, const std::string& provider_id)
     bool async_ok = false;
     if (!use_web) {
         // 归位到 Idle（上一轮运行把状态写进了 Graph；异步运行只应改副本）
-        for (aiwrite::engine::Node& node : state.graph.nodes) {
+        for (aiwrite::engine::Node& node : state.model().graph.nodes) {
             node.state = aiwrite::engine::NodeState::Idle;
             node.error_message.clear();
         }
 
         std::string start_error;
-        const bool  started = state.executor().startAsync(&state.graph, &start_error);
+        const bool  started = state.executor().startAsync(&state.model().graph, &start_error);
 
         std::vector<aiwrite::engine::RunEvent> events;
         int                                    guard3 = 0;
@@ -538,7 +538,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
 
         // ① 主线程尚未应用事件 → Graph 仍是 Idle（证明工作线程只改自己的副本）
         bool graph_untouched = true;
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+        for (const aiwrite::engine::Node& node : state.model().graph.nodes) {
             if (node.state != aiwrite::engine::NodeState::Idle) {
                 graph_untouched = false;
                 break;
@@ -547,7 +547,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
 
         // ② 快照 == 权威数据（runInfos / outputs）
         const aiwrite::engine::RunSnapshot snapshot =
-            aiwrite::engine::makeSnapshot(state.graph, state.executor());
+            aiwrite::engine::makeSnapshot(state.model().graph, state.executor());
         bool same_view = snapshot.nodes.size() == state.executor().runInfos().size();
         for (const aiwrite::engine::NodeRunInfo& info : state.executor().runInfos()) {
             const aiwrite::engine::RunNodeView* view = snapshot.find(info.node_id);
@@ -561,7 +561,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
         bool text_same = true;
         for (const aiwrite::engine::NodeRunInfo& info : state.executor().runInfos()) {
             const std::string authoritative =
-                aiwrite::engine::nodeOutputText(state.graph, state.executor().outputs(), info.node_id);
+                aiwrite::engine::nodeOutputText(state.model().graph, state.executor().outputs(), info.node_id);
             const aiwrite::engine::RunNodeView* view = snapshot.find(info.node_id);
             const std::string from_snapshot = (view != nullptr) ? view->text : std::string();
             if (authoritative != from_snapshot) {
@@ -587,7 +587,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
     // ---- PB-01 第二步：EditorState 异步入口（start_run_async + tick_run 泵事件）----
     bool session_ok = true;
     if (!use_web) {
-        for (aiwrite::engine::Node& node : state.graph.nodes) {
+        for (aiwrite::engine::Node& node : state.model().graph.nodes) {
             node.state = aiwrite::engine::NodeState::Idle;
             node.error_message.clear();
         }
@@ -608,10 +608,10 @@ int runSelftest(bool use_web, const std::string& provider_id)
         bool same_view = view.nodes.size() == state.executor().runInfos().size();
         for (const aiwrite::engine::NodeRunInfo& info : state.executor().runInfos()) {
             const aiwrite::engine::RunNodeView* item = view.find(info.node_id);
-            const aiwrite::engine::Node*        node = state.graph.findNode(info.node_id);
+            const aiwrite::engine::Node*        node = state.model().graph.findNode(info.node_id);
             if (item == nullptr || node == nullptr || item->state != info.state ||
                 node->state != info.state ||
-                item->text != aiwrite::engine::nodeOutputText(state.graph, state.executor().outputs(),
+                item->text != aiwrite::engine::nodeOutputText(state.model().graph, state.executor().outputs(),
                                                               info.node_id)) {
                 same_view = false;
                 break;
@@ -634,14 +634,14 @@ int runSelftest(bool use_web, const std::string& provider_id)
     bool sink_ok = false;
     {
         std::string output_id;
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+        for (const aiwrite::engine::Node& node : state.model().graph.nodes) {
             if (node.type == "TextOutput") {
                 output_id = node.id;
             }
         }
         std::string source_id;
         if (!output_id.empty()) {
-            if (const aiwrite::engine::Edge* edge = state.graph.findEdgeIntoInput(output_id, "text")) {
+            if (const aiwrite::engine::Edge* edge = state.model().graph.findEdgeIntoInput(output_id, "text")) {
                 source_id = edge->from_node;
             }
         }
@@ -649,9 +649,9 @@ int runSelftest(bool use_web, const std::string& provider_id)
         std::string source_text;
         bool sink_same = false;
         if (!output_id.empty() && !source_id.empty()) {
-            sink_text   = aiwrite::engine::nodeOutputText(state.graph, state.executor().outputs(), output_id);
-            source_text = aiwrite::engine::nodeOutputText(state.graph, state.executor().outputs(), source_id);
-            const aiwrite::engine::RunSnapshot snap = aiwrite::engine::makeSnapshot(state.graph, state.executor());
+            sink_text   = aiwrite::engine::nodeOutputText(state.model().graph, state.executor().outputs(), output_id);
+            source_text = aiwrite::engine::nodeOutputText(state.model().graph, state.executor().outputs(), source_id);
+            const aiwrite::engine::RunSnapshot snap = aiwrite::engine::makeSnapshot(state.model().graph, state.executor());
             const aiwrite::engine::RunNodeView* view = snap.find(output_id);
             sink_same = (sink_text == source_text) && view != nullptr && view->text == source_text;
         }
@@ -707,7 +707,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
         request.seed                   = 0;
         const nlohmann::json without_seed = aiwrite::ai::buildRequestBody(request);
         bool has_param = false;
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+        for (const aiwrite::engine::Node& node : state.model().graph.nodes) {
             if (node.type != "LLMGenerate") {
                 continue;
             }
@@ -739,9 +739,9 @@ int runSelftest(bool use_web, const std::string& provider_id)
         std::vector<Source> sources;
         // 优先取「存在连线」的一对节点（覆盖"选区内部连线被一并粘贴"这条路径）
         std::vector<std::string> prefer;
-        for (const aiwrite::engine::Edge& edge : state.graph.edges) {
-            const aiwrite::engine::Node* from = state.graph.findNode(edge.from_node);
-            const aiwrite::engine::Node* to   = state.graph.findNode(edge.to_node);
+        for (const aiwrite::engine::Edge& edge : state.model().graph.edges) {
+            const aiwrite::engine::Node* from = state.model().graph.findNode(edge.from_node);
+            const aiwrite::engine::Node* to   = state.model().graph.findNode(edge.to_node);
             if (from != nullptr && to != nullptr && from->type != "ProviderConfig" &&
                 to->type != "ProviderConfig") {
                 prefer = {edge.from_node, edge.to_node};
@@ -749,7 +749,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
             }
         }
 
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+        for (const aiwrite::engine::Node& node : state.model().graph.nodes) {
             if (sources.size() >= 2) {
                 break;
             }
@@ -781,18 +781,18 @@ int runSelftest(bool use_web, const std::string& provider_id)
 
         // 选区**内部**连线数量（这些应被一并粘贴）
         std::size_t internal_edges = 0;
-        for (const aiwrite::engine::Edge& edge : state.graph.edges) {
+        for (const aiwrite::engine::Edge& edge : state.model().graph.edges) {
             if (in_selection(edge.from_node) && in_selection(edge.to_node)) {
                 ++internal_edges;
             }
         }
 
         std::set<std::string> ids_before;
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+        for (const aiwrite::engine::Node& node : state.model().graph.nodes) {
             ids_before.insert(node.id);
         }
-        const std::size_t nodes_before_paste = state.graph.nodes.size();
-        const std::size_t edges_before_paste = state.graph.edges.size();
+        const std::size_t nodes_before_paste = state.model().graph.nodes.size();
+        const std::size_t edges_before_paste = state.model().graph.edges.size();
 
         state.selected_nodes.clear();
         for (const Source& source : sources) {
@@ -803,21 +803,21 @@ int runSelftest(bool use_web, const std::string& provider_id)
         const bool pasted = state.pasteClipboard();
 
         std::vector<const aiwrite::engine::Node*> added;
-        for (const aiwrite::engine::Node& node : state.graph.nodes) {
+        for (const aiwrite::engine::Node& node : state.model().graph.nodes) {
             if (ids_before.find(node.id) == ids_before.end()) {
                 added.push_back(&node);
             }
         }
 
-        const std::size_t edges_after_paste = state.graph.edges.size();
+        const std::size_t edges_after_paste = state.model().graph.edges.size();
 
         const bool count_ok = copied && pasted && added.size() == sources.size() &&
-                              state.graph.nodes.size() == nodes_before_paste + sources.size() &&
+                              state.model().graph.nodes.size() == nodes_before_paste + sources.size() &&
                               edges_after_paste == edges_before_paste + internal_edges;
 
         // 诊断：粘贴后"新增节点之间的连线"数量（应与选区内部连线数一致）
         std::size_t added_edges = 0;
-        for (const aiwrite::engine::Edge& edge : state.graph.edges) {
+        for (const aiwrite::engine::Edge& edge : state.model().graph.edges) {
             bool from_added = false;
             bool to_added   = false;
             for (const aiwrite::engine::Node* node : added) {
@@ -860,9 +860,9 @@ int runSelftest(bool use_web, const std::string& provider_id)
 
         const bool selection_ok = state.selected_nodes.size() == 2 &&
                                   state.request_navigate_to_content; // 视图跟随延后到画布绘制后
-        const bool undo_ok = (state.undo.canUndo() && state.undoOnce() &&
-                              state.graph.nodes.size() == nodes_before_paste &&
-                              state.graph.edges.size() == edges_before_paste);
+        const bool undo_ok = (state.model().undo.canUndo() && state.model().undoOnce() &&
+                              state.model().graph.nodes.size() == nodes_before_paste &&
+                              state.model().graph.edges.size() == edges_before_paste);
         // 空剪贴板：清空选择后复制 → 剪贴板应为空，粘贴被拒绝
         state.selected_nodes.clear();
         state.copySelection();
@@ -886,11 +886,11 @@ int runSelftest(bool use_web, const std::string& provider_id)
     {
         const aiwrite::ui::SelectionReadView sel_view{state.selected_nodes, state.selected_links,
                                                       state.selected_node};
-        const aiwrite::ui::ReadOnlyView rv{state.graph, sel_view, state.run_snapshot_view(),
+        const aiwrite::ui::ReadOnlyView rv{state.model().graph, sel_view, state.run_snapshot_view(),
                                            aiwrite::appConfig()};
-        const bool nodes_same = (&rv.nodes_for_render() == &state.graph.nodes);
-        const bool edges_same = (&rv.edges_for_render() == &state.graph.edges);
-        const bool find_same  = (rv.find_node("n1") == state.graph.findNode("n1")) &&
+        const bool nodes_same = (&rv.nodes_for_render() == &state.model().graph.nodes);
+        const bool edges_same = (&rv.edges_for_render() == &state.model().graph.edges);
+        const bool find_same  = (rv.find_node("n1") == state.model().graph.findNode("n1")) &&
                                 (rv.find_node("zz_missing") == nullptr);
         const bool snap_same  = (&rv.snapshot == &state.run_snapshot_view());
         const bool cfg_same   = (&rv.config == &aiwrite::appConfig());
@@ -989,16 +989,16 @@ int runSelftest(bool use_web, const std::string& provider_id)
         // ③ 编辑操作 → 事件映射（真实 editor() 操作；断言后删除恢复原图）
         bool op_add = false;
         bool op_remove = false;
-        const std::size_t ha = state.event_bus().subscribe(
+        const std::size_t ha = state.model().event_bus().subscribe(
             EditEventKind::NodeAdded, [&op_add](const EditEvent& e) { op_add = !e.node_id.empty(); });
-        const std::size_t hr = state.event_bus().subscribe(
+        const std::size_t hr = state.model().event_bus().subscribe(
             EditEventKind::NodeRemoved,
             [&op_remove](const EditEvent& e) { op_remove = !e.node_id.empty(); });
         const std::string tmp_id = state.createNode("TextInput", 0.0f, 0.0f);
         const bool add_mapping_ok = op_add && !tmp_id.empty();
         const bool remove_mapping_ok = state.deleteNode(tmp_id) && op_remove;
-        state.event_bus().unsubscribe(ha);
-        state.event_bus().unsubscribe(hr);
+        state.model().event_bus().unsubscribe(ha);
+        state.model().event_bus().unsubscribe(hr);
 
         edit_event_ok = kind_filter_ok && unsubscribe_ok && node_removed_ok && count_ok &&
                         eight_kinds && add_mapping_ok && remove_mapping_ok;
@@ -1047,17 +1047,17 @@ int runSelftest(bool use_web, const std::string& provider_id)
                                        bus.before_subscriber_count() == 1;
 
         // ② Undo 订阅化（真实 editor()：构造时订阅 before 通道，snapshot 只发通知）
-        const std::size_t undo_before = state.undo.undoDepth();
+        const std::size_t undo_before = state.model().undo.undoDepth();
         state.snapshot("自检快照");
-        const bool undo_push_ok = state.undo.undoDepth() == undo_before + 1;
+        const bool undo_push_ok = state.model().undo.undoDepth() == undo_before + 1;
         // 通道隔离：发 NodeAdded 不额外压快照
-        const std::size_t undo_before2 = state.undo.undoDepth();
-        state.event_bus().publish(EditEvent::node(EditEventKind::NodeAdded, "n_iso2"));
-        const bool undo_isolate_ok = state.undo.undoDepth() == undo_before2;
+        const std::size_t undo_before2 = state.model().undo.undoDepth();
+        state.model().event_bus().publish(EditEvent::node(EditEventKind::NodeAdded, "n_iso2"));
+        const bool undo_isolate_ok = state.model().undo.undoDepth() == undo_before2;
 
         // ③ 批量重置 diff（undoOnce 恢复整图 → 订阅真实总线记录 NodeRemoved）
         int               diff_removed = 0;
-        const std::size_t hd = state.event_bus().subscribe(
+        const std::size_t hd = state.model().event_bus().subscribe(
             EditEventKind::NodeRemoved, [&diff_removed](const EditEvent& e) {
                 if (!e.node_id.empty()) {
                     ++diff_removed;
@@ -1065,18 +1065,18 @@ int runSelftest(bool use_web, const std::string& provider_id)
             });
         state.snapshot("自检创建节点");
         const std::string undo_tmp_id = state.createNode("TextInput", 0.0f, 0.0f);
-        const bool        undo_once_ok = !undo_tmp_id.empty() && state.undoOnce();
+        const bool        undo_once_ok = !undo_tmp_id.empty() && state.model().undoOnce();
         const bool        diff_ok      = diff_removed >= 1;
-        state.event_bus().unsubscribe(hd);
+        state.model().event_bus().unsubscribe(hd);
         // 清理：撤销 ② 压的空快照（恢复同一张图，diff 为空）回到基线深度
-        state.undoOnce();
+        state.model().undoOnce();
 
         // ④ autosave 订阅化（真实 editor()：内容类事件 → autosaveDirty() 置位）
         state.markAutosaveBaseline(); // 先重置（与自检前状态无关）
         const bool dirty_baseline_ok = !state.autosaveDirty();
-        state.event_bus().publish(EditEvent::node(EditEventKind::SelectionChanged, ""));
+        state.model().event_bus().publish(EditEvent::node(EditEventKind::SelectionChanged, ""));
         const bool dirty_selection_ok = !state.autosaveDirty(); // 选择非内容变化 → 不置位
-        state.event_bus().publish(EditEvent::node(EditEventKind::NodeAdded, "n_dirty"));
+        state.model().event_bus().publish(EditEvent::node(EditEventKind::NodeAdded, "n_dirty"));
         const bool dirty_content_ok = state.autosaveDirty(); // 内容事件 → 置位
         state.markAutosaveBaseline();                        // 恢复基线，不污染后续运行
 

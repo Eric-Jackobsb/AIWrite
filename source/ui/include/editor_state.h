@@ -3,8 +3,9 @@
 // ============================================================================
 //  编辑器状态（UI 层共享）
 //
-//  * 持有唯一的工作流图 Graph 与撤销栈 UndoStack
-//  * 提供"修改前自动压快照"的编辑操作，供画布 / 节点库 / 工具栏 / 菜单调用
+//  * ARCH-E3：文档数据（Graph + Undo + EventBus）已拆出为 `WorkflowModel model_`（§1.8.3）；
+//    本层持有并编排（运行 / 状态栏 / 选中 / autosave / 剪贴板）
+//  * 提供"修改前自动压快照"的编辑操作（薄封装委托 `model()`），供画布 / 节点库 / 工具栏 / 菜单调用
 //  * 所有可验证的逻辑都在 engine::Graph 内，本层只做编排与日志
 // ============================================================================
 
@@ -15,10 +16,11 @@
 #include <vector>
 
 #include "graph.h"
-#include "event_bus.h"     // ARCH-E1：编辑事件总线（E3 拆 WorkflowModel 后迁出）
+#include "event_bus.h"
 #include "recent_files.h"
 #include "run_session.h"
 #include "undo_stack.h"
+#include "workflow_model.h" // ARCH-E3：文档级工作流模型（Graph + Undo + EventBus 拆出）
 
 namespace aiwrite::ui {
 
@@ -27,8 +29,13 @@ struct EditorState {
     EditorState();
     ~EditorState();
 
-    engine::Graph      graph;
-    engine::UndoStack  undo;
+    // ARCH-E3：文档级工作流模型（Graph + Undo + EventBus 已拆出为独立对象，§1.8.3）。
+    // 本层持有并编排（状态栏 / 选中 / autosave / 剪贴板）；editor() 退场（ARCH-A3）后
+    // UI 模块直接持有 WorkflowModel。
+    WorkflowModel model_;
+
+    WorkflowModel&       model() { return model_; }
+    const WorkflowModel& model() const { return model_; }
 
     // -------------------------------------------------------------- 运行 -----
     // ARCH-R1：执行器 + 快照已拆到 RunSession（ARCHITECTURE §1.8.2）——
@@ -40,9 +47,7 @@ struct EditorState {
     const engine::Executor& executor() const;
     const engine::RunSnapshot& run_snapshot_view() const { return run.snapshot(); }
 
-    // ARCH-E1：编辑事件总线（E3 拆出 WorkflowModel 后迁到文档级对象；本批由本层持有过渡）
-    EventBus&       event_bus() { return event_bus_; }
-    const EventBus& event_bus() const { return event_bus_; }
+    // ARCH-E1：编辑事件总线 —— E3 已随 Graph + Undo 迁到 WorkflowModel（model().event_bus()）
 
     // 启动运行：先做运行前校验（失败 → 每条错误写 Console 与状态栏，不启动）
     bool startRun();
@@ -153,8 +158,10 @@ struct EditorState {
     bool request_focus_selection      = false; // P7a-17：错误条定位 → 视图**居中并放大**到选中节点
 
     // ------------------------------------------------------------- 编辑 -----
-    // ARCH-E2：修改前压快照由 Undo 订阅者完成（构造时订阅 before-edit 通道）；
-    // 本方法只发布「修改前」通知（对外签名不变，全部调用点零改动）
+    // ARCH-E3：编辑核心操作已迁到 WorkflowModel（model()）；本层保留同签名薄封装并做
+    // UI 编排（状态栏 / 选中清空 / autosave baseline）—— 对外调用点零改动。
+    // ARCH-E2：修改前压快照由 Undo 订阅者完成（WorkflowModel 构造时订阅 before-edit 通道）；
+    // snapshot() 只发布「修改前」通知（压栈由订阅回调完成）
     void        snapshot(const std::string& label);
     bool        undoOnce();
     bool        redoOnce();
@@ -186,15 +193,10 @@ private:
     void onRunEvent(const engine::RunEvent& event);
     // ARCH-E2：autosave 订阅回调（内容类 EditEvent → 标记「有未保存变更」）
     void onEditContent();
-    // ARCH-E2：整图重置（undo/redo/clear/open/restore）后逐节点 diff 事件
-    //  （NodeRemoved 隐含连带连线，端点已删的连线不重复发 EdgeRemoved）
-    void publishGraphDiff(const engine::Graph& before, const engine::Graph& after);
 
     std::size_t run_sub_handle_ = 0;          // ARCH-R2：run.subscribeRunEvents 返回的句柄
-    std::size_t undo_sub_handle_ = 0;         // ARCH-E2：event_bus_.subscribe_before_edit 返回的句柄（Undo 订阅）
     std::vector<std::size_t> autosave_sub_handles_; // ARCH-E2：autosave 订阅内容类事件的句柄集合
-
-    EventBus event_bus_;                      // ARCH-E1：编辑事件总线（单线程 FIFO 通知）
+    // ARCH-E3：Undo 订阅「修改前」通道已迁到 WorkflowModel 构造（回调 = 修改前钩子 + undo.push）
 
     std::vector<engine::Node> clipboard_nodes_;                        // 复制的节点
     std::vector<engine::Edge> clipboard_edges_;                        // 选区内部的连线

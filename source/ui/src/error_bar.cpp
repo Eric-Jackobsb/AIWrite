@@ -32,7 +32,7 @@ void drawErrorBar(EditorState& state)
     if (ImGui::Button(("执行失败  " + line + "##error_bar").c_str())) {
         // 点击 → 选中失败节点（复用视图跟随；连续错误只覆盖显示、不堆积）
         // 多失败时 node_id = 首个失败节点（定位首个；全部明细在悬停提示）
-        if (state.graph.findNode(state.last_error.node_id) != nullptr) {
+        if (state.model().graph.findNode(state.last_error.node_id) != nullptr) {
             state.selected_node  = state.last_error.node_id;
             state.selected_nodes = {state.last_error.node_id};
             // P7a-17：**居中并放大**到该节点（NavigateToSelection），而不是仅跟随全部内容
@@ -61,7 +61,7 @@ void drawErrorBar(EditorState& state)
     //  * 复用 PD-06① `startRerunAsync(Downstream)`：失败节点阻塞下游 ⇒ 重跑「节点及下游」走通后续链路；
     //    核心重跑语义已被 PD-06① 离线断言覆盖（本按钮是纯 UI 薄接线）
     //  * 守卫：节点仍在图中 + 当前无运行会话；成功启动后清掉错误条（重跑结束由 refresh_last_error 重新判定）
-    const engine::Node* failed_node = state.graph.findNode(state.last_error.node_id);
+    const engine::Node* failed_node = state.model().graph.findNode(state.last_error.node_id);
     const bool          retry_ok    = failed_node != nullptr && !state.session_active();
     ImGui::SameLine();
     ImGui::BeginDisabled(!retry_ok);

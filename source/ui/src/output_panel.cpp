@@ -209,13 +209,13 @@ std::string runOutputText(const engine::Graph& graph, const engine::RunSnapshot&
 
 bool exportNodeDocument(EditorState& state, const std::string& node_id)
 {
-    const engine::Node* node = state.graph.findNode(node_id);
+    const engine::Node* node = state.model().graph.findNode(node_id);
     if (node == nullptr) {
         return false;
     }
     const engine::RunSnapshot& snapshot = state.run_snapshot_view();
     const engine::RunNodeView* view     = snapshot.find(node_id);
-    const std::string body = node_output_text(state.graph, snapshot, node_id);
+    const std::string body = node_output_text(state.model().graph, snapshot, node_id);
     if (body.empty()) {
         state.setStatus("该节点暂无可导出的运行结果（请先运行）");
         return false;

@@ -330,7 +330,7 @@ SettingsPanel settings(ctx.config());
 |---|---|---|---|
 | **ARCH-E1** | ~~`EventBus` + `EditEvent` 落地：新增事件总线 + 8 种事件类型~~ ✅ **已落地（2026-10-22）** | 事件系统就绪（8 种类型各有真实发布点 + 单元断言） | 构建 0/0 + `--run-selftest`（新增编辑事件断言）+ exec 713/0 + graph 151/0 + ce_repro 全帧 OK + check_links 1786/0 + check_all 19/19 |
 | **ARCH-E2** | ~~Undo/autosave 订阅化：改为订阅 `EditEvent`~~ ✅ **已落地（2026-10-22）** | 同步次数降低（autosave 不再每帧算 content signature；undo 快照经 before-edit 通道压栈） | 构建 0/0 + `--run-selftest`（新增「编辑订阅」断言）+ exec 713/0 + graph 151/0 + ce_repro 全帧 OK + check_links **1792**/0 |
-| **ARCH-E3** | `WorkflowModel` 拆分：Graph + Undo 从 `editor()` 拆出 | 文档级独立 | 构建 + `--graph-selftest` |
+| **ARCH-E3** | ~~`WorkflowModel` 拆分：Graph + Undo + EventBus 从 `editor()` 拆出~~ ✅ **已落地（2026-10-22）** | 文档级独立（`editor().model()` 访问；`state.graph` → `state.model().graph` 全库替换） | 构建 0/0 + `--run-selftest`（编辑订阅断言照常）+ exec 713/0 + graph 151/0 + ce_repro 全帧 OK + check_links **1800**/0 |
 | **ARCH-E4** | `SelectionState` 拆分 | 选中独立 | 构建 + `--graph-selftest` |
 | **ARCH-E5** | `CanvasInteractor` 落地：双画布交互收敛为一套 | 双画布单套实现 | 构建 + `ce_repro` 0 + `check_all` |
 | **ARCH-E6** | 打包下沉：`buildCompositeSpecFromSelection` 进 engine + 生成后严格校验 | 打包-校验同源 + 修暴露节点保存 | 构建 + `composite_selftest` + `check_all` |
@@ -461,8 +461,8 @@ SettingsPanel settings(ctx.config());
 ---
 
 **文档结束 · v1.5 定稿。**
-**下一步：按 ARCH-E3 实施（WorkflowModel 拆分：Graph + Undo 从 editor() 拆出 · 文档级独立；等用户启动）。**
-**已完成：ARCH-R1（RunSession 对象化）· ARCH-R2（RunEvent 订阅化）· ARCH-R3（ReadOnlyView 渲染视图）· ARCH-R4（命令路由层）· ARCH-E1（EventBus + EditEvent）· ARCH-E2（Undo/autosave 订阅化）—— 审计见 docs/audit/audit_arch_r1.md / audit_arch_r2.md / audit_arch_r3.md / audit_arch_r4.md / audit_arch_e1.md / audit_arch_e2.md。**
+**下一步：按 ARCH-E4 实施（SelectionState 拆分：选中独立；等用户启动）。**
+**已完成：ARCH-R1（RunSession 对象化）· ARCH-R2（RunEvent 订阅化）· ARCH-R3（ReadOnlyView 渲染视图）· ARCH-R4（命令路由层）· ARCH-E1（EventBus + EditEvent）· ARCH-E2（Undo/autosave 订阅化）· ARCH-E3（WorkflowModel 拆分：Graph + Undo + EventBus 拆出 · 文档级独立）—— 审计见 docs/audit/audit_arch_r1.md / audit_arch_r2.md / audit_arch_r3.md / audit_arch_r4.md / audit_arch_e1.md / audit_arch_e2.md / audit_arch_e3.md。**
 
 
 

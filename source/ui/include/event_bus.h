@@ -13,8 +13,8 @@
 //  E2（本批）：Undo / autosave 改为订阅 —— Undo 订阅「修改前」通道 publish_before_edit
 //    压快照（快照式撤销需修改前状态，而 EditEvent 在修改后发布）；autosave 订阅内容类
 //    EditEvent 替代每帧 content signature 轮询；RunSession 感知留 ARCH-D22 / E2 后。
-//  过渡登记：EventBus 当前由 `EditorState` 持有（editor().event_bus()）；E3 拆出
-//  `WorkflowModel` 后迁到文档级对象（§1.8.11 依赖图：WorkflowModel 依赖 EventBus）。
+//  E3（本批）：EventBus 已随 Graph + Undo 迁到文档级对象 `WorkflowModel`
+//    （editor().model().event_bus()；§1.8.11 依赖图：WorkflowModel 依赖 EventBus）。
 // ============================================================================
 
 #include <cstddef>

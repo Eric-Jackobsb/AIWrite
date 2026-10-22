@@ -231,8 +231,8 @@ void handle_create_link()
     ed::PinId start_pin;
     ed::PinId end_pin;
     if (creating && ed::QueryNewLink(&start_pin, &end_pin) && start_pin && end_pin) {
-        PinRef from = resolvePin(start_pin, state.graph);
-        PinRef to   = resolvePin(end_pin, state.graph);
+        PinRef from = resolvePin(start_pin, state.model().graph);
+        PinRef to   = resolvePin(end_pin, state.model().graph);
 
         // 统一成"输出 → 输入"
         if (from.valid && to.valid && from.direction == PortDirection::Input &&
@@ -246,7 +246,7 @@ void handle_create_link()
         else {
             bool        would_replace = false;
             std::string reason;
-            const bool  ok = state.graph.canConnect(from.node_id, from.port_id, to.node_id,
+            const bool  ok = state.model().graph.canConnect(from.node_id, from.port_id, to.node_id,
                                                     to.port_id, &reason, &would_replace);
             if (!ok) {
                 ed::RejectNewItem(ImVec4(1.0f, 0.30f, 0.30f, 1.0f), 2.0f);
@@ -259,7 +259,7 @@ void handle_create_link()
                 if (ed::AcceptNewItem(ImVec4(0.29f, 0.56f, 0.89f, 1.0f), 2.0f)) {
                     state.snapshot(would_replace ? "替换连线" : "新建连线");
                     std::string error;
-                    const std::string edge_id = state.graph.addEdge(
+                    const std::string edge_id = state.model().graph.addEdge(
                         from.node_id, from.port_id, to.node_id, to.port_id, &error);
                     if (edge_id.empty()) {
                         log::error("[连线] 创建失败：" + error);
@@ -267,7 +267,7 @@ void handle_create_link()
                     }
                     else {
                         // ARCH-E1：连线创建通知（EdgeAdded；负载含两端端口与 id）
-                        state.event_bus().publish(EditEvent::edge(
+                        state.model().event_bus().publish(EditEvent::edge(
                             EditEventKind::EdgeAdded, from.node_id, from.port_id, to.node_id,
                             to.port_id, edge_id));
                         state.logSummary("[连线] " + from.node_id + "." + from.port_id + " → " +
@@ -284,10 +284,10 @@ void handle_create_link()
     //  * QueryNewLink 已在上面调用过（end_pin 可能为 0 = 还没拖到目标端口）
     //  * 「类型不兼容变红」由 RejectNewItem 已提供（既有），这里补充文字提示
     if (creating && start_pin.Get() != 0) {
-        const PinRef from = resolvePin(start_pin, state.graph);
-        const PinRef to   = resolvePin(end_pin, state.graph);
-        const Node*  fnode = from.valid ? state.graph.findNode(from.node_id) : nullptr;
-        const Node*  tnode = to.valid ? state.graph.findNode(to.node_id) : nullptr;
+        const PinRef from = resolvePin(start_pin, state.model().graph);
+        const PinRef to   = resolvePin(end_pin, state.model().graph);
+        const Node*  fnode = from.valid ? state.model().graph.findNode(from.node_id) : nullptr;
+        const Node*  tnode = to.valid ? state.model().graph.findNode(to.node_id) : nullptr;
         const Port*  fport = (fnode != nullptr) ? fnode->findPort(from.port_id, from.direction) : nullptr;
         const Port*  tport = (tnode != nullptr) ? tnode->findPort(to.port_id, to.direction) : nullptr;
 
@@ -296,7 +296,7 @@ void handle_create_link()
         if (fport != nullptr && tport != nullptr) {
             std::string reason;
             bool        would_replace = false;
-            const bool  ok = state.graph.canConnect(from.node_id, from.port_id, to.node_id,
+            const bool  ok = state.model().graph.canConnect(from.node_id, from.port_id, to.node_id,
                                                     to.port_id, &reason, &would_replace);
             tip = std::string(engine::portTypeName(fport->type)) + " → " +
                   engine::portTypeName(tport->type);
@@ -341,11 +341,11 @@ void handle_delete_items()
             if (ed::AcceptDeletedItem()) {
                 const std::string edge_id = "e" + std::to_string(deleted_link.Get());
                 state.snapshot("删除连线");
-                const engine::Edge* edge = state.graph.findEdge(edge_id);
-                if (state.graph.removeEdge(edge_id)) {
+                const engine::Edge* edge = state.model().graph.findEdge(edge_id);
+                if (state.model().graph.removeEdge(edge_id)) {
                     // ARCH-E1：连线删除通知（删除前取边数据作负载）
                     if (edge != nullptr) {
-                        state.event_bus().publish(EditEvent::edge(EditEventKind::EdgeRemoved, *edge));
+                        state.model().event_bus().publish(EditEvent::edge(EditEventKind::EdgeRemoved, *edge));
                     }
                     state.logSummary("[连线] 删除 " + edge_id);
                     state.setStatus("已删除连线 " + edge_id);
@@ -421,7 +421,7 @@ void sync_selection(EditorState& state)
     // ARCH-E1：选中变化通知（仅在实际变化时发布）
     if (state.selected_nodes != prev_nodes || state.selected_links != prev_links ||
         state.selected_node != prev_single) {
-        state.event_bus().publish(EditEvent{EditEventKind::SelectionChanged});
+        state.model().event_bus().publish(EditEvent{EditEventKind::SelectionChanged});
     }
 }
 
@@ -451,7 +451,7 @@ void handle_delete_key()
 void sync_positions(EditorState& state)
 {
     bool moved = false;
-    for (Node& node : state.graph.nodes) {
+    for (Node& node : state.model().graph.nodes) {
         const ImVec2 position = ed::GetNodePosition(nodeHandle(node.id));
 
         const bool editor_knows =
@@ -472,7 +472,7 @@ void sync_positions(EditorState& state)
             node.y = clamp_position(position.y);
             moved  = true;
             // ARCH-E1：节点移动通知（拖拽期间每帧位置变化都会发；通知形态，重复无害）
-            state.event_bus().publish(EditEvent::node(EditEventKind::NodeMoved, node.id));
+            state.model().event_bus().publish(EditEvent::node(EditEventKind::NodeMoved, node.id));
         }
     }
     if (!moved) {
@@ -526,7 +526,7 @@ void show_add_node_menu(EditorState& state, const ImVec2& spawn)
                     state.snapshot("创建上级节点");
                     std::string error;
                     const std::string id =
-                        state.graph.addCompositeNode(spec->id, spawn.x, spawn.y, &error);
+                        state.model().graph.addCompositeNode(spec->id, spawn.x, spawn.y, &error);
                     if (!id.empty()) {
                         state.selected_nodes = {id};
                         state.selected_node  = id;
@@ -744,8 +744,8 @@ void log_canvas_diagnostic(const EditorState& state, float zoom, double width_ms
     const std::size_t uploads   = delta(&ui::TextureCacheStats::uploads);
     const std::size_t evictions = delta(&ui::TextureCacheStats::evictions);
 
-    log::info("[诊断] 画布 节点=" + std::to_string(state.graph.nodes.size()) +
-              " 连线=" + std::to_string(state.graph.edges.size()) +
+    log::info("[诊断] 画布 节点=" + std::to_string(state.model().graph.nodes.size()) +
+              " 连线=" + std::to_string(state.model().graph.edges.size()) +
               " 缩放=" + fmt_num(static_cast<double>(zoom), 2) +
               " 帧=" + std::to_string(diag.frames) + " FPS=" +
               std::to_string(static_cast<int>(ImGui::GetIO().Framerate)) +
@@ -1004,7 +1004,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
         }
         // CN：上级节点 → 打开独立编辑器
         {
-            const engine::Node* ctx_node = state.graph.findNode(context_node);
+            const engine::Node* ctx_node = state.model().graph.findNode(context_node);
             if (ctx_node != nullptr && !ctx_node->composite_id.empty()) {
                 ImGui::Separator();
                 if (ImGui::MenuItem("编辑内部图…")) {
@@ -1015,7 +1015,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
         ImGui::Separator();
         // PD-06①（FEA-M4-11 · 通用重跑）：复用上游结果，受影响节点先清结果与状态
         {
-            const engine::Node* ctx_node = state.graph.findNode(context_node);
+            const engine::Node* ctx_node = state.model().graph.findNode(context_node);
             const bool ctx_rerun_ok =
                 ctx_node != nullptr && ctx_node->state != engine::NodeState::Waiting &&
                 !state.session_active();
@@ -1043,7 +1043,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
         const std::string node_id = "n" + std::to_string(double_clicked.Get());
         state.selected_nodes      = {node_id};
         state.selected_node       = node_id;
-        if (const engine::Node* node = state.graph.findNode(node_id);
+        if (const engine::Node* node = state.model().graph.findNode(node_id);
             node != nullptr && !node->composite_id.empty()) {
             compositeEditorOpen(node->composite_id);
             state.setStatus("已打开上级节点编辑器：" + node->title + "（" +
@@ -1094,7 +1094,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     // CLN-10：辅助线绘制上移共享 draw_snap_lines（颜色/线宽传 canvas_theme_main() 的 snap_line）
     // CLN-09：小地图上移共享 draw_minimap（主题 + 节点块色按状态着色回调）
     {
-        const SnapResult snap = apply_alignment_snap(state.graph);
+        const SnapResult snap = apply_alignment_snap(state.model().graph);
         if (snap.applied) {
             drawSnapLines(snap, ImGui::GetWindowDrawList(), canvasThemeMain().snap_line, 1.6f);
         }
@@ -1168,11 +1168,11 @@ std::string canvasAddCompositeAtCenter(const std::string& composite_id)
     state.snapshot("创建上级节点");
     std::string error;
     const std::string id =
-        state.graph.addCompositeNode(composite_id, center_canvas.x, center_canvas.y, &error);
+        state.model().graph.addCompositeNode(composite_id, center_canvas.x, center_canvas.y, &error);
     if (!id.empty()) {
         state.selected_nodes = {id};
         state.selected_node  = id;
-        if (const engine::Node* node = state.graph.findNode(id)) {
+        if (const engine::Node* node = state.model().graph.findNode(id)) {
             state.setStatus("已创建上级节点：" + node->title + "（双击进入内部图编辑）");
         }
     }

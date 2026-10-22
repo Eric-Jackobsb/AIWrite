@@ -38,7 +38,7 @@ std::string compositePackSelection(const std::string& name, std::string* error)
 
     // ---- 1) internal_graph：选中节点（深拷贝，保持 id 与坐标）+ 选区内部连线 ----
     for (const std::string& nid : state.selected_nodes) {
-        const engine::Node* n = state.graph.findNode(nid);
+        const engine::Node* n = state.model().graph.findNode(nid);
         if (n == nullptr) {
             continue;
         }
@@ -50,7 +50,7 @@ std::string compositePackSelection(const std::string& name, std::string* error)
         copy.error_message.clear();
         spec.internal_graph.nodes.push_back(std::move(copy));
     }
-    for (const engine::Edge& edge : state.graph.edges) {
+    for (const engine::Edge& edge : state.model().graph.edges) {
         if (is_selected(edge.from_node) && is_selected(edge.to_node)) {
             spec.internal_graph.edges.push_back(edge);
         }
@@ -61,7 +61,7 @@ std::string compositePackSelection(const std::string& name, std::string* error)
     for (const engine::Node& n : spec.internal_graph.nodes) {
         for (const engine::Port& p : n.inputs) {
             bool exposed = false;
-            for (const engine::Edge& e : state.graph.edges) {
+            for (const engine::Edge& e : state.model().graph.edges) {
                 if (e.to_node == n.id && e.to_port == p.id && !is_selected(e.from_node)) {
                     exposed = true;
                     break;
@@ -84,7 +84,7 @@ std::string compositePackSelection(const std::string& name, std::string* error)
         std::vector<engine::CompositePortRef> boundary;
         for (const engine::Node& n : spec.internal_graph.nodes) {
             for (const engine::Port& p : n.outputs) {
-                for (const engine::Edge& e : state.graph.edges) {
+                for (const engine::Edge& e : state.model().graph.edges) {
                     if (e.from_node == n.id && e.from_port == p.id && !is_selected(e.to_node)) {
                         engine::CompositePortRef ref;
                         ref.internal_node = n.id;
