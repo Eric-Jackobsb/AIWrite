@@ -1,6 +1,6 @@
 # AIwrite 源码工程（M1 骨架 + M2 节点系统 P1/P2）
 
-> 设计文档：`../docs/ai_writer_nodes.md`　Action Plan：`../docs/actionPlan/`（进行中：M3–M6 + 补丁；已完成归档 → [../docs/Archive/actionPlan/](../docs/Archive/actionPlan/)）
+> 设计文档：`../docs/ai_writer_nodes.md`　Action Plan：`../docs/actionPlan/`（进行中：`M6` / `M8` / `M_polish`（打磨主线）/ `M_debt`；已完成归档 → [../docs/Archive/actionPlan/](../docs/Archive/actionPlan)，**2026-10-23 批** = M_code_cleanup · M_patchAB_rest · M_patchC · M_canvas_snapshot · M_8nodes_extension · M_node_expansion(_part2)）
 > 验证报告：`../docs/Archive/M1_技术验证报告.md`　节点编辑器手册：`../docs/节点编辑器使用说明.md`
 > 变更记录：`../docs/CHANGELOG.md`　文档总览：`../docs/DocMAP.md`
 > 技术栈：C++20 / MSVC 14.50（VS 2026 Insiders）/ CMake **4.4.3**（系统安装）/ VS 2026 生成器 / vcpkg / Dear ImGui 1.90.7(docking) / imgui-node-editor v0.9.3 / nativefiledialog-extended 1.3.0（overlay port）
@@ -280,12 +280,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [
 - **站点身份按「生效条目」**：登录页 / 窗口标题 / 探测路径 / Cookie 名全部取自条目的 `web.*`
   （`web/include/webview_host.h` 的 `interactive_login_request(site,id)` 等）；无参重载 = 旧常量（逐字一致，兼容保留）。
   ✅ **已落地（v9 · `D-22②` + `D-26`）**：**站点不再回落** —— 条目不是网页版条目（或表外 id / `web.login_url` 为空）时，站点区给**错误块 + 三条引导**（开窗按钮禁用）、运行前校验提示「**本次运行必定失败**」（**不阻断**）、运行期直接 `NodeError`；适配器未实现（如 `dom`）→ 运行期**明确报错**（可登录 / 可探测，生成待 L3）。不变量 `I14`。
-- **加一个网页版站点**：把 `{"schema_version":1,"providers":[ … ]}` 写进 `~/.brain-ai/providers.d/<id>.json` 并**重启**；`web` 段用**嵌套** `send{kind,value}` / `done_when{kind,selector}` —— 实测可用样例见 [../docs/actionPlan/M_patchAB_rest.md](../docs/actionPlan/M_patchAB_rest.md) **附录 D**（现行版本）。
+- **加一个网页版站点**：把 `{"schema_version":1,"providers":[ … ]}` 写进 `~/.brain-ai/providers.d/<id>.json` 并**重启**；`web` 段用**嵌套** `send{kind,value}` / `done_when{kind,selector}` —— 实测可用样例见 [../docs/actionPlan/M_patchAB_rest.md](../docs/Archive/actionPlan/M_patchAB_rest.md) **附录 D**（现行版本）。
   * **配置表重新加载入口（2026-10-10 · `M6`）**：设置面板 → 「提供商与站点表」→ 「**重新加载配置表**」会调 `ai::reload_provider_specs()`（`utils`/`ai` 侧只加载表，参数面板每帧按当前表渲染）⇒ **不必重启**即可看到新条目计数与摘要。
   * ⚠ **仍未收口**（`PB2-24`：自建站点**闭环** = 新增站点 → 节点/参数即时可用 → 真机逐站验证，`RM-D4` 必做项）—— 本批只落地了「手动 reload 入口」，**闭环未验证**。
-- **内置站点入口（v10 / `PB2-26`）**：配置表已内置 **10 个 AI 的网页版登录入口**（Kimi / Qwen 国际站 / 智谱清言 / 豆包 / 腾讯元宝 / 文心一言 / 讯飞星火 / ChatGPT / Claude / Gemini）+ 原有 `deepseek-web`；条目为**登录型**（只配 `login_url` + `window_title`）：**能登录 / 能探测**，**生成**需先补齐选择器（DOM 执行器 L3 v11 **已就绪**；选择器由 L4 `PB2-29` 逐站实测回填）→ 未填时点运行会**明确报错**（不静默、不回落 DeepSeek）。完整清单见 [../docs/actionPlan/M_patchAB_rest.md](../docs/actionPlan/M_patchAB_rest.md) **附录 E**（现行版本）。
+- **内置站点入口（v10 / `PB2-26`）**：配置表已内置 **10 个 AI 的网页版登录入口**（Kimi / Qwen 国际站 / 智谱清言 / 豆包 / 腾讯元宝 / 文心一言 / 讯飞星火 / ChatGPT / Claude / Gemini）+ 原有 `deepseek-web`；条目为**登录型**（只配 `login_url` + `window_title`）：**能登录 / 能探测**，**生成**需先补齐选择器（DOM 执行器 L3 v11 **已就绪**；选择器由 L4 `PB2-29` 逐站实测回填）→ 未填时点运行会**明确报错**（不静默、不回落 DeepSeek）。完整清单见 [../docs/actionPlan/M_patchAB_rest.md](../docs/Archive/actionPlan/M_patchAB_rest.md) **附录 E**（现行版本）。
 - **L3（v11）：DOM 适配器已接线**（`ai/src/dom_web_client.cpp` + `ai/include/dom_web_client.h`）—— 条目补齐 **`web.input_selector` / `web.send` / `web.answer_selector`**（+ 建议 `web.done_when`）**重启即真正生成**（写入提示词 → 自动发送 → 轮询取答案；到上限/超时**如实返回已取文本 + 警告**）；不要求内存 `userToken`（登录态在浏览器 profile）；选择器不会写就用 **`--web-adapter-selftest --provider <id>`**（只读命中数 + 修复建议）。站点 = 纯数据，**无需改 C++**。
-- **L4（v12 · 文档先行，代码待 `B2-e`）：登录层去 DeepSeek 化 + 站点数据落地 + 自助闭环** —— ①**登录态判据站点无关**（`web_session_state()` 纯函数：按该 origin 的 Cookie / `cookie_names` 判，**不看** `userToken`；`userToken` 行仅当条目配了 `token_expr` 才显示）②**探测「不适用」语义**（条目未配 `probe_paths` / `token_expr` / `endpoints` 时不再注入 DeepSeek 端点 → 只读诊断分支；`deepseek-web` 与无参路径**逐字不变**）③**内置站点选择器逐站实测回填**（`--web-adapter-selftest --provider <id>` → 填条目 → `verified:true`）④**自建站点 UI 闭环**（新建条目 / **重新加载配置表** / 测试选择器；`PB2-24` 并入）。计划：**现行** [../docs/actionPlan/M_patchAB_rest.md](../docs/actionPlan/M_patchAB_rest.md) §2.2 / §3.3–§3.5（承接 `PB-07` / `PB2-25` / `PB2-29` / `PB2-30②` / `PB2-24`）；历史 §9.7 见归档 [../docs/Archive/actionPlan/M_patchB.md](../docs/Archive/actionPlan/M_patchB.md)。
+- **L4（v12 · 文档先行，代码待 `B2-e`）：登录层去 DeepSeek 化 + 站点数据落地 + 自助闭环** —— ①**登录态判据站点无关**（`web_session_state()` 纯函数：按该 origin 的 Cookie / `cookie_names` 判，**不看** `userToken`；`userToken` 行仅当条目配了 `token_expr` 才显示）②**探测「不适用」语义**（条目未配 `probe_paths` / `token_expr` / `endpoints` 时不再注入 DeepSeek 端点 → 只读诊断分支；`deepseek-web` 与无参路径**逐字不变**）③**内置站点选择器逐站实测回填**（`--web-adapter-selftest --provider <id>` → 填条目 → `verified:true`）④**自建站点 UI 闭环**（新建条目 / **重新加载配置表** / 测试选择器；`PB2-24` 并入）。计划：**现行** [../docs/actionPlan/M_patchAB_rest.md](../docs/Archive/actionPlan/M_patchAB_rest.md) §2.2 / §3.3–§3.5（承接 `PB-07` / `PB2-25` / `PB2-29` / `PB2-30②` / `PB2-24`）；历史 §9.7 见归档 [../docs/Archive/actionPlan/M_patchB.md](../docs/Archive/actionPlan/M_patchB.md)。
 
 - **「模式」下拉恒两项**（`engine/src/provider_resolve.cpp` 的 `provider_mode_options`）：`official` / `web` **始终可选**
   （决策 `D-21`：**网页版与官方 API 同等优先级**，**不按条目 `kind` 裁剪**）；切换「提供商」只带出**建议值**
@@ -304,7 +304,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [
 - **`config.toml` 多 provider 实例参数**（PB2-06）：`[providers.<id>]` 可多节（`deepseek` 旧节自动迁移，幂等）；
   保存前自动备份 `config.toml.bak`，写入采用 `.tmp` → 原子替换。**厂商元数据仍以配置表（JSON）为准**。
 - 计划与验收：`PB2-17`/`PB2-18`/`PB2-19`/`PB2-06`/`PB2-20`（`D-21` 修订）、`I11`/`I12`/`I13`、`AB2-13`/`AB2-14`/`AB2-15`、`VB2-16`/`VB2-17`/`VB2-18`、`R14`/`R15`/`R16`，
-  见归档 [../docs/Archive/actionPlan/M_patchB.md](../docs/Archive/actionPlan/M_patchB.md)（§9「L1 收口」实测基线；**L4 立项见 §9.7**）与**现行承接** [../docs/actionPlan/M_patchAB_rest.md](../docs/actionPlan/M_patchAB_rest.md)（§3 `B2` 残项）与
+  见归档 [../docs/Archive/actionPlan/M_patchB.md](../docs/Archive/actionPlan/M_patchB.md)（§9「L1 收口」实测基线；**L4 立项见 §9.7**）与**现行承接** [../docs/actionPlan/M_patchAB_rest.md](../docs/Archive/actionPlan/M_patchAB_rest.md)（§3 `B2` 残项）与
   [../docs/网页版协议实测记录.md](../docs/Archive/网页版协议实测记录.md) §7。
 
 ### 4.2 图片诊断与「图片解码冻结区」（M7 · 2026-09-27）

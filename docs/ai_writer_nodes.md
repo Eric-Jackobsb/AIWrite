@@ -6,7 +6,7 @@
 > 技术栈：C++20 / MSVC 14.50（VS 2026）/ CMake 4.4.3 + `Visual Studio 18 2026` 生成器 / vcpkg / Dear ImGui 1.90.7 (docking) / imgui-node-editor 0.9.3 / nlohmann/json
 > 后端：DeepSeek 官方 API + 网页版逆向（不使用本地模型）
 
-> 相关文档：[CHANGELOG.md](CHANGELOG.md) ｜ [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) ｜ [actionPlan/](actionPlan/) ｜ [../source/README.md](../source/README.md)
+> 相关文档：[CHANGELOG.md](CHANGELOG.md) ｜ [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md) ｜ [actionPlan/](actionPlan) ｜ [../source/README.md](../source/README.md)
 
 ---
 
@@ -205,7 +205,7 @@ Workflow
 > **M7（2026-09-27）**：原「输出节点 · Image Preview」已删除（N-09）—— 图片结果由 `Image Input` 的
 > `image` 端口在输出面板 / 参数面板渲染缩略图，无需专用汇点节点。见 [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md)（📦 已归档 2026-10-11）。
 
-### 4.4 MVP 节点清单（8 个；M7 起由 9 个精简）· ✅ **已固定（2026-10-08 · 节点数维持 8，不恢复）** —— 📦 **「数量维持 8」半句已被推翻（2026-10-11 · `PQ-20` 拍板 · 见 [roadmap.md](roadmap.md) §十）**：**8 个节点仍是当前实现**，但**不再禁止扩展**；后续新增 / 变形的**方向、范围与准入标准**在 [actionPlan/M_node_expansion.md](actionPlan/M_node_expansion.md) **细致讨论**（**拍板前不动任何代码**）。**L2 已于 2026-10-15 新增 6 个文本处理节点 ⇒ 现行 14 个**（下表 N-09~N-14 · 新分类「辅助功能」）
+### 4.4 MVP 节点清单（8 个；M7 起由 9 个精简）· ✅ **已固定（2026-10-08 · 节点数维持 8，不恢复）** —— 📦 **「数量维持 8」半句已被推翻（2026-10-11 · `PQ-20` 拍板 · 见 [roadmap.md](roadmap.md) §十）**：**8 个节点仍是当前实现**，但**不再禁止扩展**；后续新增 / 变形的**方向、范围与准入标准**在 [Archive/actionPlan/M_node_expansion.md](Archive/actionPlan/M_node_expansion.md) **细致讨论**（**拍板前不动任何代码**）。**L2 已于 2026-10-15 新增 6 个文本处理节点 ⇒ 现行 14 个**（下表 N-09~N-14 · 新分类「辅助功能」）
 
 | 编号 | 节点 | 分类 | 输入 | 输出 |
 |---|---|---|---|---|
@@ -1112,7 +1112,7 @@ void Executor::cancel() {
 | M1：技术验证 | v0.1 | ImGui + 节点编辑器 + API 跑通 | ✅ ImGui 与节点编辑器已跑通；API 待 Key（见 [Archive/M1_技术验证报告.md](Archive/M1_技术验证报告.md)） |
 | M2：引擎跑通 | v0.2 | 能加载 JSON 工作流并执行 | ✅ **已完成（2026-09-23 · 见 [actionPlan/milestone_plan.md](actionPlan/milestone_plan.md) 与 [Archive/actionPlan/M2.md](Archive/actionPlan/M2.md)）** |
 | M3：可视化编辑 | v0.3 | 能拖拽编辑工作流 | ✅ **已完成 · 计划已归档（2026-09-27 → [Archive/actionPlan/M3.md](Archive/actionPlan/M3.md)）**；唯一待办 `FEA-M3-07` 工作流变体保存 ⬜ **已拍板「延后 · 不排期」（`PQ-19`，2026-10-09）** |
-| M4：文本生成 | v0.4 | 能生成文本 | ✅ **核心完成 · 计划已归档（2026-10-11 → [Archive/actionPlan/M4.md](Archive/actionPlan/M4.md)）**（残项见 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §1–§3） |
+| M4：文本生成 | v0.4 | 能生成文本 | ✅ **核心完成 · 计划已归档（2026-10-11 → [Archive/actionPlan/M4.md](Archive/actionPlan/M4.md)）**（残项见 [Archive/actionPlan/M_patchAB_rest.md](Archive/actionPlan/M_patchAB_rest.md) §1–§3） |
 | M5：多模态 | v0.5 | 能读图生成文字 | 🟡 **核心切片（M5-C）已完成**；余项见 [Archive/actionPlan/M5.md](Archive/actionPlan/M5.md)（📦 已归档 2026-10-11）§九 |
 | M6：MVP | v1.0 | 功能完整，可自用 | 🟡 **已开工（第一批已落地 2026-10-10）**（交付形态 ✅ 已定 = Inno Setup · `PQ-02` 结案；`M6-02` 归 `PM-01` ✅ 已落地——见 [actionPlan/M6.md](actionPlan/M6.md) §一） |
 | M7：图片输入收口 + 节点精简 | v0.5.1 | 删图片输出节点（9→8）+ 图片格式按内容嗅探 + 可操作报错 | ✅ 代码与手册已落地（2026-09-27；计划已归档 2026-10-11 → [Archive/actionPlan/M7.md](Archive/actionPlan/M7.md)）；待 GUI 端到端实测 |

@@ -1,11 +1,11 @@
 # M_polish：打磨与优化（阶段性计划 · 当前主线）
 
-> 类型：**跨里程碑打磨优化路线**（不占用 M1–M8 编号；独立成文，与 [M_code_cleanup.md](M_code_cleanup.md) / [M_patchAB_rest.md](M_patchAB_rest.md) / [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md) 平级，单向引用、不改动既有计划文件任何一行）
+> 类型：**跨里程碑打磨优化路线**（不占用 M1–M8 编号；独立成文，与 [M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) / [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) / [M_patchC_web_node_bind.md](../Archive/actionPlan/M_patchC_web_node_bind.md) 平级，单向引用、不改动既有计划文件任何一行）
 > 动机：**2026-10-20 用户拍板** —— 基础框架已经搭建好，从「**逻辑 → 操作体验 → 正确性 → 便捷性**」四个顺序对软件进行打磨和优化；本文是这条主线的**顶层路线**，roadmap 已同步（[../roadmap.md](../roadmap.md) §二）。
 > 编号空间：任务 **`POL-L*`**（逻辑）/ **`POL-UX*`**（操作体验）/ **`POL-C*`**（正确性）/ **`POL-E*`**（便捷性）· 验证 **`POL-V*`** · 验收 **`POL-A*`** —— ⚠️ 新编号空间，落地批需按库规登记（AI_README §5 / DocMAP / DevPlan.todo / CHANGELOG）。
 > 状态：🟢 **路线已立项（2026-10-20）· ✅ 已审核通过（2026-10-20 用户复核）** · 四阶段顺序与目标已定 · **阶段一 `POL-L` 清单已细列（2026-10-21）· 阶段一 selftest 补强首项已落地（`POL-L-01` · 2026-10-21）· 阶段二 `POL-UX` 清单已细列（2026-10-21 · 首项已落地）· 阶段三 `POL-C` 清单已细列（2026-10-21 · 首两项已落地、后两项审计通过）· §2.5 当前打磨优先级表已登记并拆条（2026-10-21 · 待用户审阅）**（每阶段开工先出 `POL-*` 任务表）。
 > 建立：**2026-10-20**
-> 相关：清理计划 [M_code_cleanup.md](M_code_cleanup.md)（§4 优化打磨方向）· 补丁系列剩余 [M_patchAB_rest.md](M_patchAB_rest.md)（交互打磨残项承接位）· 网页节点绑定 [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md)（`PW-*`）· M6 收口 [M6.md](M6.md)（打磨小项 `M6-04`~`M6-06`/`M6-10`）· 长期路线图 [../roadmap.md](../roadmap.md)
+> 相关：清理计划 [M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md)（§4 优化打磨方向）· 补丁系列剩余 [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md)（交互打磨残项承接位）· 网页节点绑定 [M_patchC_web_node_bind.md](../Archive/actionPlan/M_patchC_web_node_bind.md)（`PW-*`）· M6 收口 [M6.md](M6.md)（打磨小项 `M6-04`~`M6-06`/`M6-10`）· 长期路线图 [../roadmap.md](../roadmap.md)
 
 ---
 
@@ -40,9 +40,9 @@
 - **目标**：核心创作链路与全部功能逻辑闭环、正确可用；把「暂停 / 未收口」的逻辑项收口。
 - **范围**：
   - 创作主线端到端（构思 → 大纲 → 草稿 → 修订，含节点工作流与上级节点组合运行）。
-  - 暂停任务收口：上级编辑器小地图导航（mode 5 —— 待真实 GUI 复核，登记于 [M_code_cleanup.md](M_code_cleanup.md) §2）。
+  - 暂停任务收口：上级编辑器小地图导航（mode 5 —— 待真实 GUI 复核，登记于 [M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §2）。
   - 功能逻辑走查：各节点参数面、端口接线、运行前校验、结果回流。
-- **承接**：[M_code_cleanup.md](M_code_cleanup.md) §2 暂停任务 · [M_patchAB_rest.md](M_patchAB_rest.md) §1 逻辑残项 · [M6.md](M6.md) 逻辑相关未收口项。
+- **承接**：[M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §2 暂停任务 · [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) §1 逻辑残项 · [M6.md](M6.md) 逻辑相关未收口项。
 - **退出判据**：创作主线端到端可用 + 暂停任务结案（或如实登记为待真机）+ 逻辑清单全过 + 回归基线只升不降。
 
 **`POL-L` 清单（2026-10-21 开工时细列 · 状态随批更新）**
@@ -50,9 +50,9 @@
 | 编号 | 任务 | 来源 | 执行方式 / 当前状态 |
 |---|---|---|---|
 | `POL-L-01` | 创作主线端到端：默认工作流 + 「提示词模板」搭「构思 → 大纲 → 草稿 → 修订」创作链，验证 加载 / 校验 / 运行 / 结果回流 闭环 | M_polish §2.1 · [Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md) | ✅ **selftest 补强已落地（2026-10-21 · `api_execution_selftest.cpp` 新增 4c 段）**：四段模板可实例化 + 端到端闭环 15 断言（① 四段齐全含 `{vars}` ② 单段实例化 ③ 链式回流 ④ graph+Executor 加载 / 校验 / 运行 / 结果回流）· exec **691→706/0** · 无 Key 请求构造已由 V-11（6/0）覆盖勾账 · 构建 0/0 · graph 151/0 · selftest 十三组 PASS；**最终 GUI 创作链 ⏳ 待真机** |
-| `POL-L-02` | 暂停任务收口：上级编辑器小地图导航（mode 5）**真实 GUI 复核** —— 正常 ⇒ headless 失真（H1/H4）收尾关闭；不生效 ⇒ 深挖 H2/H3 | [M_code_cleanup.md](M_code_cleanup.md) §2.2/2.3 | ⏳ 需真机 GUI；决策已登记（仅文档推进） |
+| `POL-L-02` | 暂停任务收口：上级编辑器小地图导航（mode 5）**真实 GUI 复核** —— 正常 ⇒ headless 失真（H1/H4）收尾关闭；不生效 ⇒ 深挖 H2/H3 | [M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §2.2/2.3 | ⏳ 需真机 GUI；决策已登记（仅文档推进） |
 | `POL-L-03` | 功能逻辑走查：各节点参数面 / 端口接线 / 运行前校验 / 结果回流 —— 结合 exec-selftest 706 覆盖 + DevPlan.todo Test 〇组（上级节点 16 条未勾）+ 二组 M1/M2 画布 22 项逐项勾账 | M_polish §2.1 · DevPlan.todo Test 〇组/二组 | 人工走查为主，逐项在 [../DevPlan.todo](../DevPlan.todo) Test 勾 done |
-| `POL-L-04` | 逻辑残项**如实登记**（⏳ 真机 / 需 Key · 不阻塞主线）：`PB2-29` 逐站实测回填 · `PB-07`/`PB2-25` 真实失效响应复核 · `PB2-10`/`PB2-11` 真 Key 生成 · `PC-01`/`PC-02` 改图→快照→恢复真人点选 | [M_patchAB_rest.md](M_patchAB_rest.md) §1 | 🔵 全部承接 DevPlan.todo Test 登记，等真机/Key 环境 |
+| `POL-L-04` | 逻辑残项**如实登记**（⏳ 真机 / 需 Key · 不阻塞主线）：`PB2-29` 逐站实测回填 · `PB-07`/`PB2-25` 真实失效响应复核 · `PB2-10`/`PB2-11` 真 Key 生成 · `PC-01`/`PC-02` 改图→快照→恢复真人点选 | [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) §1 | 🔵 全部承接 DevPlan.todo Test 登记，等真机/Key 环境 |
 
 
 ### 2.2 阶段二 · 操作体验（`POL-UX*`）
@@ -63,7 +63,7 @@
   - 网页节点绑定：`M_patchC` 的 `PW-10`/`PW-11` 等未收口项。
   - M6 打磨小项：错误条 / 重试按钮 / 失败汇总（`M6-04`）、启动体验（`M6-10`）。
   - 视觉统一：主题、面板、状态圆点、空状态引导的一致性走查。
-- **承接**：[M_patchAB_rest.md](M_patchAB_rest.md) · [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md) · [M6.md](M6.md) · roadmap §四 面向 C 门槛。
+- **承接**：[M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) · [M_patchC_web_node_bind.md](../Archive/actionPlan/M_patchC_web_node_bind.md) · [M6.md](M6.md) · roadmap §四 面向 C 门槛。
 - **退出判据**：交互打磨残项清零 · UX 清单全过 · 用户试用反馈可操作项全部落地。
 
 **`POL-UX` 清单（2026-10-21 开工时细列 · 状态随批更新）**
@@ -73,7 +73,7 @@
 | `POL-UX-01` | **重试按钮**（`M6-04` 步骤 4）：错误条给一键「重试该失败节点及下游」—— 复用 PD-06① `startRerunAsync(Downstream)`（失败节点阻塞下游 ⇒ 重跑「节点及下游」走通后续链路；核心重跑语义已被 PD-06① 离线断言覆盖）；守卫 = 节点仍在图中 + 无运行会话；成功启动即清错误条 | M_polish §2.2 · [M6.md](M6.md) `M6-04` | ✅ **已落地（2026-10-21 · `ui/error_bar.cpp`）**：构建 **0/0** · exec **691/0** · graph **151/0** · selftest 十三组 PASS；观感顺延 GUI 复核 |
 | `POL-UX-02` | **视觉统一走查**（离线审计）：主题（`apply_dark_theme` + 双 `CanvasTheme`）/ 面板 / 状态圆点 / 空状态引导一致性 —— 审计结论：字体 + 暗色主题已统一（`DEBT-L11`）· 画布空状态引导（`P7a-14`）· 输出面板「尚无运行结果」· 首启引导（`M6-02`）· console 过滤/搜索/导出已齐 · 状态圆点 + 脉冲光环（`PA-08`）已齐 | M_polish §2.2 视觉统一 | ✅ 走查结论登记（2026-10-21 · 零代码）；**视觉复核**（L11 顺延项）归 GUI |
 | `POL-UX-03` | **启动体验**（`M6-10` 步骤 5 启动计时 + `M6-07` 剩余「启动 <3s」测量）：`--open <工作流>` + 日志时间戳 | [M6.md](M6.md) `M6-10`/`M6-07` | ⏳ 需真机计时（顺延 GUI 会话） |
-| `POL-UX-04` | **交互手感复核**（`PD-*` 已落地项的 GUI 复核）：设置面板 / 窗口几何 / 参数面板 / 通用重跑 / 画布交互与状态反馈 | [M_patchAB_rest.md](M_patchAB_rest.md) §5（`PD-03`/`PD-04`/`PD-05`/`PD-06` ✅） | ⏳ 需真机 GUI（顺延） |
+| `POL-UX-04` | **交互手感复核**（`PD-*` 已落地项的 GUI 复核）：设置面板 / 窗口几何 / 参数面板 / 通用重跑 / 画布交互与状态反馈 | [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) §5（`PD-03`/`PD-04`/`PD-05`/`PD-06` ✅） | ⏳ 需真机 GUI（顺延） |
 
 ### 2.3 阶段三 · 正确性（`POL-C*`）
 
@@ -83,7 +83,7 @@
   - 异常闭环（`M6-04`）：重试 / 失败汇总 / 可操作文案。
   - 数据安全：自动保存 / 崩溃恢复（`PC-01`/`PC-02`）边界走查、原子写、恢复判定。
   - 站点适配修复（roadmap §六 维护线）。
-- **承接**：[M6.md](M6.md) · [M_patchAB_rest.md](M_patchAB_rest.md) 数据安全类 · roadmap §六。
+- **承接**：[M6.md](M6.md) · [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) 数据安全类 · roadmap §六。
 - **退出判据**：边界用例补强完成 · 异常路径可操作闭环 · 数据安全走查通过 · 回归只升不降。
 
 **`POL-C` 清单（2026-10-21 开工时细列 · 状态随批更新）**
@@ -91,10 +91,10 @@
 | 编号 | 任务 | 来源 | 执行方式 / 当前状态 |
 |---|---|---|---|
 | `POL-C-01` | **工作流校验边界补强（M6-06 封口）**：加载校验（类型注册 / id 唯一 / 参数合法 / 边两端存在 / 端口类型兼容 / 非可变长不重复占用 / 无环）+ 运行前校验（必填连接 / 可选放行）两级边界全封 —— 在 DEBT-L9（5 边界）之上再补 7 组 8 断言 | M_polish §2.3 · [M6.md](M6.md) `M6-06` | ✅ **本批落地（2026-10-21 · `api_executor_selftest.cpp`）**：参数越界 / 枚举非法 / 自环 A→A / 多错误一次报告 / 可变长多入边正边界 / 可选 provider 未连 / 运行前继承加载 · executor-selftest **83→94/0** · exec **706/0** · graph **151/0** · selftest 十三组 PASS · check_links 1723/0 |
-| `POL-C-02` | **数据安全边界走查**：autosave（PC-01/02）原子写 / 中断 `.tmp` / 轮转 keep / 恢复判定 4 场景 / 自清理（已 32/0）+ TTL 清理（PC-06）边界 + 原子写失败路径 | M_polish §2.3 数据安全 · [M_patchAB_rest.md](M_patchAB_rest.md) §4 | ✅ **本批落地（2026-10-21）**：走查确认全链路已覆盖，**补 2 处缺口断言** —— ① autosave 原子写**失败路径** 4 条（rename 目标被目录顶替 ⇒ `autosave_write` 返回 false + 有错误信息 / 失败后 `.tmp` 自清理 / 原快照位置未被破坏 / 清理后重写恢复）· autosave **28→32/0**；② 归档 TTL/保留边界 7 条（`ttl_days=0` 关闭清理 / 非命名规则目录不误删 / `keep_history=true`+`max_history` 上限）· exec **706→713/0** · graph **151/0** · selftest 十三组 PASS · check_links **1730/0** |
+| `POL-C-02` | **数据安全边界走查**：autosave（PC-01/02）原子写 / 中断 `.tmp` / 轮转 keep / 恢复判定 4 场景 / 自清理（已 32/0）+ TTL 清理（PC-06）边界 + 原子写失败路径 | M_polish §2.3 数据安全 · [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) §4 | ✅ **本批落地（2026-10-21）**：走查确认全链路已覆盖，**补 2 处缺口断言** —— ① autosave 原子写**失败路径** 4 条（rename 目标被目录顶替 ⇒ `autosave_write` 返回 false + 有错误信息 / 失败后 `.tmp` 自清理 / 原快照位置未被破坏 / 清理后重写恢复）· autosave **28→32/0**；② 归档 TTL/保留边界 7 条（`ttl_days=0` 关闭清理 / 非命名规则目录不误删 / `keep_history=true`+`max_history` 上限）· exec **706→713/0** · graph **151/0** · selftest 十三组 PASS · check_links **1730/0** |
 | `POL-C-03` | **异常文案与诊断可操作性离线审计**（M6-04）：validate / failure_summary / web_error 三类归因文案「可操作」审计（含节点 id / 修复指引） | M_polish §2.3 · [M6.md](M6.md) `M6-04` | ✅ **审计通过（2026-10-21 · 零代码）**：三类文案均满足「**可操作** = 定位 id + 修复指引」—— validate 全量 `[节点id]` / `[边id]` 前缀 + 运行前引导；failure_summary 汇总带节点 id + 错误透传（web 节点 = web_error 自带指引）；web_error 三类统一形状（owner 前缀 = 含节点 id + 类别互不重叠 + **可操作下一步** · 已 5 条离线断言）。**结论：无缺口，零代码改动** |
 | `POL-C-04` | **站点适配修复**（roadmap §六 维护线）：真实站点行为变化适配 | M_polish §2.3 · [../roadmap.md](../roadmap.md) §六 | ⏳ 需真机（登记 DevPlan.todo Test） |
-| `POL-C-05` | **PC-01/02 崩溃恢复 GUI 点选**：改图 → 静默 3 秒 → 写快照 → 点「恢复」 | [M_patchAB_rest.md](M_patchAB_rest.md) §4 | ⏳ 已登记 DevPlan.todo Test（`DEBT-L5` 四组） |
+| `POL-C-05` | **PC-01/02 崩溃恢复 GUI 点选**：改图 → 静默 3 秒 → 写快照 → 点「恢复」 | [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) §4 | ⏳ 已登记 DevPlan.todo Test（`DEBT-L5` 四组） |
 | `POL-C-06` | **DEBT-B1 Ctrl+S 保存复核**：修复后 GUI 复核保存成功（与按键保存一致） | [M_debt.md](M_debt.md) `DEBT-B1` | ⏳ 已登记 DevPlan.todo Test（#573 · 原 #4011） |
 
 ### 2.4 阶段四 · 便捷性（`POL-E*`）
@@ -105,7 +105,7 @@
   - 批量 / 模板：节点模板、示例工作流复用。
   - 输出管理：`PD-07` 历史、图片复制 / 导出、归档按日期。
   - 工作流分享：导出 / 导入 JSON + 资源包（roadmap §六 可选线）。
-- **承接**：roadmap §六（滚动发布补强 / 可选）· [M_patchAB_rest.md](M_patchAB_rest.md)。
+- **承接**：roadmap §六（滚动发布补强 / 可选）· [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md)。
 - **退出判据**：常用操作路径显著减步 · 便捷类清单全过 · 用户满意度回访。
 
 ### 2.5 当前打磨优先级表（2026-10-21 登记 · 2026-10-21 拆条版 v1.7 · 待用户审阅确认）
@@ -244,7 +244,7 @@
 
 
 
-**执行口径**：① 当前唯一能**马上离线开工**的是 **P0 阶段四 `POL-E`**（细列清单 + 便捷性打磨逐项落地，含 [M_code_cleanup.md](M_code_cleanup.md) §4 方向落入）；② P0 的 Ctrl+S 复核仅需用户**顺手点一下**即可勾掉唯一真实 bug；③ 其余 P1/P2 均为真机 / Key 依赖，可分批随 GUI 会话推进（债务批 B 已全部登记 [../DevPlan.todo](../DevPlan.todo) Test 四组）。
+**执行口径**：① 当前唯一能**马上离线开工**的是 **P0 阶段四 `POL-E`**（细列清单 + 便捷性打磨逐项落地，含 [M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §4 方向落入）；② P0 的 Ctrl+S 复核仅需用户**顺手点一下**即可勾掉唯一真实 bug；③ 其余 P1/P2 均为真机 / Key 依赖，可分批随 GUI 会话推进（债务批 B 已全部登记 [../DevPlan.todo](../DevPlan.todo) Test 四组）。
 
 
 ---
@@ -253,9 +253,9 @@
 
 | 来源 | 承接进 | 状态 |
 |---|---|---|
-| [M_code_cleanup.md](M_code_cleanup.md) §4（性能 / 体验 / 结构方向） | 各对应阶段 `POL-*` 任务 | 方向已并入（2026-10-20） |
-| [M_patchAB_rest.md](M_patchAB_rest.md)（交互打磨残项 `PD-*`） | 阶段二 `POL-UX*`（部分进阶段一/三） | 待阶段二开工细列 |
-| [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md)（`PW-10`/`PW-11`） | 阶段二 `POL-UX*` | 待阶段二开工细列 |
+| [M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §4（性能 / 体验 / 结构方向） | 各对应阶段 `POL-*` 任务 | 方向已并入（2026-10-20） |
+| [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md)（交互打磨残项 `PD-*`） | 阶段二 `POL-UX*`（部分进阶段一/三） | 待阶段二开工细列 |
+| [M_patchC_web_node_bind.md](../Archive/actionPlan/M_patchC_web_node_bind.md)（`PW-10`/`PW-11`） | 阶段二 `POL-UX*` | 待阶段二开工细列 |
 | [M6.md](M6.md)（`M6-04`~`M6-06`/`M6-10` 打磨小项） | 阶段二/三 `POL-UX*`/`POL-C*` | 待相应阶段开工细列 |
 | [../roadmap.md](../roadmap.md) §六（滚动发布补强/可选） | 阶段三/四 `POL-C*`/`POL-E*` | 长期线，逐步落入 |
 | [../roadmap.md](../roadmap.md) §二（打磨与优化阶段路线） | 本文 §1 | 已同步（2026-10-20） |
@@ -267,7 +267,7 @@
 1. **每批小步、每批验证**：一个任务 = 一个批；每批 `source/build.ps1` 构建 **0/0** + 相关 selftest 全绿 + `check_links` broken 0，才进下一批。
 2. **先立基线**：行为类改动先存档基线（`build/logs/`）再动，动完对比**只升不降**。
 3. **语义等价**：打磨只优化实现与体验，不改变既有契约（`I*` 不变量 / JSON 规格 / CLI 契约 / 端口语义）。
-4. **删除即登记**：涉及删除走 [M_code_cleanup.md](M_code_cleanup.md) §3.0 删除前置审计闸门。
+4. **删除即登记**：涉及删除走 [M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §3.0 删除前置审计闸门。
 5. **测试保护**：行为类改动加断言，`exec-selftest` / `graph-selftest` / `composite_selftest` 只升不降。
 6. **真机项如实登记**：需要人工 / 真机的项（GUI 点选、真实站点、安装冒烟）登记进 [../DevPlan.todo](../DevPlan.todo) Test，不虚报完成。
 

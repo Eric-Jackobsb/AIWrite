@@ -1,10 +1,10 @@
 # M_debt：债务清零行动计划（当前主线 · 打磨四阶段前置）
 
-> 类型：**跨里程碑债务清零专项**（不占用 M1–M8 / POL-* 编号；独立成文，与 [M_polish.md](M_polish.md) / [M_code_cleanup.md](M_code_cleanup.md) / [M_patchAB_rest.md](M_patchAB_rest.md) 平级）
+> 类型：**跨里程碑债务清零专项**（不占用 M1–M8 / POL-* 编号；独立成文，与 [M_polish.md](M_polish.md) / [M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) / [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) 平级）
 > 动机：**2026-10-21 用户拍板** —— 「现在优先解决所有债务问题」：先把全部债务盘点、清零，再继续 M_polish 四阶段打磨。
 > 编号空间：任务 **`DEBT-*`**（债务总账条目 · 权威位 = [../audit/DEBT.todo](../audit/DEBT.todo)）· 人工验证项承接位 = [../DevPlan.todo](../DevPlan.todo)（**四、债务清零人工验证**组）
 > 状态：🟢 **已立项（2026-10-21）** · 债务总账已建立（6 类 / 26 项）· 批次见 §2
-> 相关：打磨主线 [M_polish.md](M_polish.md)（四阶段 · 债务清零完成后回归）· 代码清理 [M_code_cleanup.md](M_code_cleanup.md)（CLN 主体已清零）· 补丁残项 [M_patchAB_rest.md](M_patchAB_rest.md) · M6 收口 [M6.md](M6.md) · 长期路线图 [../roadmap.md](../roadmap.md)
+> 相关：打磨主线 [M_polish.md](M_polish.md)（四阶段 · 债务清零完成后回归）· 代码清理 [M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md)（CLN 主体已清零）· 补丁残项 [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) · M6 收口 [M6.md](M6.md) · 长期路线图 [../roadmap.md](../roadmap.md)
 
 ---
 
@@ -73,8 +73,8 @@
 | 文档 | 关系 |
 |---|---|
 | [M_polish.md](M_polish.md) | 债务清零 = **阶段 0（前置）**；完成后回归四阶段（POL-L-02 与 DEBT-C1 同源，一次 GUI 复核可同时勾两条） |
-| [M_code_cleanup.md](M_code_cleanup.md) | CLN 主体已清零；§4.1 方向 4/5 = DEBT-C2/C3 承接 |
-| [M_patchAB_rest.md](M_patchAB_rest.md) | 逻辑残项（PB-07 / PB2-10/11/24/25/29 / PC-01/02 / VB-03）= DEBT-L1~L7 |
+| [M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) | CLN 主体已清零；§4.1 方向 4/5 = DEBT-C2/C3 承接 |
+| [M_patchAB_rest.md](../Archive/actionPlan/M_patchAB_rest.md) | 逻辑残项（PB-07 / PB2-10/11/24/25/29 / PC-01/02 / VB-03）= DEBT-L1~L7 |
 | [M6.md](M6.md) | 打磨小项（M6-04/05/06/07/10）= DEBT-L8~L11 / V5 |
 | [../roadmap.md](../roadmap.md) | 阶段总览加「债务清零」当前主线行 |
 | [../DevPlan.todo](../DevPlan.todo) | 四、债务清零人工验证组 = 人工项唯一勾账位（DevPlan.todo Test） |

@@ -1,6 +1,6 @@
 # 审计报告 · audit_cleanup_02 —— CLN-02 冗余 / 未用 include
 
-> 批次：`CLN-02`（对应 [../actionPlan/M_code_cleanup.md](../actionPlan/M_code_cleanup.md) §3.2）· 日期：2026-10-20
+> 批次：`CLN-02`（对应 [../actionPlan/M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §3.2）· 日期：2026-10-20
 > 性质：**删除前置审计闸门（§3.0）**的产物 —— 本批扫描结论 = **项目头未用 include 0 项**；唯一可删项为 `tools/api_probe.cpp` 的 **2 行重复 include**（零行为风险）。
 > 范围：`source/**`（**225 个 .cpp/.h**，全量），排除 `third_party/**`（vendored）与 `source/python/**`（Pydoll 休眠栈，硬边界 §6）。
 > 方法：自研静态扫描脚本（临时工具，不入库，见 §5）+ 合成**阳性对照**验证扫描器可信 + 关键文件人工核验。

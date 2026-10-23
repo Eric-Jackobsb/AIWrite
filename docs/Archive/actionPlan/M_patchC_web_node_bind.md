@@ -1,23 +1,26 @@
 # M_patchC：网页版「节点 ↔ 窗口」绑定与页面就绪判据（补丁系列 · 第三期）
 
+> 📦 **已归档（2026-10-23 · 文档整理批次 `ARC-AR-02`）** —— **文档收尾 `PW-12` ✅（2026-10-15 · v8）** + 决策 `D-33`…`D-36` 已拍板（2026-10-07）；余项 `PW-10` / `PW-11` 已归入 [M_polish.md](../../actionPlan/M_polish.md) 阶段二（`POL-UX*`），按 [../README.md](../README.md) §三 归档（`git mv` 保留历史，正文只增不改）。
+> **承接位** → 交互残项 [M_polish.md](../../actionPlan/M_polish.md) §1 阶段二（承接表见其 §4）；**不变量 `I24`~`I26` 与 `web.attach` 诊断字段仍现行有效**（工程侧见 [M8.md](../../actionPlan/M8.md) §13 + [../../../source/README.md](../../../source/README.md)）。
+
 > 类型：**跨里程碑地基补丁**（不占用 M1–M8 编号；**独立成文** —— 与 [M_patchAB_rest.md](M_patchAB_rest.md) 平级，但**不改动该文件任何一行**，只做**单向引用**）
 > 动机：**2026-10-06 真机实证** —— 工作流 `imgTest` 连续三次运行（**1 次「假成功」+ 2 次失败**）暴露：网页版通道**缺少「节点/运行 ↔ 窗口」的绑定与仲裁**；
 > 且「就绪」判据只到**凭证级**（有 Cookie / userToken），不到**页面级**（窗口 / 页面 / 交互态可用）。本文把**根因、纠错与修正设计**固化为可执行补丁。
 > 编号空间：任务 **`PW-01`…`PW-13`**（验证 `VW-*` / 验收 `AW-*`）· 决策 **`D-33`…`D-36`**（**已于 2026-10-07 拍板**，见 §9；承接 `D-20` / `D-22` / `D-30`；与 [M_patchAB_rest.md](M_patchAB_rest.md) §9 已用的 `D-25`…`D-32` 语义**不重叠** —— **只引用，不修改该文件**）· 不变量 **`I24`**（窗口归属唯一）/ **`I25`**（就绪三级）/ **`I26`**（证据归属）。
 > 状态：🟢 **批 1 已收口（2026-10-11）** —— `D-33②`（**独立窗口 · 真并行**）· `D-34①`（`answer_selector` 维持**可选**，以**真机实测**驱动）· `D-35③`（复位 = **首次 + 失败时**）· `D-36②`（`web.attach` **降级为诊断字段**）。**代码已落地**：`PW-01`（归属贯穿）+ `PW-03`（就绪三级）（2026-10-07）+ **`PW-02` / `PW-04` / `PW-05` / `PW-06` / `PW-08`（批 1 · 2026-10-11）**（构建 0/0 · `api_probe --exec-selftest` **464 → 490 / 0** · `check_all.ps1` **14/14** · 文档断链见 §7.1b）；**⛔ 真机 `AW-*` 未跑**（本批为**纯离线**批）。
-> 相关：现行计划 [M8.md](M8.md)（网页通道方案 E）· 实测记录 [../网页版协议实测记录.md](../Archive/网页版协议实测记录.md) §10.6 · 索引 [../CHANGELOG.md](../CHANGELOG.md)
+> 相关：现行计划 [M8.md](../../actionPlan/M8.md)（网页通道方案 E）· 实测记录 [../网页版协议实测记录.md](../网页版协议实测记录.md) §10.6 · 索引 [../CHANGELOG.md](../../CHANGELOG.md)
 > 建立：**2026-10-06**（v1）· 决策拍板与同步：**2026-10-07**（v2）
-> ✅ **已固定（2026-10-08 全量梳理 · 口径见 [../DocMAP.md](../DocMAP.md) §五）**：§9 `D-33`~`D-36` 与 §5 `I24`~`I26` **视为契约**（不再重新讨论）；已落地 = `PW-01` / `PW-03` / `PW-07` / `PW-07g`（+ §4.7 `PW-13`）。
+> ✅ **已固定（2026-10-08 全量梳理 · 口径见 [../DocMAP.md](../../DocMAP.md) §五）**：§9 `D-33`~`D-36` 与 §5 `I24`~`I26` **视为契约**（不再重新讨论）；已落地 = `PW-01` / `PW-03` / `PW-07` / `PW-07g`（+ §4.7 `PW-13`）。
 > ✅ **拍板落盘（2026-10-09 · 零代码改动）** —— 本节原三项待定项**已全部拍板**：**`PQ-13`**（`W-D8` 模板占位符 ⇒ **改为报错**，落地 `PW-10`）· **`PQ-14`**（单 `\n` ⇒ **不做**「2 行并 1 段」推断 · 取证并入 `AW-04`）· **`PQ-15`**（`PW-14` 取 Markdown 原文 ⇒ **不排期**）。
-> ✅ **`PW-12` 已落地（2026-10-15 · 收口批 · 文档）** —— 本文件 + [M8.md](M8.md) + `CHANGELOG` + `DocMAP` 同步（见 §10 v8）；**`PW-10` ✅（2026-10-16 · 代码批 · 模板未填充占位符改为报错 · `PQ-13` 落地）** · **`PW-11` ✅（2026-10-16 · 代码批 · 归档保留下限 `kHistoryFloor=3`）**；**真机归用户手工（待登录态）**：`AW-01` / `AW-03` / `AW-04` / `AW-06` + 批 1 引入真机项（`n3(deepseek)` 运行期间 `n7(doubao)` 窗口存活 · 三类错误文案可分辨 · 同站点两窗口并行 · 连续两次运行结果一致 · 见 §6 各行末尾「⛔ 真机」）。
+> ✅ **`PW-12` 已落地（2026-10-15 · 收口批 · 文档）** —— 本文件 + [M8.md](../../actionPlan/M8.md) + `CHANGELOG` + `DocMAP` 同步（见 §10 v8）；**`PW-10` ✅（2026-10-16 · 代码批 · 模板未填充占位符改为报错 · `PQ-13` 落地）** · **`PW-11` ✅（2026-10-16 · 代码批 · 归档保留下限 `kHistoryFloor=3`）**；**真机归用户手工（待登录态）**：`AW-01` / `AW-03` / `AW-04` / `AW-06` + 批 1 引入真机项（`n3(deepseek)` 运行期间 `n7(doubao)` 窗口存活 · 三类错误文案可分辨 · 同站点两窗口并行 · 连续两次运行结果一致 · 见 §6 各行末尾「⛔ 真机」）。
 
 > **§0.6 全量判定（2026-10-11 · 核对后落盘）**：
 > * 🔵 **已完成 · 勾账**：`PW-01` · `PW-03` · `PW-07` · `PW-07g` · `PW-13`（§4.7）。
 > * ✅ **批 1 已收口 —— 四处收口契约 `I24` / `I26` 的代码落地**：**`PW-02`（窗口表 —— 本补丁**唯一结构改动**）** · `PW-04`（归属化运行态）· `PW-05`（归因分离）· `PW-06`（同站点真并行 · 结构部分）· `PW-08`（运行级复位）—— 全部 **2026-10-11** 落地（离线断言 **+26**）；**真机 `AW-*` 待跑**（§6 各行末尾）。**`PW-12` ✅ 已落地（2026-10-15 · 收口批）**；**`PW-10` / `PW-11` ✅ 已落地（2026-10-16 · 代码批 · 见 §10 v9）**；`PW-09` ⏸ 不排期。
 > * `PW-11` ✅ **已落地（2026-10-16 · 保留下限 `kHistoryFloor=3`）**。
 > * ⏸ **不排期**：`PW-09`（`answer_selector` 回填 —— `D-34①` 本就「可选」，**真机复现假成功前无收益**）· `PW-14`（`PQ-15` 已拍板）。
-> * ✅ **`PW-12` 文档收尾已落地（2026-10-15 · 收口批）**：本文件 + [M8.md](M8.md) 状态行 + `CHANGELOG` + `DocMAP` 同步（`DevPlan` 由 UI 写入）；实测记录同步归真机批。
-> * ⏳ **真机（需真实登录态）**：`AW-01` / `AW-03` / `AW-04` / `AW-06` —— 与 [M8.md](M8.md) `M8-14` **同批**跑。
+> * ✅ **`PW-12` 文档收尾已落地（2026-10-15 · 收口批）**：本文件 + [M8.md](../../actionPlan/M8.md) 状态行 + `CHANGELOG` + `DocMAP` 同步（`DevPlan` 由 UI 写入）；实测记录同步归真机批。
+> * ⏳ **真机（需真实登录态）**：`AW-01` / `AW-03` / `AW-04` / `AW-06` —— 与 [M8.md](../../actionPlan/M8.md) `M8-14` **同批**跑。
 > * ✅ **优先级依据（历史记录）**：`I24` / `I26` 曾「**已写入契约但代码未满足**」⇒ 即网页版「**假成功 / 串答案**」的根因；**批 1 已按「先 `PW-02` + `PW-04`、再 `PW-05` / `PW-06`」的顺序清理完毕**（2026-10-11）。
 
 
@@ -29,19 +32,19 @@
 
 - **不是新里程碑**：本文是「地基补丁」—— 修的是**网页通道的运行时地基**（窗口归属 / 就绪判据 / 证据归属），**不动** M8 的路线选择（方案 E：文字回 WebView2 + 图片走站点上传模板）。
 - **与 `M8-37` 的关系**：`M8-37`（运行期自动识别 · 零开关）**方向保留**；本文修正的是它**成立的前提** —— 自动识别只有在「窗口归属明确 + 页面处于就绪态」时才有意义；否则它会把「页面没就绪」误判成「站点没有入口」，把「布局容器的新文本」当成「回答」。
-- **归口**：任务看板仍是 [../DevPlan.todo](../DevPlan.todo)（`PW-*` 条目**待由 UI 写入** —— 手写 `key`/`id` 有破坏 JSON 树的风险，沿用既有口径）。
+- **归口**：任务看板仍是 [../DevPlan.todo](../../DevPlan.todo)（`PW-*` 条目**待由 UI 写入** —— 手写 `key`/`id` 有破坏 JSON 树的风险，沿用既有口径）。
 
 ### 0.2 被纠错的现有设计表述（本轮已改）
 
 | # | 文档 / 位置 | 原文（错误或**不充分**的设计表述） | 修正 |
 |---|---|---|---|
-| 1 | [M8.md](M8.md) §9.6 | 「点「运行」即自动跑完整链路」/「两站只差真实登录态」 | 加**前提**：窗口归属明确 + 页面交互态就绪；真机已实证**不满足时两类失败** |
-| 2 | [M8.md](M8.md) §13.7 | 「`answer_selector` 🟡 未回填 → 运行期自动识别」= **已可跑** | 改为**风险项**：自动识别已实证会命中布局容器（`div.bp5-overflow-list` → **12 字节**）⇒ **真机前建议回填** |
-| 3 | [../网页版协议实测记录.md](../Archive/网页版协议实测记录.md) §10.6③ | 答案容器 = 「发送前基线差分」 | 补：**差分 ≠ 归属**；须加「与本轮发送绑定 + 持续增长 + 排除布局/侧栏」判据（`PW-07`） |
+| 1 | [M8.md](../../actionPlan/M8.md) §9.6 | 「点「运行」即自动跑完整链路」/「两站只差真实登录态」 | 加**前提**：窗口归属明确 + 页面交互态就绪；真机已实证**不满足时两类失败** |
+| 2 | [M8.md](../../actionPlan/M8.md) §13.7 | 「`answer_selector` 🟡 未回填 → 运行期自动识别」= **已可跑** | 改为**风险项**：自动识别已实证会命中布局容器（`div.bp5-overflow-list` → **12 字节**）⇒ **真机前建议回填** |
+| 3 | [../网页版协议实测记录.md](../网页版协议实测记录.md) §10.6③ | 答案容器 = 「发送前基线差分」 | 补：**差分 ≠ 归属**；须加「与本轮发送绑定 + 持续增长 + 排除布局/侧栏」判据（`PW-07`） |
 | 4 | 同上 §10.6④ | 「取不到候选 ⇒ 如实报错（拖拽/粘贴入口形态仍不支持）」 | 补**前置条件**：需先满足「页面处于可上传交互态」；**0 个 `input[type=file]` ≠ 站点没有入口**（实证：同站运行 1 命中、运行 2 为 0） |
 | 5 | 同上 §8.3 B1 | 豆包「上传入口形态 = `paste_only`」 | 补：入口是**按需挂载**的**状态相关**组件；视口 / 登录态 / 交互态任一不满足都会临时为 0（`paste_only` 为假象） |
 | 6 | 同上「会话与窗口」小节 | 网页版「窗口串行复用」= 够用 | 纠正为**不够**：串行复用只保证「当前站点正确」，**不保证节点归属正确**；同站点多节点**无法区分**，跨站点**抢占无等待、被抢占者无通知** |
-| 7 | [M8.md](M8.md) §13.6 | `drop_zone` / `paste_only` 「沿用**明确不支持 + 可操作报错**」 | 语义保留，但**报错归因**必须分离：先判「页面是否就绪」，再谈「形态是否支持」（`PW-05`） |
+| 7 | [M8.md](../../actionPlan/M8.md) §13.6 | `drop_zone` / `paste_only` 「沿用**明确不支持 + 可操作报错**」 | 语义保留，但**报错归因**必须分离：先判「页面是否就绪」，再谈「形态是否支持」（`PW-05`） |
 
 ### 0.3 执行原则（承接，不改语义）
 
@@ -247,7 +250,7 @@
 | `aiwrite.exe --upload-selftest` | ≥ **72 / 0**（**串行**跑 —— 共用 `%TEMP%\aiwrite-upload\selftest` 素材目录，并发会假失败） |
 | `aiwrite.exe --web-dom-dump --provider <id>` | 只读枚举正常（用于 `PW-09` 回填） |
 | 文档断链自检 | **0** |
-> 📌 **本表 = 2026-10-08 快照，数字不追溯改写**（口径见 [../../AI_README.md](../../AI_README.md) §10.1）：**现行基线一律看 [../../AI_README.md](../../AI_README.md) §2** —— 例：`poll_answer_gate_test` 已随 `PW-07` / `PW-07i` 扩充，本表的 **12 / 0** 已不是现行值。
+> 📌 **本表 = 2026-10-08 快照，数字不追溯改写**（口径见 [../../AI_README.md](../../../AI_README.md) §10.1）：**现行基线一律看 [../../AI_README.md](../../../AI_README.md) §2** —— 例：`poll_answer_gate_test` 已随 `PW-07` / `PW-07i` 扩充，本表的 **12 / 0** 已不是现行值。
 
 
 ### 7.1b 批 1 实测（2026-10-11 · **纯离线批** · 本机）
@@ -255,11 +258,11 @@
 | 项 | 实测 | 备注 |
 |---|---|---|
 | 构建（MSVC /W4） | **0 error / 0 warning** | `build\logs\build_debug_20261011_181720.log` |
-| `api_probe.exe --selftest` | **exit 0** · 七组全 PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · DOM 探测 27/0 · **执行器 490/0**） | 唯一权威位 = [AI_README §2](../../AI_README.md) |
+| `api_probe.exe --selftest` | **exit 0** · 七组全 PASS（配置表 50/0 · 图片准备 19/0 · 上传证据 32/0 · 站点上传模板 21/0 · DOM 探测 27/0 · **执行器 490/0**） | 唯一权威位 = [AI_README §2](../../../AI_README.md) |
 | `api_probe.exe --exec-selftest` | **490 通过 / 0 失败**（**464 → 490**，本批 **+26** = `PW-02` 11 + `PW-04` 4 + `PW-05` 5 + `PW-08` 6） | 同上 |
 | `api_probe.exe --graph-selftest` | **110 / 0** | 无回归 |
 | `check_all.ps1` | **14 项 · 失败 0 项**（exit 0） | `build\logs\check_all_20261011_182044.log` |
-| 文档断链 | 见 [../../AI_README.md](../../AI_README.md) §2 / [../loop_dev.md](../loop_dev.md) §4 | `python vcpkg-cache/check_links.py` |
+| 文档断链 | 见 [../../AI_README.md](../../../AI_README.md) §2 / [../loop_dev.md](../../loop_dev.md) §4 | `python vcpkg-cache/check_links.py` |
 | **真机** | **⛔ 未跑（如实登记）** | 本批全部验收均为离线；§6 各行末尾的「⛔ 真机」项**留给批 6** |
 
 ### 7.2 真机验收（`AW-*`）
@@ -293,16 +296,16 @@
 | # | 文档 | 本轮动作 |
 |---|---|---|
 | 1 | `docs/actionPlan/M_patchC_web_node_bind.md`（本文件） | 🆕 新建 |
-| 2 | [M8.md](M8.md) | 顶部状态行 + `M8-37` 行 + §9.6 + §13.6 / §13.7 纠错，并加本文链接 |
-| 3 | [../网页版协议实测记录.md](../Archive/网页版协议实测记录.md) | §8.3 B1 / §10.5 前 / §10.6 ③④ + 「会话与窗口」小节纠错 |
-| 4 | [../CHANGELOG.md](../CHANGELOG.md) | `[Unreleased]` 新增本轮条目 + 文档索引加本文 |
-| 5 | [../DocMAP.md](../DocMAP.md) | 文档地图加本文 |
+| 2 | [M8.md](../../actionPlan/M8.md) | 顶部状态行 + `M8-37` 行 + §9.6 + §13.6 / §13.7 纠错，并加本文链接 |
+| 3 | [../网页版协议实测记录.md](../网页版协议实测记录.md) | §8.3 B1 / §10.5 前 / §10.6 ③④ + 「会话与窗口」小节纠错 |
+| 4 | [../CHANGELOG.md](../../CHANGELOG.md) | `[Unreleased]` 新增本轮条目 + 文档索引加本文 |
+| 5 | [../DocMAP.md](../../DocMAP.md) | 文档地图加本文 |
 | 6 | [M_patchAB_rest.md](M_patchAB_rest.md) | ⛔ **不改动**（新补丁**独立成文**；本轮只**单向引用**它，不向该文件写入任何内容） |
-| 7 | [../DevPlan.todo](../DevPlan.todo) | ⏳ **待由 UI 写入** `PW-*`（沿用既有口径；不手写 JSON） |
-| 8 | [../变量术语对照表.md](../变量术语对照表.md) | ✅ 本轮已改：§11.2 命名与补丁编号表加 `M_patchC` / `PW-xx` / `VW-xx` / `AW-xx` |
+| 7 | [../DevPlan.todo](../../DevPlan.todo) | ⏳ **待由 UI 写入** `PW-*`（沿用既有口径；不手写 JSON） |
+| 8 | [../变量术语对照表.md](../../变量术语对照表.md) | ✅ 本轮已改：§11.2 命名与补丁编号表加 `M_patchC` / `PW-xx` / `VW-xx` / `AW-xx` |
 | 9 | `roadmap.md` / `milestone_plan.md` / `节点编辑器使用说明.md` / `ai_writer_nodes.md` | ⏳ 随 `PW-12` 收尾按需同步（本轮**未动** —— 已核实这 4 份**没有** `M8-37` / 零开关 / 自动识别的错误表述，避免噪音） |
 | 10 | 本文件（**v2 · 2026-10-07**） | ✅ 决策拍板写回 **§9**；同步 **§1**（归属主线 = 独立窗口）· **§4.1**（窗口表）· **§4.4**（复位时机与动作）· **§4.5**（`D-34①`）· **§4.7**（🆕 `web.attach` 诊断字段）· **§5**（`I24` 措辞）· **§6**（`PW-02` / `PW-06` / `PW-07` / `PW-08` / `PW-09` / 🆕 `PW-13`）· **§7.2**（`AW-03` / `AW-04` / 🆕 `AW-06`）· **§10**（v2 行）；并修 3 处行号勘误 |
-| 11 | [../CHANGELOG.md](../CHANGELOG.md) | ✅ v2 同步：索引行的「待拍板」→「已拍板」+ 新增拍板条目 |
+| 11 | [../CHANGELOG.md](../../CHANGELOG.md) | ✅ v2 同步：索引行的「待拍板」→「已拍板」+ 新增拍板条目 |
 | 12 | 本文件（**v4 · 2026-10-08**） | ✅ `PW-07` 落地同步：**§4.5**（判据口径 + **未做项如实登记**）· **§6**（`PW-07` 行 ✅ + 文件 / 验收）· **§7.1**（`--selftest` 数字 422 → **423**）· **§10**（v4 行） |
 
 ---
@@ -335,8 +338,8 @@
 | 2026-10-07 | **v3** | **P1 首段落地（代码已改）** —— **`PW-01` 归属贯穿**：🆕 `web/web_owner.h`（`WebOwner` + 纯函数）· `LoginRequest.owner` / `with_owner()` · `ExecutionContext.run_id` · 节点层 `web_owner_of()` · 日志 `[owner run#node]`；**`PW-03` 就绪三级（`I25`）**：🆕 `web/ready_level.h`（位 + 判定 + 归因文案纯函数）· `wait_ready()` / `peek_page_state()`（L1 等 controller · L2 `readyState=complete` **且**实时 URL 站点命中 · L3 可见输入候选 / 附件入口）· **归因分离**（附件未挂载 ⇒ 「页面未就绪」，不再说「拖拽 / 粘贴入口」）· 就绪缓存 1.5 s；`run_script_sync` / `set_file_input_files` / `resolve_file_input_selector` 接入前置就绪，`dom_chat` 增 L3 诊断等待（不阻断）。**验证**：构建 **0/0** · `api_probe --selftest` **422/0**（407 → +15）· `--upload-selftest` **72/0**（串行）。真机 `AW-01` / `AW-06` **待登录后跑**；`M_patchAB_rest.md` 仍**一行未改**。 |
 | 2026-10-08 | **v4** | **`PW-07` 答案归属门落地（代码已改 · 精简版 · 只动判据）**：`ai/dom_web_client.cpp` 的 `kPollScript` 增 **「装饰 / 布局文本」整串排除门**（`kAnswerChromeTextRe` → `dom_cfg_json()` 的 `cfg["answer_chrome_text"]`，纯数据不落盘）+ **删除**旧「短候选也算成功」的 `fallback`（改 `refuse.short` 计数）+ **每轮体检串**（`note`：候选池数 / 装饰拒 / 过短拒 ⇒ C++ 侧 `last_poll_note` 进 `steps` / `error` / `log::warn` / 完成日志）；🆕 夹具 `source/tools/poll_answer_gate_test.js`（**抽真实脚本 + 迷你 DOM 真跑**：**10/0**，`--old` 负向 **5 条如实 FAIL**）；`tools/api_probe.cpp` 增 **`VB2-22⑥`**。**验证（本机实测）**：构建 **0 error / 0 warning** · `api_probe --selftest` **423/0**（422 → **+1**）· `--exec-selftest` **423/0** · `--graph-selftest` **110/0**（不变）；真机 `AW-04` ⏳ **待跑**。**同日存档**：早先那批 `PW-07b..n`（`dom_web_client.cpp` **877 → 2240 行**重写）**从未提交** ⇒ 冻结为分支 `wip/pw07n-20261008`（`9252038`）+ `build/_backup/20261008_pw07n/`；本次修复以 `main`（`33b647a`）为基线**另起分支** `fix/pw07-answer-chrome-gate-20261008`。 |
 | 2026-10-08 | **v5** | **`PW-07g` 答案文本保真落地（代码已改 · 真机物证驱动 · 口径拍板 **A2**）** —— **真机物证**（运行 `20261008-172758`）：`PW-07f` 发送链路**已通**（`发送回执：URL已变化 / 新节点 10 / 输入框 0 字`；答案容器 `div.container-qX9Csx`、文本 **759 字节**），**却整篇 1 行** —— 归档头部固定 8 行各带 1 个 `\n` ⇒ 文件里的 8 个 LF **全在文件头**，答案贡献 **0** 个。**根因**：`kPollScript` 的 `norm()`（`\s+` → `' '`）**判据与产物同源**（同一个归一值既判长度又当答案落盘）。**修法（方案 A：判据与产物分离）**：① 页面脚本**无损搬运**（`out.text = raw`；判据仍吃 `norm` ⇒ `PW-07` 的「12 字节假成功」防线**不动**）+ 新增 `out.lf`（`lf_count` = 页面 `\n` 数，**分段物证**随 poll 回传）；② 🆕 C++ 纯函数 `ai::format_answer_text()` 排版 —— `\r\n`/`\r`→`\n` · 清行尾空白 · 行内连续空白→单空格 · **行首缩进原样保留**（B1：不破坏代码块 / 引用）· **空行规范化 A2**（连续 `\n{3,}` → `\n\n`：**空行 = 段界**，行内软换行保留 `\n`）· 首尾 trim · 纯空白 → 空串；③ `dom_chat` 每轮对**原始**文本重算（幂等），完成日志 `；行 N（页面换行 k，折叠 R）`（`R` **钳 0**：页面孤立 `\r` 归一成 `\n` 会让差为负）。**不加 base64**（传输层已实证 `ExecuteScript` JSON + `nlohmann::json::parse` 逐字节无损）。**离线锁**：`api_probe` 增 **`VB2-22⑦`**（静态：产物不得再归一 + `lf` 随 poll 回传）+ **`VB2-22⑧`**（排版纯函数 **8 例**：多段保留 / CRLF / **空行规范化（含「恰好 1 空行不动」）** / 行内·行尾空白 / 缩进保留 / Markdown 原样 / trim / 空串 / 长文本无损；失败时打印 `blank_got` 等**逐例明细**）；夹具 `poll_answer_gate_test.js` 增 **⑯ 多段保真** / **⑰ 页面侧原样搬运** + `--old` **第二注入**（产物换回 `norm`）。**验证（本机实测）**：构建 **0 error / 0 warning** · `api_probe --selftest` **425/0** · `--exec-selftest` **425/0** · `--graph-selftest` **110/0** · 夹具 **12/0**（`--old` **5 / 7** = 预期，exit 1）· `send_chain_test.js` **17/0**。**待办**：真机复跑（看日志 `页面换行 k` / `折叠 R` / `行 N` 与输出空行）+ `M8.md` §9.6 复盘行；候选登记 **`PW-14`**（仅当站点只在「复制」按钮给 Markdown 源文才需要）。 |
-| 2026-10-09 | **v6** | **待定项拍板落盘（只改文档 · 零代码改动）**：三项待定项全部拍板 —— **`PQ-13`**（`W-D8` 模板未填充占位符 ⇒ **改为报错**，落地 `PW-10` · §4.6）· **`PQ-14`**（单 `\n` ⇒ **不做**「2 行并 1 段」推断，取证并入 `AW-04`，不另开项 · §4.5 + §6 `PW-07g`）· **`PQ-15`**（`PW-14` 取 Markdown 原文 ⇒ **不排期** · §6 P4）；同批补 **`A1` 口径定义**（§4.5 原先引用未定义代号）。同步 [../DocMAP.md](../DocMAP.md) §5.3 · [../DevPlan.todo](../DevPlan.todo)（三项置 done）· [../CHANGELOG.md](../CHANGELOG.md)。**代码未改**。 |
-| 2026-10-16 | **v9（`PW-10` / `PW-11` 落地批 · 代码 + 离线断言）** | **`PW-10` 模板未填充占位符 ⇒ 报错（`PQ-13` 落地 · `nodes/local_nodes.cpp` 新增 `is_placeholder_name()`；未匹配占位符抛 `NodeError` 含占位符名 · JSON 字面量 `{…}` 不误伤）+ `PW-11` 归档保留下限（`output_archive.h` 新增 `kHistoryFloor=3` · `keep_history=false` 也保底 3 份）** —— §6 P4 两行改 ✅ · 顶部状态行同步。**验证（2026-10-16 本机）**：构建 **0/0** · `--exec-selftest` **655→681 / 0** · `check_all` **15/15** · 断链全库 0。同批：[../CHANGELOG.md](../CHANGELOG.md) · [../../AI_README.md](../../AI_README.md) §2。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
-| 2026-10-15 | **v8（收口批 · 文档）** | **`PW-12` 文档收尾落地**：① 顶部状态行 + §0.6 全量判定 + §6 表 `PW-12` 行就地改 ✅；② 未做项**如实保留**（`PW-10` 占位符报错 · 口径已拍板 `PQ-13` · 留后续批 · `PW-11` 归档保留份数 · 留后续批；`PW-09` ⏸ 不排期）；③ 真机 `AW-01`/`AW-03`/`AW-04`/`AW-06` **归用户手工**（与 [M8.md](M8.md) 真机三件同批）；④ [M8.md](M8.md) 状态行同步 + [../CHANGELOG.md](../CHANGELOG.md) + [../DocMAP.md](../DocMAP.md)。**验证**：零代码 · `check_links` 复检 **1517 / 0**。 |
-| 2026-10-11 | **v7** | **批 1 收口（代码 + 文档 · **纯离线批**）—— `PW-02` / `PW-04` / `PW-05` / `PW-06`（结构部分）/ `PW-08` 全部落地**：① 🆕 `source/web/include/window_table.h`（**窗口表** + `plan_reset` 复位计划 · 纯函数）；② 🆕 `source/web/include/web_error.h`（三类归因文案 · 纯函数）；③ `source/web/include/web_owner.h` 增 `owner_accepts`（`I26` 证据准入）+ `ui_window_owner()` / `selftest_owner()`；④ `web/webview_host.{h,cpp}` **结构改动**：进程级单例状态 ⇒ **每窗口 `WindowCtx`**（`thread_local t_cur` + `CtxScope`）+ 窗口表（`g_table` / `g_windows`）+ **环境按 profile 共享**（`g_envs`，同 profile 单创建者 + 等待复用）+ 每窗口独立窗口类名 + `ctx_start/ctx_close/ctx_close_all` + `prepare_window`（统一前置 + `PW-08` 复位）+ `BusyGuard`（同窗口串行守卫）+ `windows_report()` / `close_owner_window()`；**删除全部「先关旧窗」**（`ensure_session` / `run_script_sync` / 交件 / CDP / `logout_site`）；`wait_page_ready()` 删除；⑤ `web/webview_host.h`：`LoginWindow` 改**句柄**（绑定 owner · 默认 `界面#登录窗口`）· `WebResourceRecord.owner` + `begin/take/ensure_resource_capture(owner, site)` · `current_window_site/window_on_site` 按归属 · `windows_report` / `close_owner_window`；⑥ 归属贯穿：`ai/include/deepseek_web_client.h`（`WebChatRequest.owner`）· `ai/src/deepseek/deepseek_web_client.cpp`（PoW 带 owner）· `nodes/src/local_nodes.cpp`（内置协议路径 `boot.owner`）· `ai/src/upload/upload_registry.cpp`（按归属取回执）· `ui/src/property_panel.cpp`（界面窗口按归属判定）；⑦ `tools/api_probe.cpp` 新增 **26 条**离线断言（窗口表 11 / `PW-08` 6 / `PW-04` 4 / `PW-05` 5）。**验证（2026-10-11 本机）**：构建 **0/0** · `--exec-selftest` **464 → 490 / 0** · `--graph-selftest` **110/0** · `check_all.ps1` **14/14**；**⛔ 真机未跑**（§7.1b）。同批：[../CHANGELOG.md](../CHANGELOG.md) `[Unreleased]` · [../AI_Status.md](../AI_Status.md) · [../loop_dev.md](../loop_dev.md)。**⛔ 未提交**（按 [../../AI_README.md](../../AI_README.md) §6「改完即停并汇报」）。 |
+| 2026-10-09 | **v6** | **待定项拍板落盘（只改文档 · 零代码改动）**：三项待定项全部拍板 —— **`PQ-13`**（`W-D8` 模板未填充占位符 ⇒ **改为报错**，落地 `PW-10` · §4.6）· **`PQ-14`**（单 `\n` ⇒ **不做**「2 行并 1 段」推断，取证并入 `AW-04`，不另开项 · §4.5 + §6 `PW-07g`）· **`PQ-15`**（`PW-14` 取 Markdown 原文 ⇒ **不排期** · §6 P4）；同批补 **`A1` 口径定义**（§4.5 原先引用未定义代号）。同步 [../DocMAP.md](../../DocMAP.md) §5.3 · [../DevPlan.todo](../../DevPlan.todo)（三项置 done）· [../CHANGELOG.md](../../CHANGELOG.md)。**代码未改**。 |
+| 2026-10-16 | **v9（`PW-10` / `PW-11` 落地批 · 代码 + 离线断言）** | **`PW-10` 模板未填充占位符 ⇒ 报错（`PQ-13` 落地 · `nodes/local_nodes.cpp` 新增 `is_placeholder_name()`；未匹配占位符抛 `NodeError` 含占位符名 · JSON 字面量 `{…}` 不误伤）+ `PW-11` 归档保留下限（`output_archive.h` 新增 `kHistoryFloor=3` · `keep_history=false` 也保底 3 份）** —— §6 P4 两行改 ✅ · 顶部状态行同步。**验证（2026-10-16 本机）**：构建 **0/0** · `--exec-selftest` **655→681 / 0** · `check_all` **15/15** · 断链全库 0。同批：[../CHANGELOG.md](../../CHANGELOG.md) · [../../AI_README.md](../../../AI_README.md) §2。**⛔ 未提交**（按 [../../AI_README.md](../../../AI_README.md) §6「改完即停并汇报」）。 |
+| 2026-10-15 | **v8（收口批 · 文档）** | **`PW-12` 文档收尾落地**：① 顶部状态行 + §0.6 全量判定 + §6 表 `PW-12` 行就地改 ✅；② 未做项**如实保留**（`PW-10` 占位符报错 · 口径已拍板 `PQ-13` · 留后续批 · `PW-11` 归档保留份数 · 留后续批；`PW-09` ⏸ 不排期）；③ 真机 `AW-01`/`AW-03`/`AW-04`/`AW-06` **归用户手工**（与 [M8.md](../../actionPlan/M8.md) 真机三件同批）；④ [M8.md](../../actionPlan/M8.md) 状态行同步 + [../CHANGELOG.md](../../CHANGELOG.md) + [../DocMAP.md](../../DocMAP.md)。**验证**：零代码 · `check_links` 复检 **1517 / 0**。 |
+| 2026-10-11 | **v7** | **批 1 收口（代码 + 文档 · **纯离线批**）—— `PW-02` / `PW-04` / `PW-05` / `PW-06`（结构部分）/ `PW-08` 全部落地**：① 🆕 `source/web/include/window_table.h`（**窗口表** + `plan_reset` 复位计划 · 纯函数）；② 🆕 `source/web/include/web_error.h`（三类归因文案 · 纯函数）；③ `source/web/include/web_owner.h` 增 `owner_accepts`（`I26` 证据准入）+ `ui_window_owner()` / `selftest_owner()`；④ `web/webview_host.{h,cpp}` **结构改动**：进程级单例状态 ⇒ **每窗口 `WindowCtx`**（`thread_local t_cur` + `CtxScope`）+ 窗口表（`g_table` / `g_windows`）+ **环境按 profile 共享**（`g_envs`，同 profile 单创建者 + 等待复用）+ 每窗口独立窗口类名 + `ctx_start/ctx_close/ctx_close_all` + `prepare_window`（统一前置 + `PW-08` 复位）+ `BusyGuard`（同窗口串行守卫）+ `windows_report()` / `close_owner_window()`；**删除全部「先关旧窗」**（`ensure_session` / `run_script_sync` / 交件 / CDP / `logout_site`）；`wait_page_ready()` 删除；⑤ `web/webview_host.h`：`LoginWindow` 改**句柄**（绑定 owner · 默认 `界面#登录窗口`）· `WebResourceRecord.owner` + `begin/take/ensure_resource_capture(owner, site)` · `current_window_site/window_on_site` 按归属 · `windows_report` / `close_owner_window`；⑥ 归属贯穿：`ai/include/deepseek_web_client.h`（`WebChatRequest.owner`）· `ai/src/deepseek/deepseek_web_client.cpp`（PoW 带 owner）· `nodes/src/local_nodes.cpp`（内置协议路径 `boot.owner`）· `ai/src/upload/upload_registry.cpp`（按归属取回执）· `ui/src/property_panel.cpp`（界面窗口按归属判定）；⑦ `tools/api_probe.cpp` 新增 **26 条**离线断言（窗口表 11 / `PW-08` 6 / `PW-04` 4 / `PW-05` 5）。**验证（2026-10-11 本机）**：构建 **0/0** · `--exec-selftest` **464 → 490 / 0** · `--graph-selftest` **110/0** · `check_all.ps1` **14/14**；**⛔ 真机未跑**（§7.1b）。同批：[../CHANGELOG.md](../../CHANGELOG.md) `[Unreleased]` · [../AI_Status.md](../../AI_Status.md) · [../loop_dev.md](../../loop_dev.md)。**⛔ 未提交**（按 [../../AI_README.md](../../../AI_README.md) §6「改完即停并汇报」）。 |
 

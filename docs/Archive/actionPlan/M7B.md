@@ -18,7 +18,7 @@
 > **全部通过前不进入实现**（同 P7-b 模式）；**执行偏离如实登记**：step 1~3 是**与站点无关的地基**
 > （协议 / 管道 / 驱动），经用户审核后先行落地，`M7B-06`/`07` 的真站点人工登录仍未过
 > 结构：`§0` 摘要 ｜ `§1` 现状证据 ｜ `§2` 决议登记册 ｜ `§3` 目标架构 ｜ `§4` 风险与缓解 ｜ `§5` 前置技术验证 ｜ `§6` 实施任务 ｜ `§7` 配置表迁移 ｜ `§8` `I2` 解冻与 CLI 契约重建 ｜ `§9` 断言与不变量 ｜ `§10` 站点重测清单 ｜ `§11` 验证基线与文档同步 ｜ `§12` 回滚点 ｜ `§13` 合规红线 ｜ `§14` 开口项与待拍板
-> 相关：设计 [../ai_writer_nodes.md](../../ai_writer_nodes.md)｜第二轮 [M7.md](M7.md)｜路线图 [../roadmap.md](../../roadmap.md)｜开发手册 [../../source/README.md](../../../source/README.md)｜补丁残项 [M_patchAB_rest.md](../../actionPlan/M_patchAB_rest.md)｜操作手册 [../节点编辑器使用说明.md](../../节点编辑器使用说明.md)
+> 相关：设计 [../ai_writer_nodes.md](../../ai_writer_nodes.md)｜第二轮 [M7.md](M7.md)｜路线图 [../roadmap.md](../../roadmap.md)｜开发手册 [../../source/README.md](../../../source/README.md)｜补丁残项 [M_patchAB_rest.md](M_patchAB_rest.md)｜操作手册 [../节点编辑器使用说明.md](../../节点编辑器使用说明.md)
 
 ---
 

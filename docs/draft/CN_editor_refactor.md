@@ -5,7 +5,7 @@
 > 上游依据：用户 2026-10-19 反馈（上级节点中连线体验不行 · 小地图应固定在上级编辑器**渲染视图左下角**而非**画布**上 · 可进行重构，先出草案评审）
 > 编号空间：`CEA-*`（任务 `CEA-0x`）· `CEA-D*`（决策）· `CEA-Q*`（待拍板）· `CEA-V*`（验证）
 > 状态：🟢 **已评审通过（2026-10-19）· 阶段 1（CEA-01/CEA-02）代码完成 · 构建 0/0 + check_all 16/16 · 待 GUI 目测（CEA-V3/V8）**
-> 相关：[Composition_node.md](../Archive/actionPlan/Composition_node.md)（上级节点机制）· `source/ui/src/node_canvas.cpp`（主画布）· `source/ui/src/composite_editor.cpp`（上级编辑器）· [M_node_expansion 系列](../Archive/actionPlan/)（小地图 L3/对齐辅助）· [CHANGELOG.md](../CHANGELOG.md)
+> 相关：[Composition_node.md](../Archive/actionPlan/Composition_node.md)（上级节点机制）· `source/ui/src/node_canvas.cpp`（主画布）· `source/ui/src/composite_editor.cpp`（上级编辑器）· [M_node_expansion 系列](../Archive/actionPlan)（小地图 L3/对齐辅助）· [CHANGELOG.md](../CHANGELOG.md)
 > 建立：**2026-10-19**（v0.1 · 零代码）
 
 ---

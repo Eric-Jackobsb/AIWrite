@@ -1,6 +1,6 @@
 # 审计报告 · audit_cleanup_01 —— CLN-01 死代码扫描（未使用的全局 / 静态变量与函数）
 
-> 批次：`CLN-01`（对应 [../actionPlan/M_code_cleanup.md](../actionPlan/M_code_cleanup.md) §3.1）· 日期：2026-10-20
+> 批次：`CLN-01`（对应 [../actionPlan/M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §3.1）· 日期：2026-10-20
 > 性质：**删除前置审计闸门（§3.0）**的产物 —— 本批扫描结论 = **无删除项**，故「行动计划」无删除清单，仅登记结论与观察项。
 > 范围：`source/**`（**163 个 .cpp/.h**，全量），排除 `third_party/**`（vendored）与 `source/python/**`（Pydoll 休眠栈，硬边界 §6）。
 > 方法：自研静态扫描脚本（临时工具，不入库，见 §5）+ **全量构建 0 error / 0 warning 互证**（MSVC `/W4`，2026-10-20 物证 `build/logs/build_debug_20261020_002634.log`）。
@@ -22,7 +22,7 @@
 - **A 类**：所有 `static` 符号引用计数 ≥ 2（声明 + ≥1 次真实引用），无 refs=1。与构建基线互证：MSVC `/W4` 下 **C4505（未引用局部函数）未触发** ⇒ 编译单元内确无未引用 static 函数。证据留存 `build/tmp/scan_utf8.txt`（临时）。
 - **C1 `is_id_char`（ai/src/site_template.cpp:29）**：定义 `bool is_id_char(char ch)`；**L165 真实调用** `if (!is_id_char(ch)) {` ⇒ **已用**（扫描器误报，根因见 §5）。
 - **C2 `sink_it_` / `flush_`（utils/src/log.cpp）**：spdlog 自定义 sink 的**虚函数覆写**（`base_sink<Mutex>`），经 **vtable 分发**调用，代码中无同名直接引用 ⇒ **非死代码**。
-- **E `asyncMode()`（engine/include/executor.h:228）**：`bool asyncMode() const { return async_mode_.load(); }` —— 全库（含 app/ui/tools）**无调用点**。但它是 `Executor` 的**公开 inline 成员 API**（[CHANGELOG](../../docs/CHANGELOG.md)「新增 … asyncMode()/eventsPushed()」为 async 机制配套），属于**公共契约**，不在 CLN-01「static / 匿名命名空间符号」范围内。**建议保留**；若确需删除，走「待拍板」流程另行开批。**（2026-10-20 用户已拍板 = 保留（选项 A：公共契约完整性 + 未来 UI「执行中」指示可用；接受持续留在未引用 API 观察清单的代价）→ 观察项关闭。）**
+- **E `asyncMode()`（engine/include/executor.h:228）**：`bool asyncMode() const { return async_mode_.load(); }` —— 全库（含 app/ui/tools）**无调用点**。但它是 `Executor` 的**公开 inline 成员 API**（[CHANGELOG](../CHANGELOG.md)「新增 … asyncMode()/eventsPushed()」为 async 机制配套），属于**公共契约**，不在 CLN-01「static / 匿名命名空间符号」范围内。**建议保留**；若确需删除，走「待拍板」流程另行开批。**（2026-10-20 用户已拍板 = 保留（选项 A：公共契约完整性 + 未来 UI「执行中」指示可用；接受持续留在未引用 API 观察清单的代价）→ 观察项关闭。）**
 
 ## ③ 影响面 / 回滚点
 

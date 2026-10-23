@@ -1,8 +1,11 @@
 # M_node_expansion：节点扩展实施依据（L1 已定向 · L2 定稿 · L3 定稿 · L4 不做 · 引擎议题留本文）
 
-> 类型：**跨里程碑实施依据**（不占用 M1–M8 编号；与 [M_8nodes_extension.md](M_8nodes_extension.md) / [M_patchAB_rest.md](M_patchAB_rest.md) / [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md) / [M_canvas_snapshot.md](M_canvas_snapshot.md) / [Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md) 平级互链）。
-> 动机：基础路线已跑通（M6 第一批 2026-10-10 落地、面向 C 前置项收口 —— 见 [../roadmap.md](../roadmap.md) §四 / §八）；下一步 = nodes 的扩展。四层框架（L1/L2/L3/L4）已全部定稿。
-> 编号空间：`NE-Qx`（待讨论问题）· `NE-Dx`（决议记录）· `NE-01…`（拍板后启用）—— 前缀 `NE` = **N**ode **E**xpansion；已登记 [../../AI_README.md](../../AI_README.md) §5。
+> 📦 **已归档（2026-10-23 · 文档整理批次 `ARC-AR-02`）** —— 四层**全部定稿（2026-10-15）**，且 **L1 / L2 / L3 三层已全部实施完成**（L1 `2026-10-14` + 人工验收 `2026-10-15`；L2 6 个文本处理节点；L3 5 项 UX 功能），按 [../README.md](../README.md) §三 归档（`git mv` 保留历史，正文只增不改）。
+> **承接位** → 节点清单 / 交互**现行契约** = [../../节点编辑器使用说明.md](../../节点编辑器使用说明.md) §4 + [../../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.4；后续节点设计依据 = [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md)；打磨主线 = [M_polish.md](../../actionPlan/M_polish.md)；引擎议题（条件分支 / 循环 / 子工作流）**不排期 · 未立任务号**。
+
+> 类型：**跨里程碑实施依据**（不占用 M1–M8 编号；与 [M_8nodes_extension.md](M_8nodes_extension.md) / [M_patchAB_rest.md](M_patchAB_rest.md) / [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md) / [M_canvas_snapshot.md](M_canvas_snapshot.md) / [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) 平级互链）。
+> 动机：基础路线已跑通（M6 第一批 2026-10-10 落地、面向 C 前置项收口 —— 见 [../roadmap.md](../../roadmap.md) §四 / §八）；下一步 = nodes 的扩展。四层框架（L1/L2/L3/L4）已全部定稿。
+> 编号空间：`NE-Qx`（待讨论问题）· `NE-Dx`（决议记录）· `NE-01…`（拍板后启用）—— 前缀 `NE` = **N**ode **E**xpansion；已登记 [../../AI_README.md](../../../AI_README.md) §5。
 > 状态：🟢 **四层全部定稿（2026-10-15）** ——
 > - **L1**：✅ **实施完成（2026-10-14 · 见 [M_8nodes_extension.md](M_8nodes_extension.md) §6/§7）** —— `VL1-*` 全过 + `AL1-*` 用户人工验收（2026-10-15）；实施依据 = 独立文档 [M_8nodes_extension.md](M_8nodes_extension.md)；
 > - **L2**：✅ **已实施完成（2026-10-15）** —— **写入本文**；6 个文本处理节点（`TextSplit` / `TextExtract` / `TextClean` / `TextReplace` / `TextStats` / `TextDiff`）；分类 = 辅助功能 → 文本处理；`VL2-01…VL2-07` 进 `--exec-selftest`（546 → **655 / 0**）；
@@ -10,7 +13,7 @@
 > - **L4**：🔴 **不做** —— M6-03 的 5 个示例**仍在 M6 计划内**（不属于 L4）；
 > - **引擎议题**（条件分支 / 循环 / 子工作流）：**留在本文**，不排期、不立任务号；将来立项流程 = **将来再定**。
 > ⚠ **L2/L3 的实施前提 = L1 实施完成后**（L1-1 决议）—— 已满足（L1 于 2026-10-14 落地）。
-> 相关：[../roadmap.md](../roadmap.md) §六 / §十 · [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.3–§4.5 / §9.2 / §19.1 · [Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md) · [../../source/engine/src/node_registry.cpp](../../source/engine/src/node_registry.cpp) · [../../source/nodes/src/register_executors.cpp](../../source/nodes/src/register_executors.cpp) · 看板 `PQ-20` / `DOCS-NE-01`。
+> 相关：[../roadmap.md](../../roadmap.md) §六 / §十 · [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.3–§4.5 / §9.2 / §19.1 · [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) · [../../source/engine/src/node_registry.cpp](../../../source/engine/src/node_registry.cpp) · [../../source/nodes/src/register_executors.cpp](../../../source/nodes/src/register_executors.cpp) · 看板 `PQ-20` / `DOCS-NE-01`。
 > 建立：**2026-10-11**（v1）· **最近更新：2026-10-15（v6 —— L2/L3 实施完成 + 验收回填）**
 
 ---
@@ -44,8 +47,8 @@
 
 - **本文是 L2/L3 的实施依据**：L1 有独立实施文档 [M_8nodes_extension.md](M_8nodes_extension.md)；L2/L3 的方案**写入本文**（G-1 = 甲）。
 - **本文是 L1 的索引**：L1 的方向性结论保留在 §4.2；具体细节指向 [M_8nodes_extension.md](M_8nodes_extension.md)。
-- **L2 的设计依据** = [Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md)（创作流程 8 阶段骨架 + 原子操作清单）。
-- **不改他文**：本文对 [`../ai_writer_nodes.md`](../ai_writer_nodes.md) / [`../roadmap.md`](../roadmap.md) / [`M6.md`](M6.md) 等**只单向引用**；**推翻**其中任何「✅ 已固定」结论，必须另开条目走拍板流程（见 §3.5）。
+- **L2 的设计依据** = [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md)（创作流程 8 阶段骨架 + 原子操作清单）。
+- **不改他文**：本文对 [`../ai_writer_nodes.md`](../../ai_writer_nodes.md) / [`../roadmap.md`](../../roadmap.md) / [`M6.md`](../../actionPlan/M6.md) 等**只单向引用**；**推翻**其中任何「✅ 已固定」结论，必须另开条目走拍板流程（见 §3.5）。
 - **前提**：**L2/L3 的实施 = L1 实施完成后**（L1-1 决议）。
 
 ### 0.2 本文要解决的那一个问题
@@ -74,7 +77,7 @@
 
 **四层全部定稿（2026-10-15）。**
 
-> 📌 **2026-10-11 拍板（`PQ-20` · 「入口级」）**：**推翻「节点数维持 8」** —— [../roadmap.md](../roadmap.md) §十 原半句（第 200 行）与 [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.4 原结论（第 207 行）已**就地改记**为「**不再固定 8 · 允许扩展 · 逐次走拍板与登记**」（记为 §7 `NE-D1`）。
+> 📌 **2026-10-11 拍板（`PQ-20` · 「入口级」）**：**推翻「节点数维持 8」** —— [../roadmap.md](../../roadmap.md) §十 原半句（第 200 行）与 [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.4 原结论（第 207 行）已**就地改记**为「**不再固定 8 · 允许扩展 · 逐次走拍板与登记**」（记为 §7 `NE-D1`）。
 
 > 📌 **2026-10-15 拍板（四层定稿）**：
 >
@@ -106,11 +109,11 @@
 
 | # | 注册处 | 内容 | 出处 |
 |---|---|---|---|
-| 1 | `engine::NodeRegistry` | 节点**契约**：`Definition{ type, display_name, title, category, inputs, outputs, params, description }`（分类 `Input/Process/Config/Inference/Output` 五类） | [../../source/engine/include/node_registry.h](../../source/engine/include/node_registry.h) 第 19–33 行 |
-| 2 | `engine::NodeExecutorRegistry` | 节点**实现**：`registerExecutor(type, fn)`，签名见 `NodeExecutor`（`inputs` / `params` / `ExecutionContext&`） | [../../source/engine/include/executor.h](../../source/engine/include/executor.h) 第 74–76、115 行 · [../../source/nodes/src/register_executors.cpp](../../source/nodes/src/register_executors.cpp) 第 12–19 行 |
+| 1 | `engine::NodeRegistry` | 节点**契约**：`Definition{ type, display_name, title, category, inputs, outputs, params, description }`（分类 `Input/Process/Config/Inference/Output` 五类） | [../../source/engine/include/node_registry.h](../../../source/engine/include/node_registry.h) 第 19–33 行 |
+| 2 | `engine::NodeExecutorRegistry` | 节点**实现**：`registerExecutor(type, fn)`，签名见 `NodeExecutor`（`inputs` / `params` / `ExecutionContext&`） | [../../source/engine/include/executor.h](../../../source/engine/include/executor.h) 第 74–76、115 行 · [../../source/nodes/src/register_executors.cpp](../../../source/nodes/src/register_executors.cpp) 第 12–19 行 |
 
-- **`registerAllNodes()` 幂等**：注册表非空即直接返回（[../../source/engine/src/node_registry.cpp](../../source/engine/src/node_registry.cpp) 第 238–240 行）⇒ **注册时机只有一次**。
-- 已定规范 `T-18`「**每节点一个注册函数**」（[../ai_writer_nodes.md](../ai_writer_nodes.md) 第 1049 行）⇒ 新增节点必须**同时**补齐「契约 + 实现」两处。
+- **`registerAllNodes()` 幂等**：注册表非空即直接返回（[../../source/engine/src/node_registry.cpp](../../../source/engine/src/node_registry.cpp) 第 238–240 行）⇒ **注册时机只有一次**。
+- 已定规范 `T-18`「**每节点一个注册函数**」（[../ai_writer_nodes.md](../../ai_writer_nodes.md) 第 1049 行）⇒ 新增节点必须**同时**补齐「契约 + 实现」两处。
 
 ### 2.2 当前 8 节点的完整参数面（L1 实施前快照）
 
@@ -127,7 +130,7 @@
 | `N-07` | `VLMGenerate` 图片理解 | 推理 | `prompt`(Text) + `image`(**变长** · 必填) · `provider`(可选) | `system_prompt` · `temperature` · `max_tokens` · `top_p` · `stream` | ✗ 无 `seed`（与 N-06 不对称）· 无 `mode` |
 | `N-08` | `TextOutput` 文本输出（**最终输出**） | 输出 | `text`(Text) | `label` · `export_dir` · `file_name` · `auto_export` | — |
 
-- **参数级现成机制**：`Param` 支持 `visible_when_param` / `visible_when_value` **条件可见**（`ProviderConfig` 用它在 `mode=web` 时隐藏 official 专属项，[../../source/engine/src/node_registry.cpp](../../source/engine/src/node_registry.cpp) 第 345–353 行）。
+- **参数级现成机制**：`Param` 支持 `visible_when_param` / `visible_when_value` **条件可见**（`ProviderConfig` 用它在 `mode=web` 时隐藏 official 专属项，[../../source/engine/src/node_registry.cpp](../../../source/engine/src/node_registry.cpp) 第 345–353 行）。
 - **`ImageInput` 的 `path` 已是「多值」形态**（每行一个路径、支持多选）⇒ 「批量输入」在**图片侧已存在**，文本侧没有对应形态。
 
 ### 2.3 端口类型系统与实际使用率（5 类，2 类闲置）
@@ -140,23 +143,23 @@
 | `number` | 数值（灰） | ⚠ **零使用** —— 类型、序列化名（`graph.cpp` 第 39 行）都已就位，**没有任何节点声明它** ⇒ 属**预留契约**；**L2 的 `TextStats` 将启用它** |
 | `any` | 任意类型（紫） | 仅 `PromptTemplate.vars` 一处（`node_registry.cpp` 第 280 行） |
 
-类型兼容规则：同类型可连 / `any` 双向可连 / 其余不允许（[../ai_writer_nodes.md](../ai_writer_nodes.md) §4.5 · 校验实现见 `graph.cpp` 第 451 行附近）。
+类型兼容规则：同类型可连 / `any` 双向可连 / 其余不允许（[../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.5 · 校验实现见 `graph.cpp` 第 451 行附近）。
 
 ### 2.4 节点库界面：加节点**不需要**改 UI
 
-节点库按**五个分类的顺序**遍历注册表渲染（[../../source/ui/src/node_library.cpp](../../source/ui/src/node_library.cpp) 第 29–34 行）⇒ 新节点只要落进已有五分类（或新分类，见 §4.3），界面**自动出现**；分类内排序由 `listTypes()` 按显示名稳定排序（`node_registry.cpp` 第 196–211 行）。
+节点库按**五个分类的顺序**遍历注册表渲染（[../../source/ui/src/node_library.cpp](../../../source/ui/src/node_library.cpp) 第 29–34 行）⇒ 新节点只要落进已有五分类（或新分类，见 §4.3），界面**自动出现**；分类内排序由 `listTypes()` 按显示名稳定排序（`node_registry.cpp` 第 196–211 行）。
 
 ### 2.5 改动成本：加 / 删 **1 个节点** 的「价格标签」
 
-**（a）代码侧硬断言位点**（`M7` 删 1 个节点时的真实连带，见 [../CHANGELOG.md](../CHANGELOG.md) 的 M7 条目）
+**（a）代码侧硬断言位点**（`M7` 删 1 个节点时的真实连带，见 [../CHANGELOG.md](../../CHANGELOG.md) 的 M7 条目）
 
 | 位点 | 内容 |
 |---|---|
-| [../../source/tools/api_probe.cpp](../../source/tools/api_probe.cpp) 第 803 行 | `registry.size() == "8"` —— **注册表节点总数硬断言** |
+| [../../source/tools/api_probe.cpp](../../../source/tools/api_probe.cpp) 第 803 行 | `registry.size() == "8"` —— **注册表节点总数硬断言** |
 | 同文件 第 805 行 | `expected_types[]` 类型数组 —— **逐个列举 8 个 `type`** |
 | 同文件（分类与端口用例） | 分类计数（M7 时「输出类 2 → 1」）；端口不兼容用例由 `ImagePreview.image` 改用 `VLMGenerate.image` |
 
-**（b）文档侧同步点（12~15 处）**：[../ai_writer_nodes.md](../ai_writer_nodes.md) §4.3（第 194 行）/ §4.4（第 207 行）/ §9.2（第 621 行）/ §20.1 目录树（第 1198 行 `workflows/examples/`）· [../节点编辑器使用说明.md](../节点编辑器使用说明.md)（第 106 行）· [../../source/README.md](../../source/README.md)（第 535 / 541 行）· [../变量术语对照表.md](../变量术语对照表.md)（第 111 / 413 行）· [../roadmap.md](../roadmap.md) 第 200 行 · [../DocMAP.md](../DocMAP.md)（§5.2 / §5.3）· [M7.md](../Archive/actionPlan/M7.md) · [../CHANGELOG.md](../CHANGELOG.md)。
+**（b）文档侧同步点（12~15 处）**：[../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.3（第 194 行）/ §4.4（第 207 行）/ §9.2（第 621 行）/ §20.1 目录树（第 1198 行 `workflows/examples/`）· [../节点编辑器使用说明.md](../../节点编辑器使用说明.md)（第 106 行）· [../../source/README.md](../../../source/README.md)（第 535 / 541 行）· [../变量术语对照表.md](../../变量术语对照表.md)（第 111 / 413 行）· [../roadmap.md](../../roadmap.md) 第 200 行 · [../DocMAP.md](../../DocMAP.md)（§5.2 / §5.3）· [M7.md](M7.md) · [../CHANGELOG.md](../../CHANGELOG.md)。
 
 **（c）断言基线口径**：自检数字**只升不降**；若确需下降 ⇒ 按 `PQ-05` 口径**显式登记（数字 + 原因成对）**。
 
@@ -166,10 +169,10 @@
 
 | 事实 | 出处 |
 |---|---|
-| 设计上应有 **6 个示例**（`E-01`~`E-06`） | [../ai_writer_nodes.md](../ai_writer_nodes.md) §20.4（第 1278–1287 行） |
-| **仅 `E-01` 随启动创建**，其余 5 个待做（`M6-03`） | [../roadmap.md](../roadmap.md) 第 116 行 |
-| 另有**已入库但未编 E 号**的示例：`ImgPlusText.json`（8 节点 / 7 连线） | [../ai_writer_nodes.md](../ai_writer_nodes.md) §20.4 第 1289 行 |
-| 界面工具栏「示例工作流」按钮载入的是**代码内置**示例，**不读** `workflows/examples/` 目录 | [../ai_writer_nodes.md](../ai_writer_nodes.md) §20.4 第 1290 行 |
+| 设计上应有 **6 个示例**（`E-01`~`E-06`） | [../ai_writer_nodes.md](../../ai_writer_nodes.md) §20.4（第 1278–1287 行） |
+| **仅 `E-01` 随启动创建**，其余 5 个待做（`M6-03`） | [../roadmap.md](../../roadmap.md) 第 116 行 |
+| 另有**已入库但未编 E 号**的示例：`ImgPlusText.json`（8 节点 / 7 连线） | [../ai_writer_nodes.md](../../ai_writer_nodes.md) §20.4 第 1289 行 |
+| 界面工具栏「示例工作流」按钮载入的是**代码内置**示例，**不读** `workflows/examples/` 目录 | [../ai_writer_nodes.md](../../ai_writer_nodes.md) §20.4 第 1290 行 |
 | `--exec-selftest` 目前**只对 `E-02` 有加载断言** | 同上 |
 
 > **L4 = 不做** ⇒ 上述「可达性 / 断言覆盖」缺口**登记但不修复**；`M6-03` 的 5 个示例**仍在 M6 计划内**（不属于 L4）。
@@ -178,7 +181,7 @@
 
 ## §3 约束面：先清「哪里不能碰」
 
-### 3.1 硬约束：不做清单（[../roadmap.md](../roadmap.md) §十 · 第 195–203 行）
+### 3.1 硬约束：不做清单（[../roadmap.md](../../roadmap.md) §十 · 第 195–203 行）
 
 > 原文（第 197 行）：✅ **本节视为契约**：新增需求**不得**绕过本节直接排期。
 
@@ -186,13 +189,13 @@
 
 > ✅ **2026-10-11 状态更新**：`PQ-20` 已拍板 **推翻「节点数维持 8」** ⇒ 该约束**已解除**；**L2 不再需要「先推翻 §十」这一步**，但**仍须逐次走「拍板 + 登记」**；**本节其余不做项不受影响**。
 
-### 3.2 「已固定」结论（[../ai_writer_nodes.md](../ai_writer_nodes.md) §4.4 · 第 207 行）
+### 3.2 「已固定」结论（[../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.4 · 第 207 行）
 
 > 标题原文：`### 4.4 MVP 节点清单（8 个；M7 起由 9 个精简）· ✅ **已固定（2026-10-08 · 节点数维持 8，不恢复）**`
 
 ⇒ 与 §3.1 是**同一结论的两处表述** ⇒ **要改必须两处同时改**。📌 **2026-10-11 已按此纪律执行**（`PQ-20` 拍板后同批改记）。
 
-### 3.3 已拍板延后项（[../ai_writer_nodes.md](../ai_writer_nodes.md) §19.1 · 第 1122–1139 行）
+### 3.3 已拍板延后项（[../ai_writer_nodes.md](../../ai_writer_nodes.md) §19.1 · 第 1122–1139 行）
 
 14 项**全部**「延后 · 不排期」。逐项对号：
 
@@ -204,7 +207,7 @@
 | 节点搜索 · 小地图 · 自动吸附 · 节点折叠/展开 · 对齐辅助线 | **L3** | **L3 定稿**：节点搜索 ① · 小地图 ④ · 对齐辅助系统 ⑤+⑥ **采纳（需推翻）**；分类折叠 ② **采纳（与「节点折叠」不同，无需推翻）** |
 | 快捷键 · 多语言界面 · 浅色主题 | ⛔ **不做** | §十 +（快捷键）`PD-01` |
 
-### 3.4 唯一现成的排期入口（[../roadmap.md](../roadmap.md) §六 滚动发布 · 第 128–138 行）
+### 3.4 唯一现成的排期入口（[../roadmap.md](../../roadmap.md) §六 滚动发布 · 第 128–138 行）
 
 | 栏位 | 原文内容 | 与本文的关系 |
 |---|---|---|
@@ -251,7 +254,7 @@
 ### 4.3 L2：新增节点类型（**做**）—— ✅ 已实施完成（2026-10-15）
 
 > ⚠ **L2 的实施前提 = L1 实施完成后**（L1-1 决议）—— **已满足**（L1 于 2026-10-14 落地）。
-> 📌 **L2 的设计依据** = [Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md)（创作流程 8 阶段骨架 + 原子操作清单）。
+> 📌 **L2 的设计依据** = [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md)（创作流程 8 阶段骨架 + 原子操作清单）。
 
 #### 4.3.1 定向结论
 
@@ -446,7 +449,7 @@
 | 3 | `api_probe.cpp` 分类计数断言的改法（含新分类「辅助功能」+ 子分类「文本处理」） | ✅ 已随实施完成（`NodeCategory` 增 `Auxiliary` · `categoryName()` = "辅助功能" · 计数断言同步） |
 | 4 | 每个节点的执行器实现细节 | ✅ 已随实施完成（`text_split.cpp` / `text_extract.cpp` / `text_clean.cpp` / `text_replace.cpp` / `text_stats.cpp` / `text_diff.cpp`） |
 
-> **✅ L2 实施完成（2026-10-15 · 见 [../CHANGELOG.md](../CHANGELOG.md)「L2+L3 实施」批）**：六节点 + 分类断言 + 多输出修复（`executor.cpp` 存储分支顺序）+ TextMerge 递归展平（Split→Merge 闭环）均落地。
+> **✅ L2 实施完成（2026-10-15 · 见 [../CHANGELOG.md](../../CHANGELOG.md)「L2+L3 实施」批）**：六节点 + 分类断言 + 多输出修复（`executor.cpp` 存储分支顺序）+ TextMerge 递归展平（Split→Merge 闭环）均落地。
 
 ### 4.4 L3：节点库 / 画布 UX（**做**）—— ✅ 已实施完成（2026-10-15）
 
@@ -575,7 +578,7 @@
 | 4 | 节点搜索的匹配算法（大小写不敏感 / 中文） | ✅ 已随实施完成（`find_ci` 大小写不敏感子串 + 匹配高亮底色） |
 | 5 | 登记流程的具体形态 | ✅ 已随实施完成（AI_README / DocMAP / 变量术语对照表 / 使用说明 / roadmap 同步） |
 
-> **✅ L3 实施完成（2026-10-15 · 见 [../CHANGELOG.md](../CHANGELOG.md)「L2+L3 实施」+「小地图行为修正」+「对齐线收口」批）**：五项 UX 全部落地；小地图修正为**纯导航**（`ed::NavigateToCenter` + `block_minimap_input`）；对齐线收口（`draw_node_separator`）。
+> **✅ L3 实施完成（2026-10-15 · 见 [../CHANGELOG.md](../../CHANGELOG.md)「L2+L3 实施」+「小地图行为修正」+「对齐线收口」批）**：五项 UX 全部落地；小地图修正为**纯导航**（`ed::NavigateToCenter` + `block_minimap_input`）；对齐线收口（`draw_node_separator`）。
 
 ### 4.5 L4：组合层（**不做**）—— 🔴
 
@@ -611,7 +614,7 @@
 | **循环 / 批量** | 需要「**同一节点重复执行**」或「子图重复执行」 | 执行器支持**多轮遍历**与值覆盖 | §19.1 延后 · 不排期 |
 | **子工作流** | 需要「**图套图**」：工作流成为可被调用的单元 | 契约新增「工作流实例」概念 + 参数映射 + 递归 / 深度限制 | §19.1 延后 · 不排期 |
 
-**引擎侧现状（[../../source/engine/include/executor.h](../../source/engine/include/executor.h) 第 6–13 行 · 设计原文）**：
+**引擎侧现状（[../../source/engine/include/executor.h](../../../source/engine/include/executor.h) 第 6–13 行 · 设计原文）**：
 
 - 「单线程分帧：`tick()` 每帧推进**一个节点**（UI 调用）；无 UI 场景用 `runToCompletion()`」
 - 「状态机：`Waiting → Running → Done / Error`；失败节点的下游标 `Skipped`，**无关分支继续**（§10.4）」
@@ -694,7 +697,7 @@
 
 | 编号 | 议题 | 结论 | 依据 | 登记动作 |
 |---|---|---|---|---|
-| `NE-D1` | 是否接受推翻「节点数维持 8」（= `NE-Q2`） | ✅ **接受推翻（2026-10-11 · `PQ-20`）**：**节点数不再固定 8** | 开发者拍板 | ① [../roadmap.md](../roadmap.md) §十 第 200 行 ② [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.4 第 207 行 ③ 看板 `PQ-20` 置 done ④ [../DocMAP.md](../DocMAP.md) §5.3 |
+| `NE-D1` | 是否接受推翻「节点数维持 8」（= `NE-Q2`） | ✅ **接受推翻（2026-10-11 · `PQ-20`）**：**节点数不再固定 8** | 开发者拍板 | ① [../roadmap.md](../../roadmap.md) §十 第 200 行 ② [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.4 第 207 行 ③ 看板 `PQ-20` 置 done ④ [../DocMAP.md](../../DocMAP.md) §5.3 |
 | `NE-D2` | 本次「节点扩展」落在哪一层（= `NE-Q1`） | ✅ **L1** | 开发者拍板（2026-10-12） | 本文 §4.2 |
 | `NE-D3` | L1 的实施依据 | ✅ **独立文档 [M_8nodes_extension.md](M_8nodes_extension.md)** | 开发者拍板（2026-10-12） | 本文 §0.1 / §4.2 |
 | `NE-D4` | 本文与 [M_8nodes_extension.md](M_8nodes_extension.md) 的关系 | ✅ **本文前提 = `M_8nodes_extension.md` 已完成实施并通过功能验证** | 开发者拍板（2026-10-12） | 本文 §0.1 / §1 |
@@ -804,24 +807,24 @@
 | 既有文档 | 本文与它的关系 | 本批是否改动它 |
 |---|---|---|
 | [M_8nodes_extension.md](M_8nodes_extension.md) | **L1 实施依据**（本文前提） | ✗ 不改 |
-| [Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md) | **L2 设计依据**（创作流程 8 阶段 + 原子操作） | ✗ 不改 |
-| [../roadmap.md](../roadmap.md) §五 / §六 / §十 | 引用硬约束 · 滚动发布落点 · 示例状态 | ✗ 不改 |
-| [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.3 / §4.4 / §19.1 / §20.4 | 引用节点契约、已固定结论、延后清单、示例设计 | ✗ 不改 |
-| [M6.md](M6.md) · [milestone_plan.md](milestone_plan.md) | 仅引用 `M6-03` 状态 | ✗ 不改 |
+| [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) | **L2 设计依据**（创作流程 8 阶段 + 原子操作） | ✗ 不改 |
+| [../roadmap.md](../../roadmap.md) §五 / §六 / §十 | 引用硬约束 · 滚动发布落点 · 示例状态 | ✗ 不改 |
+| [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.3 / §4.4 / §19.1 / §20.4 | 引用节点契约、已固定结论、延后清单、示例设计 | ✗ 不改 |
+| [M6.md](../../actionPlan/M6.md) · [milestone_plan.md](../../actionPlan/milestone_plan.md) | 仅引用 `M6-03` 状态 | ✗ 不改 |
 | [M_canvas_snapshot.md](M_canvas_snapshot.md) | **平级**子项文档 | ✗ 不改 |
 | [M_patchAB_rest.md](M_patchAB_rest.md) · [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md) | **平级**；互不引用 | ✗ 不改 |
-| [../DocMAP.md](../DocMAP.md) §一 / §5.2 / §5.3 | **登记本文** | ✅ 待执行（G-5） |
-| [../DevPlan.todo](../DevPlan.todo) | **登记** `PQ-20`（结案）+ `DOCS-NE-01` + L2/L3 任务号 | ✅ 待执行（G-5） |
-| [../CHANGELOG.md](../CHANGELOG.md) | 记录本文批次 | ✅ 待执行（G-5） |
-| [../../AI_README.md](../../AI_README.md) §5 / §8 | **登记**编号空间 `NE-*` + `L2-*` / `L3-*` / `CR-*` | ✅ 待执行（G-5） |
-| [../AI_Status.md](../AI_Status.md) | 「最近更新」一句 | ✅ 待执行（G-5） |
+| [../DocMAP.md](../../DocMAP.md) §一 / §5.2 / §5.3 | **登记本文** | ✅ 待执行（G-5） |
+| [../DevPlan.todo](../../DevPlan.todo) | **登记** `PQ-20`（结案）+ `DOCS-NE-01` + L2/L3 任务号 | ✅ 待执行（G-5） |
+| [../CHANGELOG.md](../../CHANGELOG.md) | 记录本文批次 | ✅ 待执行（G-5） |
+| [../../AI_README.md](../../../AI_README.md) §5 / §8 | **登记**编号空间 `NE-*` + `L2-*` / `L3-*` / `CR-*` | ✅ 待执行（G-5） |
+| [../AI_Status.md](../../AI_Status.md) | 「最近更新」一句 | ✅ 待执行（G-5） |
 
 **若后续实施 L2 / L3**，则必须**另开条目**并**同时**改下面两处（§3.2 的两处一致性）：
 
-- [../roadmap.md](../roadmap.md) §十 第 200 行（「不做清单」侧）
-- [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.4 第 207 行（「设计已固定」侧）
+- [../roadmap.md](../../roadmap.md) §十 第 200 行（「不做清单」侧）
+- [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.4 第 207 行（「设计已固定」侧）
 
-（L3 则改 [../ai_writer_nodes.md](../ai_writer_nodes.md) §19.1 第 1132–1137 行的**对应 4 行**，而非 §十。）
+（L3 则改 [../ai_writer_nodes.md](../../ai_writer_nodes.md) §19.1 第 1132–1137 行的**对应 4 行**，而非 §十。）
 
 ---
 
@@ -854,8 +857,8 @@
 | 2026-10-11 | v2 | **`PQ-20` 拍板**：推翻「节点数维持 8」；记为 `NE-D1`。 |
 | 2026-10-12 | v3 | **L1 定向完成 + L2/L3/L4 继续讨论** —— ① `NE-Q1` = L1；② L1 实施依据 = [M_8nodes_extension.md](M_8nodes_extension.md)；③ L2/L3/L4 继续讨论；④ `NE-Q3` = 留在本文；⑤ `NE-Q4` = 只出讨论稿；⑥ 新增 `NE-D2`~`NE-D14`。 |
 | 2026-10-12 | v4 | **四层全部定向** —— ① L1 = 做；② L2 = 做（候选 = 文本分块/拼接 + 文本处理）；③ L3 = 做（8 项候选）；④ L4 = 不做；⑤ G-1 = 甲；⑥ G-2 = 将来再定；⑦ G-4 = 保留 §10 清单但不由 AI 执行；⑧ G-5 = 看板同步全部执行；⑨ 新增 `NE-D15`~`NE-D29`；⑩ §4.3 / §4.4 扩为初步方向；⑪ §8 四个 `NE-Q*` 全部结案。 |
-| 2026-10-15 | **v5（定稿）** | **L2/L3 定稿** —— ① L2 细化为 **6 个节点**（`TextSplit` / `TextExtract` / `TextClean` / `TextReplace` / `TextStats` / `TextDiff`）；② L2 分类 = **辅助功能（`Auxiliary`）→ 文本处理（`TextProcess`）**；伪两层只改 UI；③ L2-D 边界 = **分类即边界**；④ L2 参数面 6 个节点全部定稿；⑤ L3 采纳 **5 项**（节点搜索 / 分类折叠 / 小地图 / 对齐辅助系统 / 连线交互提示）；⑥ ⑤+⑥ **合并**为对齐辅助系统；⑦ ⑦ 不纳入、⑧ 出局；⑧ 需推翻 §19.1 **4 行**；⑨ 新增 `NE-D18`~`NE-D43`；⑩ §4.3 / §4.4 扩为完整方案；⑪ §6 候选清单更新；⑫ §9 L2 改动清单更新；⑬ 关联 [Creation_Roadmap_Guideline.md](Creation_Roadmap_Guideline.md)。**零代码改动。** |
-| 2026-10-15 | **v6（当前 · 实施完成 + 验收回填）** | **L2/L3 实施完成 + 验收回填（配合代码批 · 2026-10-15）**：① 顶部状态 L2/L3 → ✅ **已实施完成**；② §1 摘要表四层状态更新；③ §4.3.6 / §4.4.5 待细化项全部 → ✅ 已落地；④ §4.4.3 各 UX 项标 ✅；⑤ `VL2-01…VL2-07` 进 `--exec-selftest`（546 → **655 / 0**）· graph **144 → 151 / 0** · 断链 **1487 / 0** · check_all 15/15；⑥ L3 五项交互走查用户 2026-10-15 完成；⑦ 本行。**验证**：对应 [../CHANGELOG.md](../CHANGELOG.md)「L2+L3 实施」「小地图行为修正」「对齐线收口」三批。 |
+| 2026-10-15 | **v5（定稿）** | **L2/L3 定稿** —— ① L2 细化为 **6 个节点**（`TextSplit` / `TextExtract` / `TextClean` / `TextReplace` / `TextStats` / `TextDiff`）；② L2 分类 = **辅助功能（`Auxiliary`）→ 文本处理（`TextProcess`）**；伪两层只改 UI；③ L2-D 边界 = **分类即边界**；④ L2 参数面 6 个节点全部定稿；⑤ L3 采纳 **5 项**（节点搜索 / 分类折叠 / 小地图 / 对齐辅助系统 / 连线交互提示）；⑥ ⑤+⑥ **合并**为对齐辅助系统；⑦ ⑦ 不纳入、⑧ 出局；⑧ 需推翻 §19.1 **4 行**；⑨ 新增 `NE-D18`~`NE-D43`；⑩ §4.3 / §4.4 扩为完整方案；⑪ §6 候选清单更新；⑫ §9 L2 改动清单更新；⑬ 关联 [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md)。**零代码改动。** |
+| 2026-10-15 | **v6（当前 · 实施完成 + 验收回填）** | **L2/L3 实施完成 + 验收回填（配合代码批 · 2026-10-15）**：① 顶部状态 L2/L3 → ✅ **已实施完成**；② §1 摘要表四层状态更新；③ §4.3.6 / §4.4.5 待细化项全部 → ✅ 已落地；④ §4.4.3 各 UX 项标 ✅；⑤ `VL2-01…VL2-07` 进 `--exec-selftest`（546 → **655 / 0**）· graph **144 → 151 / 0** · 断链 **1487 / 0** · check_all 15/15；⑥ L3 五项交互走查用户 2026-10-15 完成；⑦ 本行。**验证**：对应 [../CHANGELOG.md](../../CHANGELOG.md)「L2+L3 实施」「小地图行为修正」「对齐线收口」三批。 |
 
 ---
 

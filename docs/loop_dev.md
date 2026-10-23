@@ -1,7 +1,7 @@
 # 循环开发规则（Loop Dev）—— 无人监管下的「网页站逐站转可用」
 
 > **定位**：本文 = **循环开发的唯一规则** —— 什么时候才能开跑、一轮怎么跑、什么算失败、结果记在哪、什么时候必须停。
-> **适用对象**：`source/assets/providers.json` 里 `kind = "web"` 且 `web.adapter = "dom"` 的 **10 条网页版站点**（清单见 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §8 附录 E）。
+> **适用对象**：`source/assets/providers.json` 里 `kind = "web"` 且 `web.adapter = "dom"` 的 **10 条网页版站点**（清单见 [Archive/actionPlan/M_patchAB_rest.md](Archive/actionPlan/M_patchAB_rest.md) §8 附录 E）。
 > **权威边界**：站点数据（选择器 / 登录页 / `verified`）以 `source/assets/providers.json` 为准；命令开关以 [../source/README.md](../source/README.md) §4 为准；回归基线数字以 [../AI_README.md](../AI_README.md) §2 为准；**本文只管循环纪律**（怎么跑、记什么、何时停）。
 > **状态**：✅ **规则已落盘（2026-10-09）**；前置模块 `FEA-L01`~`FEA-L05` / `TST-L01` / `TST-L02` **已落地**，`TST-L03`（报告模板 + ①′ 跨轮 diff 段）**已落地**（2026-10-17 · 批 4 收口）⇒ **现在是「可自动跑一轮」**（`.\source\tools\loop_verify.ps1`），不再是「只能手工跑单站」；一轮的**结论人审**仍是硬要求（§6.1 三块 + §7 权威位）。
 
@@ -215,7 +215,7 @@ Start-Process -FilePath .\build\bin\aiwrite.exe -ArgumentList '--web-dom-dump','
 | 依赖单向（架构） | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_includes.ps1` | **violations 0** —— **2026-10-23 实测 = checked files 201 / include lines 656**（R1：`engine/nodes/ai/web/utils` 不含 `ui|app` 头 · R2：`ui` 不含 `app` 头 · 跨层同名头 = 归属不明同样判失败）（**脚本已入库** = `source/tools/check_includes.ps1`，**已作为 `check_all.ps1` 第 ⑥ 项入闸** · `ARCH-A4`） |
 | 全局变量（架构） | `powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_globals.ps1` | **exit 0** —— **2026-10-23（A7 收口后）实测 = checked files 201 / violations 0（R1 0 / R2 0 / R3 0）/ fn_static 51 · 51**（R1 头文件 `extern` 变量 · R2 文件作用域 `static`（含匿名 namespace）· R3 外部链接全局；**类成员 / `const` 常量表 / 函数内 static 不计入** —— 函数内 static 现 43 处只统计）（**脚本已入库** = `source/tools/check_globals.ps1` + 基线 `source/tools/check_globals_baseline.txt`，**已作为 `check_all.ps1` 第 ⑦ 项入闸** · `ARCH-A5`；**基线只减不增，存量 87 条按 A6/A7 逐步对象化归零**） |
 
-> 上表是 [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §0.4 回归基线的**循环化用法**（原表的数字以该处与 [../AI_README.md](../AI_README.md) §2 为准；数字变动时先改那两处，再同步本文）。
+> 上表是 [Archive/actionPlan/M_patchAB_rest.md](Archive/actionPlan/M_patchAB_rest.md) §0.4 回归基线的**循环化用法**（原表的数字以该处与 [../AI_README.md](../AI_README.md) §2 为准；数字变动时先改那两处，再同步本文）。
 > **门禁的意义**：站点循环的数字只在"起点是绿的"前提下才有可比性；起点不绿 ⇒ **先停下汇报，不进循环**。
 
 **收轮后**：重跑同一张表，并要求**与开轮前的数字逐项一致**（本轮只跑网页站，不应影响任何离线断言）。若不一致 ⇒ 停止循环、进入排查（可能是站点外因素 —— 如我方的配置表 / 会话落盘被动过）。
@@ -326,7 +326,7 @@ build/loop/<轮次>-<时间戳>/         例：build/loop/R1-20261009-2055/
 | 内容 | 唯一权威位 |
 |---|---|
 | 本轮结论数字 + 11 行站点矩阵 | [CHANGELOG.md](CHANGELOG.md) `[Unreleased]`（本轮小节） |
-| 站点「可生成」列 + 登录态列 | [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §8 **附录 E** 两列 |
+| 站点「可生成」列 + 登录态列 | [Archive/actionPlan/M_patchAB_rest.md](Archive/actionPlan/M_patchAB_rest.md) §8 **附录 E** 两列 |
 | 选择器 / `verified` / `notes` | `source/assets/providers.json`（**不填假值**） |
 | 逐站实测细节（协议 / 元素 / 时间戳） | 📦 [Archive/网页版协议实测记录.md](Archive/网页版协议实测记录.md)（**已归档 2026-10-10 · 只追溯 · 不再维护**）⇒ **新证据改记** `source/assets/site_capability_evidence.json`（`TST-L05` 唯一人工维护点）+ §2.2 台账 |
 | 循环规则本身 | **本文**（`docs/loop_dev.md`） |
@@ -446,6 +446,6 @@ build/loop/<轮次>-<时间戳>/         例：build/loop/R1-20261009-2055/
 
 ## §12 本文的维护
 
-- 本文只放**循环纪律**（何时能开跑 / 怎么跑 / 什么算失败 / 记在哪 / 何时停），**技术细节一律外链**：站点数据 → `providers.json`；命令 → [../source/README.md](../source/README.md) §4；基线 → [../AI_README.md](../AI_README.md) §2 / [actionPlan/M_patchAB_rest.md](actionPlan/M_patchAB_rest.md) §0.4。
+- 本文只放**循环纪律**（何时能开跑 / 怎么跑 / 什么算失败 / 记在哪 / 何时停），**技术细节一律外链**：站点数据 → `providers.json`；命令 → [../source/README.md](../source/README.md) §4；基线 → [../AI_README.md](../AI_README.md) §2 / [Archive/actionPlan/M_patchAB_rest.md](Archive/actionPlan/M_patchAB_rest.md) §0.4。
 - **改本文的口径要写清"为什么换"**（例：2026-10-09 从"必经登录"改为"匿名优先"）—— 与 [../AI_README.md](../AI_README.md) §3「口径变更四处同步」一致。
 - 每轮结束**回填 §11 一行**；规则本身与站点结论**分开记**（规则进本文，结论进 `CHANGELOG` + 附录 E）。

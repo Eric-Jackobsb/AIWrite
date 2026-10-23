@@ -1,8 +1,11 @@
 # M_node_expansion：节点扩展实施依据（L1 已定向 · L2/L3 已定向 · L4 不做 · 引擎议题留本文）
 
+> 📦 **已归档（2026-10-23 · 文档整理批次 `ARC-AR-02`）** —— 本文为 **v6 讨论稿（2026-10-12 · 四层「定向」）**，**已被 v5 定稿版 [M_node_expansion_part2.md](M_node_expansion_part2.md) 取代**（该版四层全部定稿 + L1/L2/L3 **全部实施完成 · 2026-10-15**），按 [../README.md](../README.md) §三 归档（`git mv` 保留历史，正文只增不改）。
+> **承接位** → 定稿正本 [M_node_expansion_part2.md](M_node_expansion_part2.md)；L1 落地 = [M_8nodes_extension.md](M_8nodes_extension.md)；后续节点设计依据 = [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) · 打磨主线 = [M_polish.md](../../actionPlan/M_polish.md)。
+
 > 类型：**跨里程碑实施依据**（不占用 M1–M8 编号；与 [M_8nodes_extension.md](M_8nodes_extension.md) / [M_patchAB_rest.md](M_patchAB_rest.md) / [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md) / [M_canvas_snapshot.md](M_canvas_snapshot.md) 平级互链）。
-> 动机：基础路线已跑通（M6 第一批 2026-10-10 落地、面向 C 前置项收口 —— 见 [../roadmap.md](../roadmap.md) §四 / §八）；下一步 = nodes 的扩展。四层框架（L1/L2/L3/L4）已全部定向。
-> 编号空间：`NE-Qx`（待讨论问题）· `NE-Dx`（决议记录 —— ⚠️ **编号分工须分清**：本文 §7 `NE-D1`~`NE-D7` + `NE-D15`~`NE-D29` + `NE-D38`~`NE-D39` = **全局 / 四层决策**；`NE-D30`~`NE-D37` = **L1 细节别名**，逐条对齐姊妹文档 [M_8nodes_extension.md](M_8nodes_extension.md) §2 的 `NE-D3`~`NE-D13`）· `L1-R1`~`L1-R3`（**L1 收尾决议**，⚠️ **不是**任务号 `L1-*`）· `L2-01…` / `L3-01…`（**任务号** · 批 9-2 先立）· `L2-1`~`L2-5` · `L3-1`~`L3-4` · `G-1`~`G-5` · `NE-01…`（拍板后启用）—— 前缀 `NE` = **N**ode **E**xpansion；编号空间已登记 [../../AI_README.md](../../AI_README.md) §5（⚠️ 与 PatchB 的层名 `L1` / `L2` / `L3` **同形不同物**）。
+> 动机：基础路线已跑通（M6 第一批 2026-10-10 落地、面向 C 前置项收口 —— 见 [../roadmap.md](../../roadmap.md) §四 / §八）；下一步 = nodes 的扩展。四层框架（L1/L2/L3/L4）已全部定向。
+> 编号空间：`NE-Qx`（待讨论问题）· `NE-Dx`（决议记录 —— ⚠️ **编号分工须分清**：本文 §7 `NE-D1`~`NE-D7` + `NE-D15`~`NE-D29` + `NE-D38`~`NE-D39` = **全局 / 四层决策**；`NE-D30`~`NE-D37` = **L1 细节别名**，逐条对齐姊妹文档 [M_8nodes_extension.md](M_8nodes_extension.md) §2 的 `NE-D3`~`NE-D13`）· `L1-R1`~`L1-R3`（**L1 收尾决议**，⚠️ **不是**任务号 `L1-*`）· `L2-01…` / `L3-01…`（**任务号** · 批 9-2 先立）· `L2-1`~`L2-5` · `L3-1`~`L3-4` · `G-1`~`G-5` · `NE-01…`（拍板后启用）—— 前缀 `NE` = **N**ode **E**xpansion；编号空间已登记 [../../AI_README.md](../../../AI_README.md) §5（⚠️ 与 PatchB 的层名 `L1` / `L2` / `L3` **同形不同物**）。
 > 状态：🟢 **四层全部定向（2026-10-12 · v6 —— 批 9-1 按代码实测收口 + 批 9-2 用户拍板已落盘）** ——
 > - **L1**：✅ **定向完成**（`M_8nodes_extension.md` 已产出）；**实施未开始**；实施依据 = 独立文档 [M_8nodes_extension.md](M_8nodes_extension.md)；
 > - **L2**：🟢 **定向完成**（初步方向）—— **写入本文**；候选 = 文本分块/拼接 + 文本处理（替换/提取）；允许新分类；无上限；
@@ -10,7 +13,7 @@
 > - **L4**：🔴 **不做** —— M6-03 的 5 个示例**仍在 M6 计划内**（不属于 L4）；不做的是「示例可达性 + 断言覆盖 + 分享 + 模板库」；
 > - **引擎议题**（条件分支 / 循环 / 子工作流）：**留在本文**，不排期、不立任务号；将来立项流程 = **将来再定**。
 > ⚠ **L2/L3 的正式定稿条件** = **L1 实施完成后**（**L1-R1** 决议）；当前 L2/L3 决策为**初步方向**，届时按 §11 细化方案。
-> 相关：[../roadmap.md](../roadmap.md) §六 / §十 · [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.3–§4.5 / §9.2 / §19.1 · [../../source/engine/src/node_registry.cpp](../../source/engine/src/node_registry.cpp) · [../../source/nodes/src/register_executors.cpp](../../source/nodes/src/register_executors.cpp) · 看板 `PQ-20` / `DOCS-NE-01`。
+> 相关：[../roadmap.md](../../roadmap.md) §六 / §十 · [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.3–§4.5 / §9.2 / §19.1 · [../../source/engine/src/node_registry.cpp](../../../source/engine/src/node_registry.cpp) · [../../source/nodes/src/register_executors.cpp](../../../source/nodes/src/register_executors.cpp) · 看板 `PQ-20` / `DOCS-NE-01`。
 > 建立：**2026-10-11**（v1）· **最近更新：2026-10-12（v6 —— 四层全部定向；L2/L3 写入本文；L4 不做；L1 实施未开始；批 9-1 按代码实测收口；批 9-2 用户拍板 ③A ④A ⑥A ⑦A + ②B ①B ⑤A 落盘）**
 
 ---
@@ -39,7 +42,7 @@
 
 - **本文是 L2/L3 的实施依据**：L1 有独立实施文档 [M_8nodes_extension.md](M_8nodes_extension.md)；L2/L3 的方案**写入本文**（G-1 = 甲）。
 - **本文是 L1 的索引**：L1 的方向性结论保留在 §4.2；具体细节指向 [M_8nodes_extension.md](M_8nodes_extension.md)。
-- **不改他文**：本文对 [`../ai_writer_nodes.md`](../ai_writer_nodes.md) / [`../roadmap.md`](../roadmap.md) / [`M6.md`](M6.md) 等**只单向引用**；**推翻**其中任何「✅ 已固定」结论，必须另开条目走拍板流程（见 §3.5）。
+- **不改他文**：本文对 [`../ai_writer_nodes.md`](../../ai_writer_nodes.md) / [`../roadmap.md`](../../roadmap.md) / [`M6.md`](../../actionPlan/M6.md) 等**只单向引用**；**推翻**其中任何「✅ 已固定」结论，必须另开条目走拍板流程（见 §3.5）。
 - **前提**：**L2/L3 的正式定稿 = L1 实施完成后**（**L1-R1** 决议）；当前 L2/L3 决策为初步方向。
 
 ### 0.2 本文要解决的那一个问题
@@ -64,7 +67,7 @@
 
 **四层全部定向（2026-10-12）。**
 
-> 📌 **2026-10-11 拍板（`PQ-20` · 「入口级」）**：**推翻「节点数维持 8」** —— [../roadmap.md](../roadmap.md) §十 原半句（第 200 行）与 [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.4 原结论（第 207 行）已**就地改记**（**大意** = 「**不再固定 8 · 允许扩展 · 逐次走拍板与登记**」；逐字措辞见两处原文，**非逐字引用**），记为 §7 `NE-D1`。⚠️ **第三处尚未改记** = [../节点编辑器使用说明.md](../节点编辑器使用说明.md) §4 标题（第 93 行）⇒ 见 §3.2 表。
+> 📌 **2026-10-11 拍板（`PQ-20` · 「入口级」）**：**推翻「节点数维持 8」** —— [../roadmap.md](../../roadmap.md) §十 原半句（第 200 行）与 [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.4 原结论（第 207 行）已**就地改记**（**大意** = 「**不再固定 8 · 允许扩展 · 逐次走拍板与登记**」；逐字措辞见两处原文，**非逐字引用**），记为 §7 `NE-D1`。⚠️ **第三处尚未改记** = [../节点编辑器使用说明.md](../../节点编辑器使用说明.md) §4 标题（第 93 行）⇒ 见 §3.2 表。
 
 > 📌 **2026-10-12 拍板（四层定向）**：
 >
@@ -96,11 +99,11 @@
 
 | # | 注册处 | 内容 | 出处 |
 |---|---|---|---|
-| 1 | `engine::NodeRegistry` | 节点**契约**：`Definition{ type, display_name, title, category, inputs, outputs, params, description }`（分类 `Input/Process/Config/Inference/Output` 五类） | [../../source/engine/include/node_registry.h](../../source/engine/include/node_registry.h) 第 19–33 行 |
-| 2 | `engine::NodeExecutorRegistry` | 节点**实现**：`registerExecutor(type, fn)`，签名见 `NodeExecutor`（`inputs` / `params` / `ExecutionContext&`） | [../../source/engine/include/executor.h](../../source/engine/include/executor.h) 第 75–77 行（`using NodeExecutor = std::function<…>` · 74 行是上一条注释） · [../../source/nodes/src/register_executors.cpp](../../source/nodes/src/register_executors.cpp) 第 12–19 行 |
+| 1 | `engine::NodeRegistry` | 节点**契约**：`Definition{ type, display_name, title, category, inputs, outputs, params, description }`（分类 `Input/Process/Config/Inference/Output` 五类） | [../../source/engine/include/node_registry.h](../../../source/engine/include/node_registry.h) 第 19–33 行 |
+| 2 | `engine::NodeExecutorRegistry` | 节点**实现**：`registerExecutor(type, fn)`，签名见 `NodeExecutor`（`inputs` / `params` / `ExecutionContext&`） | [../../source/engine/include/executor.h](../../../source/engine/include/executor.h) 第 75–77 行（`using NodeExecutor = std::function<…>` · 74 行是上一条注释） · [../../source/nodes/src/register_executors.cpp](../../../source/nodes/src/register_executors.cpp) 第 12–19 行 |
 
-- **`registerAllNodes()` 幂等**：注册表非空即直接返回（[../../source/engine/src/node_registry.cpp](../../source/engine/src/node_registry.cpp) 第 238–240 行）⇒ **注册时机只有一次**。
-- 已定规范 `T-18`「**每节点一个注册函数**」（[../ai_writer_nodes.md](../ai_writer_nodes.md) 第 1049 行）⇒ 新增节点必须**同时**补齐「契约 + 实现」两处。
+- **`registerAllNodes()` 幂等**：注册表非空即直接返回（[../../source/engine/src/node_registry.cpp](../../../source/engine/src/node_registry.cpp) 第 238–240 行）⇒ **注册时机只有一次**。
+- 已定规范 `T-18`「**每节点一个注册函数**」（[../ai_writer_nodes.md](../../ai_writer_nodes.md) 第 1049 行）⇒ 新增节点必须**同时**补齐「契约 + 实现」两处。
 
 ### 2.2 当前 8 节点的完整参数面（L1 实施前快照）
 
@@ -117,7 +120,7 @@
 | N-07 | `VLMGenerate` 图片理解 | 推理 | `prompt`(Text) + `image`(**变长** · 必填) · `provider`(可选) | `system_prompt` · `temperature` · `max_tokens` · `top_p` · `stream` | ✗ 无 `seed`（与 N-06 不对称）· 无 `mode` |
 | N-08 | `TextOutput` 文本输出（**最终输出**） | 输出 | `text`(Text) | `label` · `export_dir` · `file_name` · `auto_export` | — |
 
-- **参数级现成机制**：`Param` 支持 `visible_when_param` / `visible_when_value` **条件可见**（`ProviderConfig` 用它在 `mode=web` 时隐藏 official 专属项，[../../source/engine/src/node_registry.cpp](../../source/engine/src/node_registry.cpp) 第 345–353 行）。
+- **参数级现成机制**：`Param` 支持 `visible_when_param` / `visible_when_value` **条件可见**（`ProviderConfig` 用它在 `mode=web` 时隐藏 official 专属项，[../../source/engine/src/node_registry.cpp](../../../source/engine/src/node_registry.cpp) 第 345–353 行）。
 - **`ImageInput` 的 `path` 已是「多值」形态**（每行一个路径、支持多选）⇒ 「批量输入」在**图片侧已存在**，文本侧没有对应形态。
 - **`mode` 默认值现状（L1 比对基线 · 批 9-1 补）**：`ProviderConfig` = **`official`**（`node_registry.cpp` 第 327 行）· `LLMGenerate` = **`web`**（第 371 行）⚠️ 两处**不一致** ⇒ 本表暂不列默认值；L1 若统一/改动默认值属**行为变更**（姊妹文档 [M_8nodes_extension.md](M_8nodes_extension.md) §5.1 注 · 候选 `NE-D14` 待拍板）。
 
@@ -131,30 +134,30 @@
 | `number` | 数值（灰） | ⚠ **零使用** —— 类型、序列化名（`graph.cpp` 第 39 行）都已就位，**没有任何节点声明它** ⇒ 属**预留契约** |
 | `any` | 任意类型（紫） | 仅 `PromptTemplate.vars` 一处（`node_registry.cpp` 第 280 行） |
 
-类型兼容规则：同类型可连 / `any` 双向可连 / 其余不允许（[../ai_writer_nodes.md](../ai_writer_nodes.md) §4.5 · 校验实现见 `graph.cpp` 第 451 行附近）。
+类型兼容规则：同类型可连 / `any` 双向可连 / 其余不允许（[../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.5 · 校验实现见 `graph.cpp` 第 451 行附近）。
 
 ### 2.4 节点库界面：加节点**不需要**改 UI
 
-节点库按**五个分类的顺序**遍历注册表渲染（[../../source/ui/src/node_library.cpp](../../source/ui/src/node_library.cpp) 第 29–34 行）⇒ 新节点只要落进**已有五分类**，界面**自动出现**；分类内排序由 `listTypes()` 按显示名稳定排序（`node_registry.cpp` 第 196–211 行）。
+节点库按**五个分类的顺序**遍历注册表渲染（[../../source/ui/src/node_library.cpp](../../../source/ui/src/node_library.cpp) 第 29–34 行）⇒ 新节点只要落进**已有五分类**，界面**自动出现**；分类内排序由 `listTypes()` 按显示名稳定排序（`node_registry.cpp` 第 196–211 行）。
 
 > ⚠️ **新分类（第 6 类）例外（批 9-1 实测纠正）**：`node_library.cpp` 第 29–31 行的分类数组是**硬编码五类**、第 33–34 行只对数组内分类 `listByCategory()` ⇒ **新增分类不会自动出现**，必须同批改三处：① `node_registry.h` 第 19 行 `NodeCategory` 枚举 ② 第 21–22 行 `categoryName()` / `categoryKey()` ③ `node_library.cpp` 第 29–31 行数组加项（见 §4.3.3 / §9 #2）。
 
 ### 2.5 改动成本：加 / 删 **1 个节点** 的「价格标签」
 
-**（a）代码侧硬断言位点**（`M7` 删 1 个节点时的真实连带，见 [../CHANGELOG.md](../CHANGELOG.md) 的 M7 条目）
+**（a）代码侧硬断言位点**（`M7` 删 1 个节点时的真实连带，见 [../CHANGELOG.md](../../CHANGELOG.md) 的 M7 条目）
 
 | 位点 | 内容 |
 |---|---|
-| [../../source/tools/api_probe.cpp](../../source/tools/api_probe.cpp) 第 1936 行 | `expect_eq(check, std::to_string(registry.size()), "8", …)` —— **注册表节点总数硬断言**（⚠️ **批 9-1 纠正**：真身在 **:1936**；原稿写的第 803 行属 `ai::resolve_proxy` 代理用例区，**不是**节点断言） |
+| [../../source/tools/api_probe.cpp](../../../source/tools/api_probe.cpp) 第 1936 行 | `expect_eq(check, std::to_string(registry.size()), "8", …)` —— **注册表节点总数硬断言**（⚠️ **批 9-1 纠正**：真身在 **:1936**；原稿写的第 803 行属 `ai::resolve_proxy` 代理用例区，**不是**节点断言） |
 | 同文件 第 1938–1940 行 | `expected_types[]` 类型数组 —— **逐个列举 8 个 `type`** |
 | 同文件 第 1950–1957 行 | 分类计数五条（Input 2 / Process 2 / Config 1 / Inference 2 / Output 1；M7 时「输出类 2 → 1」）—— **加新分类须同步此表** |
 | 同文件 第 1964–1985 行 | **参数级断言**（`TextInput` 参数必填 · `temperature` / `max_tokens` 的**存在与范围**）—— **无参数个数断言** ⇒ 新增参数不撞；**改默认值 / 范围会撞**（与 §2.2 的 `mode` 默认值注呼应） |
 | 同文件（端口用例） | 端口不兼容用例由 `ImagePreview.image` 改用 `VLMGenerate.image` |
 
-**（b）文档侧同步点（12~15 处）**：[../ai_writer_nodes.md](../ai_writer_nodes.md) §4.3（第 194 行）/ §4.4（第 207 行）/ §9.2（第 621 行）/ §20.1 目录树（第 1198 行 `workflows/examples/`）· [../节点编辑器使用说明.md](../节点编辑器使用说明.md) **§4 标题（第 93 行 · 「节点数维持 8」半句）+ 节点表（第 95–104 行）** · [../../source/README.md](../../source/README.md) **第 573 行（`node_library.cpp` 行「按分类列出 8 个节点」）/ 第 579 行（`node_registry.cpp` 行「8 个 MVP 节点的注册表」）** · [../变量术语对照表.md](../变量术语对照表.md) **节点编号表（第 103–111 行 · 表末 = `~~N-09~~` 行）· §12 偏差表（第 415 行「节点 9 → 8」）** · [../roadmap.md](../roadmap.md) §十 第 200 行 · [../DocMAP.md](../DocMAP.md)（**§一 文档地图 / §5.3**）· [../CHANGELOG.md](../CHANGELOG.md)。
+**（b）文档侧同步点（12~15 处）**：[../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.3（第 194 行）/ §4.4（第 207 行）/ §9.2（第 621 行）/ §20.1 目录树（第 1198 行 `workflows/examples/`）· [../节点编辑器使用说明.md](../../节点编辑器使用说明.md) **§4 标题（第 93 行 · 「节点数维持 8」半句）+ 节点表（第 95–104 行）** · [../../source/README.md](../../../source/README.md) **第 573 行（`node_library.cpp` 行「按分类列出 8 个节点」）/ 第 579 行（`node_registry.cpp` 行「8 个 MVP 节点的注册表」）** · [../变量术语对照表.md](../../变量术语对照表.md) **节点编号表（第 103–111 行 · 表末 = `~~N-09~~` 行）· §12 偏差表（第 415 行「节点 9 → 8」）** · [../roadmap.md](../../roadmap.md) §十 第 200 行 · [../DocMAP.md](../../DocMAP.md)（**§一 文档地图 / §5.3**）· [../CHANGELOG.md](../../CHANGELOG.md)。
 
 > ⚠️ **批 9-1 更正三处行号（实测）**（原稿 → 实测）：`节点编辑器使用说明.md`「第 106 行」→ **§4 标题 93 行 + 节点表 95–104 行**（106 是 M7 注记）· `source/README.md`「第 535 / 541 行」→ **573 / 579 行**（535 / 541 是 Python 目录口径与 Pydoll `result` 两层，与节点无关）· `变量术语对照表.md`「第 111 / 413 行」→ **111 正确**（表末 `~~N-09~~`）、**413 是 `[general]` 行** ⇒ 应为 **103–111 / 415**。
-> ⛔ **归档件不在同步范围**：`docs/Archive/**` 按 [../DocMAP.md](../DocMAP.md) §5.2 纪律 2「**归档不回改**」⇒ `M7.md` 只作追溯证据，**不列为待改点**（原稿把它列入同步点，与纪律冲突）。
+> ⛔ **归档件不在同步范围**：`docs/Archive/**` 按 [../DocMAP.md](../../DocMAP.md) §5.2 纪律 2「**归档不回改**」⇒ `M7.md` 只作追溯证据，**不列为待改点**（原稿把它列入同步点，与纪律冲突）。
 
 **（c）断言基线口径**：自检数字**只升不降**；若确需下降 ⇒ 按 `PQ-05` 口径**显式登记（数字 + 原因成对）**。
 
@@ -164,10 +167,10 @@
 
 | 事实 | 出处 |
 |---|---|
-| 设计上应有 **6 个示例**（`E-01`~`E-06`） | [../ai_writer_nodes.md](../ai_writer_nodes.md) §20.4（第 1278–1287 行） |
-| **仅 `E-01` 随启动创建**，其余 5 个待做（`M6-03`） | [../roadmap.md](../roadmap.md) 第 116 行 |
-| 另有**已入库但未编 E 号**的示例：`ImgPlusText.json`（8 节点 / 7 连线） | [../ai_writer_nodes.md](../ai_writer_nodes.md) §20.4 第 1289 行 |
-| 界面工具栏「示例工作流」按钮载入的是**代码内置**示例，**不读** `workflows/examples/` 目录 | [../ai_writer_nodes.md](../ai_writer_nodes.md) §20.4 第 1290 行 |
+| 设计上应有 **6 个示例**（`E-01`~`E-06`） | [../ai_writer_nodes.md](../../ai_writer_nodes.md) §20.4（第 1278–1287 行） |
+| **仅 `E-01` 随启动创建**，其余 5 个待做（`M6-03`） | [../roadmap.md](../../roadmap.md) 第 116 行 |
+| 另有**已入库但未编 E 号**的示例：`ImgPlusText.json`（8 节点 / 7 连线） | [../ai_writer_nodes.md](../../ai_writer_nodes.md) §20.4 第 1289 行 |
+| 界面工具栏「示例工作流」按钮载入的是**代码内置**示例，**不读** `workflows/examples/` 目录 | [../ai_writer_nodes.md](../../ai_writer_nodes.md) §20.4 第 1290 行 |
 | `--exec-selftest` 目前**只对 `E-02` 有加载断言** | 同上 |
 
 > **L4 = 不做** ⇒ 上述「可达性 / 断言覆盖」缺口**登记但不修复**；`M6-03` 的 5 个示例**仍在 M6 计划内**（不属于 L4）。
@@ -176,7 +179,7 @@
 
 ## §3 约束面：先清「哪里不能碰」
 
-### 3.1 硬约束：不做清单（[../roadmap.md](../roadmap.md) §十 · 第 195–203 行）
+### 3.1 硬约束：不做清单（[../roadmap.md](../../roadmap.md) §十 · 第 195–203 行）
 
 > 原文（第 197 行）：✅ **本节视为契约**：新增需求**不得**绕过本节直接排期。
 
@@ -184,7 +187,7 @@
 
 > ✅ **2026-10-11 状态更新**：`PQ-20` 已拍板 **推翻「节点数维持 8」** ⇒ 该约束**已解除**；**L2 不再需要「先推翻 §十」这一步**，但**仍须逐次走「拍板 + 登记」**；**本节其余不做项不受影响**。
 
-### 3.2 「已固定」结论（[../ai_writer_nodes.md](../ai_writer_nodes.md) §4.4 · 第 207 行）
+### 3.2 「已固定」结论（[../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.4 · 第 207 行）
 
 > 标题原文：`### 4.4 MVP 节点清单（8 个；M7 起由 9 个精简）· ✅ **已固定（2026-10-08 · 节点数维持 8，不恢复）**`
 
@@ -192,13 +195,13 @@
 
 | # | 处 | 位置 | 现状 |
 |---|---|---|---|
-| ① | [../roadmap.md](../roadmap.md) §十 第 200 行（不做清单侧） | 已改记 | 📦 ~~节点数维持 8~~ ⇒ **不再固定 8**（2026-10-11 · `PQ-20`） |
-| ② | [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.4 第 207 行（设计已固定侧） | 已改记 | 📦「数量维持 8」半句已被推翻 ⇒ 8 = 当前实现、不再禁扩展 |
-| ③ | [../节点编辑器使用说明.md](../节点编辑器使用说明.md) **§4 标题第 93 行** | ✅ **批 9-2 已改记** | 与 ①② 同一 📦 写法 + 现行指向 |
+| ① | [../roadmap.md](../../roadmap.md) §十 第 200 行（不做清单侧） | 已改记 | 📦 ~~节点数维持 8~~ ⇒ **不再固定 8**（2026-10-11 · `PQ-20`） |
+| ② | [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.4 第 207 行（设计已固定侧） | 已改记 | 📦「数量维持 8」半句已被推翻 ⇒ 8 = 当前实现、不再禁扩展 |
+| ③ | [../节点编辑器使用说明.md](../../节点编辑器使用说明.md) **§4 标题第 93 行** | ✅ **批 9-2 已改记** | 与 ①② 同一 📦 写法 + 现行指向 |
 
 📌 **2026-10-11 已按此纪律执行 ①②**（改记文本见两处附录行）；**③ 为批 9-1 新查出的漏点，本批 9-2 已同步改记** —— 批改动作：`节点编辑器使用说明.md` 第 93 行加 `📦` 标记 + 现行指向 `M_node_expansion.md`（与 ①② 同一写法）。
 
-### 3.3 已拍板延后项（[../ai_writer_nodes.md](../ai_writer_nodes.md) §19.1 · 第 1122–1139 行）
+### 3.3 已拍板延后项（[../ai_writer_nodes.md](../../ai_writer_nodes.md) §19.1 · 第 1122–1139 行）
 
 14 项**全部**「延后 · 不排期」。逐项对号：
 
@@ -210,7 +213,7 @@
 | 节点搜索 · 小地图 · 自动吸附 · 节点折叠/展开 · 对齐辅助线 | **L3** | **L3 定向已选**：节点搜索 / 小地图 / 自动吸附 / 对齐辅助线（**折叠展开未选**） |
 | 快捷键 · 多语言界面 · 浅色主题 | ⛔ **不做** | §十 +（快捷键）`PD-01` |
 
-### 3.4 唯一现成的排期入口（[../roadmap.md](../roadmap.md) §六 滚动发布 · 第 128–138 行）
+### 3.4 唯一现成的排期入口（[../roadmap.md](../../roadmap.md) §六 滚动发布 · 第 128–138 行）
 
 | 栏位 | 原文内容 | 与本文的关系 |
 |---|---|---|
@@ -403,7 +406,7 @@
 | **循环 / 批量** | 需要「**同一节点重复执行**」或「子图重复执行」 | 执行器支持**多轮遍历**与值覆盖 | §19.1 延后 · 不排期 |
 | **子工作流** | 需要「**图套图**」：工作流成为可被调用的单元 | 契约新增「工作流实例」概念 + 参数映射 + 递归 / 深度限制 | §19.1 延后 · 不排期 |
 
-**引擎侧现状（[../../source/engine/include/executor.h](../../source/engine/include/executor.h) 第 6–13 行 · 设计原文）**：
+**引擎侧现状（[../../source/engine/include/executor.h](../../../source/engine/include/executor.h) 第 6–13 行 · 设计原文）**：
 
 - 「单线程分帧：`tick()` 每帧推进**一个节点**（UI 调用）；无 UI 场景用 `runToCompletion()`」
 - 「状态机：`Waiting → Running → Done / Error`；失败节点的下游标 `Skipped`，**无关分支继续**（§10.4）」
@@ -477,7 +480,7 @@
 
 | 编号 | 议题 | 结论 | 依据 | 登记动作 |
 |---|---|---|---|---|
-| `NE-D1` | 是否接受推翻「节点数维持 8」（= `NE-Q2`） | ✅ **接受推翻（2026-10-11 · `PQ-20`）**：**节点数不再固定 8** | 开发者拍板 | ① [../roadmap.md](../roadmap.md) §十 第 200 行 ② [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.4 第 207 行 ③ 看板 `PQ-20` 置 done ④ [../DocMAP.md](../DocMAP.md) §5.3 |
+| `NE-D1` | 是否接受推翻「节点数维持 8」（= `NE-Q2`） | ✅ **接受推翻（2026-10-11 · `PQ-20`）**：**节点数不再固定 8** | 开发者拍板 | ① [../roadmap.md](../../roadmap.md) §十 第 200 行 ② [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.4 第 207 行 ③ 看板 `PQ-20` 置 done ④ [../DocMAP.md](../../DocMAP.md) §5.3 |
 | `NE-D2` | 本次「节点扩展」落在哪一层（= `NE-Q1`） | ✅ **L1**（不新增节点，深化现有 8 个） | 开发者拍板（2026-10-12） | 本文 §4.2 / §7 |
 | `NE-D3` | L1 的实施依据 | ✅ **独立文档 [M_8nodes_extension.md](M_8nodes_extension.md)** | 开发者拍板（2026-10-12） | 本文 §0.1 / §4.2 / §10 |
 | `NE-D4` | 本文与 [M_8nodes_extension.md](M_8nodes_extension.md) 的关系 | ✅ **本文前提 = `M_8nodes_extension.md` 已完成实施并通过功能验证** | 开发者拍板（2026-10-12） | 本文 §0.1 / §1 |
@@ -558,27 +561,27 @@
 | 既有文档 | 本文与它的关系 | 本批是否改动它 |
 |---|---|---|
 | [M_8nodes_extension.md](M_8nodes_extension.md) | **L1 实施依据**（本文前提） | ✗ 不改 |
-| [../roadmap.md](../roadmap.md) §五 / §六 / §十 | 引用硬约束 · 滚动发布落点 · 示例状态 | ✗ 不改 |
-| [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.3 / §4.4 / §19.1 / §20.4 | 引用节点契约、已固定结论、延后清单、示例设计 | ✗ 不改 |
-| [M6.md](M6.md) · [milestone_plan.md](milestone_plan.md) | 仅引用 `M6-03` 状态 | ✗ 不改 |
+| [../roadmap.md](../../roadmap.md) §五 / §六 / §十 | 引用硬约束 · 滚动发布落点 · 示例状态 | ✗ 不改 |
+| [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.3 / §4.4 / §19.1 / §20.4 | 引用节点契约、已固定结论、延后清单、示例设计 | ✗ 不改 |
+| [M6.md](../../actionPlan/M6.md) · [milestone_plan.md](../../actionPlan/milestone_plan.md) | 仅引用 `M6-03` 状态 | ✗ 不改 |
 | [M_canvas_snapshot.md](M_canvas_snapshot.md) | **平级**子项文档 | ✗ 不改 |
 | [M_patchAB_rest.md](M_patchAB_rest.md) · [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md) | **平级**；互不引用 | ✗ 不改 |
-| [../DocMAP.md](../DocMAP.md) **§一 / §5.3** | **更新**本文口径（⚠️ **已有行**，只是停在 v2「讨论中 · 四层待定向」⇒ 属**更新**，不是新增） | ✅ 批 9-1（已执行） |
-| [../CHANGELOG.md](../CHANGELOG.md) | 记录本文批次 | ✅ 批 9-1（已执行） |
-| [../../AI_README.md](../../AI_README.md) §5 | **登记**编号空间 `NE-*` + `L1-R*` + `L2-*` + `L3-*` + `G-*`（含与 PatchB `L1`/`L2`/`L3` **同形不同物**的消歧） | ✅ 批 9-1（已执行） |
-| [../变量术语对照表.md](../变量术语对照表.md) §11.2 | **登记**新增编号空间（同上） | ✅ 批 9-1（已执行） |
-| [../AI_Status.md](../AI_Status.md) | 「最近更新」一句 | ✅ 批 9-1（已执行） |
-| [../DevPlan.todo](../DevPlan.todo) | 看板登记（`PQ-20` 结案 + `DOCS-NE-01`）；⚠️ **L2/L3 任务号暂不立**（按 `L1-R1` = 等 L1 完成后再定） | ⬜ **待开发者（UI 侧）** |
+| [../DocMAP.md](../../DocMAP.md) **§一 / §5.3** | **更新**本文口径（⚠️ **已有行**，只是停在 v2「讨论中 · 四层待定向」⇒ 属**更新**，不是新增） | ✅ 批 9-1（已执行） |
+| [../CHANGELOG.md](../../CHANGELOG.md) | 记录本文批次 | ✅ 批 9-1（已执行） |
+| [../../AI_README.md](../../../AI_README.md) §5 | **登记**编号空间 `NE-*` + `L1-R*` + `L2-*` + `L3-*` + `G-*`（含与 PatchB `L1`/`L2`/`L3` **同形不同物**的消歧） | ✅ 批 9-1（已执行） |
+| [../变量术语对照表.md](../../变量术语对照表.md) §11.2 | **登记**新增编号空间（同上） | ✅ 批 9-1（已执行） |
+| [../AI_Status.md](../../AI_Status.md) | 「最近更新」一句 | ✅ 批 9-1（已执行） |
+| [../DevPlan.todo](../../DevPlan.todo) | 看板登记（`PQ-20` 结案 + `DOCS-NE-01`）；⚠️ **L2/L3 任务号暂不立**（按 `L1-R1` = 等 L1 完成后再定） | ⬜ **待开发者（UI 侧）** |
 
-> **`G-4` 与 `G-5` 的分工（批 9-1 澄清，二者原表述看似冲突）**：`G-4`（`NE-D29`）= §10 清单**不由 AI 执行** ⇒ 含义是「**看板类**动作（`DevPlan.todo`）由**开发者**做」；**文档类登记**（DocMAP / CHANGELOG / AI_README / 术语表 / AI_Status）属 [../../AI_README.md](../../AI_README.md) §4 的**改动伴随义务** ⇒ **由 AI 同批完成**（本批已做）。
+> **`G-4` 与 `G-5` 的分工（批 9-1 澄清，二者原表述看似冲突）**：`G-4`（`NE-D29`）= §10 清单**不由 AI 执行** ⇒ 含义是「**看板类**动作（`DevPlan.todo`）由**开发者**做」；**文档类登记**（DocMAP / CHANGELOG / AI_README / 术语表 / AI_Status）属 [../../AI_README.md](../../../AI_README.md) §4 的**改动伴随义务** ⇒ **由 AI 同批完成**（本批已做）。
 
 **若后续定向为 L2 / L3 实施**，则必须**另开条目**并**同时**改下面**三处**（§3.2 的三处一致性 · 批 9-1 由「两处」更正为三处；**批 9-2 已改为三处同批改记**）：
 
-- [../roadmap.md](../roadmap.md) §十 第 200 行（「不做清单」侧）
-- [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.4 第 207 行（「设计已固定」侧）
-- [../节点编辑器使用说明.md](../节点编辑器使用说明.md) §4 标题第 93 行（「使用说明」侧 · ⚠️ **批 9-1 新查出**）
+- [../roadmap.md](../../roadmap.md) §十 第 200 行（「不做清单」侧）
+- [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.4 第 207 行（「设计已固定」侧）
+- [../节点编辑器使用说明.md](../../节点编辑器使用说明.md) §4 标题第 93 行（「使用说明」侧 · ⚠️ **批 9-1 新查出**）
 
-（L3 则改 [../ai_writer_nodes.md](../ai_writer_nodes.md) §19.1 第 1132–1137 行的**对应行**，而非 §十。）
+（L3 则改 [../ai_writer_nodes.md](../../ai_writer_nodes.md) §19.1 第 1132–1137 行的**对应行**，而非 §十。）
 
 ---
 

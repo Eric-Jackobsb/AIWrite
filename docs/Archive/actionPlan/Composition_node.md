@@ -5,12 +5,12 @@
 > **后续实施承接位** → [../../draft/M_preset_library.md](../../draft/M_preset_library.md)（官方预设节点库 · 组合层落地 · PS-01…）
 > 归档原则：**只增不改** —— 除本标记行与相对链接层级修正外，正文保持原样。
 
-> 类型：**架构设计文档**（不占用 M1–M8 编号；与 [M_node_expansion.md](../../actionPlan/M_node_expansion.md) / [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) / [M_8nodes_extension.md](../../actionPlan/M_8nodes_extension.md) 平级互链）
+> 类型：**架构设计文档**（不占用 M1–M8 编号；与 [M_node_expansion.md](M_node_expansion.md) / [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) / [M_8nodes_extension.md](M_8nodes_extension.md) 平级互链）
 > 定位：定义「**上级节点（Composite Node）**」——由基础节点有机组合形成的迷你工作流，可命名、可自定义、可放入其他工作流。
 > 上游依据：开发者 2026-10-16 拍板（可组合节点思路 + 10 项设计决策 + `CN-D20` L4 重启）
 > 编号空间：`CN-*`（Composite Node 任务）· `CN-D*`（决议）· `CN-Q*`（待确认）—— 已登记 [../../../AI_README.md](../../../AI_README.md) §5
 > 状态：✅ **已归档（2026-10-18 · 指令式）** —— 设计定稿 + 实施完成（代码 2026-10-16）；⏳ **人工验收 → [DevPlan.todo](../../DevPlan.todo) Test**（2026-10-21 由 `ToVerify.todo` 并入）
-> 相关：[M_node_expansion.md](../../actionPlan/M_node_expansion.md) · [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) · [M_8nodes_extension.md](../../actionPlan/M_8nodes_extension.md) · [../../ai_writer_nodes.md](../../ai_writer_nodes.md) · [../../roadmap.md](../../roadmap.md)
+> 相关：[M_node_expansion.md](M_node_expansion.md) · [Creation_Roadmap_Guideline.md](../../actionPlan/Creation_Roadmap_Guideline.md) · [M_8nodes_extension.md](M_8nodes_extension.md) · [../../ai_writer_nodes.md](../../ai_writer_nodes.md) · [../../roadmap.md](../../roadmap.md)
 > 建立：**2026-10-16**（v1）
 
 ---
@@ -42,8 +42,8 @@
 ### 0.1 定位
 
 - **本文是上级节点的设计依据**：定义上级节点的概念、端口规则、参数暴露、执行语义、创建方式、存储、UI、禁止嵌套。
-- **本文是节点扩展的架构补充**：与 [M_node_expansion.md](../../actionPlan/M_node_expansion.md) 的四层框架互补 —— 上级节点是「节点层」之上的「组合层」。
-- **不改他文**：本文对 [`M_node_expansion.md`](../../actionPlan/M_node_expansion.md) / [`Creation_Roadmap_Guideline.md`](../../actionPlan/Creation_Roadmap_Guideline.md) / [`../../ai_writer_nodes.md`](../../ai_writer_nodes.md) 等**只单向引用**。
+- **本文是节点扩展的架构补充**：与 [M_node_expansion.md](M_node_expansion.md) 的四层框架互补 —— 上级节点是「节点层」之上的「组合层」。
+- **不改他文**：本文对 [`M_node_expansion.md`](M_node_expansion.md) / [`Creation_Roadmap_Guideline.md`](../../actionPlan/Creation_Roadmap_Guideline.md) / [`../../ai_writer_nodes.md`](../../ai_writer_nodes.md) 等**只单向引用**。
 
 ### 0.2 本文要解决的那一个问题
 

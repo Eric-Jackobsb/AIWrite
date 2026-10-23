@@ -2,10 +2,10 @@
 
 > 类型：**创作流程框架文档**（不占用 M1–M8 编号；为节点扩展、示例工作流、UI 设计提供「从创作过程出发」的设计依据）
 > 定位：本文回答「**创作过程本身是什么样**」，节点设计从本文推导，而非从零散场景反推。
-> 上游依据：[M_node_expansion.md](M_node_expansion.md) §4.3（L2 定向：文本处理节点）+ 开发者 2026-10-12 拍板（8 阶段骨架 + B 档 6 项）。
+> 上游依据：[M_node_expansion.md](../Archive/actionPlan/M_node_expansion.md) §4.3（L2 定向：文本处理节点）+ 开发者 2026-10-12 拍板（8 阶段骨架 + B 档 6 项）。
 > 编号空间：`CR-*`（阶段）· `CR-OPS-*`（原子操作）· `CR-GAP-*`（缺口）—— 已登记 [../../AI_README.md](../../AI_README.md) §5。
 > 状态：🟢 **骨架已定（2026-10-12）** —— 8 阶段 + 原子操作清单 + B 档 6 项已定；创作流程其他缺口待后续讨论。
-> 相关：[M_node_expansion.md](M_node_expansion.md) §4.3 · [M_8nodes_extension.md](M_8nodes_extension.md) · [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.3–§4.5
+> 相关：[M_node_expansion.md](../Archive/actionPlan/M_node_expansion.md) §4.3 · [M_8nodes_extension.md](../Archive/actionPlan/M_8nodes_extension.md) · [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.3–§4.5
 > 建立：**2026-10-12**（v1）· **最近更新：2026-10-13（v1.1 —— 归位 `docs/actionPlan/` + 五处登记 · 正文未改）**
 
 ---
@@ -16,7 +16,7 @@
 
 - **本文是创作流程的框架文档**：描述「小说/剧本创作从 0 到 100 经历哪些阶段、每阶段的数据形态、现有节点覆盖情况、缺口」。
 - **本文是节点设计的依据**：L2 的文本处理节点（`TextSplit` / `TextReplace` / `TextExtract` / `TextClean` / `TextStats` / `TextDiff`）从本文的「原子操作清单」推导。
-- **不改他文**：本文对 [`M_node_expansion.md`](M_node_expansion.md) / [`../ai_writer_nodes.md`](../ai_writer_nodes.md) / [`../roadmap.md`](../roadmap.md) 等**只单向引用**。
+- **不改他文**：本文对 [`M_node_expansion.md`](../Archive/actionPlan/M_node_expansion.md) / [`../ai_writer_nodes.md`](../ai_writer_nodes.md) / [`../roadmap.md`](../roadmap.md) 等**只单向引用**。
 
 ### 0.2 本文要解决的那一个问题
 
@@ -367,8 +367,8 @@ N-01（输入：一句话灵感）
 
 | 既有文档 | 本文与它的关系 | 本批是否改动它 |
 |---|---|---|
-| [M_node_expansion.md](M_node_expansion.md) §4.3 | **本文是 L2 的设计依据**；L2 的 B 档节点从本文推导 | ✗ 不改 |
-| [M_8nodes_extension.md](M_8nodes_extension.md) | **平级**（那是 L1，本文是 L2 依据） | ✗ 不改 |
+| [M_node_expansion.md](../Archive/actionPlan/M_node_expansion.md) §4.3 | **本文是 L2 的设计依据**；L2 的 B 档节点从本文推导 | ✗ 不改 |
+| [M_8nodes_extension.md](../Archive/actionPlan/M_8nodes_extension.md) | **平级**（那是 L1，本文是 L2 依据） | ✗ 不改 |
 | [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.3–§4.5 / §19.1 | 引用节点契约与延后清单 | ✗ 不改 |
 | [../roadmap.md](../roadmap.md) §十 | 引用不做清单 | ✗ 不改 |
 | [../DocMAP.md](../DocMAP.md) §5.2 / §5.3 | **登记本文** | ✅ 本批登记 |

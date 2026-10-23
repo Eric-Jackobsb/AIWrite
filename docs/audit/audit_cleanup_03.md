@@ -1,6 +1,6 @@
 # 审计报告 · audit_cleanup_03 —— CLN-03 失效分支 / 注释掉的代码块
 
-> 批次：`CLN-03`（对应 [../actionPlan/M_code_cleanup.md](../actionPlan/M_code_cleanup.md) §3.1）· 日期：2026-10-20
+> 批次：`CLN-03`（对应 [../actionPlan/M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §3.1）· 日期：2026-10-20
 > 性质：**删除前置审计闸门（§3.0）**的产物 —— 本批扫描结论 = **无删除项**，故「行动计划」无删除清单，仅登记结论与观察项。
 > 范围：`source/**`（**225 个 .cpp/.h**，全量），排除 `third_party/**`（vendored）与 `source/python/**`（Pydoll 休眠栈，硬边界 §6）。
 > 方法：自研静态扫描脚本（临时工具，不入库，见 §5）+ **合成正 / 负对照夹具**验证扫描器可信度 + 逐块人工复核。

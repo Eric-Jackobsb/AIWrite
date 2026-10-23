@@ -26,7 +26,7 @@
 
 - `editor_state.h`：新增构造函数（订阅）/ 析构函数（注销）；公开订阅通知字段 `follow_output_` / `follow_node_id_` / `run_finished_` / `run_last_summary_`；私有 `onRunEvent` + `run_sub_handle_`；**删除 `pumpRunEvents()` 声明**。
 - `editor_state.cpp`：
-  - 构造：`run.subscribeRunEvents([this](...){ onRunEvent(event); })`。
+  - 构造：`run.subscribeRunEvents([this](.){ onRunEvent(event); })`。
   - 析构：`run.unsubscribeRunEvents(run_sub_handle_)`。
   - `onRunEvent`：`NodeOutput/Delta` → `follow_output_=true` + 记节点；`Finished` → 停跟随 + 缓存 `run_last_summary_`。
   - `startRunAsync` / `startRerunAsync`：新会话开始重置订阅通知。

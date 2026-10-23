@@ -1,6 +1,6 @@
 # 审计报告 · audit_cleanup_05 —— CLN-05 重复的辅助函数
 
-> 批次：`CLN-05`（对应 [../actionPlan/M_code_cleanup.md](../actionPlan/M_code_cleanup.md) §3.1）· 日期：2026-10-20
+> 批次：`CLN-05`（对应 [../actionPlan/M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §3.1）· 日期：2026-10-20
 > 性质：**删除前置审计闸门（§3.0）**的产物 —— 本批清点出 **5 组真重复辅助函数**（12 文件 · 14 处重复定义），收敛方案 = **新建 `utils/string_util.{h,cpp}` 单一来源** + 各 TU 改调共享实现 + 删本地定义。
 > 范围：`source/**`（163 个 `.cpp/.h`，非 `third_party` / `source/python`）。
 > 方法：全库同名函数清点（脚本提取 → 人工逐行比对）+ **逐行一致判定**（Trim-归一化精确 diff）+ 调用点全量取证。

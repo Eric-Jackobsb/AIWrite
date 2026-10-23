@@ -1,6 +1,6 @@
 # 审计报告 · audit_cleanup_04 —— CLN-04 TODO / FIXME / HACK 台账
 
-> 批次：`CLN-04`（对应 [../actionPlan/M_code_cleanup.md](../actionPlan/M_code_cleanup.md) §3.1）· 日期：2026-10-20
+> 批次：`CLN-04`（对应 [../actionPlan/M_code_cleanup.md](../Archive/actionPlan/M_code_cleanup.md) §3.1）· 日期：2026-10-20
 > 性质：**文档级台账批次（无删除闸门）** —— 全库收集 → 逐条判定（已实现删标 / 仍有效登记进 `DevPlan.todo` / 已无意义删）→ **台账归零**。
 > 范围：`source/**`（**163 个 .cpp/.h**，与 CLN-01 口径一致：229 全库 − 65 third_party − 1 python），排除 `third_party/**`（vendored，硬边界 §6）与 `source/python/**`（Pydoll 休眠栈）。
 > 方法：自研静态扫描脚本（临时工具，不入库，见 §5）+ 合成正例对照验证 + 双扫描器互证 + 逐条人工核验。

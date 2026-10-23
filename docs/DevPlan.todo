@@ -3193,6 +3193,18 @@
             }
           },
           {
+            "key": 447,
+            "children": [],
+            "todo": {
+              "id": 447,
+              "content": "ARC-AR-02 文档整理批次 · 7 份已收口 actionPlan 归档（2026-10-23）：M_code_cleanup（CLN-01…15 审查勾账 + CLN-12~15 拆分落地 + 驼峰化 8 批）· M_patchAB_rest（v11 收口 · D-25~D-32 8/8）· M_patchC_web_node_bind（v8 · PW-12 ✅）· M_canvas_snapshot（CS-10 收口）· M_8nodes_extension（L1 六批 + AL1-* 人工验收）· M_node_expansion（v6 讨论稿 · 被 part2 取代）· M_node_expansion_part2（四层定稿 + L1/L2/L3 实施完成）—— 七件 git mv → docs/Archive/actionPlan/（各加 📦 已归档 标记行 + 承接位，正文未改）· 残项统一承接 = docs/actionPlan/M_polish.md §4 承接表 · 全库相对链接重算（45 文件）· check_links 2094/0 · 索引同步 = Archive/README（索引 +7 行 · §四 候选表收口）· DocMAP（§一 两行 + §5.3 标记 + 后续增量）· CHANGELOG · AI_README §1 ｜ docs/Archive/README.md",
+              "done": true,
+              "level": "success",
+              "fileLink": "docs/Archive/README.md；docs/Archive/actionPlan/M_code_cleanup.md；docs/Archive/actionPlan/M_patchAB_rest.md；docs/actionPlan/M_polish.md"
+            }
+          },
+
+          {
             "key": 332,
             "children": [
               {
@@ -4933,7 +4945,7 @@
         ],
         "todo": {
           "id": 88,
-          "content": "Archive（156 项）",
+          "content": "Archive（157 项）",
           "done": true,
           "level": "success"
         }

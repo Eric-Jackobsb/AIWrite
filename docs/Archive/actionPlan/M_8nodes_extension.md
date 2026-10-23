@@ -1,10 +1,13 @@
 # M_8nodes_extension：8 节点深化开发（L1 层 · ✅ 已实施完成 + 人工验收完成）
 
+> 📦 **已归档（2026-10-23 · 文档整理批次 `ARC-AR-02`）** —— L1 六批（`L1-a`~`L1-f`）**已落地（2026-10-14）** + 人工验收 `AL1-01`…`AL1-06` **已通过（2026-10-15 · 用户）**，按 [../README.md](../README.md) §三 归档（`git mv` 保留历史，正文只增不改）。
+> **承接位** → 参数面 / 行为**现行契约** = [../../节点编辑器使用说明.md](../../节点编辑器使用说明.md) §4 + [../../变量术语对照表.md](../../变量术语对照表.md)；上游四层定稿 = [M_node_expansion_part2.md](M_node_expansion_part2.md)；验收清单留档 = [../../audit/L1_checklist.todo](../../audit/L1_checklist.todo)。
+
 > 类型：跨里程碑功能计划（不占用 M1–M8 编号；与 [M_node_expansion.md](M_node_expansion.md) / [M_patchAB_rest.md](M_patchAB_rest.md) / [M_patchC_web_node_bind.md](M_patchC_web_node_bind.md) / [M_canvas_snapshot.md](M_canvas_snapshot.md) 平级互链）。
 > 上游依据：[M_node_expansion.md](M_node_expansion.md) §4.2 **L1 层定向**（"不加节点，把现有 8 个做深"）+ §11 `D-1` / `D-7` 拍板（上游现为 **v6 实施依据 · 四层全部定向**，2026-10-12）。
-> 编号空间：`L1-*`（任务）· `NE-D*`（**L1 层决策** —— 承接上游 [M_node_expansion.md](M_node_expansion.md) 的定向；⚠️ **上游同名号另有全局含义**，其 L1 细节别名已改号为 `NE-D30`~`NE-D37`）· `VL1-*`（验证项）· `AL1-*`（验收）—— `NE-D*` **已登记**（[../../AI_README.md](../../AI_README.md) §5）；`L1-*` / `VL1-*` / `AL1-*` **本批登记**（批 9-0 · 见 §10）。
-> 状态：✅ **L1 实施完成（2026-10-14 · L1-a~f 六批落地）+ 人工验收完成（2026-10-15 · 用户）** —— `VL1-01`…`VL1-12` 离线断言全过（graph **110 → 144 / 0** · exec **546 → 598 / 0** · 断链 **1375 / 0** · check_all **15/15**）；`AL1-01`…`AL1-06` 用户人工验收通过（2026-10-15 · 见 [../audit/L1_checklist.todo](../audit/L1_checklist.todo)）。本文 **v1.4（收口批 · 纯文档）**。
-> 相关：[../roadmap.md](../roadmap.md) §六 / §十 · [../ai_writer_nodes.md](../ai_writer_nodes.md) §4.3–§4.5 / §9.2 / §19.1 · [../../source/engine/src/node_registry.cpp](../../source/engine/src/node_registry.cpp) · [../../source/nodes/src/register_executors.cpp](../../source/nodes/src/register_executors.cpp) · 看板卡 `DOCS-NE-01`（任务号 `NE-01…` 待启用）。
+> 编号空间：`L1-*`（任务）· `NE-D*`（**L1 层决策** —— 承接上游 [M_node_expansion.md](M_node_expansion.md) 的定向；⚠️ **上游同名号另有全局含义**，其 L1 细节别名已改号为 `NE-D30`~`NE-D37`）· `VL1-*`（验证项）· `AL1-*`（验收）—— `NE-D*` **已登记**（[../../AI_README.md](../../../AI_README.md) §5）；`L1-*` / `VL1-*` / `AL1-*` **本批登记**（批 9-0 · 见 §10）。
+> 状态：✅ **L1 实施完成（2026-10-14 · L1-a~f 六批落地）+ 人工验收完成（2026-10-15 · 用户）** —— `VL1-01`…`VL1-12` 离线断言全过（graph **110 → 144 / 0** · exec **546 → 598 / 0** · 断链 **1375 / 0** · check_all **15/15**）；`AL1-01`…`AL1-06` 用户人工验收通过（2026-10-15 · 见 [../audit/L1_checklist.todo](../../audit/L1_checklist.todo)）。本文 **v1.4（收口批 · 纯文档）**。
+> 相关：[../roadmap.md](../../roadmap.md) §六 / §十 · [../ai_writer_nodes.md](../../ai_writer_nodes.md) §4.3–§4.5 / §9.2 / §19.1 · [../../source/engine/src/node_registry.cpp](../../../source/engine/src/node_registry.cpp) · [../../source/nodes/src/register_executors.cpp](../../../source/nodes/src/register_executors.cpp) · 看板卡 `DOCS-NE-01`（任务号 `NE-01…` 待启用）。
 > 建立：**2026-10-12**（v1 · 方案定稿）
 
 ---
@@ -14,7 +17,7 @@
 ### 0.1 定位
 
 - **本文是 L1 的实施依据**：上游 [M_node_expansion.md](M_node_expansion.md) 现为**实施依据文档**（🟢 **四层全部定向** · 2026-10-12 v6 —— L1/L2/L3/L4 均已定向，L1 细节由**本文**承接）；本文是**L1 层的定向结论与实施方案**（有推荐、有任务、有验收）。
-- **不改他文**：本文对 [../roadmap.md](../roadmap.md) / [../ai_writer_nodes.md](../ai_writer_nodes.md) / [M6.md](M6.md) 等**只单向引用**；实施时若需改动其内容，**另开条目**并同批改记（[../../AI_README.md](../../AI_README.md) §5 / §7 第 6 条）。
+- **不改他文**：本文对 [../roadmap.md](../../roadmap.md) / [../ai_writer_nodes.md](../../ai_writer_nodes.md) / [M6.md](../../actionPlan/M6.md) 等**只单向引用**；实施时若需改动其内容，**另开条目**并同批改记（[../../AI_README.md](../../../AI_README.md) §5 / §7 第 6 条）。
 - **不撞已固定结论**：`PQ-20` 已推翻「节点数维持 8」；本文**不新增节点类型**（L1 定义），**不涉及** §19.1 延后清单的 14 项（其中无「参数级增强」）。
 
 ### 0.2 本文要解决的那一个问题
@@ -76,7 +79,7 @@
 
 | 编号 | 议题 | 结论 | 依据 | 登记动作 |
 |---|---|---|---|---|
-| `NE-D2` | 本次节点扩展落在哪一层 | **L1**（不新增节点，深化现有 8 个） | [M_node_expansion.md](M_node_expansion.md) §4.2 · §11 `D-1` | 本文 §1；[../roadmap.md](../roadmap.md) §六「补强」栏 |
+| `NE-D2` | 本次节点扩展落在哪一层 | **L1**（不新增节点，深化现有 8 个） | [M_node_expansion.md](M_node_expansion.md) §4.2 · §11 `D-1` | 本文 §1；[../roadmap.md](../../roadmap.md) §六「补强」栏 |
 | `NE-D3` | N-03 的 AI 调用是否复用 N-05 解析 | **复用** `resolve_effective_provider`（`engine/src/provider_resolve.cpp:106`）+ `ai::resolve_api_key`（`ai/include/deepseek_official_provider.h:87/89`） | 本文 §4.3 | 本文 §4.3；两符号分属 `engine` / `ai` 两模块 |
 | `NE-D4` | N-03 的登录入口 | **复用现有「网页版会话」区块**（与 N-05 相同） | 本文 §4.3 | 本文 §4.3；`ui/property_panel.cpp` |
 | `NE-D5` | N-03 的 `seed` 语义 | **只作用于内部 AI 调用**（生成提示词），不影响模板替换 | 本文 §4.3 | 本文 §4.3 |
@@ -126,7 +129,7 @@ system_prompt · temperature · max_tokens · top_p · top_k · stop
 | **高级** | `timeout.*` / `error.*` 覆盖项 | 折叠 |
 
 **落地方式**：
-- 复用已有 `visible_when_param` / `visible_when_value` **条件可见**机制（[../../source/engine/src/node_registry.cpp](../../source/engine/src/node_registry.cpp) 第 347–353 行赋值；可见性判定见 `engine::param_visible()`）。
+- 复用已有 `visible_when_param` / `visible_when_value` **条件可见**机制（[../../source/engine/src/node_registry.cpp](../../../source/engine/src/node_registry.cpp) 第 347–353 行赋值；可见性判定见 `engine::param_visible()`）。
 - 现状基础：已有**一级**「参数」`CollapsingHeader`（`ui/property_panel.cpp` 第 1053–1055 行 · P7a-15）⇒ 本轮是在该一级组**内**加**二级**分组，**不是**从零新建面板。
 - 分组是**纯 UI 层**（`ui/property_panel.cpp`）；**不影响参数序列化**（工作流 JSON 结构不变）。
 - 折叠状态持久化到 `imgui.ini`（不写 `config.toml`）。
@@ -292,7 +295,7 @@ stream
 - `seed` 只作用于内部 AI 调用，**不影响模板替换**。
 - 网页版参数标注「忽略」（与 N-06 / N-07 一致）。
 - AI 生成失败 → 节点报可操作错误，**不静默回退到 manual**。
-- AI 生成写入 `template` 前**先压撤销快照**（可撤销；先例 `M_textio` 现为 📦 已归档 → [Archive/actionPlan/M_textio.md](../Archive/actionPlan/M_textio.md)；现行撤销栈见 `engine`）。
+- AI 生成写入 `template` 前**先压撤销快照**（可撤销；先例 `M_textio` 现为 📦 已归档 → [Archive/actionPlan/M_textio.md](M_textio.md)；现行撤销栈见 `engine`）。
 
 **验收**：`VL1-06`（按钮触发 / AI 输出写入输入框 / `seed` 只作用于 AI / 登录入口可用 / 失败有可操作错误）。
 **人工项**：`AL1-02`（手动模式 / AI 模式各跑一次）。
@@ -485,7 +488,7 @@ stream
 - 每批跑 §7.3 回归基线并贴数字。
 - L1-d **不单独排期**（`NE-D6`），与其他项同批推进。
 
-**实施记录（2026-10-14 · 四个代码批 · 对应 [../CHANGELOG.md](../CHANGELOG.md)）**：
+**实施记录（2026-10-14 · 四个代码批 · 对应 [../CHANGELOG.md](../../CHANGELOG.md)）**：
 
 | 批 | 内容（落地） | 验证（本机实测） |
 |---|---|---|
@@ -494,7 +497,7 @@ stream
 | **L1-c** 输入侧 | N-01 文件导入（UTF-8 读取 / 二次确认）+ N-02 目录批量 / 图片预处理（新模块 `ai/image_preprocess`）+ N-07 预处理复用 | exec **546 → 592 / 0**（+46 = image_preprocess 6 项 + `VL1-05` 参数面 + 既有）· graph 144/0 |
 | **L1-d/e/f** 收尾 | N-03 AI 生成提示词（异步 · 新模块 `prompt_generator`）+ JSON 输出 / 多候选（`response_format` / `n`）+ N-05 参数预设 / 模型列表刷新 | exec **546 → 598 / 0**（+6 = `VL1-06`×2 · `VL1-08`×2 · `VL1-09`×2）· graph 144/0 · 断链 **1375 / 0** · check_all 15/15 |
 
-> **至此 L1 六批（a~f）全部完成**，离线断言全过。人工验收项（`AL1-01`…`AL1-06`）由**用户 2026-10-15 完成**（§7.2 + [../audit/L1_checklist.todo](../audit/L1_checklist.todo)）。后续 L2/L3 批（2026-10-15）在此基础上继续推进，全库终值 = graph **151 / 0** · exec **655 / 0** · 断链 **1487 / 0**（本文 §7.3 记 L1 收尾值）。
+> **至此 L1 六批（a~f）全部完成**，离线断言全过。人工验收项（`AL1-01`…`AL1-06`）由**用户 2026-10-15 完成**（§7.2 + [../audit/L1_checklist.todo](../../audit/L1_checklist.todo)）。后续 L2/L3 批（2026-10-15）在此基础上继续推进，全库终值 = graph **151 / 0** · exec **655 / 0** · 断链 **1487 / 0**（本文 §7.3 记 L1 收尾值）。
 
 ---
 
@@ -528,7 +531,7 @@ stream
 | `AL1-05` | N-02 预处理（缩放 / 裁剪各一次） | | ✅ 已人工验收 |
 | `AL1-06` | N-01 文件导入（`.txt` / `.md`） | | ✅ 已人工验收 |
 
-> 逐项记录与物证位见 [../audit/L1_checklist.todo](../audit/L1_checklist.todo)（2026-10-15 用户全项勾选）。
+> 逐项记录与物证位见 [../audit/L1_checklist.todo](../../audit/L1_checklist.todo)（2026-10-15 用户全项勾选）。
 
 ### 7.3 回归基线（每批必跑）
 
@@ -539,7 +542,7 @@ stream
 | `api_probe --exec-selftest` | **598 / 0**（链：546 → 585 → 592 → 598 · 只升不降） |
 | `api_probe --selftest` | **十三组 PASS** ⚠️ 不是七组 —— 组名见末行「结果: …」（四批实测 13 个组名全 PASS） |
 | `aiwrite --provider-selftest` | **52 / 0**（实测末行 `[配置表自检] 52 项通过 / 0 项失败` · exit 0） |
-| `aiwrite --run-selftest` | PASS ⏸ 未复跑（沿用 [../../AI_README.md](../../AI_README.md) §2 权威位） |
+| `aiwrite --run-selftest` | PASS ⏸ 未复跑（沿用 [../../AI_README.md](../../../AI_README.md) §2 权威位） |
 | `aiwrite --run-selftest --web` | 5 / 5 ⏸ 未复跑（同上） |
 | `python source\tools\check_links.py` | **checked 1375 / broken 0 · exit 0**（批 9-0 基线 1246 → … → 批 9-3 1341 → 批 9-4 1349 → 批 9-5 1350 → **L1-d/e/f 批 +25 = 1375**） |
 | `source\tools\check_all.ps1` | **15 / 15 PASS · exit 0**（L1 四批物证 `build\logs\check_all_20261015_010021.log` 等） |
@@ -561,7 +564,7 @@ stream
 | 不变量 `I18` | ✅ 不**放宽** | `I18` = 网页版图片「无上传完成证据不得自动发送」；预处理在**上传前**发生，不改双证据链路 |
 | 不变量 `I19` | ✅ 不涉及 | `I19` = `image` 端口语义向后兼容；不碰 `image` 端口语义 |
 
-**图片预处理与 `I18` 的关系（批 9-0 补）**：预处理 = **本地变换**（读取 → 裁剪 → 缩放 → 编码）→ 上传 → 双证据齐备 → 才注入 / 发送；**不得**因预处理失败而走"降级为不含图片继续"（该降级**只能由用户本次运行显式选择** —— 口径同 [../roadmap.md](../roadmap.md) 第 67 行）。
+**图片预处理与 `I18` 的关系（批 9-0 补）**：预处理 = **本地变换**（读取 → 裁剪 → 缩放 → 编码）→ 上传 → 双证据齐备 → 才注入 / 发送；**不得**因预处理失败而走"降级为不含图片继续"（该降级**只能由用户本次运行显式选择** —— 口径同 [../roadmap.md](../../roadmap.md) 第 67 行）。
 
 **不新增节点类型 ⇒ 不触碰** `api_probe.cpp:1936`（`registry.size() == "8"`）/ `:1938`（`expected_types[]`）/ `:1953-1959`（分类计数）的节点数硬断言。
 
@@ -611,8 +614,8 @@ stream
 | 2026-10-12 | **v1.1** | **批 9-0 收口（纯文档 · 零代码）**：① **归位** `docs/actionPlan/`（断链 **100 → 0** · 归位后 checked **1219 / 0** → 索引同步后 **1246 / 0** → 批 9-1 复检 **1283 / 0**）；② 纠正 **6 项与代码不符的前提**（P1-1…P1-6）；③ 修正 **9 项数字 / 口径**（P2-1…P2-9）；④ 登记 `L1-*` / `VL1-*` / `AL1-*`。逐条见 **§12**。 |
 | 2026-10-12 | **v1.2** | **批 9-1 口径同步（纯文档 · 零代码）**：上游 [M_node_expansion.md](M_node_expansion.md) 已升 **v5 实施依据（四层全部定向）** ⇒ 本文改三处口径：① 文首「上游依据」注明 v5；② §0.1 删「上游是**讨论稿**（摊开四层、无推荐）」→ 改「上游现为**实施依据文档**（四层全部定向）· L1 细节由本文承接」；③ §2 前言补 **两文 `NE-D` 编号分工**（本文 `NE-D1`~`NE-D13` = L1 细节；上游同名号另有全局含义，其 L1 细节别名已改号 `NE-D30`~`NE-D37`）。同时文首编号空间行同步。 |
 | 2026-10-12 | **v1.3** | **批 9-2 用户拍板落盘（纯文档 · 零代码）**：上游 [M_node_expansion.md](M_node_expansion.md) 升 **v6** —— ① `NE-D38`（`mode` 默认值保持现状）② `NE-D39`（`L2-01…` / `L3-01…` 任务号先立）；本文 §5.1 注已改为「**不再改为 `official`**（用户拍板 ③A · 零行为变更）」、§5.1 表 `mode` 默认单元格同步。 |
-| 2026-10-14 | **v1.4（实施完成 · 代码）** | **L1 六批（a~f）全部落地**（四个代码批，见 §6 实施记录）：graph **110 → 144 / 0** · exec **546 → 598 / 0** · 断链 **1375 / 0** · check_all **15/15** —— 对应 [../CHANGELOG.md](../CHANGELOG.md) 四个 `M_8nodes_extension` L1 批次。 |
-| 2026-10-15 | **v1.4 收口（纯文档）** | **文档状态同步 + 人工验收回填**：① 顶部状态 🟡 未开工 → ✅ 已实施完成 + 人工验收完成；② §7.1 `VL1-*` 逐项回填结果；③ §7.2 `AL1-*` → ✅ 用户人工验收（2026-10-15）；④ §7.3 基线更新至 L1 终值；⑤ §10 落档动作如实标注（`DevPlan.todo` / 看板卡 / roadmap / ai_writer_nodes / 使用说明 仍 ⬜ 待做）；⑥ [../audit/L1_checklist.todo](../audit/L1_checklist.todo) ⬜ → ✅（用户全项勾选）。 |
+| 2026-10-14 | **v1.4（实施完成 · 代码）** | **L1 六批（a~f）全部落地**（四个代码批，见 §6 实施记录）：graph **110 → 144 / 0** · exec **546 → 598 / 0** · 断链 **1375 / 0** · check_all **15/15** —— 对应 [../CHANGELOG.md](../../CHANGELOG.md) 四个 `M_8nodes_extension` L1 批次。 |
+| 2026-10-15 | **v1.4 收口（纯文档）** | **文档状态同步 + 人工验收回填**：① 顶部状态 🟡 未开工 → ✅ 已实施完成 + 人工验收完成；② §7.1 `VL1-*` 逐项回填结果；③ §7.2 `AL1-*` → ✅ 用户人工验收（2026-10-15）；④ §7.3 基线更新至 L1 终值；⑤ §10 落档动作如实标注（`DevPlan.todo` / 看板卡 / roadmap / ai_writer_nodes / 使用说明 仍 ⬜ 待做）；⑥ [../audit/L1_checklist.todo](../../audit/L1_checklist.todo) ⬜ → ✅（用户全项勾选）。 |
 
 ---
 
