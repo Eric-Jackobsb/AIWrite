@@ -249,13 +249,17 @@ add_library(aiwrite_core STATIC
     utils/src/webview2_runtime.cpp    # M6（PM-01）：WebView2 运行时依赖探测（首启引导 + 诊断）
     engine/src/graph.cpp
     engine/src/node_registry.cpp
+    engine/src/node_registry_nodes.cpp  # ARCH-Z1 拆分（构造小工具 + registerAllNodes）
     engine/src/undo_stack.cpp
     engine/src/workflow_io.cpp
     engine/src/validate.cpp
     engine/src/failure_summary.cpp     # DEBT-L8（M6-04）：运行结束失败汇总（纯函数）
     engine/src/provider_resolve.cpp
     engine/src/executor.cpp
+    engine/src/executor_run.cpp      # ARCH-Z1 拆分（结果文本 / 快照 / 全量·单节点执行）
     engine/src/composite.cpp        # CN：上级节点（模型/注册表/独立文件存储/展开执行）
+    engine/src/composite_build.cpp  # ARCH-Z1 拆分（试运行沙箱 / 打包 / 展开执行）
+    engine/src/composite_registry.cpp  # ARCH-Z1 拆分（CompositeRegistry 扫描·保存·删除·迁移）
     engine/src/recent_files.cpp
     engine/src/autosave.cpp          # M_patchAB §4（PC-01/02）：自动保存 + 崩溃恢复（api_probe --autosave-assert）
     engine/src/migration.cpp         # M_patchAB §4（PC-04）：版本迁移框架（workflow + config；未来版本明确拒绝）
@@ -291,6 +295,9 @@ add_library(aiwrite_core STATIC
     ai/src/site_template.cpp          # M_patchAB §3.5（PB2-24）：自建网页版站点模板 + 落盘
     ai/src/official_template.cpp      # 自定义 AI 收口：自建官方 API 提供商模板 + 落盘
     nodes/src/local_nodes.cpp
+    nodes/src/local_nodes_helpers.cpp  # ARCH-Z1 拆分（公用：文本化/图片/预处理/Key 解析/归属）
+    nodes/src/local_nodes_llm.cpp      # ARCH-Z1 拆分（N-06 文本生成）
+    nodes/src/local_nodes_vlm.cpp      # ARCH-Z1 拆分（N-07 图片理解）
     nodes/src/register_executors.cpp
     nodes/src/text_split.cpp          # M_node_expansion L2（§4.3.5.1）：文本分块
     nodes/src/text_extract.cpp        # M_node_expansion L2（§4.3.5.2）：文本提取
