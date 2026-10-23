@@ -17,7 +17,7 @@
 ## 二、官方 API 台账（9 条 · 机器生成 · 跨轮累积）
 
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-22 · 覆盖轮次 0：
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-23 · 覆盖轮次 0：
 > **范围**：`kind=official` 的 **9 条**（`openai` / `anthropic` / `gemini` 协议直连：不起浏览器、不走 DOM、不依赖登录态）· **文字理解**判据 = 真机 HTTP 200 且取回正文（或 `providers.json` `verified=true`）；**图片理解**判据 = 多模态真机一次 —— `capabilities.vision=true` 只是**声明**（§10.1 陷阱 7）。
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > 来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。

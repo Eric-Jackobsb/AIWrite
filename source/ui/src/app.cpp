@@ -513,7 +513,9 @@ int run(const AppOptions& options)
     }
 
     // 配置（M1-07：读配置 / 写日志）—— 必须早于窗口创建：窗口几何（F3 / PD-04）来自 config.toml [ui]
-    Config config;
+    // ARCH-A1：Config 收口到 editor().app_ctx().config —— editor() 首次调用提前到此处
+    //（构造 AppContext：订阅 run 事件 / autosave 编辑事件，不依赖 GLFW/窗口，可提前）
+    Config& config = editor().app_ctx().config;
     (void)loadConfig(paths::configFile(), config);
     // PA-07：灌入进程级缓存，供非 UI 代码（provider / 工具）读取
     setAppConfig(config);
@@ -737,10 +739,9 @@ int run(const AppOptions& options)
     }
 
     // 诊断：安装首异常计数器（VEH）——用于定位第三方依赖反复抛异常 / 内存增长问题，
-    // 结果会以「[诊断]」行写入 app.log（带限流）
-    utils::diagnostics::installExceptionCounter();
-    utils::diagnostics::logMemorySample("启动基线");
-
+    // 结果会以「[诊断]」行写入 app.log（带限流）。ARCH-A1：归口 app_ctx().diagnostics
+    editor().app_ctx().diagnostics.install_exception_counter();
+    editor().app_ctx().diagnostics.log_memory_sample("启动基线");
     log::info("主窗口已创建 " + std::to_string(window_width) + "x" + std::to_string(window_height) +
               "，DPI 缩放 " + std::to_string(ui_scale));
 
@@ -816,7 +817,8 @@ int run(const AppOptions& options)
         //  · 首异常累计（有变化才输出，限流）
         //  · 心跳（每 300 帧）：确认渲染循环真的在跑
         //  · 每 30 秒一次内存采样（工作集 / 私有 / 峰值 + 业务计数）
-        utils::diagnostics::logExceptionSummary();
+        // ARCH-A1：诊断归口 app_ctx().diagnostics
+        editor().app_ctx().diagnostics.log_exception_summary();
         const bool window_iconified = (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0);
         if (frame_index <= 5 || frame_index % 3600 == 0) { // 启动前几帧 + 之后约每 1 分钟
             log::info("[诊断] 心跳 帧=" + std::to_string(frame_index) + " 最小化=" +
@@ -828,7 +830,7 @@ int run(const AppOptions& options)
         if (diagnostic_now - last_memory_sample >= std::chrono::seconds(30)) {
             last_memory_sample = diagnostic_now;
             const EditorState& diagnostic_state = editor();
-            utils::diagnostics::logMemorySample(
+            editor().app_ctx().diagnostics.log_memory_sample(
                 "节点 " + std::to_string(diagnostic_state.model().graph.nodes.size()) + " / 连线 " +
                 std::to_string(diagnostic_state.model().graph.edges.size()) + " / 撤销栈 " +
                 std::to_string(diagnostic_state.model().undo.undoDepth()));
@@ -925,8 +927,9 @@ int run(const AppOptions& options)
                 if (ImGui::BeginMenu("最近打开")) {
                     // M_patchAB §4（PC-03 / FEA-M2-02）：打开前**校验存在性** ——
                     // 失效项灰显（不可点）+ 悬停解释 + 底部一键「清理失效条目」
+                    // ARCH-A1：最近列表归口 app_ctx().workflow_file.recent_files()
                     const std::vector<engine::RecentStatus> recent =
-                        engine::recentWithStatus();
+                        state.app_ctx().workflow_file.recent_files().with_status();
                     if (recent.empty()) {
                         ImGui::MenuItem("（暂无记录）", nullptr, false, false);
                     }
@@ -952,17 +955,17 @@ int run(const AppOptions& options)
                             }
                         }
                     }
-                    const std::size_t missing = engine::countMissingRecent();
+                    const std::size_t missing = state.app_ctx().workflow_file.recent_files().count_missing();
                     if (missing > 0) {
                         ImGui::Separator();
                         if (ImGui::MenuItem(("清理失效条目（" + std::to_string(missing) + "）").c_str())) {
-                            const std::size_t removed = engine::pruneMissingRecent();
+                            const std::size_t removed = state.app_ctx().workflow_file.recent_files().prune_missing();
                             state.setStatus("已清理 " + std::to_string(removed) + " 条失效的最近记录");
                         }
                     }
                     ImGui::Separator();
                     if (ImGui::MenuItem("清空列表")) {
-                        engine::clearRecentFiles();
+                        state.app_ctx().workflow_file.recent_files().clear();
                     }
                     ImGui::EndMenu();
                 }
@@ -1104,7 +1107,7 @@ int run(const AppOptions& options)
                                     "「忽略」= 删除该快照，按当前内容继续。");
 
                 const auto finish_without_restore = [&](const char* status_text) {
-                    engine::autosaveClear(nullptr); // 用户明确拒绝 ⇒ 快照不再保留（否则下次又问）
+                    state.app_ctx().autosave.clear_snapshot(); // 用户明确拒绝 ⇒ 快照不再保留（否则下次又问）
                     state.markAutosaveBaseline();
                     state.pauseAutosave(false);
                     autosave_ask = false;

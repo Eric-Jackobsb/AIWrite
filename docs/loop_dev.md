@@ -55,7 +55,7 @@
 > 完整台账（含每站 `history[]` 跨轮轨迹）：`build/loop/SITE_STATUS.json`（机器读）· `build/loop/SITE_STATUS.md`（人读，随 `build/` 易失）。
 > **长期保留的人读位** = [AI_Status.md](AI_Status.md) §二（总览）+ [AI_Status_web.md](AI_Status_web.md) §二 / [AI_Status_api.md](AI_Status_api.md) §二（**两份分通道台账**）—— 都在 `docs/` 里、随版本库走，不会被清 `build/` 带走。
 <!-- SITE-STATUS:BEGIN （TST-L05 机器生成 · 人工只审阅 · 改数据请改 providers.json / site_capability_evidence.json） -->
-> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-22 · 覆盖轮次 0：
+> 生成：`loop_verify.ps1`（TST-L05）· 时间 2026-10-23 · 覆盖轮次 0：
 > **图例**：``✅ 实测``（有真机物证）· ``🟡 就绪/声明·未实测`` · ``⬜ 未接/未测/未声明`` · ``⚠ 不可用或不一致``
 > **判据**：**文字理解** = 「文本 → 取回文本」S3 三口径通过（``rc=0`` + ``n3=done`` + 正文非站侧错误串）；**图片理解** = 「图片 → 取回文本」链路（站点上传双证据 + 取回正文）。
 > 两列是**链路**、不是模型强弱；来源 = ``providers.json``（声明/接线）× ``site_capability_evidence.json``（实测证据）× ``build/loop/*/report.json``（轮次物证），**冲突时实测优先并在列内标 ⚠**。

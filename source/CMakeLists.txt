@@ -389,6 +389,16 @@ target_sources(aiwrite PRIVATE
 target_sources(aiwrite PRIVATE
     ui/src/interactor.cpp)      # ARCH-E5（画布交互共享层：双画布单套交互 · 关键谓词唯一）
 
+# ARCH-A1（应用级服务收口 → AppContext）：Config / Clipboard / Diagnostics / RecentFiles /
+#   AutosaveService / WorkflowFile 六项从 EditorState 拆出为独立对象（§1.8 / 决策 ARCH-A1）
+target_sources(aiwrite PRIVATE
+    ui/src/app_context.cpp
+    ui/src/clipboard.cpp
+    ui/src/diagnostics_service.cpp
+    ui/src/recent_files_service.cpp
+    ui/src/autosave_service.cpp
+    ui/src/workflow_file.cpp)
+
 # M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：面板诊断按钮 + 错误条「重新登录」（PT-07）
 # M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」异步后端
 target_sources(aiwrite PRIVATE

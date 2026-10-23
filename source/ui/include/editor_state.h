@@ -24,6 +24,7 @@
 #include "selection_state.h" // ARCH-E4：选中状态独立对象（§1.8.4）
 #include "undo_stack.h"
 #include "workflow_model.h" // ARCH-E3：文档级工作流模型（Graph + Undo + EventBus 拆出）
+#include "app_context.h"    // ARCH-A1：应用级服务收口（§1.8：六项服务 → AppContext）
 
 namespace aiwrite::ui {
 
@@ -39,6 +40,16 @@ struct EditorState {
 
     WorkflowModel&       model() { return model_; }
     const WorkflowModel& model() const { return model_; }
+
+    // ARCH-A1：应用级服务收口（Config / Clipboard / Diagnostics / RecentFiles /
+    // AutosaveService / WorkflowFile）—— 由本对象持有并编排。
+    // 声明在 model_ 之后：autosave / workflow_file 依赖 model_（§1.8.11 依赖图），
+    // 构造顺序鸡生蛋 ⇒ 本批不做外部组装注入，见 app_context.h 决策说明；
+    // ARCH-A3 editor() 退场后迁到 app/main 层注入。
+    AppContext app_ctx_;
+
+    AppContext&       app_ctx() { return app_ctx_; }
+    const AppContext& app_ctx() const { return app_ctx_; }
 
     // ARCH-E4：文档级选中状态（§1.8.4 / ARCH-D28）—— 节点 / 连线 / 单选节点 id 集合。
     // 变化时发 SelectionChanged（回调在 EditorState 构造时注入到 model().event_bus()）。
@@ -75,41 +86,42 @@ struct EditorState {
     void abortRunIfAny(const std::string& reason); // 运行中修改/切换工作流时终止运行
 
     // ------------------------------------------------------- 工作流文件 -----
+    // ARCH-A1：保存 / 打开 / 最近 / 归档归 `app_ctx().workflow_file`（§1.8.9）；本层
+    // 保留同签名薄封装（编排选中清空 / autosave 基线 / 状态栏），对外调用点零改动。
     // 保存（is_secret 参数不落盘：设计 §8.4）+ 记录最近列表
     bool saveWorkflowTo(const std::string& path, std::string* error);
     // 打开：加载 → **加载校验**（不合法则拒绝并保持原图）→ 清空撤销栈 → 记录最近列表
     bool openWorkflowFrom(const std::string& path, std::string* error);
     std::vector<engine::RecentEntry> recentWorkflows() const; // 读取 ~/.brain-ai/recent.json
 
-    std::string current_workflow_path;   // 当前文件路径（保存对话框的默认名用）
+    // 当前文件路径（保存对话框的默认名用）→ app_ctx().workflow_file.current_workflow_path()
 
     // ---- PC-01：自动保存（节流；主循环每帧调用 tick_autosave()）----
-    //  判据与落点见 engine/autosave.h；本层只负责**何时**写：
-    //   * 1 Hz 用 engine::graph_content_signature() 探测（视口平移 / 缩放不算变更）
-    //   * 从首次发现变更起，**静默 ≥ config.ui.autosave_idle_sec 秒**（默认 3）才写一次
+    //  判据与落点见 engine/autosave.h；本层只负责**何时**写（归口 app_ctx().autosave）：
+    //   * 变更感知 = 订阅内容类 EditEvent（事件回调标记 dirty），**静默 ≥
+    //     config.ui.autosave_idle_sec 秒**（默认 3）才写一次
     //   * 仅变更时写（无变更 ⇒ 一次盘都不写）
-    //   * 启动时 `autosave_paused = true`（PC-02：先问「恢复未保存的更改？」再放行）
+    //   * 启动时 autosave 暂停（PC-02：先问「恢复未保存的更改？」再放行）
     //     —— 否则启动时创建的示例工作流会在 3 秒后把真快照冲掉
     void tickAutosave();                       // 主循环每帧调用一次（ARCH-E2：事件驱动，无事件不写）
     void pauseAutosave(bool paused);           // true = 暂停（不写、不探测）
     void markAutosaveBaseline();              // 以当前图为「已保存」基线（不写盘）
-    bool autosaveDirty() const { return autosave_change_seen_; } // ARCH-E2：自检钩子（有未保存变更？）
+    bool autosaveDirty() const { return app_ctx_.autosave.dirty(); } // ARCH-E2：自检钩子（有未保存变更？）
     void flushAutosaveOnExit();              // 退出前补写一次（有未保存更改时）
     // PC-02：把快照恢复进当前图（**不覆盖原文件** —— 恢复后 `current_workflow_path` 留空，
     //  保存必然走「另存为」，原文件由用户显式决定；原路径记在 restored_from_autosave_path）
     bool restoreAutosave(std::string* error);
-    std::string restored_from_autosave_path;    // 快照记录的原工作流路径（展示用；空 = 未命名）
-    bool autosave_paused = true;
 
     // ---- 运行输出归档（PC-05）----
     // 运行结束自动写入 outputs/<时间>-<工作流名>/（每节点 .txt + run.json）
     // 参数取 config.output.*（archive_dir / keep_history / max_history / ttl_days）
+    // ARCH-A1：实现归 app_ctx().workflow_file.archive_run_outputs()（§1.8.9）
     // ---- PB-01：线程化运行的 UI 读模型 ----
     //  * 运行中由事件维护（节点状态/输出全文/结束统计）；结束时由 makeSnapshot 用权威数据落定
     //  * UI 只读它，永不跨线程读 Executor 运行态
     //  * ARCH-R1：读模型归 RunSession，经 run_snapshot_view() 读取
 
-    std::string last_archive_dir;        // 最近一次归档目录（输出面板显示 + 自检断言）
+    const std::string& last_archive_dir() const { return app_ctx_.workflow_file.last_archive_dir(); } // 最近一次归档目录（输出面板显示 + 自检断言）
     std::string workflowDisplayName() const; // 工作流名（文件名去扩展名；空 → 未命名）
 
     // ---- PA-06 轻量错误条 ----
@@ -182,7 +194,7 @@ struct EditorState {
     // M2/M3 重做画布交互时接回；接回前必须先修好画布位置同步（node_canvas.cpp sync_positions）。
     void        copySelection();
     bool        pasteClipboard();
-    bool        has_clipboard() const { return !clipboard_nodes_.empty(); }
+    bool        has_clipboard() const { return app_ctx_.clipboard.has_content(); }
     bool        has_selection() const { return selection_.has_nodes() || selection_.has_links(); }
     void        setStatus(const std::string& text);
 
@@ -196,31 +208,14 @@ private:
     void finishRunSession();
     // ARCH-R2：RunEvent 订阅回调（构造时注册；更新 follow_output_ / run_finished_ / run_last_summary_）
     void onRunEvent(const engine::RunEvent& event);
-    // ARCH-E2：autosave 订阅回调（内容类 EditEvent → 标记「有未保存变更」）
-    void onEditContent();
 
     std::size_t run_sub_handle_ = 0;          // ARCH-R2：run.subscribeRunEvents 返回的句柄
-    std::vector<std::size_t> autosave_sub_handles_; // ARCH-E2：autosave 订阅内容类事件的句柄集合
     // ARCH-E3：Undo 订阅「修改前」通道已迁到 WorkflowModel 构造（回调 = 修改前钩子 + undo.push）
+    // ARCH-A1：autosave 订阅已随 AutosaveService 迁入 app_ctx_（autosave_service.cpp 构造时注册）
 
     // ARCH-E4：文档级选中状态（§1.8.4 / ARCH-D28）—— 变化回调在构造时注入
     //（发 SelectionChanged 到 model().event_bus()；依赖图第 6 位无依赖）
     SelectionState selection_;
-
-    std::vector<engine::Node> clipboard_nodes_;                        // 复制的节点
-    std::vector<engine::Edge> clipboard_edges_;                        // 选区内部的连线
-
-    // ---- M_patchAB（PB2-07 / PB2-30②）：后台诊断结论（工作线程写、主线程取）----
-    std::mutex  background_mutex_;
-    std::string background_status_;
-    bool        background_pending_ = false;
-
-    // ---- PC-01：自动保存节流状态（说明见上方 tick_autosave 注释）----
-    //  ARCH-E2：变更感知改为订阅 EditEvent（onEditContent 标记），不再每帧算 content
-    //  signature，故不再需要 autosave_signature_ / autosave_last_probe_（1 Hz 探测）。
-    std::chrono::steady_clock::time_point autosave_last_change_{};   // 最近一次「发现变更」时刻（事件回调刷新）
-    std::chrono::steady_clock::time_point autosave_retry_after_{};   // 写失败后的退避截止
-    bool                                  autosave_change_seen_ = false; // 有未保存变更（事件驱动标记）
 };
 
 // 全局单例（UI 生命周期内唯一）

@@ -349,16 +349,17 @@ void drawOutputPanel(const char* title, bool* open, const ReadOnlyView& view,
     ImGui::TextDisabled("｜ 节点 %zu ｜ 总耗时 %.2f s", infos.size(), executor.elapsedSeconds());
 
     // PC-05：最近一次归档位置（可复制路径，便于去目录里取生成文档）
-    if (!state.last_archive_dir.empty()) {
+    // ARCH-A1：last_archive_dir 收口到 WorkflowFile（app_ctx().workflow_file），经访问器读取
+    if (!state.last_archive_dir().empty()) {
         ImGui::SameLine();
         if (ImGui::SmallButton("复制归档路径")) {
-            ImGui::SetClipboardText(state.last_archive_dir.c_str());
-            log::info("[输出面板] 已复制归档路径：" + state.last_archive_dir);
+            ImGui::SetClipboardText(state.last_archive_dir().c_str());
+            log::info("[输出面板] 已复制归档路径：" + state.last_archive_dir());
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("运行结果已自动归档：\n%s", state.last_archive_dir.c_str());
+            ImGui::SetTooltip("运行结果已自动归档：\n%s", state.last_archive_dir().c_str());
         }
-        ImGui::TextDisabled("已归档：%s", state.last_archive_dir.c_str());
+        ImGui::TextDisabled("已归档：%s", state.last_archive_dir().c_str());
     }
     ImGui::Separator();
 

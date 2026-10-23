@@ -336,8 +336,8 @@ int runSelftest(bool use_web, const std::string& provider_id)
     bool        archive_ok = false;
     std::size_t archive_files = 0;
     bool        doc_found  = false;
-    if (!state.last_archive_dir.empty()) {
-        const std::filesystem::path dir(state.last_archive_dir);
+    if (!state.last_archive_dir().empty()) {
+        const std::filesystem::path dir(state.last_archive_dir());
         archive_ok = std::filesystem::exists(dir / "run.json");
         for (const std::filesystem::directory_entry& entry :
              std::filesystem::directory_iterator(dir, ec)) {
@@ -361,7 +361,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
     }
     std::printf("[运行自检] PC-05 归档：%s（目录 %s，节点文件 %zu 个，含生成文档=%s）\n",
                 archive_ok && doc_found ? "OK" : "失败",
-                state.last_archive_dir.empty() ? "（无）" : state.last_archive_dir.c_str(),
+                state.last_archive_dir().empty() ? "（无）" : state.last_archive_dir().c_str(),
                 archive_files, doc_found ? "是" : "否");
 
     // VA-07：保存出来的 JSON 不得包含运行结果（运行态值原则）

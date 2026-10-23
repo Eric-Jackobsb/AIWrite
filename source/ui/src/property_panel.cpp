@@ -707,10 +707,10 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                 ImGui::TextDisabled("（该节点无输出）");
             }
 
-            if (!editor().last_archive_dir.empty()) {
-                ImGui::TextDisabled("已归档：%s", editor().last_archive_dir.c_str());
+            if (!editor().last_archive_dir().empty()) {
+                ImGui::TextDisabled("已归档：%s", editor().last_archive_dir().c_str());
                 if (ImGui::SmallButton("复制归档路径")) {
-                    copyText(editor().last_archive_dir, "[参数面板] 归档路径");
+                    copyText(editor().last_archive_dir(), "[参数面板] 归档路径");
                 }
             }
         }
