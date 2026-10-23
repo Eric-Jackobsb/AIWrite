@@ -413,6 +413,7 @@ add_executable(aiwrite WIN32
     ui/src/ce_run.cpp            # CLN-13 拆分（试运行「执行连线」域）
     ui/src/ce_pack.cpp           # CLN-13 拆分（打包选区为上级节点域）
     ui/src/ce_draw.cpp           # CLN-13 拆分（编辑器窗口 + 新建/打包对话框域）
+    ui/src/ce_draw_dialogs.cpp   # ARCH-Z1 拆分（新建 / 打包对话框 + 自动复现入口）
     ui/src/commands.cpp)        # ARCH-R4 拆分（命令路由层：AppCommand + 快捷键表 + dispatchCommand）
 target_sources(aiwrite PRIVATE
     ui/src/event_bus.cpp       # ARCH-E1（事件总线：EventBus + EditEvent 落地）
