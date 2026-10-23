@@ -277,6 +277,7 @@ add_library(aiwrite_core STATIC
     ai/src/upload/image_convert.cpp        # M8-14：图片准备（站点白名单 / 限额 → 缩放 + 转码）
     ai/src/upload/image_preprocess.cpp     # M_8nodes_extension L1-c（§4.2）：图片预处理（用户参数 → 裁剪/缩放）
     ai/src/upload/upload_evidence.cpp      # M8-14：上传双证据（页面 + 网络；I18）纯函数
+    ai/src/site_upload_common.cpp  # ARCH-Z1 去重专项：站点上传共用骨架（prepare / deliver）
     ai/src/upload/upload_registry.cpp      # M8-14：站点上传注册表 + 唯一执行入口 upload_images
     ai/src/doubao/site_upload_doubao.cpp # M8-14：豆包站点上传单元（B1/B2 实测）
     ai/src/kimi/site_upload_kimi.cpp   # M8-14：Kimi 站点上传单元（模板性验证站）
@@ -291,6 +292,7 @@ add_library(aiwrite_core STATIC
     ai/src/inference_provider.cpp     # L2（PB2-08/12）：统一推理接口 + 能力门控 + openai/网页版实现
     ai/src/anthropic_provider.cpp     # L2（PB2-10）：Anthropic Messages API 适配器
     ai/src/gemini_provider.cpp        # L2（PB2-11）：Gemini generateContent 适配器
+    ai/src/provider_common.cpp       # ARCH-Z1 去重专项：Anthropic / Gemini 共用（图片编码 + 失败归因）
     ai/src/provider_factory.cpp       # L2（PB2-09）：按表 protocol 分派（未知 ⇒ 明确报错，R9）
     ai/src/site_template.cpp          # M_patchAB §3.5（PB2-24）：自建网页版站点模板 + 落盘
     ai/src/official_template.cpp      # 自定义 AI 收口：自建官方 API 提供商模板 + 落盘

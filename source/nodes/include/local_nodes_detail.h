@@ -14,6 +14,7 @@
 // ============================================================================
 
 #include "nodes.h"             // engine::ExecutionContext / engine::EffectiveProvider
+#include "config.h"            // Config（重试计划的全局回落）
 #include "provider_resolve.h"  // M_patchB L1：EffectiveProvider
 #include "provider_spec.h"     // ai::ProviderWebSpec
 #include "image_preprocess.h"  // M_8nodes_extension L1-c：ai::ImagePreprocessParams
@@ -53,6 +54,16 @@ void console_provider_line(const engine::ExecutionContext& ctx, const std::strin
                            const engine::EffectiveProvider& effective, const std::string& mode);
 web::WebOwner web_owner_of(const engine::ExecutionContext& ctx, const ai::ProviderWebSpec& site,
                            const std::string& provider_id);
+
+// ---- 推理节点公共：重试计划（原 llm / vlm 两处 18 行逐字复制 · 去重专项）----
+//  * 节点级 `retry_count>0` ⇒ 参数优先（未给的项回落到全局配置）
+//  * 其它 ⇒ 全用全局 `config.toml [error]`
+struct RetryPlan {
+    bool enabled     = false;
+    int  count       = 0;
+    int  interval_ms = 0;
+};
+RetryPlan resolve_retry_plan(const nlohmann::json& params, const Config& runtime_config);
 
 }  // namespace nodes_detail
 }  // namespace aiwrite::nodes

@@ -284,5 +284,26 @@ web::WebOwner web_owner_of(const engine::ExecutionContext& ctx, const ai::Provid
     return owner;
 }
 
+// 重试计划：节点覆盖优先；`retry_count=0` ⇒ 全部用全局（含开关 / 次数 / 间隔）
+RetryPlan resolve_retry_plan(const nlohmann::json& params, const Config& runtime_config)
+{
+    RetryPlan plan;
+    const int param_retry_count = params.value("retry_count", 0);
+    if (param_retry_count > 0) {
+        plan.enabled     = params.value("retry_enabled", runtime_config.error.retry_enabled);
+        plan.count       = param_retry_count;
+        plan.interval_ms = params.value("retry_interval_ms", 0);
+        if (plan.interval_ms <= 0) {
+            plan.interval_ms = runtime_config.error.retry_interval_ms;
+        }
+    }
+    else {
+        plan.enabled     = runtime_config.error.retry_enabled;
+        plan.count       = runtime_config.error.retry_count;
+        plan.interval_ms = runtime_config.error.retry_interval_ms;
+    }
+    return plan;
+}
+
 }  // namespace nodes_detail
 }  // namespace aiwrite::nodes

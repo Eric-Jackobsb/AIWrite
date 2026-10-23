@@ -2,6 +2,7 @@
 
 #include "deepseek_official_provider.h" // `encode_image_data_url`
 #include "http_json.h"
+#include "provider_common.h" // 去重专项：图片编码 / 失败归因
 #include "log.h"
 
 #include <algorithm>
@@ -152,16 +153,8 @@ GenerateResult GeminiProvider::generate(const GenerateParams& params)
     out.provider_name = name();
 
     std::vector<std::string> image_data_urls;
-    for (const std::string& path : params.images) {
-        std::string       encode_error;
-        const std::string data_url =
-            encode_image_data_url(path, params.image_max_bytes, &encode_error);
-        if (data_url.empty()) {
-            out.error = "图片准备失败：" + (encode_error.empty() ? path : encode_error);
-            return out;
-        }
-        image_data_urls.push_back(data_url);
-        out.encoded_bytes += data_url.size();
+    if (!prepare_image_data_urls(params, &image_data_urls, &out)) {
+        return out;
     }
 
     const std::string api_base =
@@ -183,16 +176,7 @@ GenerateResult GeminiProvider::generate(const GenerateParams& params)
     request.cancel            = params.cancel;
 
     const HttpJsonResult http = httpPostJson(request);
-    out.http_status           = http.http_status;
-    out.elapsed_ms            = http.elapsed_ms;
-    out.raw_head              = http.raw_head;
-    if (http.cancelled) {
-        out.cancelled = true;
-        out.error     = http.error;
-        return out;
-    }
-    if (!http.ok) {
-        out.error = std::string("Gemini 调用失败：") + http.error;
+    if (map_http_failure(http, "Gemini", &out)) {
         return out;
     }
     nlohmann::json body;

@@ -37,6 +37,34 @@ double sane_zoom(double value)
     return value;
 }
 
+// 去重专项：文件里记录的 id / 标题 / 参数 → 节点（普通节点与上级节点**同口径**）
+//  * id 冲突（文件 id 已被占用）⇒ 保留自动生成的 id，避免引用错位
+//  * 密钥参数不从文件恢复（只驻留内存）
+void apply_recorded_overrides(Node& node, const nlohmann::json& node_json,
+                              const std::string& generated_id, Graph& graph)
+{
+    const std::string wanted_id = node_json.value("id", std::string());
+    if (!wanted_id.empty() && wanted_id != generated_id &&
+        graph.findNode(wanted_id) == nullptr) {
+        node.id = wanted_id;
+    }
+    const std::string wanted_title = node_json.value("title", std::string());
+    if (!wanted_title.empty()) {
+        node.title = wanted_title;
+    }
+    const auto params = node_json.find("params");
+    if (params != node_json.end() && params->is_object()) {
+        for (auto it = params->begin(); it != params->end(); ++it) {
+            if (Param* param = node.findParam(it.key())) {
+                if (param->is_secret) {
+                    continue; // 密钥不从文件恢复（只驻留内存）
+                }
+                param->value = it.value();
+            }
+        }
+    }
+}
+
 } // namespace
 
 // ------------------------------------------------------------------ 序列化 ----
@@ -167,26 +195,7 @@ bool graphFromJson(const nlohmann::json& json, Graph& graph, std::string* error)
                 continue;
             }
 
-            const std::string wanted_id = node_json.value("id", std::string());
-            if (!wanted_id.empty() && wanted_id != generated_id &&
-                parsed.findNode(wanted_id) == nullptr) {
-                node->id = wanted_id;
-            }
-            const std::string wanted_title = node_json.value("title", std::string());
-            if (!wanted_title.empty()) {
-                node->title = wanted_title;
-            }
-            const auto params = node_json.find("params");
-            if (params != node_json.end() && params->is_object()) {
-                for (auto it = params->begin(); it != params->end(); ++it) {
-                    if (Param* param = node->findParam(it.key())) {
-                        if (param->is_secret) {
-                            continue; // 密钥不从文件恢复（只驻留内存）
-                        }
-                        param->value = it.value();
-                    }
-                }
-            }
+            apply_recorded_overrides(*node, node_json, generated_id, parsed);
             continue;
         }
 
@@ -205,28 +214,7 @@ bool graphFromJson(const nlohmann::json& json, Graph& graph, std::string* error)
         }
 
         // 尽量保留文件中的 id（边的引用要对得上）；若与已有节点冲突则保留自动生成的 id
-        const std::string wanted_id = node_json.value("id", std::string());
-        if (!wanted_id.empty() && wanted_id != generated_id &&
-            parsed.findNode(wanted_id) == nullptr) {
-            node->id = wanted_id;
-        }
-
-        const std::string wanted_title = node_json.value("title", std::string());
-        if (!wanted_title.empty()) {
-            node->title = wanted_title;
-        }
-
-        const auto params = node_json.find("params");
-        if (params != node_json.end() && params->is_object()) {
-            for (auto it = params->begin(); it != params->end(); ++it) {
-                if (Param* param = node->findParam(it.key())) {
-                    if (param->is_secret) {
-                        continue; // 密钥不从文件恢复（只驻留内存）
-                    }
-                    param->value = it.value();
-                }
-            }
-        }
+        apply_recorded_overrides(*node, node_json, generated_id, parsed);
     }
 
     // ---- 连线：统一走 addEdge（类型/端口/重复/自连校验），非法则跳过并告警 ----

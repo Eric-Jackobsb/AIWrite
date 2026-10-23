@@ -247,24 +247,8 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
                                                     : runtime_config.timeout.first_byte_ms) /
                             1000);
     }
-    bool retry_enabled;
-    int  retry_count;
-    int  retry_interval_ms;
-    const int param_retry_count = params.value("retry_count", 0);
-    if (param_retry_count > 0) {
-        retry_enabled     = params.value("retry_enabled", runtime_config.error.retry_enabled);
-        retry_count       = param_retry_count;
-        retry_interval_ms = params.value("retry_interval_ms", 0);
-        if (retry_interval_ms <= 0) {
-            retry_interval_ms = runtime_config.error.retry_interval_ms;
-        }
-    }
-    else {
-        retry_enabled     = runtime_config.error.retry_enabled;
-        retry_count       = runtime_config.error.retry_count;
-        retry_interval_ms = runtime_config.error.retry_interval_ms;
-    }
-    const int max_retries = ai::clampRetryCount(retry_enabled, retry_count);
+    const nodes_detail::RetryPlan retry = nodes_detail::resolve_retry_plan(params, runtime_config);
+    const int max_retries = ai::clampRetryCount(retry.enabled, retry.count);
 
     ctx.console("[图片理解] 请求：" + official.model + "，图片 " + std::to_string(images.size()) +
                 " 张，提示词 " + std::to_string(prompt.size()) + " 字节" +
@@ -285,7 +269,7 @@ json execute_vlm_generate(const json& inputs, const json& params, engine::Execut
         if (attempt >= max_retries || !ai::httpStatusRetryable(result.http_status)) {
             break; // 不可重试 / 已用尽
         }
-        const int delay_ms = ai::retryDelayMs(retry_interval_ms, attempt);
+        const int delay_ms = ai::retryDelayMs(retry.interval_ms, attempt);
         ctx.console("[图片理解] 第 " + std::to_string(attempt + 1) + " 次重试（HTTP " +
                     std::to_string(result.http_status) + "，等 " + std::to_string(delay_ms) +
                     " ms；可重试失败 = 429 / 5xx / 网络超时）");
