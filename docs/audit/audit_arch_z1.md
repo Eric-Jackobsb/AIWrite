@@ -212,7 +212,7 @@ Z1 拆分只搬文件、不改语义 ⇒ 拆分后**暴露**出一批逐字重�
 
 | # | 判据 | 结论 | 复跑证据（本次实测） |
 |---|---|---|---|
-| 1 | 行为等价 | ✅ | `check_all.ps1` **21/21 PASS**（内含 `--selftest` 全组 = 含 `composite_selftest` **112/0** · `--upload-selftest` **72/0** · `--run-selftest` PASS）· exec **713/0** · graph **151/0** · 夹具 **44/17/15** · `ce_repro` **ALL FRAMES OK (mode 0)** · `check_links` **1974/0**（基线 1730 · 只升不降）；两个已知 bug 由**自动断言**覆盖 —— Ctrl+S = 命令路由 `dispatchCommand(Save)` 断言（R4）· 暴露节点保存 = `buildCompositeSpecFromSelection` + `validate_composite_spec` 断言 21 条（E6）。**GUI 单击复核**仍建议用户顺手点一次（非阻塞 · 无自动化通道） |
+| 1 | 行为等价 | ✅ | `check_all.ps1` **21/21 PASS**（内含 `--selftest` 全组 = 含 `composite_selftest` **112/0** · `--upload-selftest` **72/0** · `--run-selftest` PASS）· exec **713/0** · graph **151/0** · 夹具 **44/17/15** · `ce_repro` **ALL FRAMES OK (mode 0)** · `check_links` **1974/0**（基线 1730 · 只升不降）；两个已知 bug 由**自动断言**覆盖 —— Ctrl+S = 命令路由 `dispatchCommand(Save)` 断言（R4）· 暴露节点保存 = `buildCompositeSpecFromSelection` + `validate_composite_spec` 断言 21 条（E6）。**GUI 人工复核 ✅ 用户已点检通过（2026-10-23）**：Ctrl+S 保存 + 暴露参数打包保存两条目视确认正常（[DevPlan.todo](../DevPlan.todo) #456 / #457 / #458 同步勾账） |
 | 2 | 全局变量归零 | ✅ | `check_globals.ps1` = **254 文件 / 违规 0**（R1 0 / R2 0 / R3 0）· 函数内 static 棘轮 **50 · 50**（只许减） |
 | 3 | 双画布单套交互 | ✅ | 关键谓词扫描：`interactor.cpp` 之外命中 **2 条 = 纯注释**（`ce_draw.cpp:313` / `node_canvas_impl.cpp:371`）· `BeginDelete` 实体只在 `interactor.cpp`（3 处） |
 | 4 | 打包-校验同源 | ✅ | `ce_pack.cpp` 中 `spec.internal_graph` / `spec.inputs` / `spec.exposed_params` 直写 = **0** |

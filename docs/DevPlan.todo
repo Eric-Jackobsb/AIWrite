@@ -722,18 +722,18 @@
                         "key": 457,
                         "children": [],
                         "todo": {
-                          "content": "FAIL：ctrl+S并没有保存成功，按键保存可以成功✅ 修复落地（2026-10-21 · DEBT-B1）：Ctrl+S 已实现（ce_handle_save_key）· 待真人复核（走四组 #4011）",
+                          "content": "FAIL：ctrl+S并没有保存成功，按键保存可以成功✅ 修复落地（2026-10-21 · DEBT-B1）：Ctrl+S 已实现（ce_handle_save_key）· ✅ 2026-10-23 用户 GUI 人工复核通过（Ctrl+S 保存成功 · 物证已核对）",
                           "id": 457,
                           "level": "default",
-                          "done": false,
+                          "done": true,
                           "start": 1792561459558
                         }
                       }
                     ],
                     "todo": {
                       "id": 456,
-                      "content": "⑤ 保存（Ctrl+S / 保存按钮）\n怎么点：① Ctrl+S 或点保存按钮 → ② 确认保存成功\n留什么物证：截图；保存后 ~/.brain-ai/composites/<id>.json 已生成",
-                      "done": false,
+                      "content": "⑤ 保存（Ctrl+S / 保存按钮）\n怎么点：① Ctrl+S 或点保存按钮 → ② 确认保存成功\n留什么物证：截图；保存后 ~/.brain-ai/composites/<id>.json 已生成\n✅ 2026-10-23 用户 GUI 人工复核通过",
+                      "done": true,
                       "level": "default",
                       "fileLink": "docs/Archive/actionPlan/Composition_node.md"
                     }
@@ -805,8 +805,8 @@
                 ],
                 "todo": {
                   "id": 458,
-                  "content": "打包：画布选中多节点 → 右键「打包为上级节点」→ 暴露参数勾选 → 保存（§8 · CN-D10 双创建方式）\n怎么点：① 主画布放 ≥2 个相连节点 → ② 框选/多选 → ③ 右键菜单「打包为上级节点」→ ④ 对话框勾选要暴露的参数 → ⑤ 命名 → 保存 → ⑥ 节点库「上级节点」分类刷新出现该节点\n留什么物证：截图（打包对话框 + 勾选项）；打包后 ~/.brain-ai/composites/ 新增 <id>.json",
-                  "done": false,
+                  "content": "打包：画布选中多节点 → 右键「打包为上级节点」→ 暴露参数勾选 → 保存（§8 · CN-D10 双创建方式）\n怎么点：① 主画布放 ≥2 个相连节点 → ② 框选/多选 → ③ 右键菜单「打包为上级节点」→ ④ 对话框勾选要暴露的参数 → ⑤ 命名 → 保存 → ⑥ 节点库「上级节点」分类刷新出现该节点\n留什么物证：截图（打包对话框 + 勾选项）；打包后 ~/.brain-ai/composites/ 新增 <id>.json\n✅ 2026-10-23 用户 GUI 人工复核通过（暴露参数勾选 → 保存成功）",
+                  "done": true,
                   "level": "secondary",
                   "fileLink": "docs/Archive/actionPlan/Composition_node.md"
                 }
