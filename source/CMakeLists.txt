@@ -389,6 +389,7 @@ add_executable(aiwrite WIN32
     ui/src/editor_controller.cpp   # ARCH-A3（编辑器编排层：editor() 退场 · 启动注入）
     ui/src/run_session.cpp    # ARCH-R1 拆分（运行会话：Executor + 快照从 editor() 拆出）
     ui/src/node_canvas.cpp
+    ui/src/node_canvas_impl.cpp  # ARCH-Z1 拆分（设置净化/上下文/交互回调/新建菜单/自检/Alt 平移/逐帧诊断）
     ui/src/canvas_view.cpp
     ui/src/node_library.cpp
     ui/src/toolbar.cpp
