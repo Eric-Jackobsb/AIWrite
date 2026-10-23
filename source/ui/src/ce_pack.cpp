@@ -1,7 +1,7 @@
 #include "composite_editor.h"
 #include "ce_internal.h"
 #include "composite.h"
-#include "editor_state.h"
+#include "editor_controller.h"
 
 #include <string>
 
@@ -11,9 +11,10 @@ namespace aiwrite::ui {
 // ARCH-E6：打包下沉 —— 规格构建（内部图 / 输入 / 输出 / 暴露参数）已迁入
 // engine::buildCompositeSpecFromSelection（打包-校验同源，§4 验收判据 4）；
 // 生成后严格校验：先 validate_composite_spec 再 save（产物必然合法规格）。
-std::string compositePackSelection(const std::string& name, std::string* error)
+std::string compositePackSelection(const std::string& name, std::string* error,
+                                   EditorController& editor)
 {
-    EditorState& state = editor();
+    EditorController& state = editor;
 
     const auto fail = [error](const std::string& text) {
         if (error != nullptr) {

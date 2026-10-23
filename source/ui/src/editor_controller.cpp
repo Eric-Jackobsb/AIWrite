@@ -1,6 +1,6 @@
-#include "editor_state.h"
+#include "editor_controller.h"
 
-// ARCH-A2：EditorState 不再使用 engine::autosave_*（restore 编排已迁 app.cpp）—— 本 TU 无需 autosave.h
+// ARCH-A2：EditorController 不再使用 engine::autosave_*（restore 编排已迁 app.cpp）—— 本 TU 无需 autosave.h
 #include "node_registry.h"
 #include "validate.h"
 #include "workflow_io.h"
@@ -48,18 +48,23 @@ std::string run_detail_text(const engine::Executor& executor)
 
 } // namespace
 
-EditorState& editor()
-{
-    static EditorState state;
-    return state;
-}
 
-// ARCH-R2：构造时订阅 RunEvent（UI 改为订阅，不再主动 pumpEvents）
-// ARCH-A1：AppContext（app_ctx_）在成员初始化列表中构造 —— 其 AutosaveService 在构造时
-// 订阅内容类编辑事件（原本层循环，已迁至 autosave_service.cpp）；model_ 已就绪。
-EditorState::EditorState() : app_ctx_(model_)
+// ARCH-A3：构造 = 纯注入（不拥有任何对象）。8 个引用由 AppContext 在启动阶段按
+// §1.8.11 顺序组装后传入；AutosaveService 的编辑事件订阅发生在 AppContext 构造
+// （autosave_service.cpp），RunEvent / 修改前钩子 / 选中变化回调在本层构造时注册。
+EditorController::EditorController(WorkflowModel& model, SelectionState& selection, RunSession& run,
+                                   Config& config, Clipboard& clipboard, Diagnostics& diagnostics,
+                                   AutosaveService& autosave, WorkflowFile& workflow_file)
+    : model_(model),
+      selection_(selection),
+      run_(run),
+      config_(config),
+      clipboard_(clipboard),
+      diagnostics_(diagnostics),
+      autosave_(autosave),
+      workflow_file_(workflow_file)
 {
-    run_sub_handle_ = run.subscribeRunEvents(
+    run_sub_handle_ = run_.subscribeRunEvents(
         [this](const engine::RunEvent& event) { onRunEvent(event); });
 
     // ARCH-E3：修改前钩子（M2-04 守卫）—— 运行中修改工作流 → 先终止本次运行。
@@ -75,14 +80,14 @@ EditorState::EditorState() : app_ctx_(model_)
         [this]() { model_.event_bus().publish(EditEvent{EditEventKind::SelectionChanged}); });
 }
 
-EditorState::~EditorState()
+EditorController::~EditorController()
 {
-    // ARCH-A1：autosave 订阅句柄随 app_ctx_（AutosaveService）析构统一注销
-    run.unsubscribeRunEvents(run_sub_handle_);
+    // ARCH-A1：autosave 订阅句柄随 AppContext（AutosaveService）析构统一注销
+    run_.unsubscribeRunEvents(run_sub_handle_);
 }
 
 // ARCH-R2：RunEvent 订阅回调 —— 只更新「变化通知」字段，供输出面板 / 状态栏读取
-void EditorState::onRunEvent(const engine::RunEvent& event)
+void EditorController::onRunEvent(const engine::RunEvent& event)
 {
     switch (event.kind) {
     case engine::RunEvent::Kind::NodeOutput:
@@ -101,14 +106,14 @@ void EditorState::onRunEvent(const engine::RunEvent& event)
 }
 
 // ARCH-A1：autosave 事件回调已迁至 AutosaveService::on_edit_content（autosave_service.cpp，
-// 订阅发生在 app_ctx_ 构造时；语义与拆出前逐字一致）。
+// 订阅发生在 AppContext 构造时；语义与拆出前逐字一致）。
 
-void EditorState::setStatus(const std::string& text)
+void EditorController::setStatus(const std::string& text)
 {
     status = text;
 }
 
-void EditorState::logSummary(const std::string& prefix) const
+void EditorController::logSummary(const std::string& prefix) const
 {
     log::info(prefix + "（节点 " + std::to_string(model_.graph.nodes.size()) + "，连线 " +
               std::to_string(model_.graph.edges.size()) + "）");
@@ -119,12 +124,12 @@ void EditorState::logSummary(const std::string& prefix) const
 // 本层保留同签名薄封装（状态栏 / 选中清空），对外调用点零改动。
 // ARCH-E2：修改前压快照由 Undo 订阅者完成（WorkflowModel 构造时订阅 before-edit 通道，
 // 回调 = 修改前钩子 + undo.push）；snapshot() 只发布「修改前」通知（对外签名不变）。
-void EditorState::snapshot(const std::string& label)
+void EditorController::snapshot(const std::string& label)
 {
     model_.snapshot(label);
 }
 
-bool EditorState::undoOnce()
+bool EditorController::undoOnce()
 {
     std::string label;
     if (!model_.undoOnce(&label)) {
@@ -137,7 +142,7 @@ bool EditorState::undoOnce()
     return true;
 }
 
-bool EditorState::redoOnce()
+bool EditorController::redoOnce()
 {
     std::string label;
     if (!model_.redoOnce(&label)) {
@@ -151,19 +156,19 @@ bool EditorState::redoOnce()
 }
 
 // ----------------------------------------------------------------- 工作流 ----
-void EditorState::clearWorkflow()
+void EditorController::clearWorkflow()
 {
     model_.clear(); // 清图 + 清撤销栈 + 逐节点 diff 事件
     selection_.clear_nodes(); // ARCH-E4：选中独立对象（清 nodes + single，保留 links）
-    app_ctx_.clipboard.clear(); // ARCH-A1：剪贴板归 Clipboard（app_ctx_）
+    clipboard_.clear(); // ARCH-A1：剪贴板归 Clipboard（clipboard_ 注入引用）
     logSummary("[新建] 已清空画布");
     setStatus("画布已清空（撤销栈也已清空）");
 
     // PC-01/02：清空画布**不删**快照（保守：不替用户决定丢弃可恢复内容），只重设基线
-    app_ctx_.autosave.mark_baseline();
+    autosave_.mark_baseline();
 }
 
-void EditorState::createSampleWorkflow()
+void EditorController::createSampleWorkflow()
 {
     model_.graph.clear();
     model_.undo.clear();
@@ -238,7 +243,7 @@ void EditorState::createSampleWorkflow()
 }
 
 // ------------------------------------------------------------------ 节点 -----
-std::string EditorState::createNode(const std::string& type, float x, float y)
+std::string EditorController::createNode(const std::string& type, float x, float y)
 {
     std::string error;
     const std::string id = model_.createNode(type, x, y, &error); // addNode + NodeAdded 事件
@@ -255,7 +260,7 @@ std::string EditorState::createNode(const std::string& type, float x, float y)
     return id;
 }
 
-bool EditorState::deleteNode(const std::string& node_id)
+bool EditorController::deleteNode(const std::string& node_id)
 {
     const engine::Node* node = model_.graph.findNode(node_id);
     if (node == nullptr) {
@@ -274,7 +279,7 @@ bool EditorState::deleteNode(const std::string& node_id)
     return true;
 }
 
-bool EditorState::deleteSelected()
+bool EditorController::deleteSelected()
 {
     if (selection_.empty()) {
         setStatus("没有选中的节点或连线");
@@ -327,32 +332,32 @@ bool EditorState::deleteSelected()
 // 返回 FLT_MAX（imgui_node_editor.cpp:1676），旧版 sync_positions() 会把该值当位置回写模型，
 // 叠加 NavigateToContent 后视图落入 ~1e9 量级坐标 → 界面无响应（详见 CHANGELOG「复制/粘贴暂停」）。
 // 现已加位置守卫（node_canvas.cpp：clamp_position / 未知手柄时反向推送 / 视图跟随前校验）。
-void EditorState::copySelection()
+void EditorController::copySelection()
 {
-    // ARCH-A1：剪贴板数据与注入归 Clipboard（app_ctx_）；本层只做选中读取与状态栏
-    app_ctx_.clipboard.clear();
+    // ARCH-A1：剪贴板数据与注入归 Clipboard（clipboard_）；本层只做选中读取与状态栏
+    clipboard_.clear();
 
     if (selection_.nodes().empty()) {
         setStatus("没有选中的节点");
         return;
     }
 
-    const std::size_t copied = app_ctx_.clipboard.copy(selection_.nodes(), model_.graph);
+    const std::size_t copied = clipboard_.copy(selection_.nodes(), model_.graph);
     log::info("复制 " + std::to_string(copied) + " 个节点到剪贴板");
     setStatus("已复制 " + std::to_string(copied) + " 个节点");
 }
 
-bool EditorState::pasteClipboard()
+bool EditorController::pasteClipboard()
 {
     // ARCH-A1：新建节点 / 连线注入归 Clipboard::paste；事件发布与选中更新留本层编排
-    if (!app_ctx_.clipboard.has_content()) {
+    if (!clipboard_.has_content()) {
         setStatus("剪贴板为空");
         return false;
     }
 
     snapshot("粘贴节点");
 
-    const Clipboard::PasteResult result = app_ctx_.clipboard.paste(model_.graph);
+    const Clipboard::PasteResult result = clipboard_.paste(model_.graph);
 
     // ARCH-E1：粘贴创建的每个节点发 NodeAdded / 每条连线发 EdgeAdded（与 createNode 同构）
     for (const std::string& id : result.node_ids) {
@@ -376,15 +381,13 @@ bool EditorState::pasteClipboard()
 // ARCH-R1：执行器 + 快照已拆到 RunSession（run_session.h）；本层只做编排与 UI 收尾。
 //  * 值只在 Executor 内部；只有节点状态写回 Graph（画布就地染状态色）
 //  * 控制台输出走 log::info，Console 面板读同一环形缓冲（设计 §12.4）
-
-engine::Executor& EditorState::executor() { return run.executor(); }
-const engine::Executor& EditorState::executor() const { return run.executor(); }
+// ARCH-A3：executor() 访问器内联在头文件（唯一转发），此处不再重复定义。
 
 // 同步运行（--exec-selftest 用）：校验与执行归 RunSession；本层负责状态栏文案
-bool EditorState::startRun()
+bool EditorController::startRun()
 {
     std::string error;
-    if (!run.start(model_.graph, &error)) {
+    if (!run_.start(model_.graph, &error)) {
         setStatus(error);
         return false;
     }
@@ -393,10 +396,10 @@ bool EditorState::startRun()
 }
 
 // PD-06①（FEA-M4-11 · 通用重跑）：从 node_id 开始重跑（复用上游结果）
-bool EditorState::startRerunAsync(const std::string& node_id, engine::RerunScope scope)
+bool EditorController::startRerunAsync(const std::string& node_id, engine::RerunScope scope)
 {
     std::string error;
-    if (!run.startRerunAsync(model_.graph, node_id, scope, &error)) {
+    if (!run_.startRerunAsync(model_.graph, node_id, scope, &error)) {
         setStatus(error);
         return false;
     }
@@ -408,31 +411,31 @@ bool EditorState::startRerunAsync(const std::string& node_id, engine::RerunScope
     return true;
 }
 
-void EditorState::cancelRun()
+void EditorController::cancelRun()
 {
-    if (!run.running()) {
+    if (!run_.running()) {
         setStatus("当前没有正在运行的执行会话");
         return;
     }
-    run.cancel();
+    run_.cancel();
     setStatus("正在停止…");
 }
 
-void EditorState::tickRun()
+void EditorController::tickRun()
 {
     // 委托 RunSession：异步会话泵事件 / 同步会话推进一节点；
     //  返回 true = 会话结束（Finished 事件 / 同步跑完）→ 本层做 UI 收尾
-    if (run.tick(model_.graph)) {
+    if (run_.tick(model_.graph)) {
         finishRunSession();
     }
 }
 
 // ---------------------------------------------------------------- PB-01 -----
 // 线程化运行：校验与执行归 RunSession；本层负责状态栏文案
-bool EditorState::startRunAsync()
+bool EditorController::startRunAsync()
 {
     std::string error;
-    if (!run.startAsync(model_.graph, &error)) {
+    if (!run_.startAsync(model_.graph, &error)) {
         setStatus(error);
         return false;
     }
@@ -443,22 +446,22 @@ bool EditorState::startRunAsync()
     return true;
 }
 
-void EditorState::stopRunAsync()
+void EditorController::stopRunAsync()
 {
-    run.stopAsync(); // join（幂等；退出 / 切换工作流前必须调用）
+    run_.stopAsync(); // join（幂等；退出 / 切换工作流前必须调用）
 }
 
 // 运行收尾：join 与权威快照落定归 RunSession::finish；本层只做 UI 收尾
-void EditorState::finishRunSession()
+void EditorController::finishRunSession()
 {
-    run.finish(model_.graph); // join → 权威快照 → 增量补回 → session_active_ = false
+    run_.finish(model_.graph); // join → 权威快照 → 增量补回 → session_active_ = false
 
-    const engine::RunSnapshot& snapshot = run.snapshot();
+    const engine::RunSnapshot& snapshot = run_.snapshot();
     setStatus("运行结束：" + snapshot.summary);
     log::workflow("===== 运行结束：" + snapshot.summary + " =====");
     // PA-04：逐节点耗时明细（补 M4-13 登记项）
-    if (!run.executor().runInfos().empty()) {
-        log::workflow(run_detail_text(run.executor()));
+    if (!run_.executor().runInfos().empty()) {
+        log::workflow(run_detail_text(run_.executor()));
     }
     // PC-05：运行结果归档
     archiveRunOutputs();
@@ -568,12 +571,12 @@ std::string local_time_text()
 
 } // namespace
 
-void EditorState::clearLastError()
+void EditorController::clearLastError()
 {
     last_error = LastError{};
 }
 
-void EditorState::refreshLastError()
+void EditorController::refreshLastError()
 {
     // DEBT-L8（M6-04 步骤 5）：失败汇总 —— 收集**所有**失败节点（不只首个）
     const std::vector<engine::FailureSummary> failures = engine::collectFailures(model_.graph);
@@ -621,59 +624,59 @@ void EditorState::refreshLastError()
 }
 
 // ---- M_patchAB（PB2-07 / PB2-30②）：后台诊断结论（工作线程写、主线程每帧取一次）----
-// ARCH-A1：互斥通道已迁入 app_ctx().diagnostics（Diagnostics::post_status / take_status）
-void EditorState::postBackgroundStatus(const std::string& text)
+// ARCH-A1：互斥通道已迁入 diagnostics()（Diagnostics::post_status / take_status）
+void EditorController::postBackgroundStatus(const std::string& text)
 {
-    app_ctx_.diagnostics.post_status(text);
+    diagnostics_.post_status(text);
 }
 
-bool EditorState::takeBackgroundStatus(std::string* out)
+bool EditorController::takeBackgroundStatus(std::string* out)
 {
-    return app_ctx_.diagnostics.take_status(out);
+    return diagnostics_.take_status(out);
 }
 
-std::string EditorState::workflowDisplayName() const
+std::string EditorController::workflowDisplayName() const
 {
-    // ARCH-A1：实现归 WorkflowFile（app_ctx().workflow_file）
-    return app_ctx_.workflow_file.workflow_display_name();
+    // ARCH-A1：实现归 WorkflowFile（workflow_file()）
+    return workflow_file_.workflow_display_name();
 }
 
-void EditorState::archiveRunOutputs()
+void EditorController::archiveRunOutputs()
 {
     // ARCH-A1：实现归 WorkflowFile::archive_run_outputs（§1.8.9；含 last_archive_dir 写回）
-    app_ctx_.workflow_file.archive_run_outputs(run.executor());
+    workflow_file_.archive_run_outputs(run_.executor());
 }
 
-void EditorState::abortRunIfAny(const std::string& reason)
+void EditorController::abortRunIfAny(const std::string& reason)
 {
-    if (!run.running()) {
+    if (!run_.running()) {
         return;
     }
-    run.abortIfAny(model_.graph, reason); // 终止 + 清节点状态（日志在内）
+    run_.abortIfAny(model_.graph, reason); // 终止 + 清节点状态（日志在内）
     setStatus("运行已终止（" + reason + "）");
 }
 
 // ------------------------------------------------------------- 工作流文件 ----
-// ARCH-A1：保存 / 打开 / 最近归 `app_ctx().workflow_file`（WorkflowFile，§1.8.9）；
+// ARCH-A1：保存 / 打开归 `workflow_file()`（WorkflowFile，§1.8.9）；
 // 本层保留同签名薄封装（编排选中清空 / autosave 基线 / 状态栏），对外调用点零改动。
-bool EditorState::saveWorkflowTo(const std::string& path, std::string* error)
+bool EditorController::saveWorkflowTo(const std::string& path, std::string* error)
 {
-    if (!app_ctx_.workflow_file.save_workflow_to(path, error)) {
+    if (!workflow_file_.save_workflow_to(path, error)) {
         return false;
     }
 
     // PC-01：显式保存成功 ⇒ 「已无未保存的更改」：清掉快照 + 重设基线（不会紧接着又写一份）
-    app_ctx_.autosave.clear_snapshot();
-    app_ctx_.autosave.mark_baseline();
+    autosave_.clear_snapshot();
+    autosave_.mark_baseline();
 
     setStatus("已保存：" + path);
     return true;
 }
 
-bool EditorState::openWorkflowFrom(const std::string& path, std::string* error)
+bool EditorController::openWorkflowFrom(const std::string& path, std::string* error)
 {
     // 运行守卫注入给 WorkflowFile：加载校验通过后、整图替换**之前**终止运行
-    if (!app_ctx_.workflow_file.open_workflow_from(
+    if (!workflow_file_.open_workflow_from(
             path, error, [this]() { abortRunIfAny("切换工作流"); })) {
         return false;
     }
@@ -684,18 +687,14 @@ bool EditorState::openWorkflowFrom(const std::string& path, std::string* error)
     // ARCH-E2：整图重置通知已在 model_.load 内发出（在 baseline 之前发）
     // PC-01/02：换图**不删**快照（任何情况下都不丢稿；「快照 vs 工作流」的新旧由 mtime 判定），
     //  只把当前图设为「已保存」基线 ⇒ 不因换图本身触发一次写盘
-    app_ctx_.autosave.mark_baseline();
+    autosave_.mark_baseline();
 
     logSummary("[工作流] 已加载");
     setStatus("已打开：" + path);
     return true;
 }
 
-std::vector<engine::RecentEntry> EditorState::recentWorkflows() const
-{
-    // ARCH-A1：实现归 WorkflowFile::recent_workflows（≈ engine::loadRecentFiles）
-    return app_ctx_.workflow_file.recent_workflows();
-}
+// ARCH-A3：`recentWorkflows()` 转发已移除 —— 调用方直连 `workflow_file().recent_workflows()`。
 
 // ----------------------------------------------------- 文件对话框入口 -------
 namespace {
@@ -709,7 +708,7 @@ const std::vector<utils::FileFilter>& workflow_filters()
 
 } // namespace
 
-bool openWorkflowDialog()
+bool openWorkflowDialog(EditorController& editor)
 {
     const std::string path = utils::open_file(workflow_filters(), paths::workflowsDir().string());
     if (path.empty()) {
@@ -717,18 +716,17 @@ bool openWorkflowDialog()
     }
 
     std::string error;
-    if (!editor().openWorkflowFrom(path, &error)) {
-        editor().setStatus("打开失败：" + error);
+    if (!editor.openWorkflowFrom(path, &error)) {
+        editor.setStatus("打开失败：" + error);
         return false;
     }
     return true;
 }
 
-bool saveWorkflowDialog()
+bool saveWorkflowDialog(EditorController& editor)
 {
-    EditorState&      state = editor();
     const std::string default_name =
-        (state.model().graph.name.empty() ? std::string("workflow") : state.model().graph.name) +
+        (editor.model().graph.name.empty() ? std::string("workflow") : editor.model().graph.name) +
         ".json";
     const std::string path =
         utils::save_file(workflow_filters(), paths::workflowsDir().string(), default_name);
@@ -737,8 +735,8 @@ bool saveWorkflowDialog()
     }
 
     std::string error;
-    if (!state.saveWorkflowTo(path, &error)) {
-        state.setStatus("保存失败：" + error);
+    if (!editor.saveWorkflowTo(path, &error)) {
+        editor.setStatus("保存失败：" + error);
         return false;
     }
     return true;

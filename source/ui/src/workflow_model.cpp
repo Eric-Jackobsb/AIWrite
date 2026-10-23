@@ -5,7 +5,7 @@
 //    （顺序与 E2 一致：先终止运行，再压「无运行状态」的快照）
 //  * 单点操作（createNode / deleteNode）：修改后 publish(EditEvent)
 //  * 整图重置（undo / redo / clear / load）：替换后 publishGraphDiff 逐节点 diff
-//  * 本对象不 setStatus / 不碰选中 / 不写盘（编排归 EditorState）
+//  * 本对象不 setStatus / 不碰选中 / 不写盘（编排归 EditorController）
 // ============================================================================
 
 #include "workflow_model.h"
@@ -20,7 +20,7 @@ WorkflowModel::WorkflowModel()
     // 快照式撤销在此压栈（snapshot() 只发通知，不再直接操作 undo 栈）。
     undo_sub_handle_ = event_bus_.subscribe_before_edit(
         [this](const std::string& label) {
-            // 修改前钩子（EditorState 注入的 abortRunIfAny：运行中修改工作流 → 计划与图
+            // 修改前钩子（EditorController 注入的 abortRunIfAny：运行中修改工作流 → 计划与图
             // 不再一致，先终止本次运行，M2-04 守卫）—— 先于压快照执行（顺序与 E2 一致）
             if (before_edit_hook_) {
                 before_edit_hook_(label);

@@ -1,7 +1,7 @@
 #include "composite_editor.h"
 #include "ce_internal.h"
 #include "composite.h"
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "log.h"
 #include "nodes.h"
 #include "validate.h"
@@ -42,7 +42,7 @@ engine::RunNodeView* ce_snapshot_entry(CompositeEditorState& state, const std::s
 
 } // namespace
 
-bool compositeEditorStartRun(std::string* error)
+bool compositeEditorStartRun(std::string* error, EditorController& editor)
 {
     CompositeEditorState& state = compositeEditorState();
     const auto fail = [error](const std::string& text) {
@@ -58,7 +58,7 @@ bool compositeEditorStartRun(std::string* error)
         return true; // 已在运行（幂等）
     }
     // 与主画布运行互斥：避免两个执行器并发打 HTTP / 抢画布状态色
-    if (editor().session_active()) {
+    if (editor.session_active()) {
         return fail("主画布正在运行：请先停止主画布的运行，再执行本规格");
     }
 

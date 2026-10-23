@@ -2,7 +2,7 @@
 
 #include "executor.h"
 #include "graph.h"
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "text_view.h"
 #include "texture_cache.h"
 #include "file_dialog.h"
@@ -207,7 +207,7 @@ std::string runOutputText(const engine::Graph& graph, const engine::RunSnapshot&
     return text;
 }
 
-bool exportNodeDocument(EditorState& state, const std::string& node_id)
+bool exportNodeDocument(EditorController& state, const std::string& node_id)
 {
     const engine::Node* node = state.model().graph.findNode(node_id);
     if (node == nullptr) {
@@ -270,7 +270,7 @@ bool exportNodeDocument(EditorState& state, const std::string& node_id)
 }
 
 void drawOutputPanel(const char* title, bool* open, const ReadOnlyView& view,
-                     EditorState& state)
+                     EditorController& state)
 {
     if (!ImGui::Begin(title, open)) {
         ImGui::End();
@@ -349,17 +349,17 @@ void drawOutputPanel(const char* title, bool* open, const ReadOnlyView& view,
     ImGui::TextDisabled("｜ 节点 %zu ｜ 总耗时 %.2f s", infos.size(), executor.elapsedSeconds());
 
     // PC-05：最近一次归档位置（可复制路径，便于去目录里取生成文档）
-    // ARCH-A1：last_archive_dir 收口到 WorkflowFile（app_ctx().workflow_file），经访问器读取
-    if (!state.last_archive_dir().empty()) {
+    // ARCH-A1：last_archive_dir 收口到 WorkflowFile（workflow_file()），经访问器读取
+    if (!state.workflow_file().last_archive_dir().empty()) {
         ImGui::SameLine();
         if (ImGui::SmallButton("复制归档路径")) {
-            ImGui::SetClipboardText(state.last_archive_dir().c_str());
-            log::info("[输出面板] 已复制归档路径：" + state.last_archive_dir());
+            ImGui::SetClipboardText(state.workflow_file().last_archive_dir().c_str());
+            log::info("[输出面板] 已复制归档路径：" + state.workflow_file().last_archive_dir());
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("运行结果已自动归档：\n%s", state.last_archive_dir().c_str());
+            ImGui::SetTooltip("运行结果已自动归档：\n%s", state.workflow_file().last_archive_dir().c_str());
         }
-        ImGui::TextDisabled("已归档：%s", state.last_archive_dir().c_str());
+        ImGui::TextDisabled("已归档：%s", state.workflow_file().last_archive_dir().c_str());
     }
     ImGui::Separator();
 
@@ -425,7 +425,7 @@ void drawOutputPanel(const char* title, bool* open, const ReadOnlyView& view,
             }
         }
         // ARCH-R2：RunEvent 订阅通知 → 流式跟随滚动（PB-03）
-        //  * EditorState::onRunEvent 在收到 NodeOutput/Delta 时置位 follow_output_，
+        //  * EditorController::onRunEvent 在收到 NodeOutput/Delta 时置位 follow_output_，
         //    渲染到「最新有输出的节点」段后滚动到底，然后清除标记（只跟一次）。
         //  * 渲染仍直接读快照（规则 3）；订阅只做「变化通知」。
         if (state.follow_output_ && state.follow_node_id_ == info.node_id) {

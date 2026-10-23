@@ -4,8 +4,8 @@
 //  自动保存服务（ARCH-A1：应用级服务收口 → AppContext · 六个服务之一）
 //
 //  架构落点：ARCHITECTURE.md §1.8 `AppContext` / §1.8.11 依赖图
-//   * 依赖 `WorkflowModel`（+ 经 model.event_bus() 的 EventBus），不依赖 EditorState /
-//     UI 面板 ⇒ 拆出为独立对象后随 ARCH-A3 editor() 退场可直接被 app 层注入
+//   * 依赖 `WorkflowModel`（+ 经 model.event_bus() 的 EventBus），不依赖 EditorController /
+//     UI 面板 ⇒ 拆出为独立对象后随 ARCH-A3 全局单例退场可直接被 app 层注入
 //   * 时机与判据（落点 engine::autosave_*；本层只回答「现在写不写」）：
 //     - 变更感知 = 订阅内容类 EditEvent（on_edit_content 标记 dirty），不再每帧
 //       算 content signature；**静默 ≥ config.ui.autosave_idle_sec 秒**（默认 3）才写一次

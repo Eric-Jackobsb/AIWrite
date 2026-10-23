@@ -17,13 +17,16 @@
 //      · 严格按条目解析站点（**不回落**内置默认站点 —— `D-22②` / `I14`）
 //
 //  线程模型：①② 都在**工作线程**执行（界面不阻塞）；细节走 Console（`log::info`），
-//            结论经 `EditorState::post_background_status()` 投递给主线程写状态栏。
+//            结论经 `EditorController::postBackgroundStatus()` 投递给主线程写状态栏
+//            （ARCH-A3：控制器经参数注入 —— 线程只捕获 app 寿命内的对象指针）。
 //  不变量：`I15`（判据不看 `userToken`）/ `I16`（不注入站点内部端点）/ `R20`（脱敏）。
 // ============================================================================
 
 #include <string>
 
 namespace aiwrite::ui {
+
+class EditorController;
 
 // 正在跑的后台诊断（面板据此显示「正在…」并禁用按钮）
 enum class DiagnosticKind {
@@ -42,13 +45,13 @@ int         diagnosticCode(); // 最近一次的码（0/1/2/3；无记录 = -1�
 std::string diagnosticTitle();// 最近一次是谁的结果（面板标题用）
 
 // ① 面板「测试连接」（`PB2-07`）—— 异步；`provider_id` 空 ⇒ 只跑离线部分
-void requestConnectionCheck(const std::string& provider_id);
+void requestConnectionCheck(const std::string& provider_id, EditorController& editor);
 
 // ② 面板「测试选择器」（`PB2-30②`）—— 异步；只读探测（不写入、不发送）
-void requestSelectorCheck(const std::string& provider_id);
+void requestSelectorCheck(const std::string& provider_id, EditorController& editor);
 
 // ③ 打开该条目的登录窗口（`PB-07`）；成功/失败都写 Console 与状态栏
-void openWebLoginWindow(const std::string& provider_id);
+void openWebLoginWindow(const std::string& provider_id, EditorController& editor);
 
 // 退出前收尾：等待后台诊断结束（最长 wait_ms；超时则分离线程并如实记日志）
 //  * 由 `main.cpp` 在 `log::shutdown()` **之前**调用（避免退出期写日志竞态）

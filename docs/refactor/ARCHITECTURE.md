@@ -1,4 +1,4 @@
-﻿# 架构提案 · ARCHITECTURE —— AIwrite 目标架构设计（v1.1 定稿）
+# 架构提案 · ARCHITECTURE —— AIwrite 目标架构设计（v1.1 定稿）
 
 > 日期：2026-10-22 · 状态：🟢 **v1.1 定稿（用户拍板 + 对象定义总表）** · 编号空间：`ARCH-*`
 > 前置：[FREEZE.md](FREEZE.md) 已生效 · 现状审计 = [../audit/audit_architecture_20261021.md](../audit/audit_architecture_20261021.md)
@@ -193,7 +193,7 @@ private:
 | 数据来源 | 写时通过 `WorkflowModel::graph()` 读 |
 | 限制 | 不持有 Graph、不做 UI、不替代主动保存 |
 
-> **过渡登记（A2 批）**：`AutosaveService` 完全独立 —— `EditorState` 不再持有任何 autosave 方法（`tickAutosave` / `pauseAutosave` / `markAutosaveBaseline` / `autosaveDirty` / `flushAutosaveOnExit` / `restoreAutosave` 全部移除，调用方直连 `app_ctx().autosave`）；「恢复快照」编排（`autosaveLoad` → `model().load` → 路径置空 → baseline）落在 app 层恢复弹窗（唯一调用方）；`flush()` 退出钩子由 app.cpp 退出路径直连。A3 `editor()` 退场后 AppContext 迁 app/main 注入，`AutosaveService` 依 §1.8.11 第 8 位构造。
+> **过渡登记（A2 批）**：`AutosaveService` 完全独立 —— `EditorState` 不再持有任何 autosave 方法（`tickAutosave` / `pauseAutosave` / `markAutosaveBaseline` / `autosaveDirty` / `flushAutosaveOnExit` / `restoreAutosave` 全部移除，调用方直连 autosave 服务）；「恢复快照」编排（`autosaveLoad` → `model().load` → 路径置空 → baseline）落在 app 层恢复弹窗（唯一调用方）；`flush()` 退出钩子由 app.cpp 退出路径直连。**A3 已落地（2026-10-23）**：`AutosaveService` 依 §1.8.11 第 8 位由 `AppContext` 构造，UI 侧经 `EditorController::autosave()` 直接使用。
 
 #### 1.8.7 `Diagnostics`（应用级）
 
@@ -229,7 +229,7 @@ private:
 | 归档目录 | **沿用现有** `~/.brain-ai/outputs/<时间>-<工作流名>/` |
 | 限制 | 不持有工作流数据、不执行、不渲染、不做定时自动保存 |
 
-> **过渡登记（A1 批）**：`WorkflowFile` 已拆为独立对象（`ui/workflow_file.h/.cpp`），由 `AppContext.workflow_file` 持有，`EditorState` 保留同签名薄封装（`saveWorkflowTo` / `openWorkflowFrom` / `recentWorkflows` / `archiveRunOutputs`）。归口数据 `current_workflow_path` / `restored_from_autosave_path` / `last_archive_dir`（原 EditorState 公有成员）。**运行归档触发**：目标态为「订阅运行结束事件」，A1 批仍由 `EditorState::finishRunSession` 编排调用 `archive_run_outputs(executor)`（依赖 RunSession，A3 后再转订阅）；`recent_workflows()` ≈ `engine::loadRecentFiles()`。
+> **过渡登记（A1 批）**：`WorkflowFile` 已拆为独立对象（`ui/workflow_file.h/.cpp`），由 `AppContext.workflow_file` 持有；归口数据 `current_workflow_path` / `restored_from_autosave_path` / `last_archive_dir`（原 `EditorState` 公有成员）。**运行归档触发**：目标态为「订阅运行结束事件」，A1 批仍由 `EditorController::finishRunSession` 编排调用 `archive_run_outputs(executor)`（依赖 `RunSession`；订阅化留 ARCH-Z1 后）；`recent_workflows()` ≈ `engine::loadRecentFiles()`。**A3 已落地**：同签名薄封装 `recentWorkflows()` / `last_archive_dir()` 已移除，调用方直连 `EditorController::workflow_file()`。
 
 #### 1.8.10 `AppContext`（应用级聚合）
 
@@ -245,7 +245,24 @@ private:
 | 是否持有 UI | **不持有**（UI 由 `AppFrame` 或 `app/` 自己管） |
 | 限制 | 不执行逻辑、不渲染、不处理事件、不持有 UI、运行时禁止访问 |
 
-> **过渡登记（A1 批 · 决策 ARCH-A1）**：因**构造顺序鸡生蛋**（AutosaveService / WorkflowFile 依赖 `WorkflowModel&`，而 WorkflowModel 在 A1 阶段仍由 `EditorState` 持有），A1 批的 `AppContext` 作为 **`EditorState` 成员**（`app_ctx_`，声明在 `model_` 之后；构造顺序 = `model_ → app_ctx_ → run → selection_`）构造，经 `editor().app_ctx()` 访问。§1.8.10 的目标形态（启动时外部组装 + 只注入一次 + 运行时不可访问）随 ARCH-A3 `editor()` 退场后落地——届时 UI 模块直接持有 `WorkflowModel`，`AppContext` 由 app/main 创建并分发引用。
+> **过渡登记（A1 批 · 决策 ARCH-A1）**：因**构造顺序鸡生蛋**（AutosaveService / WorkflowFile 依赖 `WorkflowModel&`，而 WorkflowModel 在 A1 阶段仍由 `EditorState` 持有），A1 批的 `AppContext` 曾作为 **`EditorState` 成员**（`app_ctx_`）构造，经 `editor().app_ctx()` 访问。
+> **A3 已落地（2026-10-23）**：`AppContext` 已回到目标形态 —— app/main 启动时按 §1.8.11 顺序组装，UI 模块只拿到各自需要的引用（`model()` / `selection()` / `autosave()` …），运行时无人再访问 `AppContext`（判据 8）；`app_ctx()` 访问器与 `editor()` 单例一并移除。
+
+> **ARCH-A3 已落地（2026-10-23）**：`AppContext` 现为**独立容器**（启动时在 `app.cpp` / `cli_selftest` 按 §1.8.11 顺序组装），与原 `EditorState` 的编排逻辑分离为无所有权的 `EditorController`（§1.8.14）；全局单例 `editor()` 已删除。
+
+#### 1.8.14 `EditorController`（UI 编排层 · ARCH-A3）
+
+**一句话定义**：`EditorController` 在启动时接收 8 个长期对象的引用（`WorkflowModel` / `SelectionState` / `RunSession` / `Config` / `Clipboard` / `Diagnostics` / `AutosaveService` / `WorkflowFile`），把它们编排成界面能直接调用的一组编辑 / 运行 / 文件 / 状态栏操作；它**不拥有**任何对象、不存业务数据、不渲染、不订阅全局，退出时只注销自己注册的 `RunEvent` 订阅。
+
+| 维度 | 内容 |
+|---|---|
+| 形态 | **无所有权编排层**（成员全部是引用；拷贝/赋值 `delete`） |
+| 生命周期 | 与 `AppContext` 同寿（`AppContext::editor`，启动构造 / 退出析构） |
+| 访问器 | `model()` / `selection()` / `run()` / `config()` / `clipboard()` / `diagnostics()` / `autosave()` / `workflow_file()` / `event_bus()` |
+| 持有状态 | 仅 **UI 瞬时状态**：`status` · `last_error` · `request_focus_title` / `request_navigate_to_content` / `request_focus_selection` · `follow_output_` / `run_finished_` / `run_last_summary_` |
+| 注入方式 | 启动时由 app/main 把引用传给各 UI 模块（构造参数 / `CommandContext.editor`）——**没有全局单例** |
+| 限制 | 不拥有数据、不渲染、不落盘、不做校验、不替代 `WorkflowModel` / `RunSession` 的职责 |
+| 后续迁移 | `status` / `last_error` / `request_*` 归 ARCH-Z1（`AppFrame` 落地后分别下沉到状态栏 / 错误条 / 画布）；`CeSession` 单例归 ARCH-Z2 |
 
 #### 1.8.11 对象依赖图（初始化顺序）
 
@@ -266,7 +283,7 @@ private:
 → 2. Config → 1. EventBus
 ```
 
-> **A1 批当前构造顺序**（EditorState 成员声明顺序）：`WorkflowModel model_` → `AppContext app_ctx_`（内部 = config → clipboard → diagnostics → autosave → workflow_file）→ `RunSession run` → `SelectionState selection_`。A3 后回到上表目标顺序（EventBus → Config → Clipboard → Diagnostics → WorkflowModel → SelectionState → RunSession → AutosaveService → WorkflowFile）。
+> **A3 已落地（2026-10-23）**：构造顺序回到上表目标顺序 —— `AppContext` 独立构造（`config → clipboard → diagnostics → model → selection → run → autosave → workflow_file`），编排层 `EditorController` 作为第 10 项（只持引用）；`app.cpp` / `cli_selftest` 是唯一组装点，UI 模块只接收引用。
 
 #### 1.8.12 启动阶段「注入」示例
 
@@ -293,6 +310,8 @@ SettingsPanel settings(ctx.config());
 | 运行时无 `ctx.` 访问 | `rg "ctx\." source/src/ui/` | 0 |
 | 渲染函数只读 `ReadOnlyView` | `rg "render\(const ReadOnlyView"` | 覆盖所有渲染模块 |
 | 无 `editor()` 引用 | `rg "editor\(\)" source/src/` | 0 |
+
+> **A3 实测（2026-10-23）**：`rg "\beditor\(\)" source/` = **0**（含注释）；`rg "AppContext" source/` 的**代码引用（非注释行）** 仅命中 `ui/include/app_context.h` · `ui/src/app_context.cpp` · `ui/src/app.cpp` · `app/src/cli_selftest.cpp`（启动组装点）—— 其余命中均为注释中的架构引用。
 
 ---
 
@@ -349,7 +368,7 @@ SettingsPanel settings(ctx.config());
 |---|---|---|---|
 | **ARCH-A1** | ~~`AppContext` 收口：Config/Clipboard/Diagnostics/RecentFiles/AutosaveService/WorkflowFile~~ ✅ **已落地（2026-10-23）** | 应用级统一（六服务拆为独立对象 + `AppContext` 容器；`EditorState` 保留薄封装 + `app_ctx()` 访问器 · 过渡形态 = EditorState 成员，A3 迁 app/main 注入） | 构建 0/0 + `--run-selftest` PASS（零断言增减）+ exec 713/0 + graph 151/0 + ce_repro 全帧 OK + check_links **1823**/0 + check_all **19/19** |
 | **ARCH-A2** | ~~`AutosaveService` 独立（A1 已拆出对象；本批 = EditorState autosave 方法随 `editor()` 一并移除）~~ ✅ **已落地（2026-10-23）** | autosave 解耦（`EditorState` 六方法移除：tick / pause / mark_baseline / dirty / flush / restore → 调用方直连 `app_ctx().autosave`；restore 编排落 app 层恢复弹窗） | 构建 0/0 + `--run-selftest` PASS（零断言增减）+ exec 713/0 + graph 151/0 + check_links **1839**/0 + check_all **19/19** |
-| **ARCH-A3** | `editor()` 退场：只保留 `AppContext` 聚合 | 上帝对象消失 | 构建 + 全量自检 |
+| **ARCH-A3** | ~~`editor()` 退场：只保留 `AppContext` 聚合~~ ✅ **已落地（2026-10-23）** | 上帝对象消失（`EditorState` → 无所有权 `EditorController`；`AppContext` 启动组装 + 只注入一次） | 构建 0/0 + `--run-selftest` PASS（零断言增减）+ exec 713/0 + graph 151/0 + ce_repro 全帧 OK + check_links **1845**/0 + check_all **19/19** + `rg "editor\(\)"` = 0 |
 | **ARCH-A4** | 依赖单向 CI 断言：`tools/check_includes.ps1`（禁止 engine/nodes/ai/web/utils include ui/app），接入 `check_all` | 规则 1 工具化 | `check_all` 新项 PASS |
 | **ARCH-A5** | 全局变量扫描：`tools/check_globals.ps1`（跨 TU extern + 文件级 static 可变状态 = 0），接入 `check_all` | 规则 6 工具化 | `check_all` 新项 PASS |
 
@@ -369,9 +388,9 @@ SettingsPanel settings(ctx.config());
 3. **双画布单套交互**：`ce_draw.cpp` 与 `node_canvas.cpp` 中不存在重复的"窗口判定 / Delete / 选中同步"实现（`rg` 验证关键谓词只出现在 `interactor.cpp`）。 ✅ **已满足（2026-10-22 · ARCH-E5）**：`GetSelected* / BeginCreate/EndCreate / BeginDelete/EndDelete / Query* / Accept* / Reject* / ClearSelection` 只出现在 `interactor.cpp`；窗口判定只出现在 `interactorWindowActiveMain/Composite`。
 4. **打包-校验同源**：`ce_pack.cpp` 不再直接写 `spec.internal_graph` / `spec.inputs` / `spec.exposed_params`（`rg` 验证为 0 次）。 ✅ **已满足（2026-10-23 · ARCH-E6）**：打包逻辑下沉 `engine::buildCompositeSpecFromSelection`（composite.h/.cpp），ce_pack 仅调用 + 生成后严格校验（`validate_composite_spec` 通过才落盘）；生成阶段自动修正「暴露输入不得有内部入边」（variadic 端口内外并存场景）。
 5. **依赖单向**：`check_includes.ps1` 通过（engine/nodes/ai/web/utils 不含 ui/app 头）。
-6. **`editor()` 退场**：全库 `editor()` 引用为 0（`rg` 验证），只保留 `AppContext`。
+6. **`editor()` 退场**：全库 `editor()` 引用为 0（`rg` 验证），只保留 `AppContext`。 ✅ **已满足（2026-10-23 · ARCH-A3）**：`rg "\beditor\(\)" source/` = 0；`AppContext` 只在 `ui/app_context.*` + 启动组装点（`app.cpp` / `cli_selftest.cpp`）出现。
 7. **ReadOnlyView 落地**：渲染路径只读 `ReadOnlyView`（`rg` 验证渲染函数不直接持有 `WorkflowModel&` / `SelectionState&` / `RunSession&` 的裸引用）。
-8. **`AppContext` 运行时不可访问**：`rg "ctx\." source/src/ui/` 为 0；`rg "AppContext" source/src/` 只在 `app/` 下。
+8. **`AppContext` 运行时不可访问**：`rg "ctx\." source/src/ui/` 为 0；`rg "AppContext" source/src/` 只在 `app/` 下。 ✅ **已满足（2026-10-23 · ARCH-A3）**：UI 面板代码 **0** 处 `AppContext` 代码引用（仅注释提及）；各模块只持 `EditorController&`（内部转发所需引用），启动组装点 = `app.cpp` / `cli_selftest.cpp`。
 
 ---
 

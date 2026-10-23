@@ -8,7 +8,8 @@
 #include <windows.h>   // M7B 批 1 step 2：--pipe-selftest（CreateProcessW / WaitForSingleObject）
 
 #include "app.h"
-#include "editor_state.h"
+#include "app_context.h"
+#include "editor_controller.h"
 #include "output_panel.h"
 #include "readonly_view.h"   // ARCH-R3：ReadOnlyView 渲染视图断言（零拷贝 / 同源）
 #include "commands.h"        // ARCH-R4：命令路由层断言（快捷键表完整性 / 唯一性）
@@ -186,7 +187,9 @@ int officialGenerateSelftest(const std::string& provider_id)
 
 int runSelftest(bool use_web, const std::string& provider_id)
 {
-    aiwrite::ui::EditorState& state = aiwrite::ui::editor();
+    // ARCH-A3：自检同样走「启动组装 + 注入」（app 层允许持有 AppContext；无全局单例）
+    aiwrite::ui::AppContext        app_context;
+    aiwrite::ui::EditorController& state = app_context.editor;
     state.createSampleWorkflow();
 
     // 默认（自检不联网）：把生成相关节点的 mode 置为 official（官方 API 占位分支）
@@ -336,8 +339,8 @@ int runSelftest(bool use_web, const std::string& provider_id)
     bool        archive_ok = false;
     std::size_t archive_files = 0;
     bool        doc_found  = false;
-    if (!state.last_archive_dir().empty()) {
-        const std::filesystem::path dir(state.last_archive_dir());
+    if (!state.workflow_file().last_archive_dir().empty()) {
+        const std::filesystem::path dir(state.workflow_file().last_archive_dir());
         archive_ok = std::filesystem::exists(dir / "run.json");
         for (const std::filesystem::directory_entry& entry :
              std::filesystem::directory_iterator(dir, ec)) {
@@ -361,7 +364,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
     }
     std::printf("[运行自检] PC-05 归档：%s（目录 %s，节点文件 %zu 个，含生成文档=%s）\n",
                 archive_ok && doc_found ? "OK" : "失败",
-                state.last_archive_dir().empty() ? "（无）" : state.last_archive_dir().c_str(),
+                state.workflow_file().last_archive_dir().empty() ? "（无）" : state.workflow_file().last_archive_dir().c_str(),
                 archive_files, doc_found ? "是" : "否");
 
     // VA-07：保存出来的 JSON 不得包含运行结果（运行态值原则）
@@ -584,7 +587,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
         async_ok = true;
     }
 
-    // ---- PB-01 第二步：EditorState 异步入口（start_run_async + tick_run 泵事件）----
+    // ---- PB-01 第二步：EditorController 异步入口（start_run_async + tick_run 泵事件）----
     bool session_ok = true;
     if (!use_web) {
         for (aiwrite::engine::Node& node : state.model().graph.nodes) {
@@ -599,7 +602,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
             state.tickRun(); // 主线程：pump_run_events（写 Graph + 维护 run_snapshot）
         }
         const bool session_ended = !state.session_active();
-        // ARCH-R2：EditorState 构造时订阅 RunEvent —— startRunAsync 重置通知，Finished 事件置位
+        // ARCH-R2：EditorController 构造时订阅 RunEvent —— startRunAsync 重置通知，Finished 事件置位
         //  * 走到这里 run_finished_ == true 证明「订阅 → 泵事件 → 回调」链路工作（不再主动 pump）
         const bool subscribed_notify = state.run_finished_;
 
@@ -620,7 +623,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
         state.stopRunAsync(); // 幂等（收尾已 join）
         session_ok = started && session_ended && same_view && subscribed_notify &&
                      state.executor().state() != aiwrite::engine::ExecState::Running;
-        std::printf("[运行自检] PB-01 第二步（EditorState 异步 + RunSnapshot）：%s（启动=%s / 会话结束=%s / "
+        std::printf("[运行自检] PB-01 第二步（EditorController 异步 + RunSnapshot）：%s（启动=%s / 会话结束=%s / "
                     "快照·Graph == 权威=%s / 订阅通知=%s / 节点 %zu 个 / 状态 %s）\n",
                     session_ok ? "OK" : "失败", started ? "是" : "否", session_ended ? "是" : "否",
                     same_view ? "是" : "否", subscribed_notify ? "是" : "否", view.nodes.size(),
@@ -957,13 +960,13 @@ int runSelftest(bool use_web, const std::string& provider_id)
     //  * 机制：按 kind 分组订阅（发 NodeAdded 不触发 NodeRemoved 订阅者）· 同 kind 按订阅顺序
     //    FIFO 分发 · 重复订阅追加 · unsubscribe 后不再收到（ARCH-D7 形态 1：通知）
     //  * 类型：EditEventKind::Count == 8（ARCH-D12）
-    //  * 映射：createNode → NodeAdded · deleteNode → NodeRemoved（真实 editor() 操作，结束后恢复）
+    //  * 映射：createNode → NodeAdded · deleteNode → NodeRemoved（真实控制器操作，结束后恢复）
     bool edit_event_ok = false;
     {
         using aiwrite::ui::EditEvent;
         using aiwrite::ui::EditEventKind;
 
-        // ① 机制（用独立临时总线验证，不污染 editor() 的事件总线）
+        // ① 机制（用独立临时总线验证，不污染控制器的事件总线）
         aiwrite::ui::EventBus bus;
         std::vector<std::string> received;
         const std::size_t h1 = bus.subscribe(EditEventKind::NodeAdded,
@@ -988,7 +991,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
         // ② 8 种类型完整性（ARCH-D12）
         const bool eight_kinds = static_cast<int>(EditEventKind::Count) == 8;
 
-        // ③ 编辑操作 → 事件映射（真实 editor() 操作；断言后删除恢复原图）
+        // ③ 编辑操作 → 事件映射（真实控制器操作；断言后删除恢复原图）
         bool op_add = false;
         bool op_remove = false;
         const std::size_t ha = state.model().event_bus().subscribe(
@@ -1018,16 +1021,16 @@ int runSelftest(bool use_web, const std::string& provider_id)
     //     批量重置 diff 事件 + autosave 内容事件标记）----
     //  * before-edit 机制：publish_before_edit 按订阅顺序 FIFO 携带 label · publish(EditEvent)
     //    不触发 before 订阅者（通道隔离）· unsubscribe_before_edit 后不再收到
-    //  * Undo 订阅化：真实 editor() 构造时已订阅 before 通道 → snapshot(label) 只发通知，
+    //  * Undo 订阅化：真实控制器构造时已订阅 before 通道 → snapshot(label) 只发通知，
     //    压快照由订阅回调完成（undoDepth +1）；发 NodeAdded 不压快照（通道隔离）
     //  * 批量重置 diff：undoOnce 恢复整图 → 逐节点 NodeRemoved 事件
-    //  * autosave 订阅化：内容类事件 → app_ctx().autosave.dirty() 置位；SelectionChanged 不触发
+    //  * autosave 订阅化：内容类事件 → autosave().dirty() 置位；SelectionChanged 不触发
     bool edit_subscribe_ok = false;
     {
         using aiwrite::ui::EditEvent;
         using aiwrite::ui::EditEventKind;
 
-        // ① before-edit 机制（独立临时总线验证，不污染 editor() 的事件总线）
+        // ① before-edit 机制（独立临时总线验证，不污染控制器的事件总线）
         aiwrite::ui::EventBus         bus;
         std::vector<std::string>      before_received;
         const std::size_t bh1 = bus.subscribe_before_edit(
@@ -1048,7 +1051,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
         const bool before_isolate_ok = before_received.size() == 3 &&
                                        bus.before_subscriber_count() == 1;
 
-        // ② Undo 订阅化（真实 editor()：构造时订阅 before 通道，snapshot 只发通知）
+        // ② Undo 订阅化（真实控制器：构造时订阅 before 通道，snapshot 只发通知）
         const std::size_t undo_before = state.model().undo.undoDepth();
         state.snapshot("自检快照");
         const bool undo_push_ok = state.model().undo.undoDepth() == undo_before + 1;
@@ -1073,15 +1076,15 @@ int runSelftest(bool use_web, const std::string& provider_id)
         // 清理：撤销 ② 压的空快照（恢复同一张图，diff 为空）回到基线深度
         state.model().undoOnce();
 
-        // ④ autosave 订阅化（真实 editor()：内容类事件 → app_ctx().autosave.dirty() 置位）
-        //    ARCH-A2：EditorState autosave 方法已移除 —— 直连 app_ctx().autosave
-        state.app_ctx().autosave.mark_baseline(); // 先重置（与自检前状态无关）
-        const bool dirty_baseline_ok = !state.app_ctx().autosave.dirty();
+        // ④ autosave 订阅化（真实控制器：内容类事件 → autosave().dirty() 置位）
+        // ARCH-A2：EditorController autosave 方法已移除 —— 直连 autosave()（本批 A3 起为注入引用）
+        state.autosave().mark_baseline(); // 先重置（与自检前状态无关）
+        const bool dirty_baseline_ok = !state.autosave().dirty();
         state.model().event_bus().publish(EditEvent::node(EditEventKind::SelectionChanged, ""));
-        const bool dirty_selection_ok = !state.app_ctx().autosave.dirty(); // 选择非内容变化 → 不置位
+        const bool dirty_selection_ok = !state.autosave().dirty(); // 选择非内容变化 → 不置位
         state.model().event_bus().publish(EditEvent::node(EditEventKind::NodeAdded, "n_dirty"));
-        const bool dirty_content_ok = state.app_ctx().autosave.dirty(); // 内容事件 → 置位
-        state.app_ctx().autosave.mark_baseline();                       // 恢复基线，不污染后续运行
+        const bool dirty_content_ok = state.autosave().dirty(); // 内容事件 → 置位
+        state.autosave().mark_baseline();                       // 恢复基线，不污染后续运行
 
         edit_subscribe_ok = before_fifo_ok && before_unsub_ok && before_isolate_ok &&
                             undo_push_ok && undo_isolate_ok && undo_once_ok && diff_ok &&

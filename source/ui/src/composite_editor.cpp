@@ -2,7 +2,7 @@
 
 #include "canvas_view.h"   // CN_editor_refactor：共享只读绘制层（CEA-01 / CEA-02）
 #include "composite.h"
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "log.h"
 #include "nodes.h" // 试运行：registerAllExecutors
 #include "node_registry.h"

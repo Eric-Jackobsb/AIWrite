@@ -14,10 +14,12 @@
 //  * is_secret（如 api_key）使用密码框
 //  * 编辑结束（控件失焦/回车/松开鼠标）才置 changed，避免拖滑块产生大量撤销快照
 //  * ARCH-R3：渲染读取（graph / snapshot）统一走 `const ReadOnlyView&`；
-//    编辑写仍用 editor()（E3/E4 拆分后收敛）
+//    ARCH-A3：编辑写走启动注入的 `EditorController&`
 // ============================================================================
 
 namespace aiwrite::ui {
+
+class EditorController;
 
 struct PropertyEditResult {
     bool begin_edit = false; // 某个控件刚刚被激活（值尚未变化）→ 外层应在此刻压撤销快照
@@ -26,9 +28,10 @@ struct PropertyEditResult {
 };
 
 // node 为 nullptr 时显示"未选中节点"
-// ARCH-R3：渲染读取（graph / snapshot）走 view；编辑写仍用 editor()
+// ARCH-R3：渲染读取（graph / snapshot）走 view；ARCH-A3：编辑写走注入的 editor
 void draw_property_panel(const char* window_title, bool* open, engine::Node* node,
-                         const ReadOnlyView& view, PropertyEditResult& result);
+                         const ReadOnlyView& view, PropertyEditResult& result,
+                         EditorController& editor);
 
 // 单个参数控件（PS-09-G1 方案乙：上级节点编辑器复用；返回 edited = 本次编辑结束）
 //  * begin_edit = 控件刚被激活（值尚未变化）→ 外层在此刻压撤销快照

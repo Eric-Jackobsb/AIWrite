@@ -38,7 +38,7 @@ std::vector<std::string> unwiredConfigFields()
         //  「界面语言切换 / 启动行为」不做（i18n 决策见 roadmap.md §十）；旧 [general] 节被静默忽略
         "ui.grid_size",                 // 网格间距：vendored imgui-node-editor 的 Style 无此字段（PD-03 处理）
         // 口径变更（2026-10-10 · M6）：以下两项**已接线**，故从清单移除（不再是「改了没效果」）——
-        //  * `output.auto_open_on_complete` → EditorState::archive_run_outputs() 归档成功后打开该目录
+        //  * `output.auto_open_on_complete` → EditorController::archiveRunOutputs() 归档成功后打开该目录
         //  * `advanced.log_ttl_days`        → 启动时清理 logs/ 下超过该天数的旧日志（不含 app.log / workflow.log）
         // 口径变更（2026-10-11 · M_patchAB 批 4）：`timeout.*` / `error.*` **已接线**，故从清单移除 ——
         //  * `timeout.connect_ms` / `first_byte_ms` → 官方 API 的**默认**连接 / 读超时

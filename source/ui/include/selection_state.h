@@ -8,17 +8,17 @@
 //   * 变化时发「选中变化」编辑事件（`EditEvent::SelectionChanged`）
 //   * 不持有工作流数据、不渲染、不执行（§1.8.4 限制）
 //   * 依赖图 §1.8.11 第 6 位：**无依赖**（不 include EventBus）—— 变化通知经
-//     `set_changed_callback` 注入（EditorState 构造时注入 → 发 SelectionChanged 到
+//     `set_changed_callback` 注入（EditorController 构造时注入 → 发 SelectionChanged 到
 //     `model().event_bus()`；SelectionChanged 为通知形态，无内容消费者，autosave 不订阅）
 //   * 变化检测内置：每个修改方法先比较再赋值，仅真正变化才触发回调（避免每帧高频通知，
 //     与 E1 `sync_selection` 语义一致）
 //   * 生命周期：文档级（加载工作流时清空，§1.8.6）
 //
-//  E4 范围（本批）：选中集合从 `EditorState` 拆出为独立对象；`ReadOnlyView` 的
+//  E4 范围（本批）：选中集合从编辑器状态拆出为独立对象；`ReadOnlyView` 的
 //  `SelectionReadView` 过渡结构替换为本对象 const 引用（渲染调用点不变）；
-//  UI 编排（状态栏 / 视图跟随 / autosave baseline）仍留在 `EditorState`。
-//  过渡登记：`EditorState` 持有本对象（`editor().selection()`）；`editor()` 退场
-//  （ARCH-A3）后 UI 模块直接持有 `SelectionState`；剪贴板独立留 ARCH-A1。
+//  UI 编排（状态栏 / 视图跟随 / autosave baseline）仍留在 `EditorController`。
+//  ARCH-A3 已落地：`EditorController` 注入本对象（`selection()`）；全局单例已退场
+//  （UI 模块直接持有 `SelectionState`）；剪贴板独立留 ARCH-A1。
 // ============================================================================
 
 #include <functional>
@@ -55,7 +55,7 @@ public:
     void prune_links(std::function<bool(const std::string&)> keep); // 保留满足 keep 的连线（ce 热重载清理失效引用）
     void clear();        // 全清（打开/恢复工作流）
 
-    // 变化回调（无依赖注入）：EditorState 构造时注入 → 发 `EditEvent::SelectionChanged`
+    // 变化回调（无依赖注入）：EditorController 构造时注入 → 发 `EditEvent::SelectionChanged`
     void set_changed_callback(std::function<void()> callback);
 
 private:

@@ -8,7 +8,7 @@
 #include <windows.h>   // M7B 批 1 step 2：--pipe-selftest（CreateProcessW / WaitForSingleObject）
 
 #include "app.h"
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "output_panel.h"
 #include "deepseek_official_provider.h"
 #include "provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）

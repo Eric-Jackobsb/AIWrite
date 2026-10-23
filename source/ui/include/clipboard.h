@@ -4,7 +4,7 @@
 //  剪贴板（ARCH-A1：应用级服务收口 → AppContext · 六个服务之一）
 //
 //  架构落点：ARCHITECTURE.md §1.8 `AppContext` / 决策 ARCH-A1
-//   * 从 `EditorState` 拆出的**纯数据 + 注入**服务：不持有 EventBus / 选中 / 图引用
+//   * 从 `EditorController` 拆出的**纯数据 + 注入**服务：不持有 EventBus / 选中 / 图引用
 //   * 复制时调用方传入选区节点 id 与源图（深拷贝到本对象）；
 //     粘贴时把新建结果注入目标图，并由调用方发布事件 / 更新选中
 //   * 语义与拆出前逐字一致（CHANGELOG「复制/粘贴暂停」说明仍适用：UI 入口已下线，

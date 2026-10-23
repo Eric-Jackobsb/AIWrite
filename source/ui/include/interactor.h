@@ -8,7 +8,7 @@
 //  —— 一处实现、两画布各自取用（与 canvas_view 只读绘制层对应）。
 //
 //  模型差异经「回调 + 参数」保留（ARCHITECTURE §5 风险对策：ce_draw 与
-//  node_canvas 交互差异比预想大 —— 主画布 = editor().model().graph +
+//  node_canvas 交互差异比预想大 —— 主画布 = `EditorController::model().graph` +
 //  SelectionState（含替换连线语义）；ce = compositeEditorState().working.
 //  internal_graph + 局部单选，无替换）。
 //

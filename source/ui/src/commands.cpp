@@ -1,6 +1,6 @@
 #include "commands.h"
 
-#include "editor_state.h"      // EditorState / openWorkflowDialog / saveWorkflowDialog
+#include "editor_controller.h"  // EditorController / openWorkflowDialog / saveWorkflowDialog
 #include "composite_editor.h"  // 上级节点：会话 / 保存 / 删除选中 / 新建 / 打包对话框
 #include "settings_panel.h"    // openSettingsPanel（设置面板）
 #include "text_view.h"         // copyText（帮助 → 复制诊断信息）
@@ -29,7 +29,12 @@ namespace aiwrite::ui {
 // ============================================================================
 void dispatchCommand(AppCommand cmd, const CommandContext& ctx)
 {
-    EditorState& state = editor();
+    // ARCH-A3：编辑器编排层由调用方启动注入（Menu / 工具栏 / 快捷键三入口都必须传）
+    if (ctx.editor == nullptr) {
+        log::error("[命令] 缺少编辑器上下文（CommandContext.editor == nullptr）—— 命令被忽略");
+        return;
+    }
+    EditorController& state = *ctx.editor;
 
     switch (cmd) {
     // ---- 文件 ----
@@ -40,10 +45,10 @@ void dispatchCommand(AppCommand cmd, const CommandContext& ctx)
         state.createSampleWorkflow();
         break;
     case AppCommand::OpenWorkflow:
-        openWorkflowDialog();
+        openWorkflowDialog(state);
         break;
     case AppCommand::SaveWorkflow:
-        saveWorkflowDialog();
+        saveWorkflowDialog(state);
         break;
     case AppCommand::Settings:
         openSettingsPanel();
@@ -89,7 +94,7 @@ void dispatchCommand(AppCommand cmd, const CommandContext& ctx)
         compositeNewDialog();
         break;
     case AppCommand::CompositePack:
-        compositePackDialog();
+        compositePackDialog(state);
         break;
     case AppCommand::CompositeOpenEditor:
         // 一律走文件路径：弹新建对话框 → 落盘空白规格 JSON → 打开编辑器读取
@@ -101,7 +106,7 @@ void dispatchCommand(AppCommand cmd, const CommandContext& ctx)
     case AppCommand::CompositeSave: {
         // 与 ce 顶栏「保存」按钮完全同一路径（DEBT-B1：Ctrl+S 与保存按钮一致）
         std::string error;
-        if (compositeEditorSave(&error)) {
+        if (compositeEditorSave(&error, state)) {
             log::info("[上级节点] 已保存 " + compositeEditorState().working.id + "（" +
                       compositeEditorState().working.name + "）");
         }

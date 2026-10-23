@@ -2,7 +2,7 @@
 
 #include "commands.h"         // ARCH-R4：命令路由层（三入口收敛：工具栏 → dispatchCommand）
 #include "provider_resolve.h"
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "log.h"
 
 #include <imgui.h>
@@ -12,9 +12,9 @@
 
 namespace aiwrite::ui {
 
-void drawToolbarButtons()
+void drawToolbarButtons(EditorController& editor)
 {
-    EditorState& state = editor();
+    EditorController& state = editor;
 
     const bool can_undo = state.model().undo.canUndo();
     const bool can_redo = state.model().undo.canRedo();
@@ -23,7 +23,7 @@ void drawToolbarButtons()
     // ARCH-R4：三入口收敛 —— 按钮执行统一走 dispatchCommand（与菜单/快捷键同一实现）
     ImGui::BeginDisabled(!can_undo);
     if (ImGui::Button("↶ 撤销")) {
-        dispatchCommand(AppCommand::Undo, CommandContext{});
+        dispatchCommand(AppCommand::Undo, CommandContext{nullptr, nullptr, &editor});
     }
     ImGui::EndDisabled();
     if (can_undo && ImGui::IsItemHovered()) {
@@ -34,7 +34,7 @@ void drawToolbarButtons()
     ImGui::SameLine();
     ImGui::BeginDisabled(!can_redo);
     if (ImGui::Button("↷ 重做")) {
-        dispatchCommand(AppCommand::Redo, CommandContext{});
+        dispatchCommand(AppCommand::Redo, CommandContext{nullptr, nullptr, &editor});
     }
     ImGui::EndDisabled();
     if (can_redo && ImGui::IsItemHovered()) {
@@ -51,7 +51,7 @@ void drawToolbarButtons()
     ImGui::SameLine();
     ImGui::BeginDisabled(!state.has_selection());
     if (ImGui::Button("删除选中")) {
-        dispatchCommand(AppCommand::DeleteSelection, CommandContext{});
+        dispatchCommand(AppCommand::DeleteSelection, CommandContext{nullptr, nullptr, &editor});
     }
     ImGui::EndDisabled();
     if (state.has_selection() && ImGui::IsItemHovered()) {
@@ -64,7 +64,7 @@ void drawToolbarButtons()
     // ---- 工作流 ----（ARCH-R4：三入口收敛 → dispatchCommand 单一实现）
     ImGui::SameLine();
     if (ImGui::Button("新建（清空）")) {
-        dispatchCommand(AppCommand::NewWorkflow, CommandContext{});
+        dispatchCommand(AppCommand::NewWorkflow, CommandContext{nullptr, nullptr, &editor});
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("清空画布，并清空撤销历史（设计 §6.6：加载/新建时清空栈）");
@@ -72,12 +72,12 @@ void drawToolbarButtons()
 
     ImGui::SameLine();
     if (ImGui::Button("示例工作流")) {
-        dispatchCommand(AppCommand::SampleWorkflow, CommandContext{});
+        dispatchCommand(AppCommand::SampleWorkflow, CommandContext{nullptr, nullptr, &editor});
     }
 
     ImGui::SameLine();
     if (ImGui::Button("打开工作流")) {
-        dispatchCommand(AppCommand::OpenWorkflow, CommandContext{});
+        dispatchCommand(AppCommand::OpenWorkflow, CommandContext{nullptr, nullptr, &editor});
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("从磁盘加载工作流 JSON：先做加载校验，通过后清空撤销栈并记入最近列表");
@@ -85,7 +85,7 @@ void drawToolbarButtons()
 
     ImGui::SameLine();
     if (ImGui::Button("保存工作流")) {
-        dispatchCommand(AppCommand::SaveWorkflow, CommandContext{});
+        dispatchCommand(AppCommand::SaveWorkflow, CommandContext{nullptr, nullptr, &editor});
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("另存为工作流 JSON（API Key 等 is_secret 参数不落盘，设计 §8.4）");
@@ -226,7 +226,7 @@ void drawToolbarButtons()
         ImGui::Separator();
 
         if (ImGui::Button("切换为网页版并运行", ImVec2(180.0f, 0.0f))) {
-            const auto switchable = [](const EditorState& state,
+            const auto switchable = [](const EditorController& state,
                                        const std::vector<BlockedNode>& items) {
                 for (const BlockedNode& item : items) {
                     const std::string target_id =

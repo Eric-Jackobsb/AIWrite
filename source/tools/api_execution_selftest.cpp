@@ -3781,7 +3781,7 @@ int execution_selftest()
     }
 
     // ---- DEBT-L7 / VB-03：离线「假增量」断言（流式数据源已拍板不做 · D-31/PQ-11 · 事件槽位保留）----
-    // 语义对齐 UI 层 editor_state.cpp `RunEvent::Kind::Delta`：增量按段 `text += seg` 追加，
+    // 语义对齐 UI 层 editor_controller.cpp `RunEvent::Kind::Delta`：增量按段 `text += seg` 追加，
     // `delta_bytes = view->text.size()`（累计字节）；executor.handleDelta 对空文本直接 return。
     // 离线断言（纯逻辑，不启进程）：多段增量拼接 == 非流式整段结果；delta_bytes 与正文长度一致。
     {
@@ -3795,7 +3795,7 @@ int execution_selftest()
                 continue; // executor.handleDelta：空文本 return
             }
             joined += seg;
-            delta_bytes = joined.size(); // 与 editor_state Delta 分支一致（累计）
+            delta_bytes = joined.size(); // 与 editor_controller Delta 分支一致（累计）
         }
         expect(check, joined == whole, "VB-03① 多段增量拼接 == 非流式整段结果", joined);
 

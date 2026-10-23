@@ -3,7 +3,8 @@
 #include "console_panel.h"
 #include "composite_editor.h"   // CN：上级节点编辑器 / 打包 / 新建
 #include "commands.h"           // ARCH-R4：命令路由层（菜单收敛 + 主窗口 Ctrl+S）
-#include "editor_state.h"
+#include "app_context.h"        // ARCH-A3：启动组装（AppContext + EditorController）
+#include "editor_controller.h"
 #include "error_bar.h"
 #include "node_canvas.h"
 #include "node_library.h"
@@ -325,7 +326,8 @@ std::string last_run_duration_text(const ReadOnlyView& view)
 // 工作流信息面板（环境 + 当前工作流统计；数据来自 ReadOnlyView）
 // ARCH-R3：graph / 选中读取走 view；撤销栈深度仍读 state（undo 不在 ReadOnlyView 字段内，
 //          E3 拆出 WorkflowModel 后归入文档级对象）
-void draw_info_panel(const char* title, bool* open, const ReadOnlyView& view)
+void draw_info_panel(const char* title, bool* open, const ReadOnlyView& view,
+                      EditorController& state)
 {
     if (open != nullptr && !*open) {
         return;
@@ -359,7 +361,7 @@ void draw_info_panel(const char* title, bool* open, const ReadOnlyView& view)
         ImGui::TextWrapped("日志文件   : %s", log::filePathString().c_str());
     }
 
-    const EditorState& state = editor();
+    // ARCH-A3：状态来自启动注入的 EditorController（函数参数）
     if (ImGui::CollapsingHeader("当前工作流", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("节点     : %d", static_cast<int>(view.nodes_for_render().size()));
         ImGui::Text("连线     : %d", static_cast<int>(view.edges_for_render().size()));
@@ -399,7 +401,7 @@ void open_url(const std::string& url)
 //    或菜单「帮助 → 首次使用引导」（force = true，重置会话内标记）
 //  * 结束方式（开始使用 / 跳过 / 右上角 ×）都会写 `first_run_done = true` 落盘
 //  * 窗口是**普通窗口**（不阻塞画布），一次只出现一次，可随时关掉
-void draw_first_run_guide(Config& config, EditorState& state,
+void draw_first_run_guide(Config& config, EditorController& state,
                           const utils::WebView2RuntimeInfo& detected, bool force)
 {
     static bool                        g_done      = false;
@@ -512,10 +514,14 @@ int run(const AppOptions& options)
         return 1;
     }
 
+    // ARCH-A3：**启动组装**（唯一构造点）—— 按 §1.8.11 依赖顺序创建全部长生命周期对象，
+    // 之后只把引用交给各 UI 模块（判据 8：运行时不再回取 AppContext）。
+    // 构造不依赖 GLFW / 窗口（订阅 run 事件 / autosave 编辑事件），因此可以提前到这里。
+    AppContext app_context;
+    EditorController& state = app_context.editor;
+
     // 配置（M1-07：读配置 / 写日志）—— 必须早于窗口创建：窗口几何（F3 / PD-04）来自 config.toml [ui]
-    // ARCH-A1：Config 收口到 editor().app_ctx().config —— editor() 首次调用提前到此处
-    //（构造 AppContext：订阅 run 事件 / autosave 编辑事件，不依赖 GLFW/窗口，可提前）
-    Config& config = editor().app_ctx().config;
+    Config& config = app_context.config;
     (void)loadConfig(paths::configFile(), config);
     // PA-07：灌入进程级缓存，供非 UI 代码（provider / 工具）读取
     setAppConfig(config);
@@ -678,16 +684,16 @@ int run(const AppOptions& options)
               (canvas_options.show_grid ? "开" : "关"));
 
     // 启动即创建示例工作流，便于直接验证节点操作（可用工具栏「新建（清空）」重来）
-    editor().createSampleWorkflow();
+    state.createSampleWorkflow();
 
     // --open <路径>：启动即打开指定工作流（覆盖上面的示例工作流）
     //  * 存在性/解析失败只告警并保留示例工作流（不阻塞启动）
     if (!options.open_workflow.empty()) {
         std::string open_error;
-        if (editor().openWorkflowFrom(options.open_workflow, &open_error)) {
+        if (state.openWorkflowFrom(options.open_workflow, &open_error)) {
             log::info("[启动] 已按 --open 打开工作流：" + options.open_workflow + "（节点 " +
-                      std::to_string(editor().model().graph.nodes.size()) + " / 连线 " +
-                      std::to_string(editor().model().graph.edges.size()) + "）");
+                      std::to_string(state.model().graph.nodes.size()) + " / 连线 " +
+                      std::to_string(state.model().graph.edges.size()) + "）");
         }
         else {
             log::warn("[启动] --open 打开失败：" + options.open_workflow + "（" + open_error +
@@ -734,15 +740,15 @@ int run(const AppOptions& options)
     else {
         // 无需询问（无快照 / 快照不比工作流新 / 用户选过「不再提示」）⇒ 直接放行自动保存
         log::info("[自动保存] 无需恢复询问（" + autosave_reason + "）→ 自动保存已放行");
-        // ARCH-A2：EditorState autosave 方法已移除 —— 直连 app_ctx().autosave
-        editor().app_ctx().autosave.mark_baseline();
-        editor().app_ctx().autosave.pause(false);
+        // ARCH-A2：EditorController autosave 方法已移除 —— 直连 state.autosave()
+        state.autosave().mark_baseline();
+        state.autosave().pause(false);
     }
 
     // 诊断：安装首异常计数器（VEH）——用于定位第三方依赖反复抛异常 / 内存增长问题，
-    // 结果会以「[诊断]」行写入 app.log（带限流）。ARCH-A1：归口 app_ctx().diagnostics
-    editor().app_ctx().diagnostics.install_exception_counter();
-    editor().app_ctx().diagnostics.log_memory_sample("启动基线");
+    // 结果会以「[诊断]」行写入 app.log（带限流）。ARCH-A1：归口 state.diagnostics()
+    state.diagnostics().install_exception_counter();
+    state.diagnostics().log_memory_sample("启动基线");
     log::info("主窗口已创建 " + std::to_string(window_width) + "x" + std::to_string(window_height) +
               "，DPI 缩放 " + std::to_string(ui_scale));
 
@@ -802,28 +808,28 @@ int run(const AppOptions& options)
         }
 
         // ---- 执行会话推进（M2-04：一帧最多推进一个节点；无运行会话时为空操作）----
-        editor().tickRun();
+        state.tickRun();
 
         // ---- PC-01：自动保存节流（静默 3 秒后写快照；暂停/无变更时零写盘）----
-        // ARCH-A2：EditorState autosave 方法已移除 —— 直连 app_ctx().autosave
+        // ARCH-A2：EditorController autosave 方法已移除 —— 直连 state.autosave()
         // （tick 返回「本次真的写了快照」，据此写状态栏）
-        if (editor().app_ctx().autosave.tick(editor().app_ctx().workflow_file.current_workflow_path())) {
-            editor().setStatus("已自动保存：未保存的更改已暂存（崩溃/退出后可恢复）");
+        if (state.autosave().tick(state.workflow_file().current_workflow_path())) {
+            state.setStatus("已自动保存：未保存的更改已暂存（崩溃/退出后可恢复）");
         }
 
         // ---- M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：后台诊断结论 → 状态栏 ----
         //  * 工作线程只**投递**结论（post_background_status）；此处（主线程）才写 UI 状态
         std::string background_status;
-        if (editor().takeBackgroundStatus(&background_status)) {
-            editor().setStatus(background_status);
+        if (state.takeBackgroundStatus(&background_status)) {
+            state.setStatus(background_status);
         }
 
         // ---- 诊断（限流输出）：放在"最小化检查"之前，保证窗口不可见时也能采样 ----
         //  · 首异常累计（有变化才输出，限流）
         //  · 心跳（每 300 帧）：确认渲染循环真的在跑
         //  · 每 30 秒一次内存采样（工作集 / 私有 / 峰值 + 业务计数）
-        // ARCH-A1：诊断归口 app_ctx().diagnostics
-        editor().app_ctx().diagnostics.log_exception_summary();
+        // ARCH-A1：诊断归口 state.diagnostics()
+        state.diagnostics().log_exception_summary();
         const bool window_iconified = (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0);
         if (frame_index <= 5 || frame_index % 3600 == 0) { // 启动前几帧 + 之后约每 1 分钟
             log::info("[诊断] 心跳 帧=" + std::to_string(frame_index) + " 最小化=" +
@@ -834,8 +840,8 @@ int run(const AppOptions& options)
         const auto diagnostic_now      = std::chrono::steady_clock::now();
         if (diagnostic_now - last_memory_sample >= std::chrono::seconds(30)) {
             last_memory_sample = diagnostic_now;
-            const EditorState& diagnostic_state = editor();
-            editor().app_ctx().diagnostics.log_memory_sample(
+            const EditorController& diagnostic_state = state;
+            state.diagnostics().log_memory_sample(
                 "节点 " + std::to_string(diagnostic_state.model().graph.nodes.size()) + " / 连线 " +
                 std::to_string(diagnostic_state.model().graph.edges.size()) + " / 撤销栈 " +
                 std::to_string(diagnostic_state.model().undo.undoDepth()));
@@ -878,14 +884,13 @@ int run(const AppOptions& options)
         }
         if (options.auto_open_composite && frame_index == 24 && compositeEditorState().active) {
             std::string save_err;
-            const bool  saved = compositeEditorSave(&save_err);
+            const bool  saved = compositeEditorSave(&save_err, state);
             log::info(std::string("[自动复现] 编辑器保存（预期失败：未标记输出）ok=") +
                       (saved ? "1" : "0") + "  err=" + save_err + "（第 24 帧）");
         }
 
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
         const float status_height     = ImGui::GetFrameHeight();
-        EditorState& state            = editor();
 
         // ARCH-R3：主循环**统一构建一次**渲染只读视图（ARCH-D30），传给所有渲染模块
         //  * 字段 = 三个核心 + 配置（ARCH-D31）：工作流数据 / 选中 / 运行快照 / 配置
@@ -912,7 +917,7 @@ int run(const AppOptions& options)
 
         // ARCH-R4：命令路由上下文（承载主循环局部状态：退出窗口 / 首启引导标志）。
         // 菜单 / 工具栏 / 快捷键三入口统一经 dispatchCommand —— 同一实现、行为一致。
-        const CommandContext cmd_ctx{window, &request_first_run_guide};
+        const CommandContext cmd_ctx{window, &request_first_run_guide, &state};
 
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("文件")) {
@@ -932,9 +937,9 @@ int run(const AppOptions& options)
                 if (ImGui::BeginMenu("最近打开")) {
                     // M_patchAB §4（PC-03 / FEA-M2-02）：打开前**校验存在性** ——
                     // 失效项灰显（不可点）+ 悬停解释 + 底部一键「清理失效条目」
-                    // ARCH-A1：最近列表归口 app_ctx().workflow_file.recent_files()
+                    // ARCH-A1：最近列表归口 state.workflow_file().recent_files()
                     const std::vector<engine::RecentStatus> recent =
-                        state.app_ctx().workflow_file.recent_files().with_status();
+                        state.workflow_file().recent_files().with_status();
                     if (recent.empty()) {
                         ImGui::MenuItem("（暂无记录）", nullptr, false, false);
                     }
@@ -960,17 +965,17 @@ int run(const AppOptions& options)
                             }
                         }
                     }
-                    const std::size_t missing = state.app_ctx().workflow_file.recent_files().count_missing();
+                    const std::size_t missing = state.workflow_file().recent_files().count_missing();
                     if (missing > 0) {
                         ImGui::Separator();
                         if (ImGui::MenuItem(("清理失效条目（" + std::to_string(missing) + "）").c_str())) {
-                            const std::size_t removed = state.app_ctx().workflow_file.recent_files().prune_missing();
+                            const std::size_t removed = state.workflow_file().recent_files().prune_missing();
                             state.setStatus("已清理 " + std::to_string(removed) + " 条失效的最近记录");
                         }
                     }
                     ImGui::Separator();
                     if (ImGui::MenuItem("清空列表")) {
-                        state.app_ctx().workflow_file.recent_files().clear();
+                        state.workflow_file().recent_files().clear();
                     }
                     ImGui::EndMenu();
                 }
@@ -1112,15 +1117,15 @@ int run(const AppOptions& options)
                                     "「忽略」= 删除该快照，按当前内容继续。");
 
                 const auto finish_without_restore = [&](const char* status_text) {
-                    state.app_ctx().autosave.clear_snapshot(); // 用户明确拒绝 ⇒ 快照不再保留（否则下次又问）
-                    state.app_ctx().autosave.mark_baseline();
-                    state.app_ctx().autosave.pause(false);
+                    state.autosave().clear_snapshot(); // 用户明确拒绝 ⇒ 快照不再保留（否则下次又问）
+                    state.autosave().mark_baseline();
+                    state.autosave().pause(false);
                     autosave_ask = false;
                     state.setStatus(status_text);
                     ImGui::CloseCurrentPopup();
                 };
 
-                // ARCH-A2：恢复编排随 EditorState::restoreAutosave 一并移除，落点改在 app 层
+                // ARCH-A2：恢复编排随 EditorController::restoreAutosave 一并移除，落点改在 app 层
                 //（恢复弹窗所在 = 唯一调用方）。数据操作 = engine::autosaveLoad + model().load()；
                 // 路径/基线 = workflow_file + autosave；编排 = abortRunIfAny / selection / 状态栏。
                 // 快照信息复用启动时 probe 的 autosave_info（弹窗期间 autosave 暂停，快照不可变）。
@@ -1138,13 +1143,13 @@ int run(const AppOptions& options)
                     state.selection().clear(); // ARCH-E4：选中独立对象（全清：nodes + links + single）
                     state.request_navigate_to_content = true;
                     // PC-02：**不覆盖原文件** —— 恢复后当前路径留空 ⇒ 保存必然走「另存为」
-                    state.app_ctx().workflow_file.set_restored_from_autosave_path(
+                    state.workflow_file().set_restored_from_autosave_path(
                         autosave_info.workflow_path);
-                    state.app_ctx().workflow_file.set_current_workflow_path("");
+                    state.workflow_file().set_current_workflow_path("");
                     // ARCH-E2：整图替换通知已在 model().load 内发出（在 baseline 之前发）
-                    state.app_ctx().autosave.mark_baseline(); // 恢复内容 = 当前状态（避免立刻再写同一快照）
+                    state.autosave().mark_baseline(); // 恢复内容 = 当前状态（避免立刻再写同一快照）
                     const std::string& restored_path =
-                        state.app_ctx().workflow_file.restored_from_autosave_path();
+                        state.workflow_file().restored_from_autosave_path();
                     log::info("[自动保存] 已恢复快照（节点 " +
                               std::to_string(state.model().graph.nodes.size()) + " / 连线 " +
                               std::to_string(state.model().graph.edges.size()) + "）" +
@@ -1157,7 +1162,7 @@ int run(const AppOptions& options)
 
                 if (ImGui::Button("恢复", ImVec2(160.0f, 0.0f))) {
                     if (do_restore()) {
-                        state.app_ctx().autosave.pause(false);
+                        state.autosave().pause(false);
                         autosave_ask = false;
                         ImGui::CloseCurrentPopup();
                     }
@@ -1185,7 +1190,7 @@ int run(const AppOptions& options)
         // ---- 工具栏（全部鼠标操作；设计 §6.7：MVP 不设快捷键）----
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f, 4.0f));
         if (ImGui::BeginChild("##toolbar", ImVec2(0.0f, ImGui::GetFrameHeight() + 10.0f), false)) {
-            drawToolbarButtons();
+            drawToolbarButtons(state);
         }
         ImGui::EndChild();
         ImGui::PopStyleVar();
@@ -1214,12 +1219,12 @@ int run(const AppOptions& options)
 
         // ---- 面板 ----
         ImGui::PushFont(fonts.ui);
-        drawNodeCanvas(kWindowCanvas, canvas_options, view);
+        drawNodeCanvas(kWindowCanvas, canvas_options, view, state);
         ImGui::PopFont();
 
         if (show_library) {
             ImGui::PushFont(fonts.ui);
-            drawNodeLibrary(kWindowLibrary, &show_library);
+            drawNodeLibrary(kWindowLibrary, &show_library, state);
             ImGui::PopFont();
         }
 
@@ -1231,7 +1236,7 @@ int run(const AppOptions& options)
                     : state.model().graph.findNode(state.selection().single());
 
             PropertyEditResult edit;
-            draw_property_panel(kWindowParams, &show_params, selected, view, edit);
+            draw_property_panel(kWindowParams, &show_params, selected, view, edit, state);
 
             // begin_edit 在控件被激活、值尚未变化时置位 → 此时压快照可正确回退
             if (edit.begin_edit) {
@@ -1270,7 +1275,7 @@ int run(const AppOptions& options)
         }
         if (show_info) {
             ImGui::PushFont(fonts.ui);
-            draw_info_panel(kWindowInfo, &show_info, view);
+            draw_info_panel(kWindowInfo, &show_info, view, state);
             ImGui::PopFont();
         }
 
@@ -1280,13 +1285,13 @@ int run(const AppOptions& options)
         }
         if (show_composite_editor) {
             ImGui::PushFont(fonts.ui);
-            drawCompositeEditor(kWindowCompositeEditor, &show_composite_editor);
+            drawCompositeEditor(kWindowCompositeEditor, &show_composite_editor, state);
             ImGui::PopFont();
         }
         if (!compositeEditorState().active) {
             show_composite_editor = false; // 会话关闭 → 隐藏窗口
         }
-        drawCompositeDialogs();
+        drawCompositeDialogs(state);
 
         // ---- M6：首次使用引导 + 设置面板（未打开时为空操作 / 零副作用）----
         ImGui::PushFont(fonts.ui);
@@ -1403,12 +1408,12 @@ int run(const AppOptions& options)
     }
 
     log::info("主窗口关闭，开始清理");
-    editor().stopRunAsync(); // PB-01：退出前 join 工作线程（幂等）
+    state.stopRunAsync(); // PB-01：退出前 join 工作线程（幂等）
     compositeEditorStopRun(); // 上级节点「执行连线」：退出前 join 试运行线程（幂等）
 
     // ---- PC-01：退出前补写快照（有未保存的更改才写；正常退出与崩溃都能在下一次启动恢复）----
-    // ARCH-A2：EditorState autosave 方法已移除 —— 直连 app_ctx().autosave
-    editor().app_ctx().autosave.flush(editor().app_ctx().workflow_file.current_workflow_path());
+    // ARCH-A2：EditorController autosave 方法已移除 —— 直连 state.autosave()
+    state.autosave().flush(state.workflow_file().current_workflow_path());
 
     // ---- 窗口几何退出落盘（F3 / PD-04）：节流保存之外的最终兜底 ----
     if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) == 0) {

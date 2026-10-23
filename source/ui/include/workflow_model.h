@@ -9,11 +9,11 @@
 //   * 不执行节点、不校验、不保存文件、不渲染界面、不持有选中状态（§1.8.3 限制）
 //   * 依赖 EventBus（§1.8.11 第 5 位初始化）；Undo 订阅「修改前」通道压快照
 //
-//  E3 范围（本批）：Graph + Undo + EventBus 从 `EditorState` 拆出为文档级对象；
+//  E3 范围（本批）：Graph + Undo + EventBus 从编辑器状态拆出为文档级对象；
 //  编辑操作（snapshot / undo / redo / clear / load / createNode / deleteNode）归本对象，
-//  UI 编排（状态栏 / 选中清空 / autosave baseline / 剪贴板）仍留在 `EditorState`。
-//  过渡登记：`EditorState` 持有本对象（`editor().model()`）；`editor()` 退场（ARCH-A3）
-//  后 UI 模块直接持有 `WorkflowModel`；SelectionState 拆分留 ARCH-E4。
+//  UI 编排（状态栏 / 选中清空 / autosave baseline / 剪贴板）仍留在 `EditorController`。
+//  ARCH-A3 已落地：`EditorController` 注入本对象（`model()`）；全局单例已退场
+//  （UI 模块直接持有 `WorkflowModel`）；SelectionState 拆分留 ARCH-E4。
 // ============================================================================
 
 #include <cstddef>
@@ -39,7 +39,7 @@ public:
     EventBus&       event_bus() { return event_bus_; }
     const EventBus& event_bus() const { return event_bus_; }
 
-    // 修改前钩子（过渡）：EditorState 注入「运行中修改先终止运行」（M2-04 守卫）。
+    // 修改前钩子（过渡）：EditorController 注入「运行中修改先终止运行」（M2-04 守卫）。
     // 在压快照**之前**执行（与 E2 回调顺序一致：先 abortRunIfAny 再 undo.push）；
     // RunSession 自己感知编辑事件（ARCH-D22）后移除本钩子。
     void setBeforeEditHook(std::function<void(const std::string&)> hook);
@@ -53,7 +53,7 @@ public:
 
     // 整图重置（ARCH-D29）：替换数据 + 清空撤销栈 + 逐节点 diff 事件
     //  * clear = 清空为空白工作流；load = 载入 source（替换；调用方用 std::move 保留拷贝）
-    //  * 不碰选中 / 状态栏 / autosave baseline（编排归 EditorState）
+    //  * 不碰选中 / 状态栏 / autosave baseline（编排归 EditorController）
     void clear();
     void load(engine::Graph source);
 

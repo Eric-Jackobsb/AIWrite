@@ -3,7 +3,7 @@
 #include "composite.h"          // CN：上级节点注册表
 #include "composite_editor.h"   // CN：新建/打包对话框 + 编辑器会话状态（删除前 force_close）
 #include "commands.h"           // ARCH-R4：命令路由层（新建/打包上级节点 → dispatchCommand）
-#include "editor_state.h"       // PS-04：删除结果回写状态栏
+#include "editor_controller.h"       // PS-04：删除结果回写状态栏
 #include "log.h"
 #include "node_registry.h"
 #include "node_canvas.h"
@@ -84,7 +84,7 @@ bool draw_library_item(const engine::Definition* definition, engine::NodeCategor
 
 } // namespace
 
-void drawNodeLibrary(const char* title, bool* open)
+void drawNodeLibrary(const char* title, bool* open, EditorController& editor)
 {
     if (open != nullptr && !*open) {
         return;
@@ -139,7 +139,7 @@ void drawNodeLibrary(const char* title, bool* open)
             }
             any = true;
             if (draw_library_item(definition, definition->category, query)) {
-                canvasAddNodeAtCenter(definition->type);
+                canvasAddNodeAtCenter(definition->type, editor);
             }
         }
         ImGui::PopStyleColor();
@@ -170,7 +170,7 @@ void drawNodeLibrary(const char* title, bool* open)
                 }
 
                 if (ImGui::Selectable(spec->name.c_str())) {
-                    canvasAddCompositeAtCenter(spec->id);
+                    canvasAddCompositeAtCenter(spec->id, editor);
                 }
                 const bool row_hovered = ImGui::IsItemHovered();
 
@@ -240,10 +240,10 @@ void drawNodeLibrary(const char* title, bool* open)
             }
             ImGui::Separator();
             if (ImGui::Button("新建上级节点…", ImVec2(-1.0f, 0.0f))) {
-                dispatchCommand(AppCommand::CompositeNew, CommandContext{}); // ARCH-R4：与菜单同一实现
+                dispatchCommand(AppCommand::CompositeNew, CommandContext{nullptr, nullptr, &editor}); // ARCH-R4：与菜单同一实现
             }
             if (ImGui::Button("打包选区为上级节点…", ImVec2(-1.0f, 0.0f))) {
-                dispatchCommand(AppCommand::CompositePack, CommandContext{}); // ARCH-R4：与菜单同一实现
+                dispatchCommand(AppCommand::CompositePack, CommandContext{nullptr, nullptr, &editor}); // ARCH-R4：与菜单同一实现
             }
             ImGui::Spacing();
             ImGui::Separator();
@@ -276,7 +276,7 @@ void drawNodeLibrary(const char* title, bool* open)
 
             for (const engine::Definition* definition : items) {
                 if (draw_library_item(definition, category, query)) {
-                    canvasAddNodeAtCenter(definition->type);
+                    canvasAddNodeAtCenter(definition->type, editor);
                 }
             }
             ImGui::Spacing();
@@ -307,11 +307,11 @@ void drawNodeLibrary(const char* title, bool* open)
             std::string error;
             if (!engine::CompositeRegistry::instance().remove(g_composite_delete_pending,
                                                               &error)) {
-                editor().setStatus("删除上级节点失败：" + error);
+                editor.setStatus("删除上级节点失败：" + error);
                 log::warn("[上级节点] 删除失败: " + error);
             }
             else {
-                editor().setStatus("已删除上级节点：" + g_composite_delete_pending);
+                editor.setStatus("已删除上级节点：" + g_composite_delete_pending);
                 log::info("[上级节点] 已删除 " + g_composite_delete_pending);
             }
             g_composite_delete_pending.clear();
@@ -341,11 +341,11 @@ void drawNodeLibrary(const char* title, bool* open)
             std::string error;
             if (!engine::CompositeRegistry::instance().copyToUser(g_composite_copy_pending,
                                                                     &error)) {
-                editor().setStatus("复制到我的节点库失败：" + error);
+                editor.setStatus("复制到我的节点库失败：" + error);
                 log::warn("[上级节点] 复制失败: " + error);
             }
             else {
-                editor().setStatus("已复制到我的节点库（可编辑）：" + g_composite_copy_pending);
+                editor.setStatus("已复制到我的节点库（可编辑）：" + g_composite_copy_pending);
                 log::info("[上级节点] 已复制到用户源 " + g_composite_copy_pending);
             }
             g_composite_copy_pending.clear();

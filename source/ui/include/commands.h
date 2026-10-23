@@ -28,6 +28,8 @@ struct GLFWwindow; // 前置声明（dispatchCommand(Exit) 用；命令层不依
 
 namespace aiwrite::ui {
 
+class EditorController;
+
 // ---- 应用命令全集（三入口动作收敛点）----
 enum class AppCommand {
     // 文件
@@ -66,10 +68,13 @@ enum class AppCommand {
 };
 
 // 分发上下文：承载 app.cpp 主循环的**局部**状态（命令层无法直接访问的变量）
-//  * 对话框函数 / editor() / compositeEditorState() 等 ui 层接口命令层可直接调用，不进 ctx
+//  * ARCH-A3：编辑器编排层经此**启动注入**（不再有全局编辑器单例）；
+//    editor == nullptr ⇒ 依赖编辑器的命令不可用（调用方必须传）
+//  * 对话框函数 / compositeEditorState() 等 ui 层接口命令层可直接调用，不进 ctx
 struct CommandContext {
-    GLFWwindow* window                  = nullptr; // Exit 用（nullptr = 禁用退出命令）
-    bool*       request_first_run_guide = nullptr; // FirstRunGuide 用（nullptr = 禁用该命令）
+    GLFWwindow*       window                  = nullptr; // Exit 用（nullptr = 禁用退出命令）
+    bool*             request_first_run_guide = nullptr; // FirstRunGuide 用（nullptr = 禁用该命令）
+    EditorController* editor                  = nullptr; // ARCH-A3：编辑/文件命令用
 };
 
 // 单一实现：菜单 / 工具栏 / 快捷键统一入口（三入口收敛点）

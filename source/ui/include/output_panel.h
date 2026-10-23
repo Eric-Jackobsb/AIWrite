@@ -22,7 +22,7 @@ struct RunSnapshot;
 
 namespace aiwrite::ui {
 
-struct EditorState;
+class EditorController;
 
 // 单节点结果文本（多输出端口按「端口名：值」依次拼接；无结果返回空串）
 std::string node_output_text(const engine::Graph& graph, const engine::Executor& executor,
@@ -41,9 +41,9 @@ std::string runOutputText(const engine::Graph& graph, const engine::RunSnapshot&
 // 绘制输出面板（可停靠；默认不显示由调用方控制）
 // M_textio P3：把某节点的结果导出为文档（TextOutput = 最终输出）
 //  * 正文与预览同源（node_output_text）；路径由保存对话框给出；失败写状态栏
-bool exportNodeDocument(EditorState& state, const std::string& node_id);
+bool exportNodeDocument(EditorController& state, const std::string& node_id);
 
 void drawOutputPanel(const char* title, bool* open, const ReadOnlyView& view,
-                     EditorState& state);
+                     EditorController& state);
 
 } // namespace aiwrite::ui

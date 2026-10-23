@@ -6,7 +6,7 @@
 #include "connection_test.h"   // M_patchAB（PB2-07 / PB2-30②）：面板诊断按钮
 #include "node_registry.h"
 #include "provider_resolve.h"
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "output_panel.h"
 #include "text_view.h"
 #include "texture_cache.h"
@@ -117,7 +117,8 @@ bool web_ignored_in_web(const std::string& param_id)
 // M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」按钮（异步）
 //  * 结果写回 `template`（先压撤销快照，可撤销 —— 文档 §4.3 关键约束）
 //  * 失败 → 状态栏 + Console（**不静默回退到 manual**）
-void draw_prompt_generate_button(engine::Node& node, PropertyEditResult& result)
+void draw_prompt_generate_button(engine::Node& node, PropertyEditResult& result,
+                                     EditorController& editor)
 {
     engine::Param* template_param = node.findParam("template");
     ImGui::Separator();
@@ -143,22 +144,23 @@ void draw_prompt_generate_button(engine::Node& node, PropertyEditResult& result)
     std::string gen_error;
     if (promptGenerationConsume(node.id, &gen_result, &gen_error)) {
         if (!gen_result.empty() && template_param != nullptr) {
-            editor().snapshot("AI 生成提示词"); // 先压快照：可撤销（文档 §4.3）
+            editor.snapshot("AI 生成提示词"); // 先压快照：可撤销（文档 §4.3）
             template_param->value = gen_result;
             result.changed        = true;
-            editor().setStatus("已把 AI 生成结果写入「模板」（可撤销）");
+            editor.setStatus("已把 AI 生成结果写入「模板」（可撤销）");
             log::info("[生成提示词] 已写入 " + node.id + ".template（" +
                       std::to_string(gen_result.size()) + " 字节）");
         }
         else {
-            editor().setStatus("生成提示词失败：" + gen_error);
+            editor.setStatus("生成提示词失败：" + gen_error);
             log::warn("[生成提示词] " + gen_error);
         }
     }
 }
 } // namespace
 void draw_property_panel(const char* window_title, bool* open, Node* node,
-                         const ReadOnlyView& view, PropertyEditResult& result)
+                         const ReadOnlyView& view, PropertyEditResult& result,
+                         EditorController& editor)
 {
     if (open != nullptr && !*open) {
         return;
@@ -194,9 +196,9 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                             engine::nodeStateName(node->state));
 
         ImGui::TextUnformatted("标题");
-        if (editor().request_focus_title) { // 双击节点 / 右键"改名" → 自动聚焦
+        if (editor.request_focus_title) { // 双击节点 / 右键"改名" → 自动聚焦
             ImGui::SetKeyboardFocusHere();
-            editor().request_focus_title = false;
+            editor.request_focus_title = false;
         }
         ImGui::SetNextItemWidth(-FLT_MIN);
         const bool title_touched = ImGui::InputTextWithHint("##title", "节点标题", &node->title);
@@ -260,11 +262,11 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                 const std::string target_label =
                     effective.from_edge ? "提供商配置 " + target_id : std::string("本节点");
                 if (ImGui::Button(("把 " + target_label + " 改为 web").c_str())) {
-                    if (engine::Node* target = editor().model().graph.findNode(target_id)) {
+                    if (engine::Node* target = editor.model().graph.findNode(target_id)) {
                         if (engine::Param* mode = target->findParam("mode")) {
-                            editor().snapshot("切换提供商为网页版"); // 先压快照：可撤销
+                            editor.snapshot("切换提供商为网页版"); // 先压快照：可撤销
                             mode->value = std::string("web");
-                            editor().setStatus(target_label + " 已切换为网页版（可撤销）");
+                            editor.setStatus(target_label + " 已切换为网页版（可撤销）");
                             log::info("[参数面板] " + target_label + " mode → web");
                         }
                     }
@@ -507,7 +509,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
 
     // M_8nodes_extension L1-d（§4.3）：PromptTemplate「生成提示词」按钮（异步 · 结果写回模板）
     if (node->type == "PromptTemplate") {
-        draw_prompt_generate_button(*node, result);
+        draw_prompt_generate_button(*node, result, editor);
     }
 
     // ---- 网页版（web 模式）：会话状态 + 登录入口（PB2-17/18/19）----
@@ -553,7 +555,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         ImGui::BeginDisabled(busy || diag_provider.empty());
         if (ImGui::Button("测试连接（表校验 + 登录态 / 连通性）", ImVec2(-FLT_MIN, 0.0f))) {
             log::info("[参数面板] 触发「测试连接」（条目 " + diag_provider + "）");
-            requestConnectionCheck(diag_provider);
+            requestConnectionCheck(diag_provider, editor);
         }
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered()) {
@@ -567,7 +569,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         ImGui::BeginDisabled(busy || !dom_entry);
         if (ImGui::Button("测试选择器（只读诊断）", ImVec2(-FLT_MIN, 0.0f))) {
             log::info("[参数面板] 触发「测试选择器」（条目 " + diag_provider + "）");
-            requestSelectorCheck(diag_provider);
+            requestSelectorCheck(diag_provider, editor);
         }
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered()) {
@@ -696,7 +698,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                 ImGui::TextColored(ImVec4(0.55f, 0.85f, 1.0f, 1.0f), "【最终输出】%s", label.c_str());
                 ImGui::BeginDisabled(body.empty());
                 if (ImGui::Button("导出为文档…")) {
-                    exportNodeDocument(editor(), node->id);
+                    exportNodeDocument(editor, node->id);
                 }
                 ImGui::EndDisabled();
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -707,10 +709,10 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                 ImGui::TextDisabled("（该节点无输出）");
             }
 
-            if (!editor().last_archive_dir().empty()) {
-                ImGui::TextDisabled("已归档：%s", editor().last_archive_dir().c_str());
+            if (!editor.workflow_file().last_archive_dir().empty()) {
+                ImGui::TextDisabled("已归档：%s", editor.workflow_file().last_archive_dir().c_str());
                 if (ImGui::SmallButton("复制归档路径")) {
-                    copyText(editor().last_archive_dir(), "[参数面板] 归档路径");
+                    copyText(editor.workflow_file().last_archive_dir(), "[参数面板] 归档路径");
                 }
             }
         }
@@ -723,19 +725,19 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
             ImGui::TextDisabled("随机种子：%d（0 = 不指定；「重新生成」会写入新值）",
                                 static_cast<int>(seed_param->number(0.0)));
         }
-        const bool rerunning = editor().executor().running() || editor().session_active();
+        const bool rerunning = editor.executor().running() || editor.session_active();
         ImGui::BeginDisabled(rerunning);
         if (ImGui::Button("重新生成（新 seed）", ImVec2(-FLT_MIN, 0.0f))) {
             if (engine::Param* seed_param = node->findParam("seed")) {
-                editor().snapshot("重新生成（新 seed）"); // 先压快照：可撤销
+                editor.snapshot("重新生成（新 seed）"); // 先压快照：可撤销
                 const long long stamp = static_cast<long long>(std::time(nullptr));
                 const int       value = static_cast<int>(stamp % 1000000000LL); // ∈ 参数范围 [0, 1e9]
                 seed_param->value     = (value > 0) ? value : 1;
                 const int applied     = static_cast<int>(seed_param->number(0.0));
                 log::info("[重跑] " + node->id + " 新 seed=" + std::to_string(applied));
-                editor().setStatus("已为 " + node->id + " 设置新 seed=" + std::to_string(applied) +
+                editor.setStatus("已为 " + node->id + " 设置新 seed=" + std::to_string(applied) +
                                     "，开始重新生成…");
-                editor().startRunAsync();
+                editor.startRunAsync();
             }
         }
         ImGui::EndDisabled();
@@ -750,13 +752,13 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
     // ---- PD-06①（FEA-M4-11 · 通用重跑）：重跑该节点 / 重跑该节点及下游（复用上游结果）----
     if (node->state != engine::NodeState::Waiting) {
         ImGui::Separator();
-        const bool rerunning = editor().executor().running() || editor().session_active();
+        const bool rerunning = editor.executor().running() || editor.session_active();
         ImGui::BeginDisabled(rerunning);
         if (ImGui::Button("重跑该节点", ImVec2(-FLT_MIN, 0.0f))) {
-            editor().startRerunAsync(node->id, engine::RerunScope::NodeOnly);
+            editor.startRerunAsync(node->id, engine::RerunScope::NodeOnly);
         }
         if (ImGui::Button("重跑该节点及下游", ImVec2(-FLT_MIN, 0.0f))) {
-            editor().startRerunAsync(node->id, engine::RerunScope::Downstream);
+            editor.startRerunAsync(node->id, engine::RerunScope::Downstream);
         }
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -785,18 +787,18 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
                            "确认把 %s 的参数应用到 %d 个同类节点？（密钥类参数不复制）",
                            node->id.c_str(), same_type_others);
         if (ImGui::Button("确认应用", ImVec2(120.0f, 0.0f))) {
-            editor().snapshot("批量应用参数到同类节点"); // 先压快照：整批应用可一次撤销
+            editor.snapshot("批量应用参数到同类节点"); // 先压快照：整批应用可一次撤销
             std::string error;
-            const int   affected = editor().model().graph.copyParamsToSameType(node->id, &error);
+            const int   affected = editor.model().graph.copyParamsToSameType(node->id, &error);
             if (affected > 0) {
                 result.changed = true;
-                editor().setStatus("已把 " + node->id + " 的参数应用到 " +
+                editor.setStatus("已把 " + node->id + " 的参数应用到 " +
                                     std::to_string(affected) + " 个同类节点（可撤销）");
                 log::info("[参数面板] 批量应用参数: " + node->id + " → " +
                           std::to_string(affected) + " 个同类节点");
             }
             else {
-                editor().setStatus("批量应用未生效：" +
+                editor.setStatus("批量应用未生效：" +
                                     (error.empty() ? std::string("没有同类节点") : error));
             }
             confirm_apply_node.clear();
@@ -823,13 +825,13 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
         ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.30f, 1.0f), "确认把 %s 的全部参数重置为默认值？",
                            node->id.c_str());
         if (ImGui::Button("确认重置", ImVec2(120.0f, 0.0f))) {
-            editor().snapshot("重置参数为默认值"); // 先压快照：可撤销（D-M3-5）
+            editor.snapshot("重置参数为默认值"); // 先压快照：可撤销（D-M3-5）
             for (Param& param : node->params) {
                 param.resetToDefault();
             }
             result.changed = true;
             log::info("参数重置为默认值: " + node->id);
-            editor().setStatus("已把 " + node->id + " 的参数重置为默认值（可撤销）");
+            editor.setStatus("已把 " + node->id + " 的参数重置为默认值（可撤销）");
             confirm_reset_node.clear();
         }
         ImGui::SameLine();

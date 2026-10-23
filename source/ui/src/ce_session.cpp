@@ -1,7 +1,7 @@
 #include "composite_editor.h"
 #include "ce_internal.h"
 #include "composite.h"
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "log.h"
 
 #include <algorithm>
@@ -75,7 +75,7 @@ void compositeEditorForceClose()
 }
 
 
-bool compositeEditorSave(std::string* error)
+bool compositeEditorSave(std::string* error, EditorController& main_editor)
 {
     CompositeEditorState& state = compositeEditorState();
     // 同步名称/描述输入缓冲 → 工作副本（id 首次保存时才生成）
@@ -100,7 +100,7 @@ bool compositeEditorSave(std::string* error)
     }
 
     // 热重载：把主画布中已放置的同 id 实例按新规格重建（保留 id/位置/自定义标题/已填参数值）
-    EditorState& main_state = editor();
+    EditorController& main_state = main_editor;
     const bool   has_instances =
         std::any_of(main_state.model().graph.nodes.begin(), main_state.model().graph.nodes.end(),
                     [&](const engine::Node& n) { return n.composite_id == state.working.id; });

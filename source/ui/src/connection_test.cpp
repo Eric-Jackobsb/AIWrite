@@ -1,6 +1,6 @@
 #include "connection_test.h"
 
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "log.h"
 
 #include "credential.h"                   // 凭据库（与 CLI --provider-selftest 同序）
@@ -308,7 +308,8 @@ int run_selector_check(const std::string& provider_id, std::string* report, std:
 namespace {
 
 void run_in_background(DiagnosticKind kind, const std::string& provider_id, const std::string& title,
-                       int (*fn)(const std::string&, std::string*, std::string*))
+                       int (*fn)(const std::string&, std::string*, std::string*),
+                       EditorController& editor)
 {
     if (diag().worker.joinable()) {
         diag().worker.join(); // 上一轮已结束：回收线程对象（此时未在跑）
@@ -322,7 +323,7 @@ void run_in_background(DiagnosticKind kind, const std::string& provider_id, cons
         diag().running_kind = kind;
         diag().title        = title;
     }
-    diag().worker = std::thread([provider_id, title, fn] {
+    diag().worker = std::thread([provider_id, title, fn, &editor] {
         std::string report;
         std::string summary;
         const int   code = fn(provider_id, &report, &summary);
@@ -343,7 +344,7 @@ void run_in_background(DiagnosticKind kind, const std::string& provider_id, cons
             }
         }
         log::info("[" + title + "] 结论：" + summary + "（码 " + std::to_string(code) + "）");
-        editor().postBackgroundStatus(summary.empty() ? (title + "完成") : summary);
+        editor.postBackgroundStatus(summary.empty() ? (title + "完成") : summary);
     });
 }
 
@@ -385,14 +386,14 @@ std::string diagnosticTitle()
     return diag().title;
 }
 
-void requestConnectionCheck(const std::string& provider_id)
+void requestConnectionCheck(const std::string& provider_id, EditorController& editor)
 {
-    run_in_background(DiagnosticKind::Connection, provider_id, "测试连接", &run_connection_check);
+    run_in_background(DiagnosticKind::Connection, provider_id, "测试连接", &run_connection_check, editor);
 }
 
-void requestSelectorCheck(const std::string& provider_id)
+void requestSelectorCheck(const std::string& provider_id, EditorController& editor)
 {
-    run_in_background(DiagnosticKind::Selector, provider_id, "测试选择器", &run_selector_check);
+    run_in_background(DiagnosticKind::Selector, provider_id, "测试选择器", &run_selector_check, editor);
 }
 
 void stopDiagnostics(int wait_ms)
@@ -418,14 +419,14 @@ void stopDiagnostics(int wait_ms)
 //  * 严格按条目解析站点（**不回落**内置默认站点）—— `D-22②` / `I14`
 //  * 只碰**界面登录窗口**这一个归属（`I24`：不抢占任何节点窗口）
 // ---------------------------------------------------------------------------
-void openWebLoginWindow(const std::string& provider_id)
+void openWebLoginWindow(const std::string& provider_id, EditorController& editor)
 {
     const std::string label      = provider_id.empty() ? std::string("(未指定条目)") : provider_id;
     const ai::ProviderSpec* spec = ai::providerSpecs().find(provider_id);
     const std::string       site_error = ai::webSiteError(spec);
     if (!site_error.empty()) {
         log::warn("[重新登录] 站点不可用（条目 " + label + "）：" + site_error);
-        editor().setStatus("无法打开登录窗口：" + site_error);
+        editor.setStatus("无法打开登录窗口：" + site_error);
         return;
     }
 
@@ -442,15 +443,15 @@ void openWebLoginWindow(const std::string& provider_id)
                                                          ai::strictWebProviderIdFor(spec)),
                           &error)) {
             log::warn("[重新登录] 打开登录窗口失败：" + error);
-            editor().setStatus("打开登录窗口失败：" + error);
+            editor.setStatus("打开登录窗口失败：" + error);
             return;
         }
         log::info("[重新登录] 已打开「" + label + "」登录窗口（站点 " + site.login_url + "）");
-        editor().setStatus("已打开「" + label + "」登录窗口：登录完成后点「运行」重跑");
+        editor.setStatus("已打开「" + label + "」登录窗口：登录完成后点「运行」重跑");
         return;
     }
     log::info("[重新登录] 「" + label + "」登录窗口已在运行（直接在其中登录即可）");
-    editor().setStatus("「" + label + "」登录窗口已打开（直接在其中登录）");
+    editor.setStatus("「" + label + "」登录窗口已打开（直接在其中登录）");
 }
 
 } // namespace aiwrite::ui

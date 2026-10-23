@@ -7,7 +7,7 @@
 #include "composite_editor.h" // CN：双击/右键打开上级节点编辑器
 #include "node_registry.h"
 #include "provider_resolve.h"
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "output_panel.h"
 #include "theme.h"
 #include "config.h"
@@ -217,35 +217,34 @@ CanvasContext g_canvas;
 
 // --------------------------------------------------------- 交互回调组 ------
 // ARCH-E5：主画布与 ce 画布共用 interactor（双画布单套交互）；模型差异
-//（图源 = editor().model().graph + SelectionState / 快照归属 / 提示落点）经回调注入。
-CanvasInteract makeMainCanvasInteract(); // 前向声明（定义紧随其后）
+//（图源 = 注入的 EditorController.model().graph + SelectionState / 快照归属 / 提示落点）经回调注入。
+CanvasInteract makeMainCanvasInteract(EditorController& editor); // 前向声明（定义紧随其后）
 
-// 每帧被连线/删除/选中/位置同步调用 4 次 → 静态缓存一次构造；回调无捕获，
-// 每次调用从 editor() 读取当前状态，跨帧复用安全。
-const CanvasInteract& mainCanvasInteract()
+// 每帧被连线/删除/选中/位置同步调用 4 次 —— 回调只捕获注入的控制器引用（构造廉价），
+// 不做文件级静态缓存（ARCH-A5：可变静态状态归零）；跨帧语义不变。
+CanvasInteract mainCanvasInteract(EditorController& editor)
 {
-    static const CanvasInteract interact = makeMainCanvasInteract();
-    return interact;
+    return makeMainCanvasInteract(editor);
 }
 
-CanvasInteract makeMainCanvasInteract()
+CanvasInteract makeMainCanvasInteract(EditorController& editor)
 {
     CanvasInteract interact;
 
-    interact.resolve_pin = [](ed::PinId start_pin, ed::PinId end_pin, PinRef& from, PinRef& to) {
-        EditorState& state = editor();
+    interact.resolve_pin = [&editor](ed::PinId start_pin, ed::PinId end_pin, PinRef& from, PinRef& to) {
+        EditorController& state = editor;
         from = resolvePin(start_pin, state.model().graph);
         to   = resolvePin(end_pin, state.model().graph);
         return from.valid && to.valid;
     };
-    interact.can_connect = [](const PinRef& from, const PinRef& to, std::string& reason,
+    interact.can_connect = [&editor](const PinRef& from, const PinRef& to, std::string& reason,
                               bool& would_replace) {
-        EditorState& state = editor();
+        EditorController& state = editor;
         return state.model().graph.canConnect(from.node_id, from.port_id, to.node_id, to.port_id,
                                               &reason, &would_replace);
     };
-    interact.on_link_accepted = [](const PinRef& from, const PinRef& to, bool would_replace) {
-        EditorState& state = editor();
+    interact.on_link_accepted = [&editor](const PinRef& from, const PinRef& to, bool would_replace) {
+        EditorController& state = editor;
         state.snapshot(would_replace ? "替换连线" : "新建连线");
         std::string error;
         const std::string edge_id = state.model().graph.addEdge(from.node_id, from.port_id,
@@ -265,17 +264,17 @@ CanvasInteract makeMainCanvasInteract()
                             (would_replace ? "（替换了原连线）" : ""));
         }
     };
-    interact.on_link_rejected = [](const std::string& reason) {
-        EditorState& state = editor();
+    interact.on_link_rejected = [&editor](const std::string& reason) {
+        EditorController& state = editor;
         log::warn("[连线] 被拒绝：" + reason);
         state.setStatus("连线被拒绝：" + reason);
     };
 
-    interact.on_create_tip = [](ed::PinId start_pin, ed::PinId end_pin) {
+    interact.on_create_tip = [&editor](ed::PinId start_pin, ed::PinId end_pin) {
         // M_node_expansion L3-09：连线交互提示（鼠标旁显示端口类型与兼容性）。
         //  * QueryNewLink 已由交互层调用过（end_pin 可能为 0 = 还没拖到目标端口）
         //  * 「类型不兼容变红」由 RejectNewItem 已提供（既有），这里补充文字提示
-        EditorState& state = editor();
+        EditorController& state = editor;
         const PinRef from = resolvePin(start_pin, state.model().graph);
         const PinRef to   = resolvePin(end_pin, state.model().graph);
         const Node*  fnode = from.valid ? state.model().graph.findNode(from.node_id) : nullptr;
@@ -315,9 +314,9 @@ CanvasInteract makeMainCanvasInteract()
             draw_list->AddText(mouse + ImVec2(14.0f, 12.0f), color, tip.c_str());
         }
     };
-    interact.on_delete_batch = [](const std::string& label) { editor().snapshot(label); };
-    interact.delete_link = [](const std::string& link_id) {
-        EditorState& state = editor();
+    interact.on_delete_batch = [&editor](const std::string& label) { editor.snapshot(label); };
+    interact.delete_link = [&editor](const std::string& link_id) {
+        EditorController& state = editor;
         const engine::Edge* edge = state.model().graph.findEdge(link_id);
         if (state.model().graph.removeEdge(link_id)) {
             // ARCH-E1：连线删除通知（删除前取边数据作负载）
@@ -328,16 +327,16 @@ CanvasInteract makeMainCanvasInteract()
             state.setStatus("已删除连线 " + link_id);
         }
     };
-    interact.delete_node = [](const std::string& node_id) {
-        EditorState& state = editor();
+    interact.delete_node = [&editor](const std::string& node_id) {
+        EditorController& state = editor;
         if (state.deleteNode(node_id)) {
             state.logSummary("[节点] 删除 " + node_id);
             state.setStatus("已删除节点 " + node_id + "（含其连线）");
         }
     };
-    interact.on_selection = [](const std::vector<std::string>& node_ids,
+    interact.on_selection = [&editor](const std::vector<std::string>& node_ids,
                                const std::vector<std::string>& link_ids) {
-        EditorState& state = editor();
+        EditorController& state = editor;
         // 单选节点（参数面板用）：单选 = 唯一选中节点；多选且原单选仍在选中内 → 保留
         std::string single;
         if (node_ids.size() == 1) {
@@ -363,28 +362,28 @@ CanvasInteract makeMainCanvasInteract()
 // 设计 §6.2：拖拽创建连接；类型不兼容变红并拒绝；输入端口已连接则替换
 //（ARCH-E5：BeginCreate/EndCreate 成对契约 + 拒绝/接受/替换语义已收敛进 interactor.cpp；
 //  拖拽提示见 mainCanvasInteract.on_create_tip）
-void handle_create_link()
+void handle_create_link(EditorController& state)
 {
-    interactorCreateLink(mainCanvasInteract());
+    interactorCreateLink(mainCanvasInteract(state));
 }
 
 
 // ------------------------------------------------------------- 删除处理 -----
 // 设计 §6.1：删除节点（连带连线）；§6.2：删除连线。每个对象一次撤销快照
 //（ARCH-E5：BeginDelete/EndDelete 成对契约收敛进 interactor.cpp）
-void handle_delete_items()
+void handle_delete_items(EditorController& state)
 {
-    interactorDeleteOuter(mainCanvasInteract(), "删除连线", "删除节点");
+    interactorDeleteOuter(mainCanvasInteract(state), "删除连线", "删除节点");
 }
 
 
 // ------------------------------------------------------------- 状态同步 -----
-void sync_selection()
+void sync_selection(EditorController& state)
 {
     // ARCH-E4/E5：选中集合归 `SelectionState`（§1.8.4）—— ed 选中读取经
     // interactorSyncSelection（GetSelected* 唯一封装在 interactor.cpp）；
     // single 保留逻辑见 mainCanvasInteract.on_selection（一次 set_selection 提交）。
-    interactorSyncSelection(mainCanvasInteract());
+    interactorSyncSelection(mainCanvasInteract(state));
 }
 
 // ------------------------------------------------------- Delete 键（ARCH-R4）----
@@ -395,11 +394,11 @@ void sync_selection()
 // （文本输入 / 激活控件 / 弹层 / 左键按住）+ Delete 键检测统一在 handleShortcut
 // （commands.cpp）内完成；删除执行经 dispatchCommand(AppCommand::DeleteSelection)
 // —— 与工具栏 / 菜单走**同一实现**（三入口收敛；无选中时静默，与 Delete 键原行为一致）。
-void handle_delete_key()
+void handle_delete_key(EditorController& editor)
 {
     handleShortcut(CommandScope::Main,
                    /*window_active=*/interactorWindowActiveMain(),
-                   CommandContext{},
+                   CommandContext{nullptr, nullptr, &editor},
                    /*only=*/AppCommand::DeleteSelection);
 }
 
@@ -409,7 +408,7 @@ void handle_delete_key()
 //     Graph 位置推给编辑器，**绝不把脏值回写模型**
 //   · 非有限值 / 超上限一律夹紧（interactor 内按 kCanvasPositionLimit）
 // 一次拖拽只压一次撤销快照
-void sync_positions(EditorState& state)
+void sync_positions(EditorController& state)
 {
     bool moved = false;
     for (Node& node : state.model().graph.nodes) {
@@ -436,7 +435,7 @@ void sync_positions(EditorState& state)
 }
 
 // --------------------------------------------------- 右键菜单：新建节点 ------
-void show_add_node_menu(EditorState& state, const ImVec2& spawn)
+void show_add_node_menu(EditorController& state, const ImVec2& spawn)
 {
     engine::registerAllNodes();
     engine::NodeRegistry& registry = engine::NodeRegistry::instance();
@@ -669,7 +668,7 @@ std::string fmt_num(double value, int decimals)
     return buffer;
 }
 
-void log_canvas_diagnostic(const EditorState& state, float zoom, double width_ms, double nodes_ms,
+void log_canvas_diagnostic(const EditorController& state, float zoom, double width_ms, double nodes_ms,
                            double links_ms)
 {
     CanvasDiagnostic& diag = canvas_diagnostic();
@@ -808,10 +807,11 @@ void draw_canvas_assist_popup()
 
 
 
-void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyView& view)
+void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyView& view,
+                    EditorController& editor)
 {
     ensure_context();
-    EditorState& state = editor();
+    EditorController& state = editor;
 
     static ImVec2      spawn_position = ImVec2(0.0f, 0.0f);
     static std::string context_node;
@@ -905,8 +905,8 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     }
     const auto diag_t3 = std::chrono::steady_clock::now();
 
-    handle_create_link();
-    handle_delete_items();
+    handle_create_link(state);
+    handle_delete_items(state);
 
     // ------------------------------------------------- 右键菜单（需挂起画布）----
     static ed::NodeId context_node_handle; // static：避免每帧重置（历史 bug 根因，见 CHANGELOG）
@@ -1006,8 +1006,8 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
         }
     }
 
-    sync_selection();
-    handle_delete_key();
+    sync_selection(state);
+    handle_delete_key(state);
 
     // 视图跟随前先确认坐标正常（历史卡死根因：异常坐标 + NavigateToContent 会让视图落到天文数字区间）
     const bool positions_sane =
@@ -1088,10 +1088,10 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     ImGui::End();
 }
 
-std::string canvasAddNodeAtCenter(const std::string& type)
+std::string canvasAddNodeAtCenter(const std::string& type, EditorController& editor)
 {
     ensure_context();
-    EditorState& state = editor();
+    EditorController& state = editor;
 
     ed::SetCurrentEditor(g_context);
     const ImVec2 center_canvas = ed::ScreenToCanvas(ImGui::GetMainViewport()->GetCenter());
@@ -1106,10 +1106,10 @@ std::string canvasAddNodeAtCenter(const std::string& type)
 }
 
 // CN（Composition_node）：依据规格在画布可视中心创建上级节点
-std::string canvasAddCompositeAtCenter(const std::string& composite_id)
+std::string canvasAddCompositeAtCenter(const std::string& composite_id, EditorController& editor)
 {
     ensure_context();
-    EditorState& state = editor();
+    EditorController& state = editor;
 
     ed::SetCurrentEditor(g_context);
     const ImVec2 center_canvas = ed::ScreenToCanvas(ImGui::GetMainViewport()->GetCenter());

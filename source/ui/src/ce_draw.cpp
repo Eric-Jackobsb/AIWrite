@@ -3,7 +3,7 @@
 #include "canvas_view.h"
 #include "commands.h"      // ARCH-R4：命令路由层（快捷键表 / dispatchCommand / handleShortcut）
 #include "interactor.h"     // ARCH-E5：画布交互共享层（双画布单套交互）
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "log.h"
 #include "node_registry.h"
 #include "nodes.h"
@@ -146,7 +146,7 @@ bool compositeEditorWindowFocused()
 // 保存成功/失败路径与「保存」按钮完全一致 —— 现在两者都经
 // dispatchCommand(AppCommand::CompositeSave) 同一实现。
 
-void drawCompositeEditor(const char* title, bool* open)
+void drawCompositeEditor(const char* title, bool* open, EditorController& editor)
 {
     // ARCH-R4：ce 窗口聚焦/悬停（主循环判断 Ctrl+S 作用域归属）。每帧在 ce 窗口
     // 上下文内更新；未进入窗口绘制（ce 未打开/折叠）时保持 false → Ctrl+S 归主窗口。
@@ -216,7 +216,7 @@ void drawCompositeEditor(const char* title, bool* open)
     if (!state.run_active) {
         if (ImGui::Button("执行连线")) {
             std::string run_error;
-            if (compositeEditorStartRun(&run_error)) {
+            if (compositeEditorStartRun(&run_error, editor)) {
                 state.error.clear();
             }
             else {
@@ -240,7 +240,7 @@ void drawCompositeEditor(const char* title, bool* open)
     ImGui::SameLine();
     if (ImGui::Button("保存")) {
         // ARCH-R4：与 Ctrl+S 同一路径（dispatchCommand 单一实现）
-        dispatchCommand(AppCommand::CompositeSave, CommandContext{});
+        dispatchCommand(AppCommand::CompositeSave, CommandContext{nullptr, nullptr, &editor});
     }
     ImGui::SameLine();
     if (ImGui::Button("关闭")) {
@@ -483,7 +483,7 @@ void drawCompositeEditor(const char* title, bool* open)
         //  * 窗口判定收敛进 interactor（ARCH-E5：interactorWindowActiveComposite）
         handleShortcut(CommandScope::CompositeEditor,
                        /*window_active=*/interactorWindowActiveComposite(),
-                       CommandContext{});
+                       CommandContext{nullptr, nullptr, &editor});
 
         ed::End();
 
@@ -728,7 +728,7 @@ void drawCompositeEditor(const char* title, bool* open)
         bool discard = false;
         if (ImGui::Button("保存并关闭", ImVec2(120.0f, 0.0f))) {
             std::string error;
-            if (compositeEditorSave(&error)) {
+            if (compositeEditorSave(&error, editor)) {
                 closed = true;
             }
             else {
@@ -842,7 +842,7 @@ void run_new_dialog()
     ImGui::EndPopup();
 }
 
-void run_pack_dialog()
+void run_pack_dialog(EditorController& editor)
 {
     if (!g_pack_dialog_open) {
         return;
@@ -852,7 +852,7 @@ void run_pack_dialog()
                                 ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
         return;
     }
-    const int count = static_cast<int>(editor().selection().nodes().size()); // ARCH-E4
+    const int count = static_cast<int>(editor.selection().nodes().size()); // ARCH-E4
     ImGui::TextWrapped("把选中的 %d 个节点打包为上级节点。\n边界输入/输出、暴露参数将自动识别（可在编辑器调整）。",
                        count);
     ImGui::SetNextItemWidth(220.0f);
@@ -861,7 +861,7 @@ void run_pack_dialog()
     if (ImGui::Button("打包", ImVec2(100.0f, 0.0f))) {
         g_pack_error.clear();
         const std::string id =
-            compositePackSelection(std::string(g_pack_name), &g_pack_error);
+            compositePackSelection(std::string(g_pack_name), &g_pack_error, editor);
         if (!id.empty()) {
             ImGui::CloseCurrentPopup();
             g_pack_dialog_open = false;
@@ -902,13 +902,13 @@ void compositeEditorTestDriveNewDialog()
     }
 }
 
-void compositePackDialog()
+void compositePackDialog(EditorController& editor)
 {
     if (!g_pack_dialog_open) {
         g_pack_dialog_open = true;
         g_pack_name[0]     = '\0';
         g_pack_error.clear(); // 重新打开时清空上次失败原因
-        if (editor().selection().nodes().size() >= 2) { // ARCH-E4：选中独立对象
+        if (editor.selection().nodes().size() >= 2) { // ARCH-E4：选中独立对象
             std::snprintf(g_pack_name, sizeof(g_pack_name), "组合节点");
         }
         else {
@@ -918,10 +918,10 @@ void compositePackDialog()
     }
 }
 
-void drawCompositeDialogs()
+void drawCompositeDialogs(EditorController& editor)
 {
     run_new_dialog();
-    run_pack_dialog();
+    run_pack_dialog(editor);
 }
 
 

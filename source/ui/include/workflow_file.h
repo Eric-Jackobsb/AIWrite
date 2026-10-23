@@ -5,11 +5,11 @@
 //
 //  架构落点：ARCHITECTURE.md §1.8 `AppContext` / §1.8.9 `WorkflowFile`
 //   * 保存读 graph()，加载调 model().load()，记录最近列表（持有 RecentFiles），
-//     运行结束写归档（PC-05）—— 编排（选中清空 / autosave 基线 / 状态栏）仍归 EditorState
-//   * 依赖 `WorkflowModel`（文档级模型），不依赖 EditorState / UI 面板 ⇒ 拆出为独立
-//     对象后随 ARCH-A3 editor() 退场可直接被 app 层注入
+//     运行结束写归档（PC-05）—— 编排（选中清空 / autosave 基线 / 状态栏）仍归 EditorController
+//   * 依赖 `WorkflowModel`（文档级模型），不依赖 EditorController / UI 面板 ⇒ 拆出为独立
+//     对象后随 ARCH-A3 全局单例退场可直接被 app 层注入
 //   * 归口数据：current_workflow_path / restored_from_autosave_path / last_archive_dir
-//     （原 EditorState 公有成员，经访问器读取）
+//     （原编辑器状态公有成员，经访问器读取）
 // ============================================================================
 
 #include <functional>
@@ -41,7 +41,7 @@ public:
     // 读取 ~/.brain-ai/recent.json
     std::vector<engine::RecentEntry> recent_workflows() const;
 
-    // ---- 归口数据（原 EditorState 公有成员）----
+    // ---- 归口数据（原编辑器状态公有成员）----
     const std::string& current_workflow_path() const { return current_workflow_path_; }
     void               set_current_workflow_path(std::string path) { current_workflow_path_ = std::move(path); }
     const std::string& restored_from_autosave_path() const { return restored_from_autosave_path_; }

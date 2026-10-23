@@ -1,6 +1,7 @@
 #include "error_bar.h"
 
-#include "connection_test.h" // M_patchAB（PB-07）：错误条「重新登录」动作
+#include "connection_test.h"   // M_patchAB（PB-07）：错误条「重新登录」动作
+#include "editor_controller.h" // ARCH-A3：完整类型（成员访问：model / selection / last_error）
 #include "log.h"
 
 #include <imgui.h>
@@ -9,7 +10,7 @@
 
 namespace aiwrite::ui {
 
-void drawErrorBar(EditorState& state)
+void drawErrorBar(EditorController& state)
 {
     if (!state.last_error.active) {
         return;
@@ -96,7 +97,7 @@ void drawErrorBar(EditorState& state)
     }
 
     // ---- M_patchAB §2.2（`PB-07`）：会话失效 → 一键「重新登录」 ----
-    //  * 判据来自 `EditorState::refresh_last_error()` 的错误串反查（纯函数；只有命中才显示本按钮）
+    //  * 判据来自 `EditorController::refresh_last_error()` 的错误串反查（纯函数；只有命中才显示本按钮）
     //  * 按钮打开**该失败节点生效条目**的登录窗口（严格解析、不回落内置默认站点）
     if (state.last_error.relogin_available) {
         ImGui::SameLine();
@@ -112,7 +113,7 @@ void drawErrorBar(EditorState& state)
                            ? std::string("(未指定)")
                            : state.last_error.relogin_provider_id) +
                       "）：" + state.last_error.relogin_text);
-            openWebLoginWindow(state.last_error.relogin_provider_id);
+            openWebLoginWindow(state.last_error.relogin_provider_id, state);
         }
         ImGui::PopStyleColor(3);
         if (ImGui::IsItemHovered()) {

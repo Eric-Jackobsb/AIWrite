@@ -8,7 +8,7 @@
 #include <windows.h>   // M7B 批 1 step 2：--pipe-selftest（CreateProcessW / WaitForSingleObject）
 
 #include "app.h"
-#include "editor_state.h"
+#include "editor_controller.h"
 #include "output_panel.h"
 #include "deepseek_official_provider.h"
 #include "provider_spec.h"   // M_patchB L1：Provider 配置表（--provider-selftest）
@@ -633,7 +633,7 @@ int main(int argc, char** argv)
         return code;
     }
 
-    // 执行自检（不需要 GUI）：验证 EditorState 的运行接线
+    // 执行自检（不需要 GUI）：验证 EditorController 的运行接线
     if (run_selftest_flag) {
         // M_patchAB §2.4（PB-09）：`--run-selftest --official` = 有 Key 时**真实生成一次**
         // （与 `--run-selftest` / `--run-selftest --web` 并列；缺 Key ⇒ 2，语义同其余自检）
