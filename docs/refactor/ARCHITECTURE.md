@@ -85,7 +85,7 @@ private:
               └─ FileEvent 队列
 ```
 
-**规则 6（跨帧可变状态显式化）**：任何跨帧存活的可变状态必须是某个对象成员；文件级 `static` 与跨 TU `extern` 全局在重构结束后**归零**。
+**规则 6（跨帧可变状态显式化）**：任何跨帧存活的可变状态必须是某个对象成员；文件级 `static` 与跨 TU `extern` 全局在重构结束后**归零**。（机器判据 = `source/tools/check_globals.ps1` · 已入 `check_all` 第 ⑦ 项 · 见 §4 判据 2）
 
 ### 1.6 状态生命周期表
 
@@ -370,7 +370,7 @@ SettingsPanel settings(ctx.config());
 | **ARCH-A2** | ~~`AutosaveService` 独立（A1 已拆出对象；本批 = EditorState autosave 方法随 `editor()` 一并移除）~~ ✅ **已落地（2026-10-23）** | autosave 解耦（`EditorState` 六方法移除：tick / pause / mark_baseline / dirty / flush / restore → 调用方直连 `app_ctx().autosave`；restore 编排落 app 层恢复弹窗） | 构建 0/0 + `--run-selftest` PASS（零断言增减）+ exec 713/0 + graph 151/0 + check_links **1839**/0 + check_all **19/19** |
 | **ARCH-A3** | ~~`editor()` 退场：只保留 `AppContext` 聚合~~ ✅ **已落地（2026-10-23）** | 上帝对象消失（`EditorState` → 无所有权 `EditorController`；`AppContext` 启动组装 + 只注入一次） | 构建 0/0 + `--run-selftest` PASS（零断言增减）+ exec 713/0 + graph 151/0 + ce_repro 全帧 OK + check_links **1845**/0 + check_all **19/19** + `rg "editor\(\)"` = 0 |
 | **ARCH-A4** | ~~依赖单向 CI 断言：`tools/check_includes.ps1`（禁止 engine/nodes/ai/web/utils include ui/app），接入 `check_all`~~ ✅ **已落地（2026-10-23）** | 规则 1 工具化（`check_includes.ps1`：R1 能力层 ⊅ `ui|app` · R2 `ui` ⊅ `app` · 跨层同名头 = 归属不明 ⇒ 失败；裸文件名 → 所属层反查，覆盖 201 文件 / 656 include 行；`check_all` **19 → 20 项**，新项排第 ⑥） | `check_all` **20/20** + 新项 PASS（201 文件 · 违规 0）· 注入测试 3 种全部变红 · 构建 0/0 + `--run-selftest` PASS + exec 713/0 + graph 151/0 + check_links **1864**/0 |
-| **ARCH-A5** | 全局变量扫描：`tools/check_globals.ps1`（跨 TU extern + 文件级 static 可变状态 = 0），接入 `check_all` | 规则 6 工具化 | `check_all` 新项 PASS |
+| **ARCH-A5** | ~~全局变量扫描：`tools/check_globals.ps1`（跨 TU extern + 文件级 static 可变状态 = 0），接入 `check_all`~~ ✅ **已落地（2026-10-23）** | 规则 6 工具化（`check_globals.ps1`：R1 头文件 `extern` 变量 · R2 文件作用域 static（含匿名 namespace）· R3 外部链接全局；类成员 / `const` 常量表 / 函数内 static 不计入）· **跨 TU extern 清零**（`ce_internal.h` 12 条 + 同域 2 条收进 `CeUiState` 对象，`ceUiState()` 单一定义点）· 存量 **113 → 87**（ui 60 / web 15 / utils 12）登记**棘轮基线** `tools/check_globals_baseline.txt`（新增即失败 · 只减不增）· `check_all` **20 → 21 项**，新项排第 ⑦ | `check_all` **21/21** + 新项 PASS（201 文件 · 违规 87 · **R1 0** · new 0）· 注入测试 3 种全部变红 · 构建 0/0 + `--run-selftest` PASS + exec 713/0 + graph 151/0 + ce_repro 全帧 OK + check_links **1889**/0 |
 
 ### 阶段 4：收尾（ARCH-Z）
 
@@ -384,7 +384,7 @@ SettingsPanel settings(ctx.config());
 ## §4 验收判据（重构完成 = 全部满足）
 
 1. **行为等价**：全部自检断言数 ≥ 现状（`exec` 713 / `graph` 151 / `check_links` 1730），且 `--selftest` 0 失败；GUI 人工复核两个已知 bug 已修复（Ctrl+S 保存、暴露节点保存）。
-2. **全局变量归零**：`check_globals.ps1` 扫描 `ui/` 跨 TU extern + 文件级 static 可变状态 = 0（`TextureCache` 作为**类成员**自然不计入，无例外条款）。
+2. **全局变量归零**：`check_globals.ps1` 扫描 `ui/` 跨 TU extern + 文件级 static 可变状态 = 0（`TextureCache` 作为**类成员**自然不计入，无例外条款）。 🟡 **部分满足（2026-10-23 · ARCH-A5）**：**跨 TU `extern` = 0**（本批清零）；文件级 static 可变状态 = **87**（ui 60 / web 15 / utils 12），全部登记在 [../../source/tools/check_globals_baseline.txt](../../source/tools/check_globals_baseline.txt) 的**棘轮基线**（新增即 FAIL · 只减不增）；**终值归零拆 ARCH-A6（ui 60 条逐文件对象化）→ ARCH-A7（web/utils 27 条 + 删基线、切严格零容忍）**（[audit/audit_arch_a5.md](../audit/audit_arch_a5.md)）。
 3. **双画布单套交互**：`ce_draw.cpp` 与 `node_canvas.cpp` 中不存在重复的"窗口判定 / Delete / 选中同步"实现（`rg` 验证关键谓词只出现在 `interactor.cpp`）。 ✅ **已满足（2026-10-22 · ARCH-E5）**：`GetSelected* / BeginCreate/EndCreate / BeginDelete/EndDelete / Query* / Accept* / Reject* / ClearSelection` 只出现在 `interactor.cpp`；窗口判定只出现在 `interactorWindowActiveMain/Composite`。
 4. **打包-校验同源**：`ce_pack.cpp` 不再直接写 `spec.internal_graph` / `spec.inputs` / `spec.exposed_params`（`rg` 验证为 0 次）。 ✅ **已满足（2026-10-23 · ARCH-E6）**：打包逻辑下沉 `engine::buildCompositeSpecFromSelection`（composite.h/.cpp），ce_pack 仅调用 + 生成后严格校验（`validate_composite_spec` 通过才落盘）；生成阶段自动修正「暴露输入不得有内部入边」（variadic 端口内外并存场景）。
 5. **依赖单向**：`check_includes.ps1` 通过（engine/nodes/ai/web/utils 不含 ui/app 头）。 ✅ **已满足（2026-10-23 · ARCH-A4）**：`check_includes.ps1` = `checked files: 201 / include lines: 656 / violations: 0`（能力层 130 文件 276 行 include 中归属 `ui|app` 者 0；`ui` 292 行中归属 `app` 者 0）；接入 `check_all` 第 ⑥ 项，三个注入测试均能变红（[audit/audit_arch_a4.md](../audit/audit_arch_a4.md)）。

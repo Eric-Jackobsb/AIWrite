@@ -122,15 +122,11 @@ void compositeEditorDeleteSelection()
                               []() { cePushSnapshot("删除选中（Delete 键）"); });
 }
 
-namespace {
-// ce 窗口当前聚焦/悬停（上一帧 draw_composite_editor 在窗口上下文内更新；
-// 主循环经 compositeEditorWindowFocused() 读取 —— ARCH-R4 Ctrl+S 作用域归属）
-bool g_ce_window_focused = false;
-} // namespace
-
+// ce 窗口当前聚焦/悬停（ARCH-A5：状态挂 ceUiState().window_focused；上一帧
+// draw_composite_editor 在窗口上下文内更新 —— ARCH-R4 Ctrl+S 作用域归属）
 bool compositeEditorWindowFocused()
 {
-    return g_ce_window_focused;
+    return ceUiState().window_focused;
 }
 
 // ------------------------------------------------ Ctrl+S 保存（DEBT-B1 历史）----
@@ -150,7 +146,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
 {
     // ARCH-R4：ce 窗口聚焦/悬停（主循环判断 Ctrl+S 作用域归属）。每帧在 ce 窗口
     // 上下文内更新；未进入窗口绘制（ce 未打开/折叠）时保持 false → Ctrl+S 归主窗口。
-    g_ce_window_focused = false;
+    ceUiState().window_focused = false;
 
     CompositeEditorState& state = compositeEditorState();
     if (!state.active) {
@@ -179,7 +175,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         return;
     }
     // 窗口 Begin 成功后计算聚焦/悬停（RootAndChildWindows：顶栏 / 规格面板 / 画布都算）
-    g_ce_window_focused = interactorWindowActiveComposite(); // ARCH-E5：窗口判定收敛进 interactor
+    ceUiState().window_focused = interactorWindowActiveComposite(); // ARCH-E5：窗口判定收敛进 interactor
 
     // ---- 顶栏 ----
     ImGui::SetNextItemWidth(200.0f);
@@ -196,7 +192,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
     }
     ImGui::SameLine();
     if (ImGui::Button("适配视图")) { // G8：ed::Begin 内执行 NavigateToContent
-        g_ce_request_fit = true;
+        ceUiState().request_fit = true;
     }
     ImGui::SameLine();
     if (ImGui::Button("画布辅助")) { // G4/G5/G7：小地图 / 对齐吸附 / 网格
@@ -205,10 +201,10 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
     if (ImGui::BeginPopup("##ce_canvas_assist")) {
         ImGui::TextDisabled("画布辅助（会话级设置）");
         ImGui::Separator();
-        ImGui::Checkbox("小地图（左下角）", &g_ce_show_minimap);
-        ImGui::Checkbox("对齐吸附 + 辅助线", &g_ce_align_snap);
-        ImGui::Checkbox("网格 16px 吸附", &g_ce_grid_snap);
-        ImGui::Checkbox("网格显示", &g_ce_show_grid);
+        ImGui::Checkbox("小地图（左下角）", &ceUiState().show_minimap);
+        ImGui::Checkbox("对齐吸附 + 辅助线", &ceUiState().align_snap);
+        ImGui::Checkbox("网格 16px 吸附", &ceUiState().grid_snap);
+        ImGui::Checkbox("网格显示", &ceUiState().show_grid);
         ImGui::EndPopup();
     }
     ImGui::SameLine();
@@ -273,21 +269,21 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
                       ImVec2(ImGui::GetContentRegionAvail().x - spec_panel_w, 0.0f));
     {
         ensureCeContext();
-        ed::SetCurrentEditor(g_ce_context);
+        ed::SetCurrentEditor(ceUiState().context);
 
         // 位置同步：新建节点落到 working 记录坐标
         for (const engine::Node& n : state.working.internal_graph.nodes) {
             interactorPushNodePosition(n.id, n.x, n.y);
         }
 
-        blockMinimapInput(g_ce_show_minimap, g_ce_minimap); // G4：小地图区域输入与画布隔离（ed::Begin 之前）
+        blockMinimapInput(ceUiState().show_minimap, ceUiState().minimap); // G4：小地图区域输入与画布隔离（ed::Begin 之前）
 
         ed::Begin("##CeCanvas", ImVec2(0.0f, 0.0f));
-        if (g_ce_request_fit) { // G8：适配视图
+        if (ceUiState().request_fit) { // G8：适配视图
             ed::NavigateToContent(0.0f);
-            g_ce_request_fit = false;
+            ceUiState().request_fit = false;
         }
-        if (!g_ce_show_grid) { // G7：隐藏网格（透明网格色）
+        if (!ceUiState().show_grid) { // G7：隐藏网格（透明网格色）
             ed::PushStyleColor(ed::StyleColor_Grid, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         }
         // CN_editor_refactor 阶段 1（CEA-02）：内部图画布改走共享绘制层 canvas_view。
@@ -353,7 +349,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         }
         if (ed::ShowBackgroundContextMenu()) {
             ce_spawn_position  = ed::ScreenToCanvas(ImGui::GetMousePos());
-            g_ce_add_filter[0] = '\0'; // G3：重新打开时清空搜索
+            ceUiState().add_filter[0] = '\0'; // G3：重新打开时清空搜索
             ImGui::OpenPopup("##ce_add_node_menu");
         }
         if (ImGui::BeginPopup("##ce_node_menu")) {
@@ -376,14 +372,14 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
                 ImGui::SetKeyboardFocusHere(); // 打开即可直接键入
             }
             ImGui::SetNextItemWidth(-1.0f);
-            ImGui::InputTextWithHint("##ce_add_filter", "搜索节点…", g_ce_add_filter,
-                                     sizeof(g_ce_add_filter));
+            ImGui::InputTextWithHint("##ce_add_filter", "搜索节点…", ceUiState().add_filter,
+                                     sizeof(ceUiState().add_filter));
             ImGui::Separator();
             // 创建内部节点落点：背景右键那一刻的画布坐标（右键点在画布哪里，节点就落哪里）。
             const ImVec2 ce_spawn = ce_spawn_position;
             engine::registerAllNodes();
             engine::NodeRegistry& registry  = engine::NodeRegistry::instance();
-            const std::string     query     = g_ce_add_filter;
+            const std::string     query     = ceUiState().add_filter;
             const bool            searching = !query.empty();
 
             // 搜索模式：跨分类平铺命中项；否则按分类分组（与节点库一致）
@@ -431,11 +427,11 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
             ImGui::EndPopup();
         }
         if (ImGui::BeginPopup("##ce_rename_menu")) {
-            ImGui::TextDisabled("重命名内部节点 %s", g_ce_rename_id.c_str());
+            ImGui::TextDisabled("重命名内部节点 %s", ceUiState().rename_id.c_str());
             ImGui::SetNextItemWidth(220.0f);
             const bool enter_pressed = ImGui::InputText(
-                "##ce_rename_input", g_ce_rename_buf.data(), g_ce_rename_buf.size(),
-                ImGuiInputTextFlags_EnterReturnsTrue);
+                "##ce_rename_input", ceUiState().rename_buf.data(),
+                ceUiState().rename_buf.size(), ImGuiInputTextFlags_EnterReturnsTrue);
             if (enter_pressed) {
                 ceApplyRename(); // 回车确认
             }
@@ -444,7 +440,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
             }
             ImGui::SameLine();
             if (ImGui::Button("取消")) {
-                g_ce_rename_id.clear();
+                ceUiState().rename_id.clear();
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
@@ -493,14 +489,14 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         // 小地图固定锚定视图左下角、不随平移缩放移动。时序与主画布一致
         // （node_canvas.cpp：ed::End() → apply_alignment_snap + draw_minimap →
         //  SetCurrentEditor(nullptr)）。
-        // 注意：此时 ed::SetCurrentEditor 仍指向 g_ce_context，共享 draw_minimap 内的
+        // 注意：此时 ed::SetCurrentEditor 仍指向 ceUiState().context，共享 draw_minimap 内的
         //       GetNodeSize / NavigateToCenter 才能正常取到节点尺寸与发起视口导航。
         // CLN-10/09：辅助线与小地图上移共享（draw_snap_lines / draw_minimap），
         // 主题用 canvas_theme_composite()、节点块色固定蓝紫（保留两画布差异）。
         drawSnapLines(ce_snap, ImGui::GetWindowDrawList(), IM_COL32(200, 80, 220, 255), 1.0f);
-        draw_minimap(state.working.internal_graph, canvasThemeComposite(), g_ce_show_minimap,
-                     g_ce_minimap, [](const engine::Node&) { return IM_COL32(190, 195, 220, 200); });
-        if (!g_ce_show_grid) {
+        draw_minimap(state.working.internal_graph, canvasThemeComposite(), ceUiState().show_minimap,
+                     ceUiState().minimap, [](const engine::Node&) { return IM_COL32(190, 195, 220, 200); });
+        if (!ceUiState().show_grid) {
             ed::PopStyleColor(); // 与 ed::Begin 后的 PushStyleColor 配对（主画布同款：ed::End 后 Pop）
         }
 

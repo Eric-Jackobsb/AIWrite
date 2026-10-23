@@ -29,8 +29,8 @@ void compositeEditorOpen(const std::string& composite_id)
     state.active    = true;
     state.ask_close = false;
     state.error.clear();
-    g_ce_undo.clear();
-    g_ce_redo.clear();
+    ceUiState().undo.clear();
+    ceUiState().redo.clear();
     if (existing != nullptr) {
         state.working = *existing;
     }
@@ -70,8 +70,8 @@ void compositeEditorForceClose()
     state.error.clear();
     state.run_status.clear();
     state.run_snapshot = engine::RunSnapshot{};
-    g_ce_undo.clear();
-    g_ce_redo.clear();
+    ceUiState().undo.clear();
+    ceUiState().redo.clear();
 }
 
 

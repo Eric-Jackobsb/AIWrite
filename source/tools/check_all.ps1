@@ -230,10 +230,33 @@ else {
     Add-Result 'check_includes（依赖单向）' $false "脚本缺失：$incScript"
 }
 
-# ---- ⑦ 文档断链自检（DBG-L01 收口：判据 = **全库 0**） ----
+# ---- ⑦ 全局变量自检（ARCH-A5 收口：判据 2 = 跨 TU extern + 文件级 static 可变状态 **无新增**） ----
+#  * 脚本 = `source/tools/check_globals.ps1`（只读、零副作用；R1 头文件 extern 变量 /
+#    R2 文件作用域 static（含匿名 namespace）/ R3 外部链接全局；类成员与 const 常量表不计入）
+#  * 判据两段：**终值 = 存量 0**（ARCH-A6/A7 逐文件对象化清偿）；**当前 = 基线棘轮** ——
+#    存量记在 `tools/check_globals_baseline.txt`，出现基线外的新增即失败（只减不增）。
+Write-Both "`n== ⑦ 全局变量（check_globals.ps1 · 规则 6 / 判据 2） =="
+$glbScript   = Join-Path $sourceDir 'tools\check_globals.ps1'
+$glbBaseline = Join-Path $sourceDir 'tools\check_globals_baseline.txt'
+if (Test-Path $glbScript) {
+    $outFile = Join-Path $logDir "check_all_$stamp`_globals.txt"
+    Push-Location $repoRoot
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $glbScript -Baseline $glbBaseline *> $outFile
+    $glbCode = $LASTEXITCODE
+    Pop-Location
+    $glbText = if (Test-Path $outFile) { Get-Content $outFile -Raw -ErrorAction SilentlyContinue } else { '' }
+    $glbLine = (($glbText -split "`n") | Where-Object { $_ -match 'checked files' } | Select-Object -Last 1)
+    $glbDetail = if ($glbLine) { ($glbLine -replace '^\s+', '').Trim() } else { '' }
+    Add-Result 'check_globals（全局变量棘轮）' ($glbCode -eq 0) $glbDetail
+}
+else {
+    Add-Result 'check_globals（全局变量棘轮）' $false "脚本缺失：$glbScript"
+}
+
+# ---- ⑧ 文档断链自检（DBG-L01 收口：判据 = **全库 0**） ----
 #  * 脚本 = `source/tools/check_links.py`（仓库根由脚本位置推导；剔除代码块 / 行内代码）
 #  * 只读、零副作用；退出码 1 = 有断链（逐条 `文件:行 -> 目标` 打印在自检输出里）
-Write-Both "`n== ⑦ 文档断链（check_links.py · 全库 0 判据） =="
+Write-Both "`n== ⑧ 文档断链（check_links.py · 全库 0 判据） =="
 $linksScript = Join-Path $sourceDir 'tools\check_links.py'
 if (Test-Path $linksScript) {
     Push-Location $repoRoot
@@ -247,11 +270,11 @@ else {
     Add-Result 'check_links（文档断链）' $false "脚本缺失：$linksScript"
 }
 
-# ---- ⑧ 打包 payload 自检（FEA-M6-06 · 打包流水线入闸；DBG-L01 同款「离线可验证」口径） ----
+# ---- ⑨ 打包 payload 自检（FEA-M6-06 · 打包流水线入闸；DBG-L01 同款「离线可验证」口径） ----
 #  * 跑 package.ps1 -SkipBuild -SkipInstaller：重建 payload + manifest + `.iss ↔ payload` 一致性锁
 #  * 判据：退出码 ∈ {0, 2}（0 = payload+安装包都成功 / 2 = payload 成功、安装包未编译）**且**
 #    `build\dist\payload` 与 manifest.txt 都存在；ISCC 缺失**不是**失败（本机无 Inno Setup 亦可入闸）
-Write-Both "`n== ⑧ 打包 payload（package.ps1 -SkipBuild -SkipInstaller） =="
+Write-Both "`n== ⑨ 打包 payload（package.ps1 -SkipBuild -SkipInstaller） =="
 $packageScript = Join-Path $sourceDir 'tools\package.ps1'
 if (Test-Path $packageScript) {
     $outFile = Join-Path $logDir "check_all_$stamp`_package.txt"
