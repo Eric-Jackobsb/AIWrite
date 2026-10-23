@@ -730,6 +730,60 @@ int composite_selftest()
         eng::CompositeRegistry::instance().remove(pv.id, nullptr);
     }
 
+    // ---- 12. DBG-CN-01 回归：暴露输入为空 = 合法（可校验 / 可保存 / 可回读 / 可实例化）----
+    // 现象登记：上级节点规格的暴露输入端口为空时，保存被校验拦截（期望可保存）。
+    // 本块按断言逐层验证「空输入」规格的完整链路，任一层被拦即 FAIL：
+    //  * 严格校验：只强制 1 个对外输出，**不**要求暴露输入非空（composite.cpp 校验段）
+    //  * 保存：注册表 save（allow_incomplete_draft=false）落盘 JSON（inputs = 空数组）
+    //  * 回读：compositeFromJson 反序列化后 inputs 仍为空（没有隐式补端口）
+    //  * 实例化：画布实例 0 输入 / 1 输出；暴露输入恒 is_optional ⇒ 父图校验通过
+    {
+        eng::CompositeSpec no_inputs = make_selftest_spec();
+        no_inputs.id   = "c_no_inputs";
+        no_inputs.name = "空输入上级";
+        no_inputs.inputs.clear(); // 只保留内部图 + 1 个对外输出 + 暴露参数
+
+        std::string ni_error;
+        expect(check, eng::validate_composite_spec(no_inputs, &ni_error),
+               "空输入：严格校验通过（暴露输入可为 0）", ni_error);
+
+        // 保存（严格模式）：空输入不应被拦
+        expect(check, eng::CompositeRegistry::instance().save(no_inputs, &ni_error),
+               "空输入：注册表保存成功（严格校验放行）", ni_error);
+        const std::filesystem::path ni_file = temp_root / "c_no_inputs.json";
+        expect(check, std::filesystem::exists(ni_file), "空输入：JSON 已落盘 c_no_inputs.json");
+
+        // 落盘回读：inputs 为空数组，不得被补出端口
+        {
+            std::ifstream  in(ni_file);
+            nlohmann::json doc;
+            in >> doc;
+            expect(check, doc.contains("inputs") && doc["inputs"].is_array() &&
+                              doc["inputs"].empty(),
+                   "空输入：落盘 JSON 的 inputs 为空数组");
+            eng::CompositeSpec round;
+            std::string        parse_error;
+            expect(check, eng::compositeFromJson(doc, round, &parse_error) && round.inputs.empty() &&
+                              round.outputs.size() == 1,
+                   "空输入：反序列化后 inputs 仍为空 / outputs = 1", parse_error);
+        }
+
+        // 实例化到父图 + 父图校验（暴露输入恒可选 ⇒ 0 输入不会被「必填输入未连接」拦）
+        eng::Graph  parent;
+        std::string add_error;
+        const std::string inst = parent.addCompositeNode("c_no_inputs", 0.0f, 0.0f, &add_error);
+        expect(check, !inst.empty(), "空输入：可实例化到画布", add_error);
+        const eng::Node* inst_node = parent.findNode(inst);
+        expect(check, inst_node != nullptr && inst_node->inputs.empty() &&
+                          inst_node->outputs.size() == 1,
+               "空输入：实例 0 输入 / 1 输出");
+        eng::ValidationMessages ni_messages;
+        expect(check, eng::validateWorkflow(parent, &ni_messages) && ni_messages.empty(),
+               "空输入：含该实例的父图校验通过");
+
+        eng::CompositeRegistry::instance().remove(no_inputs.id, nullptr);
+    }
+
     // 清理临时目录
     std::filesystem::remove_all(temp_root, ec);
     std::printf("=== 上级节点自检结果: %d 通过 / %d 失败 ===\n", check.passed, check.failed);

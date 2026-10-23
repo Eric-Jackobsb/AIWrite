@@ -128,8 +128,8 @@
                 "children": [],
                 "todo": {
                   "id": 446,
-                  "content": "DBG-CN-01 上级节点暴露的输入为空时无法保存（应改为可保存 · 空输入合法）｜ 现象：上级节点规格的暴露输入端口为空时，保存被校验拦截；期望允许保存 ｜ 定位线索：engine/src/composite.cpp validate_composite_spec() L101-114 暴露输入引用校验（引用的内部输入端口必须存在 / 无内部入边）· 上级节点实例端口恒 is_optional=true（composite.cpp L309 · validate.cpp L122 跳过 optional）⇒ 运行前不拦，疑为规格保存或加载校验拦截 ｜ 2026-10-21 登记 · ⛔ 待用户审查补充确切拦截点与场景后统一修复 + 补「空输入可保存」反例断言（exec-selftest）｜ 关联 M_polish §POL-C-01 校验边界相邻区",
-                  "done": false,
+                  "content": "DBG-CN-01 上级节点暴露的输入为空时无法保存（应改为可保存 · 空输入合法）｜ 现象：上级节点规格的暴露输入端口为空时，保存被校验拦截；期望允许保存 ｜ 定位线索：engine/src/composite.cpp validate_composite_spec() L101-114 暴露输入引用校验（引用的内部输入端口必须存在 / 无内部入边）· 上级节点实例端口恒 is_optional=true（composite.cpp L309 · validate.cpp L122 跳过 optional）⇒ 运行前不拦，疑为规格保存或加载校验拦截 ｜ 2026-10-23 结案：实证「空输入」全链合法（validate_composite_spec 只强制 1 个对外输出，不要求输入非空）+ 补 8 条断言（composite_selftest §12：严格校验 / 保存落盘 / JSON 回读 inputs≡[] / 实例化 0 入 1 出 / 父图校验 · 上级节点自检 112→120）；另堵住唯一会因「输入」导致保存失败的两个 GUI 入口：① 有内部入线的端口禁勾「对外输入」（变灰 + 悬停提示）② 拖线 / 程序化加边到已标记端口直接拒绝并给文案 ｜ 验证 check_all 21/21 · 0 失败 ｜ GUI 目视 2 项待用户下次复核（禁勾变灰 / 拖线被拒）；若仍见保存失败请附错误文案 ｜ 关联 M_polish §POL-C-01",
+                  "done": true,
                   "level": "warning",
                   "fileLink": "docs/actionPlan/M_polish.md"
                 }
@@ -137,7 +137,7 @@
             ],
             "todo": {
               "id": 445,
-              "content": "CN 上级节点（1 项 · 待修复 2026-10-21）",
+              "content": "CN 上级节点（0 项 · 已全部勾账 2026-10-23）",
               "done": false,
               "level": "secondary"
             }
@@ -145,7 +145,7 @@
         ],
         "todo": {
           "id": 1,
-          "content": "Debug（1 项 · CN 上级节点待修复 2026-10-21）",
+          "content": "Debug（0 项 · 已全部勾账 2026-10-23）",
           "done": false,
           "level": "danger"
         }

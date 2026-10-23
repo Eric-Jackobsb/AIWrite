@@ -169,6 +169,16 @@ std::string composite_editor_add_edge(const std::string& from_node, const std::s
 {
     CeSession&  session = ceSession();
     std::string reason;
+    // 「对外输入」端口不得再接内部入边（与画布拖线预检 can_connect 同一口径）：
+    // validate_composite_spec 保存时会拒绝该状态，此处对程序化调用同样拦截，
+    // 文案与画布提示一致（DBG-CN-01 统一修复）。
+    if (session.spec_marks().has_input(to_node, to_port)) {
+        if (error != nullptr) {
+            *error = "该输入端口已标记为「对外输入」：外部连线会接管它，"
+                     "请先取消标记再连内部线（或改标记其它端口）";
+        }
+        return {};
+    }
     if (!session.model().graph().canConnect(from_node, from_port, to_node, to_port, &reason)) {
         if (error != nullptr) {
             *error = reason;

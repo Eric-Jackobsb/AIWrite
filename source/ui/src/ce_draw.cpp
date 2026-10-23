@@ -47,6 +47,13 @@ CanvasInteract ceInteractCore()
     interact.can_connect = [](const PinRef& from, const PinRef& to, std::string& reason,
                               bool& would_replace) {
         would_replace = false; // ce 内部图无替换语义（与主画布 canConnect 差异点）
+        // 「对外输入」端口不得再接内部入边（DBG-CN-01 统一修复）：validate_composite_spec
+        // 保存时会拒绝「暴露输入…已有内部连线」⇒ 拖线阶段就拦下，别让用户连完才存不下去。
+        if (ceSession().spec_marks().has_input(to.node_id, to.port_id)) {
+            reason = "该输入端口已标记为「对外输入」：外部连线会接管它，"
+                     "请先取消标记再连内部线（或改标记其它端口）";
+            return false;
+        }
         return ceSession().model().graph().canConnect(from.node_id, from.port_id, to.node_id,
                                                       to.port_id, &reason);
     };
@@ -498,19 +505,31 @@ void drawCompositeEditor(const char* title, bool* open, const CeReadOnlyView& vi
             ImGui::PushID(node.id.c_str());
             const std::string header = node.title + "（" + node.id + "）";
             if (ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-                // 输入 → 对外输入（有内部入边的端口不允许标记）
+                // 输入 → 对外输入（有内部入边的端口不允许标记：严格校验会拒绝「暴露输入
+                // 已有内部连线」⇒ 此处直接禁勾选 + 提示，避免「勾上了却永远存不下去」）
                 for (const engine::Port& port : node.inputs) {
                     const bool has_internal_in =
                         view.graph().findEdgeIntoInput(node.id, port.id) != nullptr;
                     bool exposed = ceSession().spec_marks().has_input(node.id, port.id);
+                    const bool blocked = has_internal_in && !exposed; // 已标记的仍可取消
                     ImGui::PushID(("in" + port.id).c_str());
+                    if (blocked) {
+                        ImGui::BeginDisabled();
+                    }
                     if (ImGui::Checkbox("对外输入", &exposed)) {
                         compositeEditorSnapshot("标记对外输入 " + port.id);
                         ceSession().spec_marks().toggle_input(node.id, port.id, exposed);
                     }
+                    if (blocked) {
+                        ImGui::EndDisabled();
+                    }
                     ImGui::SameLine();
                     ImGui::TextDisabled("%s%s", port.display_name.c_str(),
-                                        has_internal_in ? "（有内部连线）" : "");
+                                        has_internal_in ? "（有内部连线：不可标记）" : "");
+                    if (blocked && ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("该端口已有内部连线：请先删除该内部连线，"
+                                          "再把它标记为对外输入");
+                    }
                     ImGui::PopID();
                 }
 
