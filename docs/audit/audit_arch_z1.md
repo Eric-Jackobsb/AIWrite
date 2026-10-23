@@ -118,36 +118,39 @@ python ..\source\tools\check_links.py
 
 | 目标 | 状态 |
 |---|---|
-| 单文件 < 800 行 | ✅ **13 个 > 800 的生产文件全部拆分完成**（v1.13/v1.14）：生产模块现存最大 **766**（`engine/src/graph.cpp`，Z1 前已达标 · `image_decode` 757）· 唯一 > 800 的剩余项 = 自检工具 `app/src/cli_selftest.cpp` 1429（§8 风险 3 口径：工具类不计入 Z1） |
+| 单文件 < 800 行 | ✅ **14 个 ≥ 800 行的生产文件全部拆分完成**（**13 组**提交 · 2026-10-23 · 基线在 `6b2cb68` 实测 = 14 个）：生产模块现存最大 **766**（`engine/src/graph.cpp`，Z1 前已达标 · `image_decode` 758）· 唯一 ≥ 800 的剩余项 = 自检工具 `app/src/cli_selftest.cpp` **1429**（§8 风险 3 口径：工具类不计入 Z1） |
 | 公共 API 零变动 | ✅ `provider_spec.h` / `inference_provider.h` / `upload_contract.h` 等公开头一字未改；新头全部 `*_detail.h` / `*_common.h`（模块内） |
-| 重复率 ≤ 3.0 % | ✅ **2.98 %**（876 / 29425 · v1.14 去重专项 6 步，3.7 % → 3.0 %，见 §10） |
+| 重复率 ≤ 3.0 % | ✅ **2.98 %**（876 / 29425 · 去重专项 6 步，**3.8 % → 2.98 %**，见 §10） |
 | 依赖单向 / 零全局 / 断链 | ✅ 见 §6 三行门禁 |
 
-## 8. 遗留与风险（Z1 队列）
+## 8. 队列收口（Z1 · **13 组 / 14 个文件** · 全部完成）
 
-已完成：`provider_spec.cpp` ✅（1743 → 5 TU）· **第 2 组 ✅（2026-10-23）**：`webview_host.cpp`（3514 → 8 TU）· `dom_web_client.cpp`（2397 → 4 TU + 2 脚本头）· `pydoll_channel.cpp`（1282 → 3 TU）—— 详见 [audit_arch_z1_web.md](audit_arch_z1_web.md) · `image_decode.cpp` **758** ✅（已 < 800，无需拆）。
-**第 3 组 ✅（ui 5 文件 → 12 TU）**：`node_canvas` 1126 → 2（+ `node_canvas_detail.h`）· `settings_panel` 944 → 3（+ `settings_panel_detail.h`）· `canvas_view` 938 → 2 · `property_panel` 855 → 2（+ `property_panel_detail.h`）· `ce_draw` 846 → 2（`ce_repro` ALL FRAMES OK）。
-**第 4 组 ✅（engine/nodes 4 文件 → 10 TU）**：`executor` 886 → 2 · `node_registry` 899 → 2 · `composite` 1171 → 3 · `local_nodes` 1242 → 4（+ `local_nodes_detail.h`）。
-**去重专项 ✅（v1.14 · 6 步）**：见 §10 —— 重复率 **3.7 % → 2.98 %**（判据 ≤ 3.0 % 达成）。
-**剩余 10 个生产文件**（按「先大后小、先纯逻辑后 GUI」排序，下一组从 `app.cpp` 起）：
+**基线**（`6b2cb68` 实测 · 生产模块 ≥ 800 行 = **14 个**；`cli_selftest.cpp` 1429 属工具类不计）：下表 = 收口后实测（`max` = 拆后最大 TU · 新 TU 按 `前缀_*.cpp` 同目录统计）。
 
-| 顺序 | 文件 | 行数 | 拆分预判 |
-|---|---|---|---|
-| 1 | `web/src/webview_host.cpp` | **3514** | WebView2 宿主 / 登录 / PoW / 上传桥接四段 → 至少 4 TU（本批最大风险面） |
-| 2 | `ai/src/dom_web_client.cpp` | **2397** | DOM 适配器（探测 / 发送 / 取答案 / 上传）→ 3 TU |
-| 3 | `ui/src/app.cpp` | **1454** | 主循环 → `AppFrame`（§3 原定口径） |
-| 4 | `web/src/pydoll_channel.cpp` | **1282** | 守护进程逻辑两处 23 行同构（§4 集群）→ 合并后再拆 |
-| 5 | `nodes/src/local_nodes.cpp` | **1242** | 两个节点函数结构同构（§4 集群）→ 抽公共骨架 |
-| 6 | `engine/src/composite.cpp` | **1171** | 复合执行 ← 与 `executor` 同簇 |
-| 7 | `ui/src/node_canvas.cpp` | **1126** | 交互段移入 interactor（A6 已把 11 条 static 收进 `NodeCanvasState`） |
-| 8 | `ui/src/settings_panel.cpp` | **944** | 分区渲染 → 每区一函数（`SettingsPanelState` 已在 A6 就位） |
-| 9 | `ui/src/canvas_view.cpp` | **938** | 视图装配 |
-| 10 | `engine/src/node_registry.cpp` | **899** | 注册表 + 内置节点声明 |
-| 11 | `engine/src/executor.cpp` | **886** | 校验块两处同构（§4 集群 14 行） |
-| 12 | `ui/src/property_panel.cpp` | **855** | 每类节点一函数 |
-| 13 | `ui/src/ce_draw.cpp` | **846** | Z2 后仍 846：窗口函数按「规格 / 模型 / 试运行」三段切 |
+| # | 文件（基线行数） | 组 | 拆后 | max |
+|---|---|---|---|---|
+| 1 | `ai/src/provider_spec.cpp` 1743 | 1/13 | 5 TU + `provider_spec_detail.h` | **679** |
+| 2 | `web/src/webview_host.cpp` 3514 | 2/13 | 8 TU + `webview_host_detail.h` | **607** |
+| 3 | `ai/src/dom_web_client.cpp` 2397 | 3‑4/13 | 4 TU + 2 脚本头 + `dom_web_client_detail.h` | **583** |
+| 4 | `web/src/pydoll_channel.cpp` 1282 | 3‑4/13 | 3 TU + `pydoll_channel_detail.h` | **527** |
+| 5 | `ui/src/app.cpp` 1454 | 5/13 | 4 TU + `app_detail.h` | **486** |
+| 6 | `ui/src/node_canvas.cpp` 1125 | 6/13 | 2 TU + `node_canvas_detail.h` | **734** |
+| 7 | `ui/src/settings_panel.cpp` 944 | 7/13 | 3 TU + `settings_panel_detail.h` | **487** |
+| 8 | `ui/src/canvas_view.cpp` 938 | 8/13 | 2 TU | **551** |
+| 9 | `ui/src/property_panel.cpp` 855 | 9/13 | 2 TU + `property_panel_detail.h` | **639** |
+| 10 | `ui/src/ce_draw.cpp` 845 | 10/13 | 2 TU | **686** |
+| 11 | `engine/src/executor.cpp` 886 | 11‑13/13 | 2 TU | **631** |
+| 12 | `engine/src/node_registry.cpp` 899 | 11‑13/13 | 2 TU | **698** |
+| 13 | `engine/src/composite.cpp` 1171 | 11‑13/13 | 3 TU | **431** |
+| 14 | `nodes/src/local_nodes.cpp` 1242 | 11‑13/13 | 4 TU + `local_nodes_detail.h` | **389** |
 
-**风险**：
+> 组数 13 ≠ 文件数 14：第 3‑4 组与第 11‑13 组各一次提交覆盖多个文件（见 `git log --oneline | grep 'ARCH-Z1'`）。
+
+**收口后全库**（生产模块 · 排除 `source/tools` 与 `third_party`）：**≥ 800 行 = 0**；现存前三 = `engine/src/graph.cpp` **766** · `utils/src/image_decode.cpp` **758** · `ui/src/editor_controller.cpp` **745**。工具类 `app/src/cli_selftest.cpp` **1429** 按下方风险 3 口径不计入 Z1。
+
+**已收口的去重专项**：见 §10 —— 重复率 **3.8 % → 2.98 %**（判据 ≤ 3.0 % 达成）。
+
+**风险**（保留原文 · 已按批执行）：
 
 1. `webview_host` / `dom_web_client` 含 WebView2 与线程/管道交互，**没有单元级等价证据**：拆分必须只搬函数、不改调用顺序，
    并以 `--upload-selftest`（72/0）+ 真机一次网页版运行作旁证 → 建议单独一组、单独提交。
@@ -200,5 +203,41 @@ Z1 拆分只搬文件、不改语义 ⇒ 拆分后**暴露**出一批逐字重�
 | `dup_scan.py` | 重复行 **876** · 重复率 **2.98 %**（≤ 3.0 % ✅） |
 
 **回滚**：`git revert 1a871fe 43f83c7`（两步去重提交；拆分提交不受影响 —— 去重只删重复、不改调用契约）。
+
+---
+
+## 11. 8/8 复审（2026-10-23 · 冻结解除闸口）
+
+> 依据：[ARCHITECTURE.md](../refactor/ARCHITECTURE.md) §4 八条验收判据。逐条**当场复跑**取证，不引用历史结论。
+
+| # | 判据 | 结论 | 复跑证据（本次实测） |
+|---|---|---|---|
+| 1 | 行为等价 | ✅ | `check_all.ps1` **21/21 PASS**（内含 `--selftest` 全组 = 含 `composite_selftest` **112/0** · `--upload-selftest` **72/0** · `--run-selftest` PASS）· exec **713/0** · graph **151/0** · 夹具 **44/17/15** · `ce_repro` **ALL FRAMES OK (mode 0)** · `check_links` **1974/0**（基线 1730 · 只升不降）；两个已知 bug 由**自动断言**覆盖 —— Ctrl+S = 命令路由 `dispatchCommand(Save)` 断言（R4）· 暴露节点保存 = `buildCompositeSpecFromSelection` + `validate_composite_spec` 断言 21 条（E6）。**GUI 单击复核**仍建议用户顺手点一次（非阻塞 · 无自动化通道） |
+| 2 | 全局变量归零 | ✅ | `check_globals.ps1` = **254 文件 / 违规 0**（R1 0 / R2 0 / R3 0）· 函数内 static 棘轮 **50 · 50**（只许减） |
+| 3 | 双画布单套交互 | ✅ | 关键谓词扫描：`interactor.cpp` 之外命中 **2 条 = 纯注释**（`ce_draw.cpp:313` / `node_canvas_impl.cpp:371`）· `BeginDelete` 实体只在 `interactor.cpp`（3 处） |
+| 4 | 打包-校验同源 | ✅ | `ce_pack.cpp` 中 `spec.internal_graph` / `spec.inputs` / `spec.exposed_params` 直写 = **0** |
+| 5 | 依赖单向 | ✅ | `check_includes.ps1` = **254 文件 / 913 include 行 / 0 violations** |
+| 6 | `editor()` 退场 | ✅ | 全库 `\beditor\(\)` = **0** |
+| 7 | ReadOnlyView 落地 | ✅ | 渲染签名仍全部 `const ReadOnlyView&` / `const CeReadOnlyView&`（13 组拆分**未改任何渲染签名** · Z2 已满足）· `ce_repro` 全帧 OK |
+| 8 | `AppContext` 运行时不可访问 | ✅ | `ui` 下 `AppContext` 命中 **5 = 定义 + 启动装配**（`app_context.h:29-30` · `app_context.cpp:10` · `app.cpp:7/79`），面板 / 视图代码 **0** 处 |
+
+**复审结论：8/8 ✅** ⇒ 触发 [FREEZE.md](../refactor/FREEZE.md) §3 解除动作（状态 🟢 已冻结 → 🔵 已解除 · DocMAP 同步 · 冻结组核对：`DevPlan.todo` 的 `📦 冻结待解冻` 组**从未建立**（冻结期内零新功能登记）⇒ 无需迁移，仅在此登记说明）。
+
+**复审顺带修掉的文档偏差**（取证时发现 · 只改文档、零代码）：
+
+1. §7 原写「13 个 > 800 的生产文件」→ 实为 **14 个**（基线 `6b2cb68` 逐文件实测；13 = **提交组数**，第 3‑4 与第 11‑13 组各一次提交覆盖多个文件）。
+2. §8 原留「剩余 10 个生产文件」待拆表（与 §7「全部完成」自相矛盾）→ 改为收口后实测表（14 行 · 含拆后 `max` TU 行数）。
+3. 行数口径统一为 `wc -l`：`image_decode` 757 → **758** · `ce_draw` 846 → **845** · `node_canvas` 1126 → **1125**（原值多算了末行）。
+
+**复现命令**：
+
+```powershell
+cd source; .\build.ps1
+.\tools\check_all.ps1 -SkipBuild
+.\tools\check_globals.ps1 ; .\tools\check_includes.ps1
+cd .. ; python source\tools\check_links.py ; python source\tools\dup_scan.py
+```
+
+**回滚**：本条只改文档 ⇒ `git revert <docs 提交>`；判据证据全部来自可复跑命令，无需回滚代码。
 
 
