@@ -391,6 +391,7 @@ add_executable(aiwrite WIN32
     ui/src/node_canvas.cpp
     ui/src/node_canvas_impl.cpp  # ARCH-Z1 拆分（设置净化/上下文/交互回调/新建菜单/自检/Alt 平移/逐帧诊断）
     ui/src/canvas_view.cpp
+    ui/src/canvas_view_render.cpp  # ARCH-Z1 拆分（端口/节点卡片/小地图/对齐吸附绘制）
     ui/src/node_library.cpp
     ui/src/toolbar.cpp
     utils/src/file_dialog.cpp
