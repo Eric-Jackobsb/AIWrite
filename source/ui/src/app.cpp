@@ -869,7 +869,7 @@ int run(const AppOptions& options)
         }
         // 若新建因规格校验失败而未打开编辑器：第 12 帧再走「内存会话」路径（旧实现），
         // 以判定断言是否来自「无文件支撑的内存会话」（composite_editor_open 的 find 落空回退）。
-        if (options.auto_open_composite && frame_index == 12 && !compositeEditorState().active) {
+        if (options.auto_open_composite && frame_index == 12 && !ceSession().active) {
             engine::CompositeSpec fresh;
             fresh.id   = engine::CompositeRegistry::instance().makeId();
             fresh.name = "内存会话复现";
@@ -878,11 +878,11 @@ int run(const AppOptions& options)
         }
         // 编辑器已打开后：第 16 帧添加一个内部节点（覆盖非空内部图的 BeginNode 绘制路径），
         // 第 24 帧点「保存」（应因未标记输出被严格校验拦截 → 属预期行为，非崩溃）。
-        if (options.auto_open_composite && frame_index == 16 && compositeEditorState().active) {
+        if (options.auto_open_composite && frame_index == 16 && ceSession().active) {
             const std::string nid = compositeEditorAddNode("TextInput", 0.0f, 0.0f);
             log::info("[自动复现] 编辑器内添加内部节点 " + nid + "（第 16 帧）");
         }
-        if (options.auto_open_composite && frame_index == 24 && compositeEditorState().active) {
+        if (options.auto_open_composite && frame_index == 24 && ceSession().active) {
             std::string save_err;
             const bool  saved = compositeEditorSave(&save_err, state);
             log::info(std::string("[自动复现] 编辑器保存（预期失败：未标记输出）ok=") +
@@ -1212,8 +1212,7 @@ int run(const AppOptions& options)
         // 通用隔离（文本输入 / 激活控件 / 弹层 / 左键按住）在 handleShortcut 内判定；
         // IsKeyChordPressed 同帧只触发一次，与各窗口内检测天然互斥、不会重复。
         handleShortcut(CommandScope::Main,
-                       /*window_active=*/!(compositeEditorState().active &&
-                                           compositeEditorWindowFocused()),
+                       /*window_active=*/!(ceSession().active && compositeEditorWindowFocused()),
                        cmd_ctx,
                        /*only=*/AppCommand::SaveWorkflow);
 
@@ -1280,15 +1279,18 @@ int run(const AppOptions& options)
         }
 
         // ---- CN：上级节点编辑器 + 新建/打包对话框 ----
-        if (compositeEditorState().active) {
+        if (ceSession().active) {
             show_composite_editor = true; // 会话打开 → 自动显示窗口
         }
         if (show_composite_editor) {
             ImGui::PushFont(fonts.ui);
-            drawCompositeEditor(kWindowCompositeEditor, &show_composite_editor, state);
+            // ARCH-Z2：每帧构建一次渲染只读视图（只存引用、零拷贝；对称 ReadOnlyView）
+            const CeReadOnlyView ce_view(ceSession().model(), ceSession().selection(),
+                                         ceSession().run_snapshot, config);
+            drawCompositeEditor(kWindowCompositeEditor, &show_composite_editor, ce_view, state);
             ImGui::PopFont();
         }
-        if (!compositeEditorState().active) {
+        if (!ceSession().active) {
             show_composite_editor = false; // 会话关闭 → 隐藏窗口
         }
         drawCompositeDialogs(state);

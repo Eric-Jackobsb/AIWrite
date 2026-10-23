@@ -295,8 +295,7 @@ void drawNodeLibrary(const char* title, bool* open, EditorController& editor)
         ImGui::Spacing();
         if (ImGui::Button("删除", ImVec2(90.0f, 0.0f))) {
             // 目标节点正被编辑器打开 → 先强制关闭编辑器（§9.1②）
-            if (compositeEditorState().active &&
-                compositeEditorState().working.id == lib.delete_pending) {
+            if (ceSession().active && ceSession().model().spec().id == lib.delete_pending) {
                 compositeEditorForceClose();
             }
             std::string error;

@@ -20,7 +20,6 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
-#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -31,69 +30,44 @@ namespace ed = ax::NodeEditor;
 // ==================================================== 编辑器窗口 ============
 namespace {
 
-// 规格标记面板里的显示名编辑缓冲（key = 节点id + "|" + 端口id）
-std::map<std::string, std::array<char, 128>>& ce_name_buffers()
-{
-    static std::map<std::string, std::array<char, 128>> buffers;
-    return buffers;
-}
-
-std::array<char, 128>& ce_name_buffer(const std::string& key, const std::string& initial)
-{
-    auto& buffers = ce_name_buffers();
-    auto  it      = buffers.find(key);
-    if (it == buffers.end()) {
-        std::array<char, 128> buf{};
-        const std::size_t     n = std::min<std::size_t>(initial.size(), buf.size() - 1);
-        initial.copy(buf.data(), n);
-        buf[n] = '\0';
-        it     = buffers.emplace(key, std::move(buf)).first;
-    }
-    return it->second;
-}
-
-
 // ------------------------------------------------------- ce 交互回调组 ------
 // ARCH-E5：ce 画布与主画布共用 interactor（双画布单套交互）；模型差异
-//（图源 = working.internal_graph / 无替换连线语义 / 局部单选）经回调注入。
-// on_selection 需捕获 draw 内局部 ce_selected_node，由 drawCompositeEditor 在
-// 核心之上补充（本函数不含选中同步回调）。
+//（图源 = model().graph() / 无替换连线语义 / 局部单选）经回调注入。
+// ARCH-Z2：规格标记显示名缓冲已收进 `CeSpec`（原 `ce_name_buffers()` 函数内 static 移除）。
 CanvasInteract ceInteractCore()
 {
     CanvasInteract interact;
 
     interact.resolve_pin = [](ed::PinId start_pin, ed::PinId end_pin, PinRef& from, PinRef& to) {
-        const engine::Graph& graph = compositeEditorState().working.internal_graph;
+        const engine::Graph& graph = ceSession().model().graph();
         from = resolvePin(start_pin, graph);
         to   = resolvePin(end_pin, graph);
         return from.valid && to.valid;
     };
     interact.can_connect = [](const PinRef& from, const PinRef& to, std::string& reason,
                               bool& would_replace) {
-        CompositeEditorState& state = compositeEditorState();
         would_replace = false; // ce 内部图无替换语义（与主画布 canConnect 差异点）
-        return state.working.internal_graph.canConnect(from.node_id, from.port_id, to.node_id,
-                                                       to.port_id, &reason);
+        return ceSession().model().graph().canConnect(from.node_id, from.port_id, to.node_id,
+                                                      to.port_id, &reason);
     };
     interact.on_link_accepted = [](const PinRef& from, const PinRef& to, bool) {
-        CompositeEditorState& state = compositeEditorState();
-        compositeEditorSnapshot("添加内部连线");
+        ceSession().snapshot("添加内部连线");
         std::string add_error;
         composite_editor_add_edge(from.node_id, from.port_id, to.node_id, to.port_id, &add_error);
         if (!add_error.empty()) {
-            state.error = add_error;
+            ceSession().error = add_error;
         }
     };
     interact.on_link_rejected = [](const std::string& reason) {
-        compositeEditorState().error = reason;
+        ceSession().error = reason;
     };
     // on_create_tip：ce 无拖拽连线提示（保持两画布差异；主画布有 L3-09）
-    interact.on_delete_batch = [](const std::string& label) { compositeEditorSnapshot(label); };
+    interact.on_delete_batch = [](const std::string& label) { ceSession().snapshot(label); };
     interact.delete_link = [](const std::string& link_id) {
-        compositeEditorState().working.internal_graph.removeEdge(link_id);
+        ceSession().model().graph().removeEdge(link_id);
     };
     interact.delete_node = [](const std::string& node_id) {
-        ceRemoveNode(compositeEditorState(), node_id);
+        ceRemoveNode(node_id);
     };
     return interact;
 }
@@ -142,22 +116,23 @@ bool compositeEditorWindowFocused()
 // 保存成功/失败路径与「保存」按钮完全一致 —— 现在两者都经
 // dispatchCommand(AppCommand::CompositeSave) 同一实现。
 
-void drawCompositeEditor(const char* title, bool* open, EditorController& editor)
+void drawCompositeEditor(const char* title, bool* open, const CeReadOnlyView& view,
+                         EditorController& editor)
 {
     // ARCH-R4：ce 窗口聚焦/悬停（主循环判断 Ctrl+S 作用域归属）。每帧在 ce 窗口
     // 上下文内更新；未进入窗口绘制（ce 未打开/折叠）时保持 false → Ctrl+S 归主窗口。
     ceUiState().window_focused = false;
 
-    CompositeEditorState& state = compositeEditorState();
-    if (!state.active) {
+    CeSession& session = ceSession();
+    if (!session.active) {
         return;
     }
     compositeEditorTickRun(); // 试运行：泵事件 → 回写内部节点状态/结果（窗口隐藏也继续推进）
     // 点窗口 X 关闭：有未保存更改则拦截并弹确认
     if (open != nullptr && !*open) {
-        if (state.dirty) {
-            *open            = true;
-            state.ask_close  = true;
+        if (view.dirty()) {
+            *open           = true;
+            session.ask_close = true;
         }
         else {
             compositeEditorForceClose();
@@ -166,8 +141,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
     }
 
     // 名称/描述输入缓冲同步到工作副本（结构类修改才进撤销栈）
-    state.working.name        = state.name_buf.data();
-    state.working.description = state.desc_buf.data();
+    session.syncNameBuffers();
 
     ImGui::SetNextWindowSize(ImVec2(1000.0f, 640.0f), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin(title, open)) {
@@ -179,9 +153,9 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
 
     // ---- 顶栏 ----
     ImGui::SetNextItemWidth(200.0f);
-    ImGui::InputText("名称", state.name_buf.data(), state.name_buf.size());
+    ImGui::InputText("名称", session.name_buf.data(), session.name_buf.size());
     ImGui::SameLine();
-    ImGui::TextDisabled("id: %s", state.working.id.c_str());
+    ImGui::TextDisabled("id: %s", view.id().c_str());
     ImGui::SameLine();
     if (ImGui::Button("撤销")) {
         compositeEditorUndoOnce();
@@ -209,14 +183,14 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
     }
     ImGui::SameLine();
     // 试运行「执行连线」：与主画布同机制执行内部图（暴露输入自动接测试源）
-    if (!state.run_active) {
+    if (!session.run_active) {
         if (ImGui::Button("执行连线")) {
             std::string run_error;
             if (compositeEditorStartRun(&run_error, editor)) {
-                state.error.clear();
+                session.error.clear();
             }
             else {
-                state.error = run_error;
+                session.error = run_error;
                 log::warn("[上级节点] 试运行启动失败: " + run_error);
             }
         }
@@ -228,7 +202,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
     else {
         if (ImGui::Button("停止")) {
             compositeEditorStopRun();
-            state.run_status = "试运行已停止";
+            session.run_status = "试运行已停止";
         }
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.29f, 0.56f, 0.89f, 1.0f), "试运行中…");
@@ -243,27 +217,27 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         compositeEditorRequestClose();
     }
     ImGui::SameLine();
-    ImGui::TextDisabled(state.dirty ? "● 有未保存更改" : "已保存");
-    if (!state.run_status.empty()) {
+    ImGui::TextDisabled(view.dirty() ? "● 有未保存更改" : "已保存");
+    if (!session.run_status.empty()) {
         ImGui::SameLine();
-        ImGui::TextDisabled("%s", state.run_status.c_str());
+        ImGui::TextDisabled("%s", session.run_status.c_str());
     }
     ImGui::SetNextItemWidth(-1.0f);
-    ImGui::InputText("描述", state.desc_buf.data(), state.desc_buf.size());
-    if (!state.error.empty()) {
-        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "%s", state.error.c_str());
+    ImGui::InputText("描述", session.desc_buf.data(), session.desc_buf.size());
+    if (!session.error.empty()) {
+        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f), "%s", session.error.c_str());
     }
     ImGui::Separator();
 
     // ---- 主体布局：左侧画布 + 右侧规格面板 ----
     const float spec_panel_w = 320.0f;
-    std::string ce_selected_node; // PS-09-G1：本帧选中的内部节点（单选），供右侧参数编辑区使用
-    // ARCH-E5：ce 画布交互回调组（核心 + 选中同步；on_selection 捕获本帧局部单选）
+    // ARCH-E5：ce 画布交互回调组（核心 + 选中同步）
+    // ARCH-Z2：选中落点 = CeSelection（对称 SelectionState；原为本帧局部 ce_selected_node）
     CanvasInteract ce_interact = ceInteractCore();
-    ce_interact.on_selection = [&ce_selected_node](const std::vector<std::string>& node_ids,
-                                                   const std::vector<std::string>&) {
+    ce_interact.on_selection   = [](const std::vector<std::string>& node_ids,
+                                  const std::vector<std::string>&) {
         // PS-09-G1：单选 → 右侧「参数编辑」区显示该节点参数（ce 独立选中，不互通主画布）
-        ce_selected_node = (node_ids.size() == 1) ? node_ids.front() : std::string();
+        ceSession().selection().sync(node_ids);
     };
     ImGui::BeginChild("##ce_canvas_host",
                       ImVec2(ImGui::GetContentRegionAvail().x - spec_panel_w, 0.0f));
@@ -271,8 +245,8 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         ensureCeContext();
         ed::SetCurrentEditor(ceUiState().context);
 
-        // 位置同步：新建节点落到 working 记录坐标
-        for (const engine::Node& n : state.working.internal_graph.nodes) {
+        // 位置同步：新建节点落到工作副本记录坐标
+        for (const engine::Node& n : view.nodes_for_render()) {
             interactorPushNodePosition(n.id, n.x, n.y);
         }
 
@@ -291,9 +265,9 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         //   —— 运行读模型 = composite_editor_run_snapshot()（试运行结果摘要）
         //   —— 内容宽度 = 共享 update_content_width 动态宽度（原固定 160px → 与主画布同款自适应）
         CanvasContext ce_ctx;
-        ce_ctx.graph        = &state.working.internal_graph;
+        ce_ctx.graph        = &view.graph(); // ARCH-Z2：渲染只读视图（零拷贝）
         ce_ctx.theme        = &canvasThemeComposite();
-        ce_ctx.run_snapshot = []() -> const engine::RunSnapshot& { return compositeEditorRunSnapshot(); };
+        ce_ctx.run_snapshot = [&view]() -> const engine::RunSnapshot& { return view.snapshot; };
         ce_ctx.textures     = &editor.textures(); // ARCH-A6：卡片缩略图（与主画布共用同一缓存）
         // 内联文本编辑（CEA）：TextInput 节点的「文本内容」直接在卡片上编辑（主画布保持只读预览）。
         // 写回工作副本 + 标脏；编辑开始压「修改前」快照 → 可撤销（与右侧参数编辑区同语义）。
@@ -303,21 +277,21 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         };
         ce_ctx.on_param_edit_commit = [](const std::string& node_id, const std::string& param_id,
                                          const std::string& value) {
-            CompositeEditorState& st = compositeEditorState();
-            if (engine::Node* node = st.working.internal_graph.findNode(node_id)) {
+            CeSession& session_w = ceSession();
+            if (engine::Node* node = session_w.model().graph().findNode(node_id)) {
                 if (engine::Param* param = node->findParam(param_id)) {
                     param->value = value; // ParamType::Text → 字符串直接写回
-                    st.dirty    = true;
+                    session_w.model().markDirty();
                 }
             }
         };
-        updateContentWidth(state.working.internal_graph, ce_ctx);
-        for (const engine::Node& n : state.working.internal_graph.nodes) {
+        updateContentWidth(view.graph(), ce_ctx);
+        for (const engine::Node& n : view.nodes_for_render()) {
             drawNodeBody(ce_ctx, n);
         }
-        for (const engine::Edge& e : state.working.internal_graph.edges) {
-            const engine::Node* from = state.working.internal_graph.findNode(e.from_node);
-            const engine::Node* to   = state.working.internal_graph.findNode(e.to_node);
+        for (const engine::Edge& e : view.edges_for_render()) {
+            const engine::Node* from = view.find_node(e.from_node);
+            const engine::Node* to   = view.find_node(e.to_node);
             if (from == nullptr || to == nullptr) {
                 continue;
             }
@@ -454,22 +428,23 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         ed::Resume();
 
         // G5/G7：拖动中的对齐吸附（辅助线）+ 网格 16px 吸附
-        const SnapResult ce_snap = ceApplySnap(state.working.internal_graph);
+        const SnapResult ce_snap = ceApplySnap(view.graph());
 
         // 位置写回（有变化才标记 dirty；ARCH-E5：读回经 interactorReadNodePosition，
         // 0.0f clamp = 不夹紧（保持 ce 原语义）、0.0f epsilon = 任何变化都写回）
-        for (engine::Node& n : state.working.internal_graph.nodes) {
+        // 写路径：经 model().graph()（渲染读仍走 view）
+        for (engine::Node& n : session.model().graph().nodes) {
             const PositionRead p = interactorReadNodePosition(n.id, n.x, n.y, 0.0f, 0.0f);
             if (p.changed && p.editor_knows) {
-                n.x         = p.x;
-                n.y         = p.y;
-                state.dirty = true;
+                n.x = p.x;
+                n.y = p.y;
+                session.model().markDirty();
             }
         }
 
         // PS-09-G1：同步内部节点选中（单选 → 右侧「参数编辑」区显示该节点参数；
-        // ARCH-E5：ed 选中读取经 interactorSyncSelection，单选落点 = ce_interact.on_selection）
-        ce_selected_node.clear();
+        // ARCH-E5：ed 选中读取经 interactorSyncSelection，落点 = CeSelection）
+        session.selection().clear();
         interactorSyncSelection(ce_interact);
 
         // ARCH-R4：Delete / Ctrl+S 统一走命令路由层（快捷键表 + dispatchCommand）。
@@ -495,7 +470,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         // CLN-10/09：辅助线与小地图上移共享（draw_snap_lines / draw_minimap），
         // 主题用 canvas_theme_composite()、节点块色固定蓝紫（保留两画布差异）。
         drawSnapLines(ce_snap, ImGui::GetWindowDrawList(), IM_COL32(200, 80, 220, 255), 1.0f);
-        draw_minimap(state.working.internal_graph, canvasThemeComposite(), ceUiState().show_minimap,
+        draw_minimap(view.graph(), canvasThemeComposite(), ceUiState().show_minimap,
                      ceUiState().minimap, [](const engine::Node&) { return IM_COL32(190, 195, 220, 200); });
         if (!ceUiState().show_grid) {
             ed::PopStyleColor(); // 与 ed::Begin 后的 PushStyleColor 配对（主画布同款：ed::End 后 Pop）
@@ -514,42 +489,24 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         ImGui::TextDisabled("勾选端口/参数，即暴露到上级节点外部");
         ImGui::Separator();
 
-        if (state.working.internal_graph.nodes.empty()) {
+        if (view.nodes_for_render().empty()) {
             ImGui::TextWrapped("内部图为空：右键画布添加内部节点。");
         }
 
-        for (engine::Node& node : state.working.internal_graph.nodes) {
+        // 渲染读走 view（ARCH-Z2 判据 7）；标记写走 ceSession().spec_marks()（单一实现）
+        for (const engine::Node& node : view.nodes_for_render()) {
             ImGui::PushID(node.id.c_str());
             const std::string header = node.title + "（" + node.id + "）";
             if (ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
                 // 输入 → 对外输入（有内部入边的端口不允许标记）
-                for (engine::Port& port : node.inputs) {
+                for (const engine::Port& port : node.inputs) {
                     const bool has_internal_in =
-                        state.working.internal_graph.findEdgeIntoInput(node.id, port.id) != nullptr;
-                    bool exposed = false;
-                    for (const engine::CompositePortRef& ref : state.working.inputs) {
-                        if (ref.internal_node == node.id && ref.internal_port == port.id) {
-                            exposed = true;
-                        }
-                    }
+                        view.graph().findEdgeIntoInput(node.id, port.id) != nullptr;
+                    bool exposed = ceSession().spec_marks().has_input(node.id, port.id);
                     ImGui::PushID(("in" + port.id).c_str());
                     if (ImGui::Checkbox("对外输入", &exposed)) {
                         compositeEditorSnapshot("标记对外输入 " + port.id);
-                        state.working.inputs.erase(
-                            std::remove_if(state.working.inputs.begin(), state.working.inputs.end(),
-                                           [&node, &port](const engine::CompositePortRef& r) {
-                                               return r.internal_node == node.id &&
-                                                      r.internal_port == port.id;
-                                           }),
-                            state.working.inputs.end());
-                        if (exposed) {
-                            engine::CompositePortRef ref;
-                            ref.internal_node = node.id;
-                            ref.internal_port = port.id;
-                            ref.display_name  = port.display_name;
-                            ref.type          = port.type;
-                            state.working.inputs.push_back(std::move(ref));
-                        }
+                        ceSession().spec_marks().toggle_input(node.id, port.id, exposed);
                     }
                     ImGui::SameLine();
                     ImGui::TextDisabled("%s%s", port.display_name.c_str(),
@@ -558,24 +515,13 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
                 }
 
                 // 输出 → 对外输出（单选）
-                for (engine::Port& port : node.outputs) {
-                    bool selected = false;
-                    for (const engine::CompositePortRef& ref : state.working.outputs) {
-                        if (ref.internal_node == node.id && ref.internal_port == port.id) {
-                            selected = true;
-                        }
-                    }
+                for (const engine::Port& port : node.outputs) {
+                    const bool selected = ceSession().spec_marks().has_output(node.id, port.id);
                     ImGui::PushID(("out" + port.id).c_str());
                     if (ImGui::RadioButton("对外输出", selected)) {
                         if (!selected) {
                             compositeEditorSnapshot("标记对外输出 " + port.id);
-                            state.working.outputs.clear();
-                            engine::CompositePortRef ref;
-                            ref.internal_node = node.id;
-                            ref.internal_port = port.id;
-                            ref.display_name  = port.display_name;
-                            ref.type          = port.type;
-                            state.working.outputs.push_back(std::move(ref));
+                            ceSession().spec_marks().set_output(node.id, port.id);
                         }
                     }
                     ImGui::SameLine();
@@ -584,43 +530,19 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
                 }
                 // 参数 → 暴露（外部参数 id 唯一：同一 param_id 只能暴露一次；冲突项禁勾选并提示，
                 // 避免「勾选后又被静默取消」——与 validate_composite_spec 的全局唯一校验同口径）
-                for (engine::Param& param : node.params) {
-                    bool exposed = false;
-                    for (const engine::CompositeParamRef& ref : state.working.exposed_params) {
-                        if (ref.internal_node == node.id && ref.param_id == param.id) {
-                            exposed = true;
-                        }
-                    }
+                for (const engine::Param& param : node.params) {
+                    bool exposed = ceSession().spec_marks().has_exposed(node.id, param.id);
                     // 唯一性冲突：该 param_id 已被**其它**内部节点暴露（外部实例参数 id 会撞车）
                     const bool id_conflict =
-                        !exposed &&
-                        std::any_of(state.working.exposed_params.begin(),
-                                    state.working.exposed_params.end(),
-                                    [&node, &param](const engine::CompositeParamRef& r) {
-                                        return r.param_id == param.id && r.internal_node != node.id;
-                                    });
+                        !exposed && ceSession().spec_marks().param_id_conflict(node.id, param.id);
                     ImGui::PushID(("p" + param.id).c_str());
                     if (id_conflict) {
                         ImGui::BeginDisabled();
                     }
                     if (ImGui::Checkbox("暴露参数", &exposed)) {
                         compositeEditorSnapshot("切换暴露参数 " + param.id);
-                        state.working.exposed_params.erase(
-                            std::remove_if(state.working.exposed_params.begin(),
-                                           state.working.exposed_params.end(),
-                                           [&node, &param](const engine::CompositeParamRef& r) {
-                                               return r.internal_node == node.id &&
-                                                      r.param_id == param.id;
-                                           }),
-                            state.working.exposed_params.end());
-                        if (exposed) {
-                            // 冲突项已禁用，到不了这里；其余场景无同 id 冲突，直接入列
-                            engine::CompositeParamRef ref;
-                            ref.internal_node = node.id;
-                            ref.param_id      = param.id;
-                            ref.display_name  = param.display_name;
-                            state.working.exposed_params.push_back(std::move(ref));
-                        }
+                        // 冲突项已禁用，到不了这里；其余场景无同 id 冲突
+                        ceSession().spec_marks().toggle_exposed(node.id, param.id, exposed);
                     }
                     if (id_conflict) {
                         ImGui::EndDisabled();
@@ -642,30 +564,32 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
             ImGui::PopID();
         }
 
-        // 外部显示名编辑（输入/输出端口）
+        // 外部显示名编辑（输入/输出端口）—— 写路径经 CeSpec（缓冲 + 写回单一实现）
         ImGui::Separator();
         ImGui::TextDisabled("外部显示名（可改）");
-        for (engine::CompositePortRef& ref : state.working.inputs) {
-            const std::string key = ref.internal_node + "|" + ref.internal_port + "|in";
-            std::array<char, 128>& buf = ce_name_buffer(key, ref.display_name);
+        for (engine::CompositePortRef& ref : ceSession().model().spec().inputs) {
+            const std::string      key = ref.internal_node + "|" + ref.internal_port + "|in";
+            std::array<char, 128>& buf = ceSession().spec_marks().name_buffer(key, ref.display_name);
             ImGui::PushID(key.c_str());
             if (ImGui::InputText("##dn", buf.data(), buf.size())) {
-                ref.display_name = buf.data();
-                state.dirty      = true;
+                ceSession().spec_marks().set_input_display_name(ref.internal_node, ref.internal_port,
+                                                                buf.data());
+                ceSession().model().markDirty();
             }
             ImGui::PopID();
         }
-        for (engine::CompositePortRef& ref : state.working.outputs) {
-            const std::string key = ref.internal_node + "|" + ref.internal_port + "|out";
-            std::array<char, 128>& buf = ce_name_buffer(key, ref.display_name);
+        for (engine::CompositePortRef& ref : ceSession().model().spec().outputs) {
+            const std::string      key = ref.internal_node + "|" + ref.internal_port + "|out";
+            std::array<char, 128>& buf = ceSession().spec_marks().name_buffer(key, ref.display_name);
             ImGui::PushID(key.c_str());
             if (ImGui::InputText("##dn", buf.data(), buf.size())) {
-                ref.display_name = buf.data();
-                state.dirty      = true;
+                ceSession().spec_marks().set_output_display_name(ref.internal_node,
+                                                                 ref.internal_port, buf.data());
+                ceSession().model().markDirty();
             }
             ImGui::PopID();
         }
-        if (state.working.inputs.empty() && state.working.outputs.empty()) {
+        if (ceSession().model().spec().inputs.empty() && ceSession().model().spec().outputs.empty()) {
             ImGui::TextDisabled("（尚无对外端口）");
         }
 
@@ -673,11 +597,13 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         ImGui::Separator();
         ImGui::TextColored(ImVec4(0.75f, 0.9f, 0.7f, 1.0f), "参数编辑");
         ImGui::TextDisabled("在画布中单击一个内部节点，在此编辑其参数值。");
-        if (ce_selected_node.empty()) {
+        const std::string& ce_selected_id = view.selection.single(); // ARCH-Z2：选中来自 CeSelection
+        if (ce_selected_id.empty()) {
             ImGui::TextDisabled("（未选中节点）");
         }
         else {
-            engine::Node* sel = state.working.internal_graph.findNode(ce_selected_node);
+            // 写路径：参数控件直接写回工作副本（渲染读仍走 view）
+            engine::Node* sel = session.model().graph().findNode(ce_selected_id);
             if (sel == nullptr) {
                 ImGui::TextDisabled("（选中节点不存在）");
             }
@@ -702,7 +628,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
                         compositeEditorSnapshot("修改内部节点参数 " + sel->id + "." + param.id);
                     }
                     if (param_change) {
-                        state.dirty = true; // 参数值已写回工作副本（ce_push_snapshot 亦置 dirty）
+                        session.model().markDirty(); // 参数值已写回工作副本（cePushSnapshot 亦置 dirty）
                     }
                     ImGui::Spacing();
                 }
@@ -713,15 +639,15 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
 
 
     // ---- 关闭确认弹窗 ----
-    if (state.ask_close) {
+    if (session.ask_close) {
         ImGui::OpenPopup("##ce_close_confirm");
-        state.ask_close = false;
+        session.ask_close = false;
     }
     if (ImGui::BeginPopupModal("未保存的更改", nullptr,
                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
-        ImGui::TextWrapped("上级节点「%s」有未保存的更改。", state.working.name.c_str());
+        ImGui::TextWrapped("上级节点「%s」有未保存的更改。", view.name().c_str());
         ImGui::Spacing();
-        bool closed = false;
+        bool closed  = false;
         bool discard = false;
         if (ImGui::Button("保存并关闭", ImVec2(120.0f, 0.0f))) {
             std::string error;
@@ -729,7 +655,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
                 closed = true;
             }
             else {
-                state.error = error;
+                session.error = error;
             }
         }
         ImGui::SameLine();
@@ -744,7 +670,7 @@ void drawCompositeEditor(const char* title, bool* open, EditorController& editor
         if (closed) {
             ImGui::CloseCurrentPopup();
         }
-        if (closed && (discard || !state.dirty)) {
+        if (closed && (discard || !view.dirty())) {
             // 放弃：直接关闭会话；保存成功：会话已不脏
             compositeEditorForceClose();
             if (open != nullptr) {
@@ -903,7 +829,7 @@ void compositePackDialog(EditorController& editor)
             std::snprintf(dlg.pack_name, sizeof(dlg.pack_name), "组合节点");
         }
         else {
-            compositeEditorState().error = "请先在画布上选中至少 2 个节点再打包";
+            ceSession().error = "请先在画布上选中至少 2 个节点再打包";
             dlg.pack_open             = false;
         }
     }

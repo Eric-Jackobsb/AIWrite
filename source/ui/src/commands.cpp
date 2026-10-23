@@ -99,7 +99,7 @@ void dispatchCommand(AppCommand cmd, const CommandContext& ctx)
     case AppCommand::CompositeOpenEditor:
         // 一律走文件路径：弹新建对话框 → 落盘空白规格 JSON → 打开编辑器读取
         // （不直接创建无文件支撑的内存会话，避免依赖 imgui-node-editor 上下文时序）
-        if (!compositeEditorState().active) {
+        if (!ceSession().active) {
             compositeNewDialog(state);
         }
         break;
@@ -107,8 +107,8 @@ void dispatchCommand(AppCommand cmd, const CommandContext& ctx)
         // 与 ce 顶栏「保存」按钮完全同一路径（DEBT-B1：Ctrl+S 与保存按钮一致）
         std::string error;
         if (compositeEditorSave(&error, state)) {
-            log::info("[上级节点] 已保存 " + compositeEditorState().working.id + "（" +
-                      compositeEditorState().working.name + "）");
+            log::info("[上级节点] 已保存 " + ceSession().model().spec().id + "（" +
+                      ceSession().model().spec().name + "）");
         }
         else {
             log::warn("[上级节点] 保存失败: " + error);

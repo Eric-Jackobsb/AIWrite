@@ -1,93 +1,57 @@
 #include "composite_editor.h"
 #include "ce_internal.h"
+#include "ce_session.h"
 
+#include <array>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace aiwrite::ui {
 
-CompositeEditorState& compositeEditorState()
-{
-    static CompositeEditorState state;
-    return state;
-}
-
-// ---- 跨帧状态容器（ARCH-A5：原 g_ce_* 全局的唯一定义点）----
-// 规则 6：跨帧可变状态必须是对象成员 —— 撤销栈 / 画布状态全部落在 CeUiState 上。
-// 这里的函数级 static 就是承载它们的对象；命名空间作用域不再有可变变量。
+// ======================================================= 画布域状态容器 ====
+// ARCH-A5：原 12 条跨 TU extern（g_ce_*）收进本对象；ARCH-Z2：撤销栈已迁至 CeModel
+//（对称 WorkflowModel.undo），本对象只剩**画布域**状态。
+// 规则 6：跨帧可变状态必须是对象成员 —— 这里的函数级 static 就是承载它的对象；
+// 命名空间作用域不再有可变变量。
 CeUiState& ceUiState()
 {
     static CeUiState state;
     return state;
 }
 
-// ---- 本地撤销（快照整份 CompositeSpec，深度 30）----
-// 撤销栈挂 ceUiState().undo / .redo（ce_session.cpp 的 open / force_close 清栈）。
-namespace {
-constexpr std::size_t kCeUndoDepth = 30;
-} // namespace
-
-// cePushSnapshot（跨 TU：ce_session / ce_draw 调用；ce_internal.h 声明）
+// ------------------------------------------------------------ 撤销域 ----
+// 快照栈本体在 CeModel（ce_model.cpp）；本文件只保留跨 TU / 对外 API 的薄转发。
 void cePushSnapshot(const std::string& label)
 {
-    CeUiState& ui = ceUiState();
-    CeUndoEntry entry;
-    entry.spec  = compositeEditorState().working;
-    entry.label = label;
-    ui.undo.push_back(std::move(entry));
-    if (ui.undo.size() > kCeUndoDepth) {
-        ui.undo.erase(ui.undo.begin());
-    }
-    ui.redo.clear();
-    compositeEditorState().dirty = true;
+    ceSession().snapshot(label);
 }
 
-namespace {
-
-void ce_undo()
+// 编辑器内撤销/重做（窗口按钮 / 命令路由层调用；error 随撤销清空，与原语义一致）
+bool compositeEditorCanUndo()
 {
-    CeUiState&            ui    = ceUiState();
-    CompositeEditorState& state = compositeEditorState();
-    if (ui.undo.empty()) {
-        return;
-    }
-    CeUndoEntry entry = ui.undo.back();
-    ui.undo.pop_back();
-
-    CeUndoEntry current;
-    current.spec  = state.working;
-    current.label = entry.label;
-    ui.redo.push_back(std::move(current));
-
-    state.working = std::move(entry.spec);
-    state.error.clear();
+    return ceSession().model().canUndo();
 }
 
-void ce_redo()
+bool compositeEditorCanRedo()
 {
-    CeUiState&            ui    = ceUiState();
-    CompositeEditorState& state = compositeEditorState();
-    if (ui.redo.empty()) {
-        return;
-    }
-    CeUndoEntry entry = ui.redo.back();
-    ui.redo.pop_back();
-
-    CeUndoEntry current;
-    current.spec  = state.working;
-    current.label = entry.label;
-    ui.undo.push_back(std::move(current));
-
-    state.working = std::move(entry.spec);
-    state.error.clear();
+    return ceSession().model().canRedo();
 }
 
-} // namespace
+void compositeEditorUndoOnce()
+{
+    CeSession& session = ceSession();
+    if (session.model().undoOnce()) {
+        session.error.clear();
+    }
+}
 
-// 编辑器内撤销/重做（供窗口按钮调用）
-bool compositeEditorCanUndo() { return !ceUiState().undo.empty(); }
-bool compositeEditorCanRedo() { return !ceUiState().redo.empty(); }
-void compositeEditorUndoOnce() { ce_undo(); }
-void compositeEditorRedoOnce() { ce_redo(); }
+void compositeEditorRedoOnce()
+{
+    CeSession& session = ceSession();
+    if (session.model().redoOnce()) {
+        session.error.clear();
+    }
+}
 
 } // namespace aiwrite::ui

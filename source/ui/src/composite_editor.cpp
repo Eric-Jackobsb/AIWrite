@@ -68,8 +68,7 @@ void ceOpenRename(const std::string& node_id)
 {
     CeUiState&          ui = ceUiState();
     ui.rename_id           = node_id;
-    const engine::Node* node =
-        compositeEditorState().working.internal_graph.findNode(node_id);
+    const engine::Node* node = ceSession().model().graph().findNode(node_id);
     const std::string& title = (node != nullptr) ? node->title : std::string();
     const std::size_t  n     = std::min<std::size_t>(title.size(), ui.rename_buf.size() - 1);
     title.copy(ui.rename_buf.data(), n);
@@ -80,12 +79,12 @@ void ceOpenRename(const std::string& node_id)
 // 应用改名（先压快照再改值；可撤销）
 void ceApplyRename()
 {
-    CeUiState&            ui    = ceUiState();
-    CompositeEditorState& state = compositeEditorState();
-    engine::Node* node = state.working.internal_graph.findNode(ui.rename_id);
+    CeUiState& ui      = ceUiState();
+    CeSession& session = ceSession();
+    engine::Node* node = session.model().graph().findNode(ui.rename_id);
     const std::string  new_title(ui.rename_buf.data());
     if (node != nullptr && new_title != node->title) {
-        compositeEditorSnapshot("重命名内部节点 " + ui.rename_id);
+        session.snapshot("重命名内部节点 " + ui.rename_id);
         node->title = new_title;
     }
     ui.rename_id.clear();

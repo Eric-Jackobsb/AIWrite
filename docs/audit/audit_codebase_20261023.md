@@ -3,30 +3,30 @@
 > 日期：2026-10-23 · 触发：用户「现在重构还有没做的部分吗？如果全部完成……再审计一遍代码风险和重复度」
 > 范围：`source/` 全部自有代码（`ui/` `app/` `engine/` `nodes/` `ai/` `web/` `utils/` `tools/`），排除 `third_party/`（61 文件 / 76,007 行）与 `source/python/`
 > 方法：① 进度核对（[refactor/ARCHITECTURE.md](../refactor/ARCHITECTURE.md) §3 / §4 逐条对照）② `check_all` 21 项门禁实测 ③ **克隆检测**（自写窗口哈希扫描器，K=6 有意义行 / 最大延伸 / 禁止自重叠，`28976` 有意义行 / `28971` 窗口）④ 风险面 grep 取证（静态存储期 / 内存 / 并发 / 危险 API / 文件体量）
-> 结论一句话：**重构 17/19 批（A6 / A7 已于同日落地，见 [audit_arch_a6.md](audit_arch_a6.md) · [audit_arch_a7.md](audit_arch_a7.md)），验收 8 条判据 **7 ✅ + 1 🟡（判据 7 待 Z2）**；代码重复度 3.8 %（可接受，但 ai/web 有结构性重复）；P0 风险只剩一类，挂在未完成的 Z2/Z1 上。**
+> 结论一句话：**重构 18/19 批（A6 / A7 已于同日落地，见 [audit_arch_a6.md](audit_arch_a6.md) · [audit_arch_a7.md](audit_arch_a7.md)；Z2 已落地，见 [audit_arch_z2.md](audit_arch_z2.md)），验收 8 条判据 **8 ✅**（判据 7 已由 Z2 补齐）；代码重复度 3.8 %（可接受，但 ai/web 有结构性重复）；P0 风险只剩一类，挂在未完成的 Z1 上。**
 
 ---
 
-## §1 重构完成度：还剩 4 批
+## §1 重构完成度：还剩 1 批（Z1）
 
 | 阶段 | 批次 | 状态 | 说明 |
 |---|---|---|---|
 | 1 运行侧事件化 | R1 · R2 · R3 · R4 | ✅ 4/4 | RunSession · RunEvent 订阅 · ReadOnlyView · 命令路由 |
 | 2 编辑侧事件化 | E1 · E2 · E3 · E4 · E5 · E6 | ✅ 6/6 | EventBus · Undo/autosave 订阅 · WorkflowModel · SelectionState · CanvasInteractor · 打包下沉 |
 | 3 应用级收口 | A1 · A2 · A3 · A4 · A5 · **A6 · A7** | ✅ 7/7 | AppContext · AutosaveService · `editor()` 退场 · 依赖单向 · 全局变量断言 · **ui 60 条状态对象化** · **web/utils 27 条状态对象化 + 删基线切严格 0** |
-| 4 收尾 | **Z1 · Z2** | ⬜ **0/2**（A6 / A7 已从本阶段移出并落地） | 见 §2 |
+| 4 收尾 | ~~**Z2**~~ ✅ · **Z1** | 🟡 **1/2**（Z2 已落地 2026-10-23） | 见 §2 |
 
 **验收判据 8 条**（§4）实测状态：
 
 | # | 判据 | 状态 | 证据 |
 |---|---|---|---|
 | 1 | 行为等价（断言数 ≥ 现状 · selftest 0 失败） | ✅ | exec **713/0** · graph **151/0** · composite **112/0** · upload **72/0** · `--run-selftest` PASS · check_links **1889**（门槛 1730） |
-| 2 | 全局变量归零 | ✅ | **跨 TU `extern` = 0 · 文件级 static = 0 · R3 = 0（全库）** —— A5 清 `extern` 12 条 · A6 清 ui 60 条 · A7 清 web 15 + utils 12 条 ⇒ 存量 **113 → 0**；`check_all` 第 ⑦ 项改**严格零容忍**（基线文件已删除）+ 函数内 static 棘轮 51（只许减），实测 `201 文件 / 违规 0 / fn_static 51·51`（[audit_arch_a7.md](audit_arch_a7.md)） |
+| 2 | 全局变量归零 | ✅ | **跨 TU `extern` = 0 · 文件级 static = 0 · R3 = 0（全库）** —— A5 清 `extern` 12 条 · A6 清 ui 60 条 · A7 清 web 15 + utils 12 条 ⇒ 存量 **113 → 0**；`check_all` 第 ⑦ 项改**严格零容忍**（基线文件已删除）+ 函数内 static 棘轮（只许减；**Z2 后 51 → 50**），实测 `206 文件 / 违规 0 / fn_static 50·50`（[audit_arch_a7.md](audit_arch_a7.md) · [audit_arch_z2.md](audit_arch_z2.md)） |
 | 3 | 双画布单套交互 | ✅ | 关键谓词只在 `interactor.cpp`（E5） |
 | 4 | 打包-校验同源 | ✅ | `ce_pack.cpp` 零直写（E6） |
 | 5 | 依赖单向 | ✅ | `check_includes` 201 文件 / 656 行 / 违规 **0** |
 | 6 | `editor()` 退场 | ✅ | `rg` 全库 = 0（A3） |
-| 7 | ReadOnlyView 落地 | 🟡 | **仅主画布面板完成**；ce 侧仍直读对象（详 §3.2） |
+| 7 | ReadOnlyView 落地 | ✅ | **主画布侧 + ce 侧均完成**（Z2：`drawCompositeEditor(name, open, const CeReadOnlyView&, editor)` · `CompositeEditorState` 单例 → 5 对象 · 详 §3.2 / [audit_arch_z2.md](audit_arch_z2.md)） |
 | 8 | `AppContext` 运行时不可访问 | ✅ | UI 面板 0 处代码引用（A3） |
 
 ---
@@ -36,7 +36,7 @@
 | 批次 | 内容 | 量化 | 关键文件（条数） |
 |---|---|---|---|
 | ~~**ARCH-A6**~~ ✅ | ui 层文件级可变状态**逐文件对象化** | ~~60 条 / 7 文件~~ → **0** | 已落地 2026-10-23：`settings_panel` 19 → `SettingsPanelState` · `texture_cache` 12 → `class TextureCache` · `node_canvas` 11 → `NodeCanvasState` · `ce_draw` 7 → `CompositeDialogsState` · `node_library` 6 · `console_panel` 3 · `output_panel` 2（[audit_arch_a6.md](audit_arch_a6.md)） |
-| **ARCH-Z2** | `CeSession` 对称拆分（`CeModel` / `CeFile` / `CeSelection` / `CeSpec`）+ ce 渲染 ReadOnlyView 化 | ce 侧 **6 文件 / 1,514 行** | `ce_draw.cpp` 865 · `ce_run.cpp` 203 · `ce_session.cpp` 187 · `composite_editor.cpp` 139 · `ce_state.cpp` 77 · `ce_pack.cpp` 43 |
+| ~~**ARCH-Z2**~~ ✅ | `CeSession` 对称拆分（`CeModel` / `CeFile` / `CeSelection` / `CeSpec`）+ ce 渲染 ReadOnlyView 化 | ~~ce 侧 **6 文件 / 1,514 行**~~ → 已落地 2026-10-23 | `ce_draw` 846（读 `view` / 写 `session`）· `ce_run` 223 · `ce_session` 182 + 新增 `ce_model` 74 / `ce_spec` 191 / `ce_file` 98 / `ce_selection` 33 · `composite_editor` 162 · `ce_state` 57（[audit_arch_z2.md](audit_arch_z2.md)） |
 | ~~**ARCH-A7**~~ ✅ | web / utils 层 27 条 + **删基线、切严格零容忍** | ~~27 条 / 7 文件~~ → **0** | 已落地 2026-10-23：`webview_host` 8 → `WindowRegistry` + `EnvCache` + `tlsWindow()` · `diagnostics` 7 → `ExceptionCounter` · `pipe_client` 4 → `IpcCounters` + `IpcThreadCounters` · `pydoll_channel` 3 → `SessionState` · `log` 2 → `Loggers` · `config` 2 → `ConfigStore` · `credential` 1 → `AvailabilityCache`；基线文件删除 + 函数内 static 棘轮 41 → 51（[audit_arch_a7.md](audit_arch_a7.md)） |
 | **ARCH-Z1** | 超长文件瘦身（目标 <800 行） | **15 文件 >700 行**（其中 **14 >800**） | `webview_host.cpp` **3195** · `dom_web_client.cpp` **2301** · `provider_spec.cpp` **1609** · `app.cpp` **1321** · `pydoll_channel.cpp` 1188 · `local_nodes.cpp` 1175 · `composite.cpp` 1069 · `node_canvas.cpp` 1017 · `settings_panel.cpp` 893 · `ce_draw.cpp` 865 · `canvas_view.cpp` 844 · `node_registry.cpp` 841 · `property_panel.cpp` 807 · `executor.cpp` 805 · `image_decode.cpp` 705 |
 
@@ -57,12 +57,14 @@
 
 **判断**：这不是「洁癖债」。规则 6 的机器判据已能拦住**新增**（严格 0 + 棘轮超限 ⇒ exit 1）；**A6 已把 ui 层 60 条全部对象化、A7 已把 web/utils 27 条全部对象化（87 → 0）**，全库再无文件级可变状态，规则 6 在这里是**闭环**，不是口号。
 
-### 3.2 P0-② 判据 7 只覆盖一半：ce 侧渲染仍直读可变对象
+### 3.2 P0-② 判据 7 只覆盖一半：ce 侧渲染仍直读可变对象（**Z2 后已闭环 ✅**）
 
 - 已 `ReadOnlyView&` 化：`drawNodeCanvas` / `drawPropertyPanel` / `drawOutputPanel` / `app.cpp` 的 4 个文本函数。
-- 未覆盖：`ce_draw.cpp`（865 行）、`canvas_view.cpp`（844 行）、`settings_panel.cpp`（893 行）、`node_library.cpp`（334 行）—— ce 侧渲染直接读 `CompositeEditorState` / `CeUiState` / `Config` 的可变引用。
-- **后果**：ce 侧任一渲染改动仍可能顺手改状态（渲染与状态未解耦）；Z2 拆分 `CeSession` 前没有「只读视图」这层缓冲，拆分风险更高。
-- **对策**：Z2 与「ce 渲染 ReadOnlyView 化」同批做（同一改动面，等价证据靠 `ce_repro` 全帧对比）。
+- ~~未覆盖：`ce_draw.cpp`（865 行）、`canvas_view.cpp`（844 行）、`settings_panel.cpp`（893 行）、`node_library.cpp`（334 行）—— ce 侧渲染直接读 `CompositeEditorState` / `CeUiState` / `Config` 的可变引用。~~
+- **Z2 已落地（2026-10-23）**：`drawCompositeEditor(name, open, const CeReadOnlyView&, editor)` —— ce 绘制只经视图读（内部图 / 选中 / 运行快照 / 配置 / 规格 id·名称·dirty），
+  写路径仍走 `ceSession()`；`CompositeEditorState` 单例拆成 **5 对象**（`CeModel` / `CeFile` / `CeSelection` / `CeSpec` / `CeSession` · [refactor/ARCHITECTURE.md](../refactor/ARCHITECTURE.md) §1.8.15），
+  `rg "compositeEditorState\(" source/` 代码行 = **0**。等价证据 = `ce_repro` **ALL FRAMES OK（mode 0）** + 自检断言零升降（[audit_arch_z2.md](audit_arch_z2.md)）。
+- **残留（不属判据 7）**：`ce_draw.cpp` 仍 846 行（体量问题 → Z1）；`ceUiState()` / `Config` 仍是「画布瞬态 / 配置」的可变对象，绘制层经视图或会话读，不经 raw 引用。
 
 ### 3.3 P1 中等风险
 
@@ -123,7 +125,7 @@
 |---|---|---|
 | 1 | ~~**ARCH-A6**~~ ✅ 已落地（2026-10-23） | 60 条占存量 69 %，且 `node_canvas` 11 条 / `ce_draw` 7 条是 Z2 的直接依赖（先有对象、再拆分）—— 已按此顺序做完，Z2 的 `NodeCanvasState` / `CompositeDialogsState` 前置条件就位 |
 | 2 | ~~**ARCH-A7**~~ ✅ 已落地（2026-10-23） | 27 条 + **删基线切严格 0** ⇒ **判据 2 已由 🟡 转 ✅**；`check_globals` 现为零容忍 + 函数内 static 棘轮，规则 6 闭环（比原计划提前：A7 与 Z2 相互独立，先做短的立刻拿下一个 ✅） |
-| 3 | **ARCH-Z2** | 同时补齐**判据 7**（ce 渲染 ReadOnlyView 化）—— 与拆分同一改动面，`ce_repro` 全帧对比可作等价证据 |
+| 3 | ~~**ARCH-Z2**~~ ✅ 已落地（2026-10-23） | 同时补齐**判据 7**（ce 渲染 ReadOnlyView 化）—— 已按「与拆分同一改动面」落地：`CeReadOnlyView` + 5 对象拆分，**判据 7 由 🟡 转 ✅**，`ce_repro` 全帧 OK 作等价证据（[audit_arch_z2.md](audit_arch_z2.md)） |
 | 4 | **ARCH-Z1** | 15 个超长文件瘦身（先 `webview_host` / `dom_web_client` / `provider_spec`），顺带治 provider 骨架与平台样板重复 |
 | 5 | 复审 | 重跑本文 §1 / §4 两表 + `check_all` 21 项；重复率目标 **≤ 3.0 %**、判据 **8/8 ✅** |
 
@@ -135,7 +137,7 @@
 # 门禁（21 项 · 含构建）
 powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1
 
-# 全局变量（A7 后 = 严格零容忍 · 文件级 0 / 函数内 static 棘轮 51）
+# 全局变量（A7 后 = 严格零容忍 · 文件级 0 / 函数内 static 棘轮 **50**——Z2 从 51 下调）
 powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_globals.ps1
 # 函数内 static 按文件分布（棘轮参考清单）
 powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_globals.ps1 |

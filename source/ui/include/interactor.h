@@ -9,8 +9,8 @@
 //
 //  模型差异经「回调 + 参数」保留（ARCHITECTURE §5 风险对策：ce_draw 与
 //  node_canvas 交互差异比预想大 —— 主画布 = `EditorController::model().graph` +
-//  SelectionState（含替换连线语义）；ce = compositeEditorState().working.
-//  internal_graph + 局部单选，无替换）。
+//  SelectionState（含替换连线语义）；ce = `CeSession::model().graph()` +
+//  CeSelection（局部单选，无替换）。
 //
 //  imgui-node-editor 的交互 API 谓词（GetSelected* / BeginCreate / BeginDelete /
 //  QueryNewLink / AcceptNewItem / RejectNewItem / QueryDeleted* / AcceptDeletedItem /

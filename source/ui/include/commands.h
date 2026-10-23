@@ -70,7 +70,7 @@ enum class AppCommand {
 // 分发上下文：承载 app.cpp 主循环的**局部**状态（命令层无法直接访问的变量）
 //  * ARCH-A3：编辑器编排层经此**启动注入**（不再有全局编辑器单例）；
 //    editor == nullptr ⇒ 依赖编辑器的命令不可用（调用方必须传）
-//  * 对话框函数 / compositeEditorState() 等 ui 层接口命令层可直接调用，不进 ctx
+//  * 对话框函数 / ceSession() 等 ui 层接口命令层可直接调用，不进 ctx
 struct CommandContext {
     GLFWwindow*       window                  = nullptr; // Exit 用（nullptr = 禁用退出命令）
     bool*             request_first_run_guide = nullptr; // FirstRunGuide 用（nullptr = 禁用该命令）

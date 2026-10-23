@@ -376,8 +376,12 @@ add_executable(aiwrite WIN32
     ui/src/texture_cache.cpp
     ui/src/settings_panel.cpp
     ui/src/composite_editor.cpp  # CN：上级节点编辑器（CLN-13 拆分：画布/上下文/改名域）
-    ui/src/ce_state.cpp          # CLN-13 拆分（会话状态 + 撤销域）
-    ui/src/ce_session.cpp        # CLN-13 拆分（会话操作域）
+    ui/src/ce_state.cpp          # CLN-13 拆分（画布状态容器 + 撤销转发）
+    ui/src/ce_model.cpp          # ARCH-Z2 拆分（CeModel：规格工作副本 + 撤销栈）
+    ui/src/ce_selection.cpp      # ARCH-Z2 拆分（CeSelection：内部图选中）
+    ui/src/ce_spec.cpp           # ARCH-Z2 拆分（CeSpec：规格标记 + 显示名缓冲）
+    ui/src/ce_file.cpp           # ARCH-Z2 拆分（CeFile：打开 / 保存 / 热重载）
+    ui/src/ce_session.cpp        # CLN-13 拆分（会话门面 + 内部图编辑 API）
     ui/src/ce_run.cpp            # CLN-13 拆分（试运行「执行连线」域）
     ui/src/ce_pack.cpp           # CLN-13 拆分（打包选区为上级节点域）
     ui/src/ce_draw.cpp           # CLN-13 拆分（编辑器窗口 + 新建/打包对话框域）

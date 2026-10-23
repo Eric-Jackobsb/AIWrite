@@ -24,37 +24,37 @@ bool ce_is_test_source(const std::string& node_id)
 }
 
 // 取/建 run_snapshot 中某内部节点的条目（只记录内部节点；测试源不进读模型）
-engine::RunNodeView* ce_snapshot_entry(CompositeEditorState& state, const std::string& node_id)
+engine::RunNodeView* ce_snapshot_entry(CeSession& session, const std::string& node_id)
 {
-    for (engine::RunNodeView& view : state.run_snapshot.nodes) {
+    for (engine::RunNodeView& view : session.run_snapshot.nodes) {
         if (view.node_id == node_id) {
             return &view;
         }
     }
     engine::RunNodeView view;
     view.node_id = node_id;
-    if (const engine::Node* node = state.working.internal_graph.findNode(node_id)) {
+    if (const engine::Node* node = session.model().graph().findNode(node_id)) {
         view.type = node->type;
     }
-    state.run_snapshot.nodes.push_back(std::move(view));
-    return &state.run_snapshot.nodes.back();
+    session.run_snapshot.nodes.push_back(std::move(view));
+    return &session.run_snapshot.nodes.back();
 }
 
 } // namespace
 
 bool compositeEditorStartRun(std::string* error, EditorController& editor)
 {
-    CompositeEditorState& state = compositeEditorState();
-    const auto fail = [error](const std::string& text) {
+    CeSession& session = ceSession();
+    const auto fail    = [error](const std::string& text) {
         if (error != nullptr) {
             *error = text;
         }
         return false;
     };
-    if (!state.active) {
+    if (!session.active) {
         return fail("上级节点编辑器未打开");
     }
-    if (state.run_active) {
+    if (session.run_active) {
         return true; // 已在运行（幂等）
     }
     // 与主画布运行互斥：避免两个执行器并发打 HTTP / 抢画布状态色
@@ -66,7 +66,7 @@ bool compositeEditorStartRun(std::string* error, EditorController& editor)
 
     engine::Graph sandbox;
     std::string   build_error;
-    if (!engine::buildCompositeTestGraph(state.working, &sandbox, &build_error)) {
+    if (!engine::buildCompositeTestGraph(session.model().spec(), &sandbox, &build_error)) {
         return fail("构建试运行图失败: " + build_error);
     }
 
@@ -86,37 +86,38 @@ bool compositeEditorStartRun(std::string* error, EditorController& editor)
     // 丢弃上一会话残留事件（stop 后未泵的事件不清零，重跑前必须排空）
     {
         std::vector<engine::RunEvent> stale;
-        state.run_executor.pumpEvents(&stale);
+        session.run_executor.pumpEvents(&stale);
     }
-    if (!state.run_executor.startAsync(&sandbox, &start_error)) {
+    if (!session.run_executor.startAsync(&sandbox, &start_error)) {
         return fail("启动执行器失败: " + start_error);
     }
 
-    state.run_snapshot         = engine::RunSnapshot{}; // 新会话：清空读模型
-    state.run_snapshot.running = true;
-    state.run_active           = true;
-    state.run_status           = "试运行中…";
+    session.run_snapshot         = engine::RunSnapshot{}; // 新会话：清空读模型
+    session.run_snapshot.running = true;
+    session.run_active           = true;
+    session.run_status           = "试运行中…";
     // 画布即时反馈：全图节点回到「等待」（执行器对工作副本做了同样重置，事件随后逐节点接管）
-    for (engine::Node& node : state.working.internal_graph.nodes) {
+    for (engine::Node& node : session.model().graph().nodes) {
         node.state = engine::NodeState::Waiting;
         node.error_message.clear();
     }
-    log::info("[上级节点] 试运行开始（规格 " + state.working.id + " · " + state.working.name +
-              "），计划 " + std::to_string(state.run_executor.totalCount()) + " 个节点");
+    log::info("[上级节点] 试运行开始（规格 " + session.model().spec().id + " · " +
+              session.model().spec().name + "），计划 " +
+              std::to_string(session.run_executor.totalCount()) + " 个节点");
     return true;
 }
 
 void compositeEditorStopRun()
 {
-    CompositeEditorState& state = compositeEditorState();
-    if (!state.run_active) {
+    CeSession& session = ceSession();
+    if (!session.run_active) {
         return;
     }
-    state.run_executor.stopAsync(); // join（幂等；退出 / 切会话前必调）
-    state.run_active           = false;
-    state.run_snapshot.running = false;
+    session.run_executor.stopAsync(); // join（幂等；退出 / 切会话前必调）
+    session.run_active           = false;
+    session.run_snapshot.running = false;
     // 尚未收到 Finished 事件的运行态节点回落 Idle（避免「停止后仍显示运行中」）
-    for (engine::Node& node : state.working.internal_graph.nodes) {
+    for (engine::Node& node : session.model().graph().nodes) {
         if (node.state == engine::NodeState::Running ||
             node.state == engine::NodeState::Waiting) {
             node.state = engine::NodeState::Idle;
@@ -126,13 +127,13 @@ void compositeEditorStopRun()
 
 void compositeEditorClearRun()
 {
-    CompositeEditorState& state = compositeEditorState();
-    if (state.run_active) {
+    CeSession& session = ceSession();
+    if (session.run_active) {
         compositeEditorStopRun();
     }
-    state.run_snapshot = engine::RunSnapshot{};
-    state.run_status.clear();
-    for (engine::Node& node : state.working.internal_graph.nodes) {
+    session.run_snapshot = engine::RunSnapshot{};
+    session.run_status.clear();
+    for (engine::Node& node : session.model().graph().nodes) {
         node.state = engine::NodeState::Idle;
         node.error_message.clear();
     }
@@ -140,25 +141,25 @@ void compositeEditorClearRun()
 
 bool compositeEditorRunActive()
 {
-    return compositeEditorState().run_active;
+    return ceSession().run_active;
 }
 
 const engine::RunSnapshot& compositeEditorRunSnapshot()
 {
-    return compositeEditorState().run_snapshot;
+    return ceSession().run_snapshot;
 }
 
 // 每帧泵事件：沙箱节点状态/输出 → 内部图节点状态 + 结果读模型（测试源不回写）
 void compositeEditorTickRun()
 {
-    CompositeEditorState& state = compositeEditorState();
-    if (!state.run_active) {
+    CeSession& session = ceSession();
+    if (!session.run_active) {
         return;
     }
     std::vector<engine::RunEvent> events;
-    state.run_executor.pumpEvents(&events);
+    session.run_executor.pumpEvents(&events);
 
-    engine::Graph& ig = state.working.internal_graph;
+    engine::Graph& ig = session.model().graph();
     for (const engine::RunEvent& event : events) {
         switch (event.kind) {
         case engine::RunEvent::Kind::NodeState: {
@@ -171,7 +172,7 @@ void compositeEditorTickRun()
                     node->error_message = event.error;
                 }
             }
-            engine::RunNodeView* view = ce_snapshot_entry(state, event.node_id);
+            engine::RunNodeView* view = ce_snapshot_entry(session, event.node_id);
             view->state               = event.state;
             if (!event.error.empty()) {
                 view->error = event.error;
@@ -185,7 +186,7 @@ void compositeEditorTickRun()
             if (ce_is_test_source(event.node_id)) {
                 break;
             }
-            engine::RunNodeView* view = ce_snapshot_entry(state, event.node_id);
+            engine::RunNodeView* view = ce_snapshot_entry(session, event.node_id);
             view->text                = event.text;
             view->state               = event.state;
             view->delta_bytes         = event.text.size();
@@ -195,7 +196,7 @@ void compositeEditorTickRun()
             if (ce_is_test_source(event.node_id)) {
                 break;
             }
-            engine::RunNodeView* view = ce_snapshot_entry(state, event.node_id);
+            engine::RunNodeView* view = ce_snapshot_entry(session, event.node_id);
             view->text += event.text;
             view->state       = engine::NodeState::Running;
             view->delta_bytes = view->text.size();
@@ -206,12 +207,12 @@ void compositeEditorTickRun()
             break;
         }
         case engine::RunEvent::Kind::Finished: {
-            state.run_snapshot.summary     = event.summary;
-            state.run_snapshot.final_state = event.final_state;
-            state.run_snapshot.running     = false;
-            state.run_executor.stopAsync(); // join 后再读权威数据（本次只用 summary）
-            state.run_active = false;
-            state.run_status = "运行结束：" + event.summary;
+            session.run_snapshot.summary     = event.summary;
+            session.run_snapshot.final_state = event.final_state;
+            session.run_snapshot.running     = false;
+            session.run_executor.stopAsync(); // join 后再读权威数据（本次只用 summary）
+            session.run_active = false;
+            session.run_status = "运行结束：" + event.summary;
             log::info("[上级节点执行器] " + event.summary);
             break;
         }

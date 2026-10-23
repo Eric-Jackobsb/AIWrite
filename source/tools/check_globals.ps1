@@ -45,7 +45,8 @@ param(
 #  * 这些是「函数作用域单实例」的合法形态（访问器 / 惰性初始化 / 纯缓存），但**不允许再长**——
 #    否则「文件级归零、函数内继续长」就绕开了规则 6 的机器判据（A7 审计 §2 记录）。
 #  * 减少后请同步下调本数字（或显式传 `-MaxFunctionStatics <n>`）。
-$script:FnStaticCap = 51
+#  2026-10-23 ARCH-Z2：`ce_draw.cpp` 的 `ce_name_buffers()` 函数内 static 收进 `CeSpec` → 51 ⇒ 50。
+$script:FnStaticCap = 50
 
 $ErrorActionPreference = 'Stop'
 

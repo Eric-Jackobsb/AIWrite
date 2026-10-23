@@ -12,35 +12,20 @@
 #include <array>
 #include <string>
 
+#include "ce_session.h" // ARCH-Z2：CeSession / CeModel / CeFile / CeSelection / CeSpec / CeReadOnlyView
 #include "composite.h"
 #include "executor.h"
-#include "undo_stack.h"
 
 namespace aiwrite::ui {
 
 class EditorController; // ARCH-A3：主画布编排层（启动注入；本模块不拥有）
 
-// 编辑会话状态（UI 层，跨帧存活；画布上下文在 .cpp 内）
-struct CompositeEditorState {
-    bool                 active       = false; // 编辑窗口是否打开
-    bool                 dirty        = false; // 有未保存更改
-    std::string          error;                 // 上次操作错误（展示用）
-    bool                 ask_close    = false;  // 关闭确认弹窗
-    std::array<char, 256> name_buf{};           // 名称输入缓冲
-    std::array<char, 256> desc_buf{};           // 描述输入缓冲
-    engine::CompositeSpec working;              // 工作副本（保存时才写注册表）
-    engine::UndoStack    undo;                  // 编辑会话内撤销
-
-    // ---- 试运行「执行连线」（与主画布同机制）----
-    //  * 独立执行器在**沙箱副本**（内部图 + 暴露输入测试源）上推进，事件回写内部图节点状态/结果
-    //  * 运行态值只存执行器与 run_snapshot，不进规格/撤销快照/JSON
-    engine::Executor    run_executor;           // 试运行执行器（工作线程跑沙箱副本）
-    engine::RunSnapshot run_snapshot;           // 内部节点运行结果（读模型；UI 只读它）
-    bool                run_active   = false;   // 试运行进行中
-    std::string         run_status;             // 试运行摘要 / 上次结果（顶栏展示）
-};
-
-CompositeEditorState& compositeEditorState();
+// ---------------------------------------------------------------------------
+//  ARCH-Z2：原 `CompositeEditorState`（会话单例结构）已对称拆分为 5 个对象 ——
+//  `CeModel`（规格工作副本 + 撤销栈）· `CeFile`（打开/保存）· `CeSelection`（内部图选中）·
+//  `CeSpec`（规格标记）· `CeSession`（会话门面，`ceSession()` 取唯一实例）。
+//  字段归属与主编辑器一致：WorkflowModel / WorkflowFile / SelectionState ↔ 前四个。
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 //  ARCH-A6：新建 / 打包对话框的跨帧状态（原 `ce_draw.cpp` 7 条文件级 static）
@@ -110,7 +95,10 @@ std::string compositePackSelection(const std::string& name, std::string* error,
 
 // 画布窗口（dock 进主布局；未打开时为空操作）
 // ARCH-A3：试运行互斥判定与快捷键命令需要主编辑器（启动注入）
-void drawCompositeEditor(const char* title, bool* open, EditorController& editor);
+// ARCH-Z2：渲染只读 `CeReadOnlyView`（§4 判据 7 · 对称 ReadOnlyView）；
+// 视图由 app.cpp 主循环每帧构建一次（只存引用、零拷贝），写路径仍经 ceSession()
+void drawCompositeEditor(const char* title, bool* open, const CeReadOnlyView& view,
+                          EditorController& editor);
 // ce 窗口当前是否聚焦/悬停（ARCH-R4：主循环据此判断 Ctrl+S 作用域归属；
 // 由 ce_draw 每帧在窗口上下文内更新）
 bool compositeEditorWindowFocused();
