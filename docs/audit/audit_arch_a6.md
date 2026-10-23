@@ -65,7 +65,7 @@ NodeLibraryState       node_library_        //  6 条：右键菜单 / 删除·�
 [① 构建]            0 error / 0 warning
 [⑥ check_includes]  201 文件 · include 行 666 · violations 0
 [⑦ check_globals]   201 文件 · violations 27（R1 0 / R2 27 / R3 0）· baseline 27 · new 0 · fixable 0
-                    （本批从 87 → 27；ui 层 60 → 0，剩余 27 条**全部是函数内 static**，属 A7 范围）
+                    （本批从 87 → 27；ui 层 60 → 0，剩余 27 条见 §6 —— **口径更正见下方注**）
 [⑧ check_links]     1897 链接 · broken 0
 [② api_probe]       --selftest PASS · exec 713/0 · graph 151/0 · diag-assert PASS · dep-check PASS
                     --settings-assert PASS · --site-assert 50/50 · --official-assert 40/40 · --autosave-assert 32/32
@@ -81,12 +81,12 @@ NodeLibraryState       node_library_        //  6 条：右键菜单 / 删除·�
 |---|---|---|
 | 跨 TU `extern` 变量 | 0 ✅ | 0 ✅ |
 | **文件级** `static` 可变状态 | 87（ui 60 / web 15 / utils 12） | **27（ui 0 / web 15 / utils 12）** |
-| 剩余形态 | 文件级 + 函数内 | **全部是函数内 `static`**（27 条 / 13 文件） |
+| 剩余形态 | 文件级 + 函数内 | **全部是文件级** `static`（web 15 / utils 12 · 共 27 条 / 7 文件） |
 | 判据 2 状态 | 🟡 | 🟡（**再进一大步**：ui 层已零；待 A7 清 27 条 + 删基线 ⇒ ✅） |
 
-> 注：`check_globals.ps1` 的 R2 规则把**函数内** `static` 也算作「跨帧可变状态」并登记基线。
-> 也就是说 A7 = 「把这 27 条函数内单实例也对象化，然后删掉基线文件、切严格零容忍」，
-> 不再有「文件级 vs 函数内」的口径模糊地带。
+> 注（**ARCH-A7 收口时更正**）：A6 当时的表述「剩余 27 条是函数内 static」**口径错了** —— 那 27 条是 `web`/`utils` 的**文件级** `static`（`check_globals` 的 R2 会登记它们）；函数内 `static` 另有 41 处，只统计、不进基线。
+> 所以 A7 的实际工作 = 「27 条文件级对象化 + **补函数内 static 棘轮（41 → 51）** + 删基线切严格零容忍」，
+> 否则「文件级归零、函数内继续长」仍是绕开规则 6 的口子（详见 [audit_arch_a7.md](audit_arch_a7.md) §2 / §4）。
 
 ## 7. 已知限制
 

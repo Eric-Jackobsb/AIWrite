@@ -425,13 +425,22 @@ int scriptSelftest(int timeout_seconds)
 
 // ---- 会话生命周期（批 3 step 9 · `M7B-18`）：诊断工具**自己起会话 / 自己收尾** ----
 namespace {
-DaemonProcess g_session;        // 常驻会话的守护进程（`process == nullptr` = 无会话）
-std::string   g_session_pipe;   // 会话管道名（= `daemon_pipe_name()`）
+// ARCH-A7：原先 3 条文件级 static（`g_session` / `g_session_pipe` / `g_cancel_polls`）
+// ⇒ 显式状态对象，单一定义点 = `sessionState()`。
+struct SessionState {
+    DaemonProcess     process;     // 常驻会话的守护进程（`process == nullptr` = 无会话）
+    std::string       pipe_name;   // 会话管道名（= `daemon_pipe_name()`）
+    // **M7B step 12（`M7B-44`）**：登录态轮询的取消位（见 `request_cancel_session_ops()`）
+    //  * 由 `ui::wait_web_tasks()`（退出流程）置位；`login_site` / `pydoll_login` 每轮检查 ⇒ 尽早结束
+    //  * **不**用于中断浏览器命令本身（单条命令超时仍由各自的 `timeout_ms` 兜底）
+    std::atomic<bool> cancel_polls{false};
+};
 
-// **M7B step 12（`M7B-44`）**：登录态轮询的取消位（见 `request_cancel_session_ops()`）
-//  * 由 `ui::wait_web_tasks()`（退出流程）置位；`login_site` / `pydoll_login` 每轮检查 ⇒ 尽早结束
-//  * **不**用于中断浏览器命令本身（单条命令超时仍由各自的 `timeout_ms` 兜底）
-std::atomic<bool> g_cancel_polls{false};
+SessionState& sessionState()
+{
+    static SessionState state;
+    return state;
+}
 
 // 确保**常驻会话**在跑（复用已有 or 起守护进程）；返回会话管道名（失败 → 空串 + *error）
 //  * 「已有会话」= 本进程已记账（`session_ready()`），**或**管道能连上（本进程外起过）
@@ -459,8 +468,8 @@ std::string ensure_daemon_session(std::string* error)
                 }
                 return {};
             }
-            g_session      = daemon;
-            g_session_pipe = pipeName;
+            sessionState().process      = daemon;
+            sessionState().pipe_name = pipeName;
             log::info("[新通道] 会话已起（pid=" + std::to_string(daemon.pid) + " · 管道 " +
                       pipeName + "）");
         }
@@ -520,33 +529,33 @@ bool query_login_state(PipeClient& client, const SiteRef& site, int timeout_ms, 
 //  * 下一次 `login_site` / `pydoll_login` 进入时会**自动复位**（一次取消只作用于在跑的那一次）
 void requestCancelSessionOps()
 {
-    g_cancel_polls = true;
+    sessionState().cancel_polls = true;
     log::info("[新通道] 已请求取消登录态轮询（等待中的 `login_site` / `pydoll_login` 将尽早结束）");
 }
 
 bool sessionReady()
 {
-    return g_session.process != nullptr;
+    return sessionState().process.process != nullptr;
 }
 
 bool shutdownSession()
 {
-    if (g_session.process == nullptr) {
+    if (sessionState().process.process == nullptr) {
         return false;   // 幂等：本来就没有会话
     }
     std::string ignored;
     PipeClient  closer;     // ⚠️ 作用域必须**盖过** `wait_daemon`：句柄先断会变 `pipe_error`
-    if (closer.connect(g_session_pipe, 2'000, &ignored)) {
+    if (closer.connect(sessionState().pipe_name, 2'000, &ignored)) {
         closer.sendCommand("shutdown", nlohmann::json::object(), &ignored);
         // 发完**不主动 close**（照 `--pydoll-selftest` 做法）
     }
-    const int code = wait_daemon(g_session, 60'000);
+    const int code = wait_daemon(sessionState().process, 60'000);
     if (code != 0) {
         log::warn("[新通道] 会话收尾非干净退出（退出码 " + std::to_string(code) +
                   "）—— 详见 pydoll_channel_daemon.log");
     }
-    release_daemon(g_session);
-    g_session_pipe.clear();
+    release_daemon(sessionState().process);
+    sessionState().pipe_name.clear();
     return true;
 }
 
@@ -620,7 +629,7 @@ bool ensureSession(const SiteRef& site, int timeout_ms, std::string* error)
 bool loginSite(const SiteRef& site, int timeout_seconds, std::string* error)
 {
     // ⓪ 复位取消位：一次取消只作用于**在跑的那一次**（`wait_web_tasks()` 在退出时置位）
-    g_cancel_polls = false;
+    sessionState().cancel_polls = false;
 
     // ① 复用 / 起**常驻**会话（有头：`spawn_daemon` 不传 headless —— 用户要能看见窗口登录）
     const std::string pipeName = ensure_daemon_session(error);
@@ -672,7 +681,7 @@ bool loginSite(const SiteRef& site, int timeout_seconds, std::string* error)
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(total_s);
     while (std::chrono::steady_clock::now() < deadline) {
         // 取消位（退出流程 / 用户取消）—— **不**干等满上限
-        if (g_cancel_polls.load()) {
+        if (sessionState().cancel_polls.load()) {
             client.close();
             if (error != nullptr) {
                 *error = "本次登录轮询已取消（进程退出 / 用户取消）—— 浏览器窗口**保持打开**，"
@@ -1205,7 +1214,7 @@ int pydollLogin(const std::string& provider_id, int timeout_seconds)
                     "（不代填密码、不绕过验证 · §13）\n"
                     "               判据：条目 cookie_names 命中（%s）· 超时 %d s\n",
                     site.url.c_str(), joinNames(site.cookie_names).c_str(), timeout_seconds);
-        g_cancel_polls = false;   // 复位取消位（一次取消只作用于在跑的那一次 · `M7B-44`）
+        sessionState().cancel_polls = false;   // 复位取消位（一次取消只作用于在跑的那一次 · `M7B-44`）
         const auto started = std::chrono::steady_clock::now();
         bool       aborted = false;   // 非超时结束（观测失败 / 取消）—— 超时文案**不得**误报
         while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() -
@@ -1245,7 +1254,7 @@ int pydollLogin(const std::string& provider_id, int timeout_seconds)
                 aborted = true;
                 break;
             }
-            if (g_cancel_polls.load()) {
+            if (sessionState().cancel_polls.load()) {
                 std::printf("[pydoll-login] 已请求取消（进程退出 / 用户取消）—— 本次登录结束\n");
                 aborted = true;
                 break;

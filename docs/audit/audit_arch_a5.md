@@ -1,7 +1,7 @@
 # audit_arch_a5：ARCH-A5 落地审计报告（全局变量断言 · `check_globals.ps1` + 棘轮基线）
 
 > 批次：`ARCH-A5` · 日期：2026-10-23 · 计划：[refactor/ARCHITECTURE.md](../refactor/ARCHITECTURE.md) §2.1 迁移路线阶段 3「应用级收口（ARCH-A）」A5
-> 性质：**架构约束工具化（第二批）** —— 把 §1.1 规则 6「跨帧可变状态显式化」从**口头纪律**变成**离线可验证断言**：新增 [../../source/tools/check_globals.ps1](../../source/tools/check_globals.ps1) + 存量基线 [../../source/tools/check_globals_baseline.txt](../../source/tools/check_globals_baseline.txt)，接入 [../../source/tools/check_all.ps1](../../source/tools/check_all.ps1) 作为第 ⑦ 项（`check_all` **20 → 21 项**）。
+> 性质：**架构约束工具化（第二批）** —— 把 §1.1 规则 6「跨帧可变状态显式化」从**口头纪律**变成**离线可验证断言**：新增 [../../source/tools/check_globals.ps1](../../source/tools/check_globals.ps1) + 存量基线 `check_globals_baseline.txt`（**ARCH-A7 收口后已删除** · 存量归零 ⇒ 改严格零容忍），接入 [../../source/tools/check_all.ps1](../../source/tools/check_all.ps1) 作为第 ⑦ 项（`check_all` **20 → 21 项**）。
 > 判据：`check_all` **21/21 PASS**（新项 `check_globals（全局变量棘轮）` PASS）· 扫描 **201 文件 / 违规 87（R1 0 / R2 82 / R3 5）/ 基线 87 / 新增 0** · 本批同时**清零「跨 TU extern」（113 → 87，`R1 = 0`）** · 构建 0/0 · `--run-selftest` PASS · exec 713/0 · graph 151/0 · ce_repro 全帧 OK · check_links **1889/0**。
 
 ## 1. 背景与目标（承接 §1.1 规则 6 / §4 判据 2）
@@ -64,7 +64,7 @@ A5 的目标 = **让新增的全局状态立刻变红**：
 | 其余 4 层 | 81 | 0 | 0 | 0 | **0** |
 | **合计** | 201 | **0** | **82** | **5** | **87** |
 
-**存量分布（= A6/A7 待办清单的唯一权威口径，逐条内容见 [../../source/tools/check_globals_baseline.txt](../../source/tools/check_globals_baseline.txt)）**：
+**存量分布（= A6/A7 待办清单的唯一权威口径，逐条内容见 `check_globals_baseline.txt`（**ARCH-A7 收口后已删除** · 存量归零 ⇒ 改严格零容忍））**：
 
 | 文件 | 条数 | 规则 | 典型内容 |
 |---|---|---|---|
@@ -180,5 +180,5 @@ checked files: 201   violations: 87   (R1 0 / R2 82 / R3 5)   ·   baseline: 87 
 
 ## 11. 回滚点
 
-删除 [../../source/tools/check_globals.ps1](../../source/tools/check_globals.ps1) + [../../source/tools/check_globals_baseline.txt](../../source/tools/check_globals_baseline.txt) + `git checkout -- source/tools/check_all.ps1` 即回滚到 A4 形态（`check_all` 回到 20 项）；`CeUiState` 收口改动可单独 `git checkout -- source/ui/include/ce_internal.h source/ui/src/{ce_state,ce_draw,ce_session,composite_editor}.cpp` 回滚（会退回 12 条 extern）。本审计文档可留作登记。
+删除 [../../source/tools/check_globals.ps1](../../source/tools/check_globals.ps1) + `check_globals_baseline.txt`（**ARCH-A7 收口后已删除** · 存量归零 ⇒ 改严格零容忍） + `git checkout -- source/tools/check_all.ps1` 即回滚到 A4 形态（`check_all` 回到 20 项）；`CeUiState` 收口改动可单独 `git checkout -- source/ui/include/ce_internal.h source/ui/src/{ce_state,ce_draw,ce_session,composite_editor}.cpp` 回滚（会退回 12 条 extern）。本审计文档可留作登记。
 

@@ -399,13 +399,23 @@ constexpr int kPowMaxAttempts   = 240; // 240 × 500ms ≈ 120 秒
 
 constexpr std::size_t kNetRecordLimit = 400; // 网络回执有界缓冲（R13：不能无限增长）
 
-// ---- `PW-02`：**窗口表**（唯一真相 = 键与顺序；`g_windows` 存对应运行时对象）----
-//  * `g_table` = 纯函数决策模型（`web/window_table.h`）：复用 / 新建 / 收尾顺序 / 诊断行
-//  * `g_windows` = 窗口键 → 窗口运行时（`WindowCtx`）；**只在 `ctx_acquire` / `ctx_close` 里变更**
-//    （两处同时改，保证与 `g_table` 不发散）
-std::mutex                                        g_table_mutex;
-WindowTable                                       g_table;
-std::map<std::string, std::shared_ptr<WindowCtx>> g_windows;
+// ---- `PW-02`：**窗口表**（唯一真相 = 键与顺序；运行时对象见 `windows`）----
+//  * `table` = 纯函数决策模型（`web/window_table.h`）：复用 / 新建 / 收尾顺序 / 诊断行
+//  * `windows` = 窗口键 → 窗口运行时（`WindowCtx`）；**只在 `ctx_acquire` / `ctx_close` 里变更**
+//    （两处同时改，保证与 `table` 不发散）
+// ARCH-A7：原先是 3 条文件级 static（`g_table_mutex` / `g_table` / `g_windows`）
+// ⇒ 归拢为 `WindowRegistry`，单一定义点 = `windowRegistry()`。
+struct WindowRegistry {
+    std::mutex                                        table_mutex;
+    WindowTable                                       table;
+    std::map<std::string, std::shared_ptr<WindowCtx>> windows;
+};
+
+WindowRegistry& windowRegistry()
+{
+    static WindowRegistry registry;
+    return registry;
+}
 
 // ---- 浏览器**环境**（`D-35④` 修订 2026-10-18：**每窗口线程各建一个**，不再跨线程共享）----
 //  * WebView2 对象有**线程亲和性**（必须在创建它的线程上使用，见官方「Threading model」文档）。
@@ -413,26 +423,41 @@ std::map<std::string, std::shared_ptr<WindowCtx>> g_windows;
 //    `CreateCoreWebView2Controller` ⇒ 跨线程调用同步失败 `0x802A000C`
 //    （`--web-adapter-selftest --provider all` 9/10 站失败的根因，真机 2026-10-17 日志实证）。
 //  * 现在每个窗口线程在自己的线程上创建并独占自己的环境：本线程建、本线程用、窗口关闭即释放。
-//    同 profile 的**并发创建**仍由 `g_env_creating` 串行化（首建时 user data folder 被占用）。
-//  * `g_env_fail` = 创建失败码缓存：同一 profile 不反复重试空转（如实报错）。
-std::mutex                      g_env_mutex;
-std::condition_variable         g_env_cv;
-std::map<std::string, HRESULT>  g_env_fail;  // profile 目录 → 创建失败码
-std::string                     g_env_creating; // 正在创建该 profile
+//    同 profile 的**并发创建**仍由 `creating` 串行化（首建时 user data folder 被占用）。
+//  * `fail` = 创建失败码缓存：同一 profile 不反复重试空转（如实报错）。
+// ARCH-A7：原先是 4 条文件级 static（`g_env_mutex` / `g_env_cv` / `g_env_fail` / `g_env_creating`）
+// ⇒ 归拢为 `EnvCache`，单一定义点 = `envCache()`。
+struct EnvCache {
+    std::mutex                     mutex;
+    std::condition_variable        cv;
+    std::map<std::string, HRESULT> fail;     // profile 目录 → 创建失败码
+    std::string                    creating; // 正在创建该 profile
+};
+
+EnvCache& envCache()
+{
+    static EnvCache cache;
+    return cache;
+}
 
 // ---- 「当前窗口」上下文（`thread_local`）----
 //  * 窗口线程：线程启动时绑定**自己**的窗口 ⇒ 窗口线程内所有 `st()` 都指自己（含 COM 回调）
 //  * 调用方线程：进入公开 API 时用 `CtxScope` 绑定**目标**窗口（由 `ctx_find` 得到）
 //  * 这一层替换掉了改造前的「进程级单例」：**同一份代码**现在服务 N 个窗口
-thread_local WindowCtx* t_cur = nullptr;
+// ARCH-A7：`t_cur` → `tlsWindow()`（线程局部单实例的唯一读写口，不再是文件级 `thread_local` 变量）
+WindowCtx*& tlsWindow()
+{
+    thread_local WindowCtx* current = nullptr;
+    return current;
+}
 
-WindowCtx& st() { return *t_cur; }
+WindowCtx& st() { return *tlsWindow(); }
 
 // 绑定 / 还原「当前窗口」（作用域守卫；支持嵌套）
 class CtxScope {
 public:
-    explicit CtxScope(WindowCtx* ctx) : prev_(t_cur) { t_cur = ctx; }
-    ~CtxScope() { t_cur = prev_; }
+    explicit CtxScope(WindowCtx* ctx) : prev_(tlsWindow()) { tlsWindow() = ctx; }
+    ~CtxScope() { tlsWindow() = prev_; }
     CtxScope(const CtxScope&)            = delete;
     CtxScope& operator=(const CtxScope&) = delete;
 
@@ -636,9 +661,9 @@ int run_login_window(const LoginRequest& request); // 线程体（定义在后�
 std::shared_ptr<WindowCtx> ctx_find(const WebOwner& owner, const std::string& site_key)
 {
     const std::string           key = window_key(owner, site_key);
-    std::lock_guard<std::mutex> lock(g_table_mutex);
-    const auto                  it = g_windows.find(key);
-    return it == g_windows.end() ? nullptr : it->second;
+    std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+    const auto                  it = windowRegistry().windows.find(key);
+    return it == windowRegistry().windows.end() ? nullptr : it->second;
 }
 
 bool ctx_alive(const std::shared_ptr<WindowCtx>& ctx)
@@ -646,7 +671,7 @@ bool ctx_alive(const std::shared_ptr<WindowCtx>& ctx)
     return ctx != nullptr && ctx->running.load();
 }
 
-// 窗口线程体（绑定 `t_cur` → 跑 `run_login_window` → 回写结果 / `running`）
+// 窗口线程体（绑定 `tlsWindow()` → 跑 `run_login_window` → 回写结果 / `running`）
 void window_thread_main(std::shared_ptr<WindowCtx> holder, LoginRequest request)
 {
     CtxScope scope(holder.get());
@@ -693,18 +718,18 @@ std::shared_ptr<WindowCtx> ctx_start(const WebOwner& owner, LoginRequest request
     }
 
     {
-        std::lock_guard<std::mutex> lock(g_table_mutex);
-        if (g_windows.find(ctx->key) != g_windows.end()) {
+        std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+        if (windowRegistry().windows.find(ctx->key) != windowRegistry().windows.end()) {
             if (error != nullptr) {
                 *error = "该归属在该站点已有窗口（" + ctx->key + "）";
             }
             return nullptr;
         }
-        g_table.note_opened(owner, site);
-        if (const WindowEntry* entry = g_table.find(owner, site); entry != nullptr) {
+        windowRegistry().table.note_opened(owner, site);
+        if (const WindowEntry* entry = windowRegistry().table.find(owner, site); entry != nullptr) {
             ctx->seq = entry->seq; // 诊断序号（收尾顺序由窗口表给出）
         }
-        g_windows.emplace(ctx->key, ctx);
+        windowRegistry().windows.emplace(ctx->key, ctx);
     }
 
     ctx->running = true;
@@ -714,9 +739,9 @@ std::shared_ptr<WindowCtx> ctx_start(const WebOwner& owner, LoginRequest request
     catch (const std::exception& ex) {
         ctx->running = false;
         {
-            std::lock_guard<std::mutex> lock(g_table_mutex);
-            g_windows.erase(ctx->key);
-            g_table.note_closed(owner, site);
+            std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+            windowRegistry().windows.erase(ctx->key);
+            windowRegistry().table.note_closed(owner, site);
         }
         if (error != nullptr) {
             *error = std::string("创建登录线程失败（") + ctx->key + "）: " + ex.what();
@@ -725,7 +750,7 @@ std::shared_ptr<WindowCtx> ctx_start(const WebOwner& owner, LoginRequest request
     }
 
     log::info("[网页版窗口] 开窗 " + ctx->key + "（profile " + ctx->request.profile_dir +
-              "；窗口表：" + g_table.report() + "）");
+              "；窗口表：" + windowRegistry().table.report() + "）");
     return ctx;
 }
 
@@ -745,9 +770,9 @@ void ctx_close(const std::shared_ptr<WindowCtx>& ctx, int code, bool wait)
     if (wait && ctx->thread.joinable()) {
         ctx->thread.join();
     }
-    std::lock_guard<std::mutex> lock(g_table_mutex);
-    g_windows.erase(ctx->key);
-    g_table.note_closed(ctx->owner, ctx->site_key);
+    std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+    windowRegistry().windows.erase(ctx->key);
+    windowRegistry().table.note_closed(ctx->owner, ctx->site_key);
 }
 
 // 收尾：**逐窗口**关闭（顺序 = 窗口表给出：后开的先关）
@@ -755,10 +780,10 @@ void ctx_close_all()
 {
     std::vector<std::shared_ptr<WindowCtx>> all;
     {
-        std::lock_guard<std::mutex> lock(g_table_mutex);
-        for (const std::string& key : g_table.keys_in_close_order()) {
-            const auto it = g_windows.find(key);
-            if (it != g_windows.end()) {
+        std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+        for (const std::string& key : windowRegistry().table.keys_in_close_order()) {
+            const auto it = windowRegistry().windows.find(key);
+            if (it != windowRegistry().windows.end()) {
                 all.push_back(it->second);
             }
         }
@@ -1610,9 +1635,9 @@ HRESULT on_controller_ready(HRESULT result, ICoreWebView2Controller* controller)
 //  * WebView2 官方线程模型：环境 / 控制器都必须在其创建线程上使用（「Threading model」文档）。
 //    此前「按 profile 缓存、跨窗口线程共享」⇒ 第二个窗口用**别人线程**的环境创建控制器，
 //    同步失败 `0x802A000C`（真机批量探测 9/10 站失败根因）。现改为每个窗口线程自建自用。
-//  * `g_env_creating` = 「该 profile 正在被某个窗口线程创建」：同 profile 的并发创建**等它建好**
+//  * `envCache().creating` = 「该 profile 正在被某个窗口线程创建」：同 profile 的并发创建**等它建好**
 //    （首建时 user data folder 被占用，同时创建会失败）。
-//  * 失败码进缓存（`g_env_fail`）：同一 profile 不反复重试空转（如实报错）
+//  * 失败码进缓存（`envCache().fail`）：同一 profile 不反复重试空转（如实报错）
 void create_controller_for_window(ICoreWebView2Environment* environment)
 {
     // `D-35③` 修订 2026-10-17：同步返回失败是**浏览器侧瞬时竞态**的信号
@@ -1648,13 +1673,13 @@ HRESULT on_environment_ready(HRESULT result, ICoreWebView2Environment* environme
         log::error("[网页版登录] 创建 WebView2 环境失败（请确认已安装 WebView2 Runtime）HRESULT=" +
                    std::to_string(result));
         {
-            std::lock_guard<std::mutex> lock(g_env_mutex);
-            g_env_fail[profile_dir] = result;
-            if (g_env_creating == profile_dir) {
-                g_env_creating.clear();
+            std::lock_guard<std::mutex> lock(envCache().mutex);
+            envCache().fail[profile_dir] = result;
+            if (envCache().creating == profile_dir) {
+                envCache().creating.clear();
             }
         }
-        g_env_cv.notify_all();
+        envCache().cv.notify_all();
         st().result = 1;
         ::PostMessageW(st().window.load(), WM_CLOSE, 0, 0);
         return S_OK;
@@ -1664,13 +1689,13 @@ HRESULT on_environment_ready(HRESULT result, ICoreWebView2Environment* environme
     //    跨线程复用环境 ⇒ 第二个窗口 `CreateCoreWebView2Controller` 同步失败 0x802A000C
     //    （线程亲和性违反，真机 2026-10-17 批量探测实证）。环境随窗口关闭一并释放。
     {
-        std::lock_guard<std::mutex> lock(g_env_mutex);
-        g_env_fail.erase(profile_dir);
-        if (g_env_creating == profile_dir) {
-            g_env_creating.clear();
+        std::lock_guard<std::mutex> lock(envCache().mutex);
+        envCache().fail.erase(profile_dir);
+        if (envCache().creating == profile_dir) {
+            envCache().creating.clear();
         }
     }
-    g_env_cv.notify_all();
+    envCache().cv.notify_all();
 
     // ② 本窗口**自己**的 controller（创建线程 = 环境线程 ⇒ 满足线程亲和）
     st().environment = environment;
@@ -1680,7 +1705,7 @@ HRESULT on_environment_ready(HRESULT result, ICoreWebView2Environment* environme
 
 // 取（必要时建）**本窗口**要用的环境；失败 → false + 可操作 `error`
 //  * `D-35④`（2026-10-18）：**每个窗口线程都自己创建环境**（本线程用，不跨线程复用）——
-//    跨线程复用会撞 0x802A000C（线程亲和）。同 profile 的并发创建由 `g_env_creating` 串行化。
+//    跨线程复用会撞 0x802A000C（线程亲和）。同 profile 的并发创建由 `envCache().creating` 串行化。
 bool ensure_environment(HWND window, std::string* error)
 {
     const std::string profile_dir = st().request.profile_dir;
@@ -1691,14 +1716,14 @@ bool ensure_environment(HWND window, std::string* error)
     HRESULT           fail_code   = S_OK;
 
     {
-        std::unique_lock<std::mutex> lock(g_env_mutex);
+        std::unique_lock<std::mutex> lock(envCache().mutex);
         for (;;) {
-            if (const auto it = g_env_fail.find(profile_dir); it != g_env_fail.end()) {
+            if (const auto it = envCache().fail.find(profile_dir); it != envCache().fail.end()) {
                 fail_code = it->second;
                 break;
             }
-            if (g_env_creating.empty()) {
-                g_env_creating = profile_dir; // 本线程来建（同 profile 同时只允许一个创建者）
+            if (envCache().creating.empty()) {
+                envCache().creating = profile_dir; // 本线程来建（同 profile 同时只允许一个创建者）
                 create_now     = true;
                 break;
             }
@@ -1706,7 +1731,7 @@ bool ensure_environment(HWND window, std::string* error)
                 env_timeout = true;
                 break;
             }
-            g_env_cv.wait_for(lock, std::chrono::milliseconds(200));
+            envCache().cv.wait_for(lock, std::chrono::milliseconds(200));
         }
     }
 
@@ -1723,13 +1748,13 @@ bool ensure_environment(HWND window, std::string* error)
             log::error("[网页版登录] CreateCoreWebView2EnvironmentWithOptions 调用失败 HRESULT=" +
                        std::to_string(hr));
             {
-                std::lock_guard<std::mutex> lock(g_env_mutex);
-                g_env_fail[profile_dir] = hr;
-                if (g_env_creating == profile_dir) {
-                    g_env_creating.clear();
+                std::lock_guard<std::mutex> lock(envCache().mutex);
+                envCache().fail[profile_dir] = hr;
+                if (envCache().creating == profile_dir) {
+                    envCache().creating.clear();
                 }
             }
-            g_env_cv.notify_all();
+            envCache().cv.notify_all();
             if (error != nullptr) {
                 *error = "创建 WebView2 环境失败（HRESULT " + std::to_string(hr) +
                          "）：请确认已安装 WebView2 Runtime";
@@ -2009,8 +2034,8 @@ bool LoginWindow::start(const LoginRequest& request, std::string* error)
 
     // ① 同一个 owner 在其他站点还有窗口 ⇒ 先关它（换站点 = 换这一个可见窗口；`I24` 允许：同一个 owner）
     const std::vector<std::string> owned = [this] {
-        std::lock_guard<std::mutex> lock(g_table_mutex);
-        return g_table.keys_of_owner(owner_);
+        std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+        return windowRegistry().table.keys_of_owner(owner_);
     }();
     for (const std::string& key : owned) {
         if (key == window_key(owner_, site)) {
@@ -2018,9 +2043,9 @@ bool LoginWindow::start(const LoginRequest& request, std::string* error)
         }
         std::shared_ptr<WindowCtx> other;
         {
-            std::lock_guard<std::mutex> lock(g_table_mutex);
-            const auto                  it = g_windows.find(key);
-            if (it != g_windows.end()) {
+            std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+            const auto                  it = windowRegistry().windows.find(key);
+            if (it != windowRegistry().windows.end()) {
                 other = it->second;
             }
         }
@@ -2164,15 +2189,15 @@ std::shared_ptr<WindowCtx> ctx_latest_alive()
 {
     std::vector<std::string> order;
     {
-        std::lock_guard<std::mutex> lock(g_table_mutex);
-        order = g_table.keys_in_close_order(); // 后开的在前
+        std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+        order = windowRegistry().table.keys_in_close_order(); // 后开的在前
     }
     for (const std::string& key : order) {
         std::shared_ptr<WindowCtx> ctx;
         {
-            std::lock_guard<std::mutex> lock(g_table_mutex);
-            const auto                  it = g_windows.find(key);
-            if (it != g_windows.end()) {
+            std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+            const auto                  it = windowRegistry().windows.find(key);
+            if (it != windowRegistry().windows.end()) {
                 ctx = it->second;
             }
         }
@@ -2210,8 +2235,8 @@ bool prepare_window(const LoginRequest& site_request, std::shared_ptr<WindowCtx>
             return false;
         }
         log::info("[网页版窗口] 新开（" + ctx->key + "）；窗口表：" + [&] {
-            std::lock_guard<std::mutex> lock(g_table_mutex);
-            return g_table.report();
+            std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+            return windowRegistry().table.report();
         }());
         if (out != nullptr) {
             *out = ctx;
@@ -2338,8 +2363,8 @@ bool windowOnSite(const WebOwner& owner, const std::string& site)
 // 窗口表诊断行（`PW-02`：谁开着哪些窗口 —— 日志 / 断言 / 界面可读）
 std::string windowsReport()
 {
-    std::lock_guard<std::mutex> lock(g_table_mutex);
-    return g_table.report();
+    std::lock_guard<std::mutex> lock(windowRegistry().table_mutex);
+    return windowRegistry().table.report();
 }
 
 // 关闭**某归属**的窗口（显式收尾 / 换站点用；不碰别的归属）
@@ -3480,9 +3505,9 @@ void stopLoginWindow()
     ctx_close_all();
     // 失败缓存一并释放（同进程内再开窗会重新尝试创建环境）
     {
-        std::lock_guard<std::mutex> lock(g_env_mutex);
-        g_env_fail.clear();
-        g_env_creating.clear();
+        std::lock_guard<std::mutex> lock(envCache().mutex);
+        envCache().fail.clear();
+        envCache().creating.clear();
     }
 }
 

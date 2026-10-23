@@ -13,21 +13,31 @@ namespace aiwrite {
 namespace {
 
 // PA-07：进程级配置缓存（只读访问为主）
-std::mutex g_config_mutex;
-Config     g_config;
+// ARCH-A7：原先是两条文件级 static（`g_config_mutex` / `g_config`）⇒ 归拢为显式状态对象，
+// 单一定义点 = `configStore()`（函数作用域单实例，C++11 起初始化线程安全）。
+struct ConfigStore {
+    std::mutex mutex;
+    Config     value;
+};
+
+ConfigStore& configStore()
+{
+    static ConfigStore store;
+    return store;
+}
 
 } // namespace
 
 const Config& appConfig()
 {
-    std::lock_guard<std::mutex> lock(g_config_mutex);
-    return g_config;
+    std::lock_guard<std::mutex> lock(configStore().mutex);
+    return configStore().value;
 }
 
 void setAppConfig(Config config)
 {
-    std::lock_guard<std::mutex> lock(g_config_mutex);
-    g_config = std::move(config);
+    std::lock_guard<std::mutex> lock(configStore().mutex);
+    configStore().value = std::move(config);
 }
 
 // PA-08：尚未接线的配置字段清单（见 config.h 注释；加载时写日志 + 文档标注）

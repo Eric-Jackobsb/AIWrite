@@ -14,13 +14,23 @@
 namespace aiwrite::utils::diagnostics {
 namespace {
 
-std::atomic<long>         g_exception_total{0};
-std::atomic<void*>        g_first_address{nullptr};
-std::atomic<void*>        g_last_address{nullptr};
-std::atomic<unsigned long> g_first_code{0};
-std::atomic<unsigned long> g_last_code{0};
-std::atomic<long>         g_logged_total{0};
-bool                      g_counter_installed = false;
+// ARCH-A7：原先 7 条文件级 static ⇒ 归拢为显式状态对象（单一定义点 = `exceptionCounter()`）。
+// 语义不变：全部 `relaxed`（这些计数只用于限流输出 / 诊断行，不参与同步判定）。
+struct ExceptionCounter {
+    std::atomic<long>          exception_total{0};
+    std::atomic<void*>         first_address{nullptr};
+    std::atomic<void*>         last_address{nullptr};
+    std::atomic<unsigned long> first_code{0};
+    std::atomic<unsigned long> last_code{0};
+    std::atomic<long>          logged_total{0};
+    bool                       installed = false; // VEH 只装一次
+};
+
+ExceptionCounter& exceptionCounter()
+{
+    static ExceptionCounter counter;
+    return counter;
+}
 
 // 把地址解析成"模块名+偏移"（在 VEH 之外调用，避免异常上下文里碰 loader）
 std::string describe_address(void* address)
@@ -60,13 +70,13 @@ LONG WINAPI first_chance_exception_handler(EXCEPTION_POINTERS* info)
     // 0xE06D7363 = MSVC C++ 异常（wil::ResultException 等）；0xC0000005 = 访问冲突
     if (code == 0xE06D7363UL || code == 0xC0000005UL) {
         void* address = info->ExceptionRecord->ExceptionAddress;
-        g_exception_total.fetch_add(1, std::memory_order_relaxed);
-        if (g_first_address.load(std::memory_order_relaxed) == nullptr) {
-            g_first_address.store(address, std::memory_order_relaxed);
-            g_first_code.store(code, std::memory_order_relaxed);
+        exceptionCounter().exception_total.fetch_add(1, std::memory_order_relaxed);
+        if (exceptionCounter().first_address.load(std::memory_order_relaxed) == nullptr) {
+            exceptionCounter().first_address.store(address, std::memory_order_relaxed);
+            exceptionCounter().first_code.store(code, std::memory_order_relaxed);
         }
-        g_last_address.store(address, std::memory_order_relaxed);
-        g_last_code.store(code, std::memory_order_relaxed);
+        exceptionCounter().last_address.store(address, std::memory_order_relaxed);
+        exceptionCounter().last_code.store(code, std::memory_order_relaxed);
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
@@ -75,10 +85,10 @@ LONG WINAPI first_chance_exception_handler(EXCEPTION_POINTERS* info)
 
 void installExceptionCounter()
 {
-    if (g_counter_installed) {
+    if (exceptionCounter().installed) {
         return;
     }
-    g_counter_installed = true;
+    exceptionCounter().installed = true;
     // 1 = 最先调用（在 SEH/调试器处理之前）
     ::AddVectoredExceptionHandler(1, first_chance_exception_handler);
     log::info("[诊断] 首异常计数器已安装（VEH；汇总输出见下）");
@@ -86,13 +96,13 @@ void installExceptionCounter()
 
 long exceptionTotal()
 {
-    return g_exception_total.load(std::memory_order_relaxed);
+    return exceptionCounter().exception_total.load(std::memory_order_relaxed);
 }
 
 void logExceptionSummary()
 {
     const long total = exceptionTotal();
-    const long logged = g_logged_total.load(std::memory_order_relaxed);
+    const long logged = exceptionCounter().logged_total.load(std::memory_order_relaxed);
     if (total == logged) {
         return; // 无新异常
     }
@@ -102,14 +112,14 @@ void logExceptionSummary()
     if (!should_log) {
         return;
     }
-    g_logged_total.store(total, std::memory_order_relaxed);
+    exceptionCounter().logged_total.store(total, std::memory_order_relaxed);
 
     char code_buffer[32] = {};
-    std::snprintf(code_buffer, sizeof(code_buffer), "0x%08lX", g_last_code.load());
+    std::snprintf(code_buffer, sizeof(code_buffer), "0x%08lX", exceptionCounter().last_code.load());
 
     log::warn("[诊断] 首异常累计 " + std::to_string(total) + " 次；首个于 " +
-              describe_address(g_first_address.load()) + "（代码 " + code_buffer + "），" +
-              "最近一次于 " + describe_address(g_last_address.load()) + "（限流输出）");
+              describe_address(exceptionCounter().first_address.load()) + "（代码 " + code_buffer + "），" +
+              "最近一次于 " + describe_address(exceptionCounter().last_address.load()) + "（限流输出）");
 }
 
 void logMemorySample(const std::string& tag)

@@ -40,7 +40,16 @@ struct AvailabilityEntry {
     std::chrono::steady_clock::time_point checked_at{};
 };
 
-std::unordered_map<std::string, AvailabilityEntry> g_availability;
+// ARCH-A7：原先是文件级 static（`g_availability`）⇒ 显式状态对象，单一定义点 = `availabilityCache()`。
+struct AvailabilityCache {
+    std::unordered_map<std::string, AvailabilityEntry> entries;
+};
+
+AvailabilityCache& availabilityCache()
+{
+    static AvailabilityCache cache;
+    return cache;
+}
 
 std::uint32_t crc32_of(const std::string& data)
 {
@@ -301,10 +310,10 @@ std::string loadCredential(const std::string& ref, std::string* error)
 void invalidateCredentialCache(const std::string& ref)
 {
     if (ref.empty()) {
-        g_availability.clear();
+        availabilityCache().entries.clear();
         return;
     }
-    g_availability.erase(ref);
+    availabilityCache().entries.erase(ref);
 }
 
 bool credentialAvailable(const std::string& ref)
@@ -319,7 +328,7 @@ bool credentialAvailable(const std::string& ref)
         return false;
     }
 
-    AvailabilityEntry& entry = g_availability[ref];
+    AvailabilityEntry& entry = availabilityCache().entries[ref];
     const auto         now   = std::chrono::steady_clock::now();
     if (entry.loaded && now - entry.checked_at < std::chrono::seconds(kAvailabilityTtlSeconds)) {
         return entry.available; // 命中：本帧不再读文件、不再 DPAPI 解密

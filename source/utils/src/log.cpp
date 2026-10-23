@@ -111,8 +111,18 @@ protected:
     void flush_() override {}
 };
 
-std::shared_ptr<spdlog::logger> g_logger;
-std::shared_ptr<spdlog::logger> g_workflow_logger;
+// ARCH-A7：原先是两条文件级 static 智能指针（`g_logger` / `g_workflow_logger`）
+// ⇒ 归拢为显式状态对象，单一定义点 = `loggers()`。
+struct Loggers {
+    std::shared_ptr<spdlog::logger> app;
+    std::shared_ptr<spdlog::logger> workflow;
+};
+
+Loggers& loggers()
+{
+    static Loggers state;
+    return state;
+}
 
 } // namespace
 
@@ -150,10 +160,10 @@ void init(bool attach_console)
         sink->set_formatter(std::make_unique<AppFormatter>());
     }
 
-    g_logger = std::make_shared<spdlog::logger>("app", sinks.begin(), sinks.end());
-    g_logger->set_level(spdlog::level::info);
-    g_logger->flush_on(spdlog::level::warn);
-    spdlog::set_default_logger(g_logger);
+    loggers().app = std::make_shared<spdlog::logger>("app", sinks.begin(), sinks.end());
+    loggers().app->set_level(spdlog::level::info);
+    loggers().app->flush_on(spdlog::level::warn);
+    spdlog::set_default_logger(loggers().app);
 
     // ---- workflow.log：独立文件 sink（设计 §11.1；M4-13 只补事件，不再新建 sink）----
     try {
@@ -162,11 +172,11 @@ void init(bool attach_console)
         workflow_sink->set_formatter(std::make_unique<AppFormatter>());
 
         std::vector<spdlog::sink_ptr> workflow_sinks{workflow_sink};
-        g_workflow_logger =
+        loggers().workflow =
             std::make_shared<spdlog::logger>("workflow", workflow_sinks.begin(), workflow_sinks.end());
-        g_workflow_logger->set_level(spdlog::level::info);
-        g_workflow_logger->flush_on(spdlog::level::info);
-        spdlog::register_logger(g_workflow_logger); // 让 flush_every 也覆盖它
+        loggers().workflow->set_level(spdlog::level::info);
+        loggers().workflow->flush_on(spdlog::level::info);
+        spdlog::register_logger(loggers().workflow); // 让 flush_every 也覆盖它
     }
     catch (const spdlog::spdlog_ex& ex) {
         std::fprintf(stderr, "[log] 无法创建工作流日志 %s: %s\n",
@@ -179,20 +189,20 @@ void init(bool attach_console)
 
 void shutdown()
 {
-    if (g_logger) {
-        g_logger->flush();
+    if (loggers().app) {
+        loggers().app->flush();
     }
-    if (g_workflow_logger) {
-        g_workflow_logger->flush();
+    if (loggers().workflow) {
+        loggers().workflow->flush();
     }
-    g_workflow_logger.reset();
+    loggers().workflow.reset();
     spdlog::shutdown();
 }
 
 void workflow(const std::string& message)
 {
-    if (g_workflow_logger) {
-        g_workflow_logger->info("{}", message);
+    if (loggers().workflow) {
+        loggers().workflow->info("{}", message);
     }
 }
 

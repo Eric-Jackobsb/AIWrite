@@ -12,7 +12,8 @@
 #  不计入（规则 6 的合法形态）：
 #    * 类 / 结构体 / 联合体 / 枚举**成员** —— `TextureCache` 这类对象成员天然合规（无例外条款）；
 #    * `const` / `constexpr` / `consteval` / `constinit` 常量表（只读，不可变）；
-#    * 函数体内的 `static` 局部变量（函数作用域：**只统计不判失败**，见「参考」行）；
+#    * 函数体内的 `static` 局部变量（函数作用域：不判**文件级**违规，但计入
+#      **函数内 static 棘轮** —— 见 `-MaxFunctionStatics`，只许减）；
 #    * 函数 / 类型 / 别名 / 模板 / `using` / `typedef` / 预处理行 / 前向声明。
 #
 #  纪律（AI_README §3）：
@@ -24,19 +25,27 @@
 #       [-SourceDir <仓库的 source 目录>]   默认由脚本位置推导（source\tools\.. = source）
 #       [-Layers ui,app]                    只扫指定层（默认全部 7 层）
 #       [-SummaryOnly]                      只打印汇总表，不逐条列出违规
-#       [-Baseline <基线文件>]              棘轮模式：基线内 ⇒ PASS；**基线外新增 ⇒ FAIL**
+#       [-MaxFunctionStatics <n>]           函数内 static 上限（默认见 `$script:FnStaticCap`）
+#       [-Baseline <基线文件>]              遗留能力：棘轮模式（ARCH-A5 引入）—— 存量归零后
+#                                           已不再使用（基线文件已删除）；保留给将来的大批量迁移
 #       [-Baseline <基线文件> -UpdateBaseline]
-#                                           重写基线（**只许减**：新增违规必须在代码里修，
-#                                           不许写进基线；基线文件由 check_all 固定引用）
-#     不带 -Baseline ⇒ **严格零容忍**（存量归零后应改用此形态并删除基线文件）
+#                                           重写基线（**只许减**）
+#     不带 -Baseline ⇒ **严格零容忍**（现用形态：文件级可变状态必须恒为 0）
 # ============================================================================
 param(
     [string]$SourceDir = '',
     [string[]]$Layers = @(),
     [string]$Baseline = '',
     [switch]$UpdateBaseline,
-    [switch]$SummaryOnly
+    [switch]$SummaryOnly,
+    [int]$MaxFunctionStatics = -1
 )
+
+# 函数内 static 棘轮上限（ARCH-A7 收口时实测值 · **只许减**）：
+#  * 这些是「函数作用域单实例」的合法形态（访问器 / 惰性初始化 / 纯缓存），但**不允许再长**——
+#    否则「文件级归零、函数内继续长」就绕开了规则 6 的机器判据（A7 审计 §2 记录）。
+#  * 减少后请同步下调本数字（或显式传 `-MaxFunctionStatics <n>`）。
+$script:FnStaticCap = 51
 
 $ErrorActionPreference = 'Stop'
 
@@ -225,16 +234,18 @@ if (-not $SummaryOnly -and $violations.Count -gt 0) {
     }
 }
 
+$fnCap = if ($MaxFunctionStatics -ge 0) { $MaxFunctionStatics } else { $script:FnStaticCap }
+
 if (-not $SummaryOnly -and $fnStatics.Count -gt 0) {
     Write-Line ''
-    Write-Line "参考：函数内 static 局部变量 $($fnStatics.Count) 处（函数作用域 · 规则 6 字面范围外 · 不计失败）"
+    Write-Line "参考：函数内 static 局部变量 $($fnStatics.Count) 处（上限 $fnCap · 棘轮只许减 · 不计文件级失败）"
     foreach ($s in ($fnStatics | Sort-Object Layer, File, Line)) {
         Write-Line ("  [{0}] {1}:{2}  {3}" -f $s.Layer, $s.File, $s.Line, $s.Text)
     }
 }
 
 Write-Line ''
-$summary = "checked files: $totalFiles   violations: $($violations.Count)   (R1 $r1 / R2 $r2 / R3 $r3)"
+$summary = "checked files: $totalFiles   violations: $($violations.Count)   (R1 $r1 / R2 $r2 / R3 $r3)   ·   fn_static: $($fnStatics.Count) / $fnCap"
 
 # ---- 基线棘轮（-Baseline）：存量允许，**新增即失败** ----------------------
 function Get-ViolationKey($v) {
@@ -281,22 +292,32 @@ if (-not [string]::IsNullOrWhiteSpace($Baseline)) {
     }
 
     Write-Line "$summary   ·   baseline: $($baseKeys.Count)   new: $($newOnes.Count)   fixable: $($fixedKeys.Count)"
-    if ($newOnes.Count -eq 0) {
-        Write-Line '结果: PASS（无新增跨帧可变状态；存量见基线文件，按 ARCH-A6/A7 逐步清偿）'
+    if ($newOnes.Count -eq 0 -and $fnStatics.Count -le $fnCap) {
+        Write-Line '结果: PASS（无新增跨帧可变状态；存量见基线文件，按 ARCH-A6/A7 逐步清偿；函数内 static 未超棘轮）'
         exit 0
+    }
+    if ($newOnes.Count -eq 0) {
+        Write-Line "结果: FAIL（函数内 static 超出棘轮上限 $fnCap：只许减不许增）"
+        exit 1
     }
     Write-Line '结果: FAIL（出现基线外的新增跨帧可变状态：见 ARCHITECTURE.md §1.1 规则 6 / §4 判据 2）'
     exit 1
 }
 
-if ($violations.Count -eq 0) {
+if ($violations.Count -eq 0 -and $fnStatics.Count -le $fnCap) {
     Write-Line "$summary"
-    Write-Line '结果: PASS（无跨 TU extern 变量 · 无文件作用域可变状态）'
+    Write-Line '结果: PASS（无跨 TU extern 变量 · 无文件作用域可变状态 · 函数内 static 未超棘轮）'
     exit 0
 }
 
+if ($violations.Count -gt 0) {
+    Write-Line "$summary"
+    Write-Line '结果: FAIL（跨帧可变状态必须是对象成员：见 ARCHITECTURE.md §1.1 规则 6 / §4 判据 2）'
+    exit 1
+}
+
 Write-Line "$summary"
-Write-Line '结果: FAIL（跨帧可变状态必须是对象成员：见 ARCHITECTURE.md §1.1 规则 6 / §4 判据 2）'
+Write-Line "结果: FAIL（函数内 static 超出棘轮上限 $fnCap：只许减不许增；新增的跨帧状态必须做成对象成员，见 ARCHITECTURE.md §1.1 规则 6）"
 exit 1
 
 

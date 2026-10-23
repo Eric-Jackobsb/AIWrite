@@ -230,27 +230,27 @@ else {
     Add-Result 'check_includes（依赖单向）' $false "脚本缺失：$incScript"
 }
 
-# ---- ⑦ 全局变量自检（ARCH-A5 收口：判据 2 = 跨 TU extern + 文件级 static 可变状态 **无新增**） ----
+# ---- ⑦ 全局变量自检（ARCH-A5/A7 收口：判据 2 = 跨 TU extern + 文件级 static 可变状态 **恒为 0**） ----
 #  * 脚本 = `source/tools/check_globals.ps1`（只读、零副作用；R1 头文件 extern 变量 /
 #    R2 文件作用域 static（含匿名 namespace）/ R3 外部链接全局；类成员与 const 常量表不计入）
-#  * 判据两段：**终值 = 存量 0**（ARCH-A6/A7 逐文件对象化清偿）；**当前 = 基线棘轮** ——
-#    存量记在 `tools/check_globals_baseline.txt`，出现基线外的新增即失败（只减不增）。
+#  * 判据：**严格零容忍**（不带 `-Baseline`）—— A6 清 ui 60 条 · A7 清 web/utils 27 条，
+#    存量归零后基线文件已删除；同时脚本内建**函数内 static 棘轮**（只许减），
+#    防止「文件级归零、函数内继续长」绕开规则 6。
 Write-Both "`n== ⑦ 全局变量（check_globals.ps1 · 规则 6 / 判据 2） =="
 $glbScript   = Join-Path $sourceDir 'tools\check_globals.ps1'
-$glbBaseline = Join-Path $sourceDir 'tools\check_globals_baseline.txt'
 if (Test-Path $glbScript) {
     $outFile = Join-Path $logDir "check_all_$stamp`_globals.txt"
     Push-Location $repoRoot
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $glbScript -Baseline $glbBaseline *> $outFile
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $glbScript *> $outFile
     $glbCode = $LASTEXITCODE
     Pop-Location
     $glbText = if (Test-Path $outFile) { Get-Content $outFile -Raw -ErrorAction SilentlyContinue } else { '' }
     $glbLine = (($glbText -split "`n") | Where-Object { $_ -match 'checked files' } | Select-Object -Last 1)
     $glbDetail = if ($glbLine) { ($glbLine -replace '^\s+', '').Trim() } else { '' }
-    Add-Result 'check_globals（全局变量棘轮）' ($glbCode -eq 0) $glbDetail
+    Add-Result 'check_globals（全局变量零容忍）' ($glbCode -eq 0) $glbDetail
 }
 else {
-    Add-Result 'check_globals（全局变量棘轮）' $false "脚本缺失：$glbScript"
+    Add-Result 'check_globals（全局变量零容忍）' $false "脚本缺失：$glbScript"
 }
 
 # ---- ⑧ 文档断链自检（DBG-L01 收口：判据 = **全库 0**） ----

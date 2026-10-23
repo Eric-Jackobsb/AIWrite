@@ -107,39 +107,58 @@ bool is_pipe_gone(unsigned long code)
 } // namespace
 
 namespace {
-std::atomic<std::uint64_t> g_ipc_connects{0};   // 全局：成功建立的连接数
-std::atomic<std::uint64_t> g_ipc_commands{0};   // 全局：发出的命令帧数（`call` + `send_command`）
+// ARCH-A7：原先 4 条文件级 static ⇒ 两套显式状态对象（单一定义点 = 各自访问器）。
+// 全局计数（诊断 / 自检打印）
+struct IpcCounters {
+    std::atomic<std::uint64_t> connects{0}; // 成功建立的连接数
+    std::atomic<std::uint64_t> commands{0}; // 发出的命令帧数（`call` + `send_command`）
+};
+
+IpcCounters& ipcCounters()
+{
+    static IpcCounters counters;
+    return counters;
+}
+
 // 本线程计数（护栏判据）：`thread_local` ⇒ 后台线程的 IPC **不**污染 UI 线程的差值
-thread_local std::uint64_t t_ipc_connects = 0;
-thread_local std::uint64_t t_ipc_commands = 0;
+struct IpcThreadCounters {
+    std::uint64_t connects = 0;
+    std::uint64_t commands = 0;
+};
+
+IpcThreadCounters& ipcThreadCounters()
+{
+    thread_local IpcThreadCounters counters;
+    return counters;
+}
 } // namespace
 
 std::uint64_t ipcConnectCount()
 {
-    return g_ipc_connects.load();
+    return ipcCounters().connects.load();
 }
 
 std::uint64_t ipcCommandCount()
 {
-    return g_ipc_commands.load();
+    return ipcCounters().commands.load();
 }
 
 std::uint64_t ipcThreadConnectCount()
 {
-    return t_ipc_connects;
+    return ipcThreadCounters().connects;
 }
 
 std::uint64_t ipcThreadCommandCount()
 {
-    return t_ipc_commands;
+    return ipcThreadCounters().commands;
 }
 
 void ipcResetCounters()
 {
-    g_ipc_connects.store(0);
-    g_ipc_commands.store(0);
-    t_ipc_connects = 0;
-    t_ipc_commands = 0;
+    ipcCounters().connects.store(0);
+    ipcCounters().commands.store(0);
+    ipcThreadCounters().connects = 0;
+    ipcThreadCounters().commands = 0;
 }
 
 std::string daemonPipeName(std::uint32_t pid)
@@ -248,8 +267,8 @@ bool PipeClient::connect(const std::string& pipeName, int timeout_ms, std::strin
         pipe_name_   = full;
     }
     reader_ = std::thread([this, handle, read_event] { readerLoop(handle, read_event); });
-    g_ipc_connects.fetch_add(1); // `M7B-46` 护栏：全局（诊断）
-    ++t_ipc_connects;            // `M7B-46` 护栏：本线程（判据）
+    ipcCounters().connects.fetch_add(1); // `M7B-46` 护栏：全局（诊断）
+    ++ipcThreadCounters().connects;            // `M7B-46` 护栏：本线程（判据）
     aiwrite::log::info("[管道] 已连接 " + full);
     return true;
 }
@@ -328,8 +347,8 @@ bool PipeClient::writeLine(const std::string& line, std::string* error)
 bool PipeClient::call(const std::string& name, const nlohmann::json& fields,
                       nlohmann::json* response, int timeout_ms, std::string* error)
 {
-    g_ipc_commands.fetch_add(1); // `M7B-46` 护栏：全局（入口即计，含词表校验失败 —— 宁可过报）
-    ++t_ipc_commands;            // `M7B-46` 护栏：本线程（判据）
+    ipcCounters().commands.fetch_add(1); // `M7B-46` 护栏：全局（入口即计，含词表校验失败 —— 宁可过报）
+    ++ipcThreadCounters().commands;            // `M7B-46` 护栏：本线程（判据）
     const std::string    id      = nextId();
     const std::string    line    = channel::make_command(name, id, fields.dump());
     const channel::Frame command = channel::parseFrame(line);
@@ -391,8 +410,8 @@ bool PipeClient::call(const std::string& name, const nlohmann::json& fields,
 bool PipeClient::sendCommand(const std::string& name, const nlohmann::json& fields,
                               std::string* error)
 {
-    g_ipc_commands.fetch_add(1); // `M7B-46` 护栏：全局（入口即计，同 `call`）
-    ++t_ipc_commands;            // `M7B-46` 护栏：本线程（判据）
+    ipcCounters().commands.fetch_add(1); // `M7B-46` 护栏：全局（入口即计，同 `call`）
+    ++ipcThreadCounters().commands;            // `M7B-46` 护栏：本线程（判据）
     const std::string    id      = nextId();
     const std::string    line    = channel::make_command(name, id, fields.dump());
     const channel::Frame command = channel::parseFrame(line);
