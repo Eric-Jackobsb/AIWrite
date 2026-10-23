@@ -263,7 +263,12 @@ add_library(aiwrite_core STATIC
     ai/src/cancel_token.cpp          # M_patchAB §2.1（PB-02）：协作式取消 + 取消监视（纯逻辑 + 线程）
     ai/src/retry_policy.cpp          # M_patchAB §2.6（PB-08 残项）：可重试状态 / 退避 / 次数钳制
     ai/src/deepseek/deepseek_web_client.cpp
-    ai/src/dom_web_client.cpp        # L3（PB2-13/15）：通用 DOM 站点适配器 + 选择器探测
+    ai/src/dom_web_client.cpp        # L3（PB2-13/15）：通用 DOM 站点适配器 —— 会话聊天主体（domChat）
+    # ARCH-Z1b（2026-10-23）：`dom_web_client.cpp` 2397 行 → 4 个 TU + 2 个脚本模板头
+    #   模块内契约 = ai/include/dom_web_client_detail.h；脚本模板 = dom_web_client_scripts[_poll].h
+    ai/src/dom_web_client_probe.cpp     # 单站探测：selector dump + 探测脚本执行 + 结果解析
+    ai/src/dom_web_client_probe_all.cpp # 批量探测：domProbeAll（报告 + 台账）
+    ai/src/dom_web_client_selftest.cpp  # 自检：domAdapterSelftest + domProbeSelftest
     ai/src/upload_supply_probe.cpp  # M8 Phase 2：C++ 供料探针（WebView2 会话供料 + 站点只读 GET）
     ai/src/upload/image_convert.cpp        # M8-14：图片准备（站点白名单 / 限额 → 缩放 + 转码）
     ai/src/upload/image_preprocess.cpp     # M_8nodes_extension L1-c（§4.2）：图片预处理（用户参数 → 裁剪/缩放）
@@ -295,7 +300,10 @@ add_library(aiwrite_core STATIC
     nodes/src/text_diff.cpp           # M_node_expansion L2（§4.3.5.6）：文本对比
     web/src/channel_frames.cpp   # M7B 批 1：管道协议 v1 帧（纯函数；VB2-29 / VB2-32）
     web/src/pipe_client.cpp      # M7B 批 1 step 2：命名管道客户端（M7B-02；读线程 + id 配对）
-    web/src/pydoll_channel.cpp   # M7B 批 2：新通道（Pydoll 守护进程）—— 本批**不接线**（只 --pydoll-login / --pydoll-selftest）
+    web/src/pydoll_channel.cpp   # M7B 批 2：新通道（Pydoll 守护进程）—— 基础设施 + 会话生命周期
+    # ARCH-Z1b（2026-10-23）：`pydoll_channel.cpp` 1282 行 → 3 个 TU（模块内契约 = web/include/pydoll_channel_detail.h）
+    web/src/pydoll_channel_commands.cpp  # 内容返回：run_script / connect_session / tab 判定 / joinNames
+    web/src/pydoll_channel_selftest.cpp  # 自检（pydoll / script / chat）与 --pydoll-login
     web/src/session_snapshot.cpp # M7B 批 2：L2 快照只读视图（MB-D0-8；**只碰元数据**，不读内容）
     web/src/session_store.cpp
     web/src/probe_verdict.cpp    # M_patchAB §2.2/§3.3（PB-07 / PB2-25）：会话诊断纯函数（判据收紧 + 错误串反查）

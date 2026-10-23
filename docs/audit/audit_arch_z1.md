@@ -125,8 +125,8 @@ python ..\source\tools\check_links.py
 
 ## 8. 遗留与风险（Z1 队列）
 
-已完成：`provider_spec.cpp` ✅（1743 → 5 TU）· `image_decode.cpp` **758** ✅（已 < 800，无需拆）。
-**剩余 13 个生产文件**（按「先大后小、先纯逻辑后 GUI」排序，下一组从 `webview_host` 起）：
+已完成：`provider_spec.cpp` ✅（1743 → 5 TU）· **第 2 组 ✅（2026-10-23）**：`webview_host.cpp`（3514 → 8 TU）· `dom_web_client.cpp`（2397 → 4 TU + 2 脚本头）· `pydoll_channel.cpp`（1282 → 3 TU）—— 详见 [audit_arch_z1_web.md](audit_arch_z1_web.md) · `image_decode.cpp` **758** ✅（已 < 800，无需拆）。
+**剩余 10 个生产文件**（按「先大后小、先纯逻辑后 GUI」排序，下一组从 `app.cpp` 起）：
 
 | 顺序 | 文件 | 行数 | 拆分预判 |
 |---|---|---|---|

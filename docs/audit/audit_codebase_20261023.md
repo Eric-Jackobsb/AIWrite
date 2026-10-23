@@ -3,18 +3,18 @@
 > 日期：2026-10-23 · 触发：用户「现在重构还有没做的部分吗？如果全部完成……再审计一遍代码风险和重复度」
 > 范围：`source/` 全部自有代码（`ui/` `app/` `engine/` `nodes/` `ai/` `web/` `utils/` `tools/`），排除 `third_party/`（61 文件 / 76,007 行）与 `source/python/`
 > 方法：① 进度核对（[refactor/ARCHITECTURE.md](../refactor/ARCHITECTURE.md) §3 / §4 逐条对照）② `check_all` 21 项门禁实测 ③ **克隆检测**（自写窗口哈希扫描器，K=6 有意义行 / 最大延伸 / 禁止自重叠，`28976` 有意义行 / `28971` 窗口）④ 风险面 grep 取证（静态存储期 / 内存 / 并发 / 危险 API / 文件体量）
-> 结论一句话：**重构 18/19 批（A6 / A7 已于同日落地，见 [audit_arch_a6.md](audit_arch_a6.md) · [audit_arch_a7.md](audit_arch_a7.md)；Z2 已落地，见 [audit_arch_z2.md](audit_arch_z2.md)），验收 8 条判据 **8 ✅**（判据 7 已由 Z2 补齐）；代码重复度 3.8 %（可接受，但 ai/web 有结构性重复）；P0 风险只剩一类，挂在未完成的 Z1 上。**
+> 结论一句话：**重构 18/19 批（A6 / A7 已于同日落地，见 [audit_arch_a6.md](audit_arch_a6.md) · [audit_arch_a7.md](audit_arch_a7.md)；Z2 已落地，见 [audit_arch_z2.md](audit_arch_z2.md)），验收 8 条判据 **8 ✅**（判据 7 已由 Z2 补齐）；代码重复度 **3.7 %**（可接受，但 ai/web 有结构性重复）；P0 风险只剩一类，挂在未完成的 Z1 上。**
 
 ---
 
-## §1 重构完成度：还剩 1 批（Z1 · 第 1 组已落地）
+## §1 重构完成度：还剩 1 批（Z1 · 第 1、2 组已落地 · 余 10 文件）
 
 | 阶段 | 批次 | 状态 | 说明 |
 |---|---|---|---|
 | 1 运行侧事件化 | R1 · R2 · R3 · R4 | ✅ 4/4 | RunSession · RunEvent 订阅 · ReadOnlyView · 命令路由 |
 | 2 编辑侧事件化 | E1 · E2 · E3 · E4 · E5 · E6 | ✅ 6/6 | EventBus · Undo/autosave 订阅 · WorkflowModel · SelectionState · CanvasInteractor · 打包下沉 |
 | 3 应用级收口 | A1 · A2 · A3 · A4 · A5 · **A6 · A7** | ✅ 7/7 | AppContext · AutosaveService · `editor()` 退场 · 依赖单向 · 全局变量断言 · **ui 60 条状态对象化** · **web/utils 27 条状态对象化 + 删基线切严格 0** |
-| 4 收尾 | ~~**Z2**~~ ✅ · **Z1** 🟡（13/15 文件仍 >800） | 🟡 **1/2**（Z2 已落地 2026-10-23；Z1 第 1 组同日落地：`provider_spec` 1743 → 5 TU） | 见 §2 |
+| 4 收尾 | ~~**Z2**~~ ✅ · **Z1** 🟡（10/15 文件仍 >800） | 🟡 **1/2**（Z2 已落地 2026-10-23；Z1 第 1 组同日落地：`provider_spec` 1743 → 5 TU · 第 2 组同日落地：`webview_host` / `dom_web_client` / `pydoll_channel` → 15 TU） | 见 §2 |
 
 **验收判据 8 条**（§4）实测状态：
 
@@ -38,7 +38,7 @@
 | ~~**ARCH-A6**~~ ✅ | ui 层文件级可变状态**逐文件对象化** | ~~60 条 / 7 文件~~ → **0** | 已落地 2026-10-23：`settings_panel` 19 → `SettingsPanelState` · `texture_cache` 12 → `class TextureCache` · `node_canvas` 11 → `NodeCanvasState` · `ce_draw` 7 → `CompositeDialogsState` · `node_library` 6 · `console_panel` 3 · `output_panel` 2（[audit_arch_a6.md](audit_arch_a6.md)） |
 | ~~**ARCH-Z2**~~ ✅ | `CeSession` 对称拆分（`CeModel` / `CeFile` / `CeSelection` / `CeSpec`）+ ce 渲染 ReadOnlyView 化 | ~~ce 侧 **6 文件 / 1,514 行**~~ → 已落地 2026-10-23 | `ce_draw` 846（读 `view` / 写 `session`）· `ce_run` 223 · `ce_session` 182 + 新增 `ce_model` 74 / `ce_spec` 191 / `ce_file` 98 / `ce_selection` 33 · `composite_editor` 162 · `ce_state` 57（[audit_arch_z2.md](audit_arch_z2.md)） |
 | ~~**ARCH-A7**~~ ✅ | web / utils 层 27 条 + **删基线、切严格零容忍** | ~~27 条 / 7 文件~~ → **0** | 已落地 2026-10-23：`webview_host` 8 → `WindowRegistry` + `EnvCache` + `tlsWindow()` · `diagnostics` 7 → `ExceptionCounter` · `pipe_client` 4 → `IpcCounters` + `IpcThreadCounters` · `pydoll_channel` 3 → `SessionState` · `log` 2 → `Loggers` · `config` 2 → `ConfigStore` · `credential` 1 → `AvailabilityCache`；基线文件删除 + 函数内 static 棘轮 41 → 51（[audit_arch_a7.md](audit_arch_a7.md)） |
-| **ARCH-Z1** | 超长文件瘦身（目标 <800 行） | **15 目标 → 已达标 2**（`provider_spec.cpp` 1743 → **5 TU / 最大 679** · `image_decode.cpp` **758**）；**余 13 个生产文件仍 >800** | 余队列（按批）：`webview_host.cpp` **3514** · `dom_web_client.cpp` **2397** · `app.cpp` **1454** · `pydoll_channel.cpp` **1282** · `local_nodes.cpp` **1242** · `composite.cpp` **1171** · `node_canvas.cpp` **1126** · `settings_panel.cpp` **944** · `canvas_view.cpp` **938** · `node_registry.cpp` **899** · `executor.cpp` **886** · `property_panel.cpp` **855** · `ce_draw.cpp` **846**（[audit_arch_z1.md](audit_arch_z1.md) §8 给出拆分预判） |
+| **ARCH-Z1** | 超长文件瘦身（目标 <800 行） | **14 目标 → 已达标 5**（`provider_spec.cpp` 1743 → **5 TU / 最大 679** · `webview_host.cpp` 3514 → **8 TU / 最大 607** · `dom_web_client.cpp` 2397 → **4 TU + 2 脚本头 / 最大 583** · `pydoll_channel.cpp` 1282 → **3 TU / 最大 527** · `image_decode.cpp` **758**）；**余 10 个生产文件仍 >800** | 余队列（按批）：`app.cpp` **1454** · `local_nodes.cpp` **1242** · `composite.cpp` **1171** · `node_canvas.cpp` **1126** · `settings_panel.cpp` **944** · `canvas_view.cpp` **938** · `node_registry.cpp` **899** · `executor.cpp` **886** · `property_panel.cpp` **855** · `ce_draw.cpp` **846**（[audit_arch_z1.md](audit_arch_z1.md) §8 · 第 2 组详版 [audit_arch_z1_web.md](audit_arch_z1_web.md) §9） |
 
 > 附带说明（**A7 收口时更正**）：本文初版曾把基线 27 条写成「函数内 `static`」—— 口径错了，那 27 条**全是文件级** `static` / 匿名 `namespace` 内可变变量（web 15 / utils 12）；函数内 `static` 另有 **41 处**（`check_globals` 只统计、不判失败）。A7 因此 = 27 条对象化 + **补函数内 static 棘轮（41 → 51，本批新增 10 个访问器）** + 删基线切严格零容忍 —— 既关掉文件级存量，也关掉「文件级归零、函数内继续长」的绕行口子。
 
@@ -109,7 +109,7 @@
 | ai | 6,420 | 370 | **5.8 %** | provider 家族骨架重复（最大来源） |
 | nodes | 1,643 | 115 | **7.0 %** | `local_nodes` 两个节点函数结构同构 + `text_process_common.h` 与实现重复 |
 
-> **复测（2026-10-23 · ARCH-Z1 第 1 组后）**：有意义行 **29,243** · 克隆块 **90** · 重复行 **1,096** · 重复率 **3.7 %**
+> **复测（2026-10-23 · ARCH-Z1 第 2 组后）**：有意义行 **29,243** · 克隆块 **90** · 重复行 **1,096** · 重复率 **3.7 %**
 > （ai **5.6 %**（原 5.8 %，`provider_spec` 拆分 −1 块）· ui **1.2 %**（原 1.1 %，Z2 新增 5 个 TU 的分母效应）· web 5.5 % · nodes 7.0 % · engine 3.8 % · utils 3.0 % · app 2.9 %）。
 > 上表保持审计时点快照不动，复测口径同为 `python source\tools\dup_scan.py`。
 
@@ -172,6 +172,7 @@ python source\tools\dup_scan.py
 | 2026-10-23 | 首版：重构完成度复审（15/19 批 · 判据 6 ✅ / 2 🟡）+ 风险清单（P0×2 / P1×5 / P2×5）+ 重复度首次量化（3.8 % · 91 块）+ 下批顺序建议；同步 [ARCHITECTURE.md](../refactor/ARCHITECTURE.md) §4 |
 | 2026-10-23 | **A7 回填：17/19 批 · 判据 7 条 ✅ + 1 🟡**（文件级 static 87 → 0 · 基线删除 · 严格零容忍 + 函数内 static 棘轮 51 · 判据 2 转 ✅）；更正初版 §2 的「27 条函数内 static」口径（实为 web/utils 的**文件级** static；函数内 static 另有 41 处）；§5 顺序表按「A7 已提前落地」重排（Z2 → Z1 → 复审）；§6 复现命令改严格模式（[audit_arch_a7.md](audit_arch_a7.md)） |
 | 2026-10-23 | **Z1 回填（第 1 组）：§1 第 4 行标 🟡 1/13 文件 · §2 Z1 行改用「15 目标 → 已达标 2」口径并列出剩余 13 个文件的**实测**行数（原表头是审计时点快照，`provider_spec` 1609 → 实测 1743 等）· §4 增「复测」段（克隆块 90 / 重复率 **3.7 %**）· §5 第 4 序标第 1 组已落地（[audit_arch_z1.md](audit_arch_z1.md)） |
+| 2026-10-23 | **Z1 回填（第 2 组）：§1 第 4 行改 🟡 10/15 文件 · §2 Z1 行改「14 目标 → 已达标 5」并重列剩余 10 个文件的实测行数 · §4 复测标第 2 组后 · §5 第 4 序补第 2 组已落地；新详版审计 [audit_arch_z1_web.md](audit_arch_z1_web.md)（web/DOM 三文件 7193 → 15 TU · 契约头 3 个 + 脚本头 2 个 · 夹具抽取口修正 · 40 块逐字 0 差异）** |
 
 
 

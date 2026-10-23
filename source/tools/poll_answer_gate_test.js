@@ -1,7 +1,8 @@
 // =============================================================================
 //  poll_answer_gate_test.js —— PW-07（精简版）「答案**归属**门」行为夹具
 //
-//  做什么：从源码 `source/ai/src/dom_web_client.cpp` **抽取真实的** `kPollScript`
+//  做什么：从源码 `source/ai/include/dom_web_client_scripts*.h`（ARCH-Z1b 拆分后脚本模板所在）
+//          与 `source/ai/src/dom_web_client.cpp` **抽取真实的** `kPollScript`
 //          与三个判据常量（`kAnswerPoolSelector` / `kAnswerChromeTextRe` /
 //          `kMinAutoAnswerChars`），在 node 里用**迷你 DOM** 真跑该脚本，
 //          断言「装饰 / 布局文本不会被当成答案」且「真答案**不被误伤**」——
@@ -47,8 +48,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const CPP = path.join(__dirname, '..', 'ai', 'src', 'dom_web_client.cpp');
-const SRC = fs.readFileSync(CPP, 'utf8');
+// ARCH-Z1b（2026-10-23）：脚本模板与判据常量已拆到 `ai/include/dom_web_client_scripts*.h`，
+//  运行期 .cpp 只保留调用方 —— 抽取口 = 「两个模板头 + 主体 .cpp」按顺序拼接（源码一动夹具即见）。
+const AI_DIR = path.join(__dirname, '..', 'ai');
+const SRC = [
+    path.join(AI_DIR, 'include', 'dom_web_client_scripts.h'),
+    path.join(AI_DIR, 'include', 'dom_web_client_scripts_poll.h'),
+    path.join(AI_DIR, 'src', 'dom_web_client.cpp'),
+].map((file) => fs.readFileSync(file, 'utf8')).join('\n');
 
 // --------------------------------------------------------- 抽取（源码即真相）----
 // C++ 字符串字面量 → 运行时值：相邻字面量拼接 + 转义（`\\` `\"` `\n` `\t` `\r`）
