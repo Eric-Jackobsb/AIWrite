@@ -4,7 +4,7 @@
 //  编辑器状态（UI 层共享）
 //
 //  * ARCH-E3：文档数据（Graph + Undo + EventBus）已拆出为 `WorkflowModel model_`（§1.8.3）；
-//    本层持有并编排（运行 / 状态栏 / 选中 / autosave / 剪贴板）
+//    本层持有并编排（运行 / 状态栏 / 选中 / 剪贴板 / 工作流文件）
 //  * ARCH-E4：选中集合已拆出为独立对象 `SelectionState selection_`（§1.8.4 / ARCH-D28）；
 //    `editor().selection()` 访问；`selected_nodes` 等公有成员移除
 //  * 提供"修改前自动压快照"的编辑操作（薄封装委托 `model()`），供画布 / 节点库 / 工具栏 / 菜单调用
@@ -96,21 +96,9 @@ struct EditorState {
 
     // 当前文件路径（保存对话框的默认名用）→ app_ctx().workflow_file.current_workflow_path()
 
-    // ---- PC-01：自动保存（节流；主循环每帧调用 tick_autosave()）----
-    //  判据与落点见 engine/autosave.h；本层只负责**何时**写（归口 app_ctx().autosave）：
-    //   * 变更感知 = 订阅内容类 EditEvent（事件回调标记 dirty），**静默 ≥
-    //     config.ui.autosave_idle_sec 秒**（默认 3）才写一次
-    //   * 仅变更时写（无变更 ⇒ 一次盘都不写）
-    //   * 启动时 autosave 暂停（PC-02：先问「恢复未保存的更改？」再放行）
-    //     —— 否则启动时创建的示例工作流会在 3 秒后把真快照冲掉
-    void tickAutosave();                       // 主循环每帧调用一次（ARCH-E2：事件驱动，无事件不写）
-    void pauseAutosave(bool paused);           // true = 暂停（不写、不探测）
-    void markAutosaveBaseline();              // 以当前图为「已保存」基线（不写盘）
-    bool autosaveDirty() const { return app_ctx_.autosave.dirty(); } // ARCH-E2：自检钩子（有未保存变更？）
-    void flushAutosaveOnExit();              // 退出前补写一次（有未保存更改时）
-    // PC-02：把快照恢复进当前图（**不覆盖原文件** —— 恢复后 `current_workflow_path` 留空，
-    //  保存必然走「另存为」，原文件由用户显式决定；原路径记在 restored_from_autosave_path）
-    bool restoreAutosave(std::string* error);
+    // ---- PC-01：自动保存（ARCH-A2：EditorState 不再持有 autosave 方法）----
+    //  判据与落点见 engine/autosave.h；调用方直连 `app_ctx().autosave`（AutosaveService）：
+    //  tick(workflow_path) / pause / mark_baseline / dirty / flush 与「恢复」编排均落 app 层。
 
     // ---- 运行输出归档（PC-05）----
     // 运行结束自动写入 outputs/<时间>-<工作流名>/（每节点 .txt + run.json）

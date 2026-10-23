@@ -734,8 +734,9 @@ int run(const AppOptions& options)
     else {
         // 无需询问（无快照 / 快照不比工作流新 / 用户选过「不再提示」）⇒ 直接放行自动保存
         log::info("[自动保存] 无需恢复询问（" + autosave_reason + "）→ 自动保存已放行");
-        editor().markAutosaveBaseline();
-        editor().pauseAutosave(false);
+        // ARCH-A2：EditorState autosave 方法已移除 —— 直连 app_ctx().autosave
+        editor().app_ctx().autosave.mark_baseline();
+        editor().app_ctx().autosave.pause(false);
     }
 
     // 诊断：安装首异常计数器（VEH）——用于定位第三方依赖反复抛异常 / 内存增长问题，
@@ -803,8 +804,12 @@ int run(const AppOptions& options)
         // ---- 执行会话推进（M2-04：一帧最多推进一个节点；无运行会话时为空操作）----
         editor().tickRun();
 
-        // ---- PC-01：自动保存节流（1 Hz 探测 + 静默 3 秒后写快照；暂停/无变更时零写盘）----
-        editor().tickAutosave();
+        // ---- PC-01：自动保存节流（静默 3 秒后写快照；暂停/无变更时零写盘）----
+        // ARCH-A2：EditorState autosave 方法已移除 —— 直连 app_ctx().autosave
+        // （tick 返回「本次真的写了快照」，据此写状态栏）
+        if (editor().app_ctx().autosave.tick(editor().app_ctx().workflow_file.current_workflow_path())) {
+            editor().setStatus("已自动保存：未保存的更改已暂存（崩溃/退出后可恢复）");
+        }
 
         // ---- M_patchAB §3.2 / §3.4（PB2-07 / PB2-30②）：后台诊断结论 → 状态栏 ----
         //  * 工作线程只**投递**结论（post_background_status）；此处（主线程）才写 UI 状态
@@ -1108,22 +1113,53 @@ int run(const AppOptions& options)
 
                 const auto finish_without_restore = [&](const char* status_text) {
                     state.app_ctx().autosave.clear_snapshot(); // 用户明确拒绝 ⇒ 快照不再保留（否则下次又问）
-                    state.markAutosaveBaseline();
-                    state.pauseAutosave(false);
+                    state.app_ctx().autosave.mark_baseline();
+                    state.app_ctx().autosave.pause(false);
                     autosave_ask = false;
                     state.setStatus(status_text);
                     ImGui::CloseCurrentPopup();
                 };
 
+                // ARCH-A2：恢复编排随 EditorState::restoreAutosave 一并移除，落点改在 app 层
+                //（恢复弹窗所在 = 唯一调用方）。数据操作 = engine::autosaveLoad + model().load()；
+                // 路径/基线 = workflow_file + autosave；编排 = abortRunIfAny / selection / 状态栏。
+                // 快照信息复用启动时 probe 的 autosave_info（弹窗期间 autosave 暂停，快照不可变）。
+                const auto do_restore = [&]() -> bool {
+                    engine::Graph loaded;
+                    std::string   load_error;
+                    if (!engine::autosaveLoad(loaded, &load_error)) {
+                        log::error("[自动保存] 恢复失败：" + load_error);
+                        state.setStatus("恢复失败：" + load_error);
+                        return false;
+                    }
+                    state.abortRunIfAny("恢复自动保存");
+                    // ARCH-E3：整图替换（替换数据 + 清空撤销栈 + 逐节点 diff 事件）归 WorkflowModel::load
+                    state.model().load(std::move(loaded));
+                    state.selection().clear(); // ARCH-E4：选中独立对象（全清：nodes + links + single）
+                    state.request_navigate_to_content = true;
+                    // PC-02：**不覆盖原文件** —— 恢复后当前路径留空 ⇒ 保存必然走「另存为」
+                    state.app_ctx().workflow_file.set_restored_from_autosave_path(
+                        autosave_info.workflow_path);
+                    state.app_ctx().workflow_file.set_current_workflow_path("");
+                    // ARCH-E2：整图替换通知已在 model().load 内发出（在 baseline 之前发）
+                    state.app_ctx().autosave.mark_baseline(); // 恢复内容 = 当前状态（避免立刻再写同一快照）
+                    const std::string& restored_path =
+                        state.app_ctx().workflow_file.restored_from_autosave_path();
+                    log::info("[自动保存] 已恢复快照（节点 " +
+                              std::to_string(state.model().graph.nodes.size()) + " / 连线 " +
+                              std::to_string(state.model().graph.edges.size()) + "）" +
+                              (restored_path.empty() ? "（快照未关联工作流文件）"
+                                                     : "（原文件 " + restored_path +
+                                                           "，保存将另存为新文件）"));
+                    state.setStatus("已恢复未保存的更改（另存为新文件，不会覆盖原工作流）");
+                    return true;
+                };
+
                 if (ImGui::Button("恢复", ImVec2(160.0f, 0.0f))) {
-                    std::string restore_error;
-                    if (state.restoreAutosave(&restore_error)) {
-                        state.pauseAutosave(false);
+                    if (do_restore()) {
+                        state.app_ctx().autosave.pause(false);
                         autosave_ask = false;
                         ImGui::CloseCurrentPopup();
-                    }
-                    else {
-                        state.setStatus("恢复失败：" + restore_error);
                     }
                 }
                 ImGui::SameLine();
@@ -1371,7 +1407,8 @@ int run(const AppOptions& options)
     compositeEditorStopRun(); // 上级节点「执行连线」：退出前 join 试运行线程（幂等）
 
     // ---- PC-01：退出前补写快照（有未保存的更改才写；正常退出与崩溃都能在下一次启动恢复）----
-    editor().flushAutosaveOnExit();
+    // ARCH-A2：EditorState autosave 方法已移除 —— 直连 app_ctx().autosave
+    editor().app_ctx().autosave.flush(editor().app_ctx().workflow_file.current_workflow_path());
 
     // ---- 窗口几何退出落盘（F3 / PD-04）：节流保存之外的最终兜底 ----
     if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) == 0) {

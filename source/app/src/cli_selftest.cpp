@@ -1021,7 +1021,7 @@ int runSelftest(bool use_web, const std::string& provider_id)
     //  * Undo 订阅化：真实 editor() 构造时已订阅 before 通道 → snapshot(label) 只发通知，
     //    压快照由订阅回调完成（undoDepth +1）；发 NodeAdded 不压快照（通道隔离）
     //  * 批量重置 diff：undoOnce 恢复整图 → 逐节点 NodeRemoved 事件
-    //  * autosave 订阅化：内容类事件 → autosaveDirty() 置位；SelectionChanged 不触发
+    //  * autosave 订阅化：内容类事件 → app_ctx().autosave.dirty() 置位；SelectionChanged 不触发
     bool edit_subscribe_ok = false;
     {
         using aiwrite::ui::EditEvent;
@@ -1073,14 +1073,15 @@ int runSelftest(bool use_web, const std::string& provider_id)
         // 清理：撤销 ② 压的空快照（恢复同一张图，diff 为空）回到基线深度
         state.model().undoOnce();
 
-        // ④ autosave 订阅化（真实 editor()：内容类事件 → autosaveDirty() 置位）
-        state.markAutosaveBaseline(); // 先重置（与自检前状态无关）
-        const bool dirty_baseline_ok = !state.autosaveDirty();
+        // ④ autosave 订阅化（真实 editor()：内容类事件 → app_ctx().autosave.dirty() 置位）
+        //    ARCH-A2：EditorState autosave 方法已移除 —— 直连 app_ctx().autosave
+        state.app_ctx().autosave.mark_baseline(); // 先重置（与自检前状态无关）
+        const bool dirty_baseline_ok = !state.app_ctx().autosave.dirty();
         state.model().event_bus().publish(EditEvent::node(EditEventKind::SelectionChanged, ""));
-        const bool dirty_selection_ok = !state.autosaveDirty(); // 选择非内容变化 → 不置位
+        const bool dirty_selection_ok = !state.app_ctx().autosave.dirty(); // 选择非内容变化 → 不置位
         state.model().event_bus().publish(EditEvent::node(EditEventKind::NodeAdded, "n_dirty"));
-        const bool dirty_content_ok = state.autosaveDirty(); // 内容事件 → 置位
-        state.markAutosaveBaseline();                        // 恢复基线，不污染后续运行
+        const bool dirty_content_ok = state.app_ctx().autosave.dirty(); // 内容事件 → 置位
+        state.app_ctx().autosave.mark_baseline();                       // 恢复基线，不污染后续运行
 
         edit_subscribe_ok = before_fifo_ok && before_unsub_ok && before_isolate_ok &&
                             undo_push_ok && undo_isolate_ok && undo_once_ok && diff_ok &&

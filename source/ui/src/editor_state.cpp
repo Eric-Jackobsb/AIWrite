@@ -1,6 +1,6 @@
 #include "editor_state.h"
 
-#include "autosave.h"
+// ARCH-A2：EditorState 不再使用 engine::autosave_*（restore 编排已迁 app.cpp）—— 本 TU 无需 autosave.h
 #include "node_registry.h"
 #include "validate.h"
 #include "workflow_io.h"
@@ -160,7 +160,7 @@ void EditorState::clearWorkflow()
     setStatus("画布已清空（撤销栈也已清空）");
 
     // PC-01/02：清空画布**不删**快照（保守：不替用户决定丢弃可恢复内容），只重设基线
-    markAutosaveBaseline();
+    app_ctx_.autosave.mark_baseline();
 }
 
 void EditorState::createSampleWorkflow()
@@ -651,69 +651,6 @@ void EditorState::abortRunIfAny(const std::string& reason)
     }
     run.abortIfAny(model_.graph, reason); // 终止 + 清节点状态（日志在内）
     setStatus("运行已终止（" + reason + "）");
-}
-
-// ----------------------------------------------------------- 自动保存（PC-01）----
-// 时机与判据（落点 engine::autosave_*；本层只回答「现在写不写」）：
-//  * ARCH-E2：变更感知 = 订阅内容类 EditEvent（AutosaveService::on_edit_content 标记
-//    dirty），不再每帧算 content signature；**静默 ≥ autosave_idle_sec 秒**（默认 3）才写一次
-//  * 无变更（无事件）⇒ 一次盘都不写；写失败 ⇒ 退避 10 秒（避免每帧重试砸盘 + 刷日志）
-// ARCH-A1：实现归 app_ctx().autosave（AutosaveService）；本层只做状态栏编排
-void EditorState::pauseAutosave(bool paused)
-{
-    app_ctx_.autosave.pause(paused);
-}
-
-void EditorState::markAutosaveBaseline()
-{
-    app_ctx_.autosave.mark_baseline();
-}
-
-void EditorState::tickAutosave()
-{
-    if (app_ctx_.autosave.tick(app_ctx_.workflow_file.current_workflow_path())) {
-        setStatus("已自动保存：未保存的更改已暂存（崩溃/退出后可恢复）");
-    }
-}
-
-bool EditorState::restoreAutosave(std::string* error)
-{
-    engine::AutosaveInfo info = engine::autosaveProbe();
-    engine::Graph        loaded;
-    std::string          load_error;
-    if (!engine::autosaveLoad(loaded, &load_error)) {
-        if (error != nullptr) {
-            *error = load_error;
-        }
-        log::error("[自动保存] 恢复失败：" + load_error);
-        return false;
-    }
-
-    abortRunIfAny("恢复自动保存");
-    // ARCH-E3：整图替换（替换数据 + 清空撤销栈 + 逐节点 diff 事件）归 WorkflowModel::load
-    model_.load(std::move(loaded));
-    selection_.clear(); // ARCH-E4：选中独立对象（全清：nodes + links + single）
-    request_navigate_to_content = true;
-
-    // PC-02：**不覆盖原文件** —— 恢复后当前路径留空 ⇒ 保存必然走「另存为」（用户显式确认目标）
-    // ARCH-A1：路径归口 app_ctx().workflow_file（current / restored_from）
-    app_ctx_.workflow_file.set_restored_from_autosave_path(info.workflow_path);
-    app_ctx_.workflow_file.set_current_workflow_path("");
-
-    // ARCH-E2：整图替换通知已在 model_.load 内发出（在 baseline 之前发）
-    app_ctx_.autosave.mark_baseline(); // 恢复内容 = 当前状态（否则会立刻再写一份同样的快照）
-    const std::string& restored_path = app_ctx_.workflow_file.restored_from_autosave_path();
-    log::info("[自动保存] 已恢复快照（节点 " + std::to_string(model_.graph.nodes.size()) +
-              " / 连线 " + std::to_string(model_.graph.edges.size()) + "）" +
-              (restored_path.empty() ? "（快照未关联工作流文件）"
-                                     : "（原文件 " + restored_path + "，保存将另存为新文件）"));
-    setStatus("已恢复未保存的更改（另存为新文件，不会覆盖原工作流）");
-    return true;
-}
-
-void EditorState::flushAutosaveOnExit()
-{
-    app_ctx_.autosave.flush(app_ctx_.workflow_file.current_workflow_path());
 }
 
 // ------------------------------------------------------------- 工作流文件 ----
