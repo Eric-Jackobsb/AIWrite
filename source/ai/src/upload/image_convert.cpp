@@ -9,6 +9,7 @@
 // ============================================================================
 
 #include "paths.h"
+#include "check_counter.h"  // make_selftest_check（去重专项）
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
@@ -428,16 +429,7 @@ int imageConvertSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
-    const auto check = [&passed, &failed](bool ok, const std::string& what) {
-        if (ok) {
-            ++passed;
-            std::printf("  ✓ %s\n", what.c_str());
-        }
-        else {
-            ++failed;
-            std::printf("  ✗ %s\n", what.c_str());
-        }
-    };
+    const auto check = make_selftest_check(passed, failed);  // 去重专项：见 utils/check_counter.h
 
     // ① accept 解析：非图片混入 / MIME 形式 / 大小写 / 空项 / 重复
     check(imageExtsFromAccept(".png,.PDF, .JPG,.mp3,docx,.jpeg,image/webp,*/*,") ==

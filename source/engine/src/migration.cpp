@@ -1,6 +1,7 @@
 #include "migration.h"
 
 #include "log.h"
+#include "check_counter.h"  // make_selftest_check（去重专项）
 #include "workflow_io.h"   // kWorkflowVersion（权威位）
 
 #include <cstdio>
@@ -131,16 +132,7 @@ int migrationSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
-    const auto check = [&passed, &failed](bool ok, const std::string& what) {
-        if (ok) {
-            ++passed;
-            std::printf("  ✓ %s\n", what.c_str());
-        }
-        else {
-            ++failed;
-            std::printf("  ✗ %s\n", what.c_str());
-        }
-    };
+    const auto check = make_selftest_check(passed, failed);  // 去重专项：见 utils/check_counter.h
 
     // ---- ① 工作流：当前版本 / 缺版本 / 未来版本 ----
     nlohmann::json current_doc = {{"version", kWorkflowVersion}, {"nodes", nlohmann::json::array()}};

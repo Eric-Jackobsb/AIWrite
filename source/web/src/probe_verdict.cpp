@@ -1,4 +1,5 @@
 #include "probe_verdict.h"
+#include "check_counter.h"  // make_selftest_check（去重专项）
 
 #include <cctype>
 #include <cstdio>
@@ -371,16 +372,7 @@ int probeVerdictSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
-    const auto check = [&passed, &failed](bool ok, const std::string& what) {
-        if (ok) {
-            ++passed;
-            std::printf("  ✓ %s\n", what.c_str());
-        }
-        else {
-            ++failed;
-            std::printf("  ✗ %s\n", what.c_str());
-        }
-    };
+    const auto check = make_selftest_check(passed, failed);  // 去重专项：见 utils/check_counter.h
 
     // ---- ① 端点报告解析 ----
     const std::string report_ok =

@@ -8,6 +8,7 @@
 //   计数口径：CheckCounter（passed / failed），返回失败项数。
 
 #include "provider_spec.h"
+#include "check_counter.h"  // 自检计数助手（去重专项：原 3 处逐字复制）
 
 #include <cstdio>
 #include <string>
@@ -20,22 +21,7 @@ namespace aiwrite::ai {
 // ============================================================================
 namespace {
 
-struct CheckCounter {
-    int passed = 0;
-    int failed = 0;
-
-    void check(bool condition, const std::string& name, const std::string& detail = {})
-    {
-        if (condition) {
-            ++passed;
-            std::printf("   PASS  %s\n", name.c_str());
-            return;
-        }
-        ++failed;
-        std::printf("   FAIL  %s%s%s\n", name.c_str(), detail.empty() ? "" : "  ->  ",
-                    detail.c_str());
-    }
-};
+// 自检计数助手（与 site_template / official_template 同风格：逐项打印，失败带原因）
 
 bool has_text(const std::vector<std::string>& items, const std::string& needle)
 {

@@ -1,4 +1,5 @@
 #include "image_preprocess.h"
+#include "check_counter.h"  // make_selftest_check（去重专项）
 
 #include "image_decode.h" // M7-04：嗅探 / 解码（**只调用、不修改** —— 守 I17 冻结区）
 #include "image_convert.h" // default_upload_tmp_dir：临时目录口径与上传准备一致
@@ -191,16 +192,7 @@ int imagePreprocessSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
-    const auto check = [&passed, &failed](bool ok, const std::string& what) {
-        if (ok) {
-            ++passed;
-            std::printf("  ✓ %s\n", what.c_str());
-        }
-        else {
-            ++failed;
-            std::printf("  ✗ %s\n", what.c_str());
-        }
-    };
+    const auto check = make_selftest_check(passed, failed);  // 去重专项：见 utils/check_counter.h
 
     const std::string dir = defaultUploadTmpDir();
     std::error_code   ec;

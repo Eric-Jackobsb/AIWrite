@@ -1,6 +1,7 @@
 // ============================================================================//  dom_web_client_selftest.cpp — 自检：domAdapterSelftest + domProbeSelftest//  * ARCH-Z1b：自 2398 行单文件 `dom_web_client.cpp` 逐字拆出，**零语义变化**//  * 模块内契约见 `dom_web_client_detail.h`；公开 API 见 `dom_web_client.h`// ============================================================================
 #include "dom_web_client_detail.h"
 #include "dom_web_client_scripts.h"
+#include "check_counter.h"  // make_selftest_check（去重专项）
 
 namespace aiwrite::ai {
 
@@ -220,16 +221,7 @@ int domProbeSelftest(int* passed_out)
 {
     int passed = 0;
     int failed = 0;
-    const auto check = [&passed, &failed](bool ok, const std::string& what) {
-        if (ok) {
-            ++passed;
-            std::printf("  ✓ %s\n", what.c_str());
-        }
-        else {
-            ++failed;
-            std::printf("  ✗ %s\n", what.c_str());
-        }
-    };
+    const auto check = make_selftest_check(passed, failed);  // 去重专项：见 utils/check_counter.h
 
     // ---- ① `dom_probe_result_from_json`：事实搬运（不重算判据）----
     const std::string full = R"({"url":"https://x/login","title":"T","input_hits":0,)"
