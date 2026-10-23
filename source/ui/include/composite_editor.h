@@ -42,6 +42,23 @@ struct CompositeEditorState {
 
 CompositeEditorState& compositeEditorState();
 
+// ---------------------------------------------------------------------------
+//  ARCH-A6：新建 / 打包对话框的跨帧状态（原 `ce_draw.cpp` 7 条文件级 static）
+//  * 归属 = `EditorController::composite_dialogs()`（与窗口同寿；多窗口并按不互踩）
+//  * 只放「界面临时状态」：对话框开关 / 名称输入缓冲 / 展示用错误文案
+// ---------------------------------------------------------------------------
+struct CompositeDialogsState {
+    bool        new_open        = false; // 「新建上级节点」对话框是否打开
+    char        new_name[128]   = {};    // 名称输入缓冲
+    std::string new_error;               // 创建失败原因（打开时清空）
+    // [调试] --auto-open-composite：对话框可见后自动执行一次「创建并打开编辑器」
+    bool new_auto_accept = false;
+
+    bool        pack_open     = false; // 「打包为上级节点」对话框是否打开
+    char        pack_name[128] = {};   // 名称输入缓冲
+    std::string pack_error;            // 打包失败原因（打开时清空）
+};
+
 // 打开编辑会话：读取已落盘的 composite_id 规格
 //（新建/打包均先落盘 JSON 再走此标准打开路径，不存在「内存未保存会话」）
 void compositeEditorOpen(const std::string& composite_id);
@@ -106,12 +123,12 @@ void compositeEditorDeleteSelection();
 void drawCompositeDialogs(EditorController& editor);
 
 // 主画布右键菜单入口：新建上级节点（弹名称框 → 落盘空白规格 JSON → 打开编辑器）
-void compositeNewDialog();
+void compositeNewDialog(EditorController& editor);
 // 主画布右键菜单入口：打包选中节点（弹名称框）
 // ARCH-A3：需要主画布选中（启动注入）
 void compositePackDialog(EditorController& editor);
 
 // [调试] --auto-open-composite：程序化驱动「新建上级节点」对话框并自动点「创建并打开编辑器」
-void compositeEditorTestDriveNewDialog();
+void compositeEditorTestDriveNewDialog(EditorController& editor);
 
 } // namespace aiwrite::ui

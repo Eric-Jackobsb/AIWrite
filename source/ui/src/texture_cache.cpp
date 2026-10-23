@@ -4,8 +4,6 @@
 #include "log.h"
 
 #include <filesystem>
-#include <list>
-#include <unordered_map>
 
 // Windows 的 GL/gl.h 依赖 windows.h（WINGDIAPI / APIENTRY）——先引再引 GL
 #if defined(_WIN32)
@@ -28,42 +26,8 @@
 namespace aiwrite::ui {
 namespace {
 
-// P0（2026-10-09）：容量由 8 → 64，并新增「逐帧保护 + 字节预算」，详见 texture_cache.h 顶部说明。
-//  事故根因：同屏卡片图 9 张 > 容量 8 ⇒ 每帧按固定顺序请求 9 张，插入第 9 张时淘汰的
-//  恰好是下一帧第一个要用的那张 ⇒ 命中率 0、每帧重解码 9 张（实测 166 ms/帧，掉到个位数 FPS）。
-constexpr std::size_t kDefaultCapacity   = 64;
-constexpr std::size_t kDefaultByteBudget = 256ull * 1024ull * 1024ull; // 256 MB 解码后纹理
-// 硬上限倍数：即使调用方忘了每帧 begin_frame()（g_frame 不前进 → 没有条目"变旧"），
-// 超过 容量/预算 的这个倍数后也强制淘汰，保证内存有界。
-constexpr std::size_t kHardOverflowFactor = 4;
-
-struct CacheEntry {
-    TextureInfo info;
-    // 最近使用顺序中自己的位置（g_order.front() = 最近使用）
-    std::list<std::string>::iterator order;
-    std::size_t bytes = 0; // 纹理字节数（宽×高×4；失败条目为 0）
-    std::size_t stamp = 0; // 最近使用所在的帧号（== g_frame 表示「本帧刚用过」→ 本轮不淘汰）
-};
-
-std::unordered_map<std::string, CacheEntry> g_cache;
-std::list<std::string>                      g_order;
-std::size_t                                 g_capacity    = kDefaultCapacity;
-std::size_t                                 g_byte_budget = kDefaultByteBudget;
-std::size_t                                 g_bytes       = 0; // 当前缓存纹理总字节数
-
-// 逐帧序号（begin_frame() 自增）——「逐帧保护」的依据
-std::size_t g_frame = 0;
-
-// 统计（CS-01 诊断；仅渲染线程访问，无需加锁）
-std::size_t g_requests  = 0;
-std::size_t g_hits      = 0;
-std::size_t g_misses    = 0;
-std::size_t g_decodes   = 0;
-std::size_t g_uploads   = 0;
-std::size_t g_evictions = 0;
-
 // 缓存键：路径 + 修改时间 + 大小（文件被替换 → 键变化 → 自动重新加载）
-std::string cache_key(const std::string& path)
+std::string cacheKey(const std::string& path)
 {
     std::error_code            code;
     const std::filesystem::path file(path);
@@ -77,7 +41,12 @@ std::string cache_key(const std::string& path)
            (code ? std::string("?") : std::to_string(static_cast<unsigned long long>(size)));
 }
 
-void release_entry(CacheEntry& entry)
+} // namespace
+
+// ---------------------------------------------------------------------------
+//  内部：条目生命周期（ARCH-A6 起这些原 g_* 文件级变量都是本对象成员）
+// ---------------------------------------------------------------------------
+void TextureCache::releaseEntry(Entry& entry)
 {
     if (entry.info.texture != 0) {
         const GLuint texture = static_cast<GLuint>(entry.info.texture);
@@ -86,53 +55,53 @@ void release_entry(CacheEntry& entry)
     }
 }
 
-void touch(const std::string& key)
+void TextureCache::touch(const std::string& key)
 {
-    const auto found = g_cache.find(key);
-    if (found == g_cache.end()) {
+    const auto found = entries_.find(key);
+    if (found == entries_.end()) {
         return;
     }
-    g_order.erase(found->second.order);
-    g_order.push_front(key);
-    found->second.order = g_order.begin();
-    found->second.stamp = g_frame; // 本帧用过 → 本轮淘汰保护
+    order_.erase(found->second.order);
+    order_.push_front(key);
+    found->second.order = order_.begin();
+    found->second.stamp = frame_; // 本帧用过 → 本轮淘汰保护
 }
 
 // 释放一条缓存（同时扣减字节数、从顺序表摘除）
-void erase_entry(const std::string& key)
+void TextureCache::eraseEntry(const std::string& key)
 {
-    const auto found = g_cache.find(key);
-    if (found == g_cache.end()) {
+    const auto found = entries_.find(key);
+    if (found == entries_.end()) {
         return;
     }
-    release_entry(found->second);
-    g_bytes = (g_bytes >= found->second.bytes) ? (g_bytes - found->second.bytes) : 0;
-    g_order.erase(found->second.order);
-    g_cache.erase(found);
+    releaseEntry(found->second);
+    bytes_ = (bytes_ >= found->second.bytes) ? (bytes_ - found->second.bytes) : 0;
+    order_.erase(found->second.order);
+    entries_.erase(found);
 }
 
-void evict_if_needed()
+void TextureCache::evictIfNeeded()
 {
     const bool hard_overflow =
-        (g_capacity != 0 && g_cache.size() > g_capacity * kHardOverflowFactor) ||
-        (g_byte_budget != 0 && g_bytes > g_byte_budget * kHardOverflowFactor);
+        (capacity_ != 0 && entries_.size() > capacity_ * kHardOverflowFactor) ||
+        (byte_budget_ != 0 && bytes_ > byte_budget_ * kHardOverflowFactor);
 
     while (true) {
-        const bool over_count  = (g_capacity != 0) && (g_cache.size() > g_capacity);
-        const bool over_budget = (g_byte_budget != 0) && (g_bytes > g_byte_budget);
+        const bool over_count  = (capacity_ != 0) && (entries_.size() > capacity_);
+        const bool over_budget = (byte_budget_ != 0) && (bytes_ > byte_budget_);
         if (!over_count && !over_budget) {
             return;
         }
 
         // 从「最久未使用」一端往回找第一个**不是本帧用过**的条目当牺牲者。
-        // 本帧用过的（stamp == g_frame）一律跳过 —— 这正是修复 100% 未命中的关键。
+        // 本帧用过的（stamp == frame_）一律跳过 —— 这正是修复 100% 未命中的关键。
         std::string victim;
-        for (auto it = g_order.rbegin(); it != g_order.rend(); ++it) {
-            const auto found = g_cache.find(*it);
-            if (found == g_cache.end()) {
+        for (auto it = order_.rbegin(); it != order_.rend(); ++it) {
+            const auto found = entries_.find(*it);
+            if (found == entries_.end()) {
                 continue;
             }
-            if (!hard_overflow && found->second.stamp == g_frame) {
+            if (!hard_overflow && found->second.stamp == frame_) {
                 continue;
             }
             victim = *it;
@@ -141,14 +110,16 @@ void evict_if_needed()
         if (victim.empty()) {
             return; // 全是本帧刚用过的 → 本帧不再淘汰（下一帧它们自然变旧；硬上限兜底）
         }
-        erase_entry(victim);
-        ++g_evictions;
+        eraseEntry(victim);
+        ++evictions_;
     }
 }
 
-} // namespace
 
-TextureInfo textureFor(const std::string& path)
+// ---------------------------------------------------------------------------
+//  取纹理：键命中即返回；未命中 → 嗅探格式 + 解码 + 上传 → 入缓存（失败也缓存）
+// ---------------------------------------------------------------------------
+TextureInfo TextureCache::textureFor(const std::string& path)
 {
     if (path.empty()) {
         TextureInfo empty;
@@ -156,14 +127,14 @@ TextureInfo textureFor(const std::string& path)
         return empty;
     }
 
-    ++g_requests;
-    const std::string key = cache_key(path);
-    if (const auto found = g_cache.find(key); found != g_cache.end()) {
-        ++g_hits;
+    ++requests_;
+    const std::string key = cacheKey(path);
+    if (const auto found = entries_.find(key); found != entries_.end()) {
+        ++hits_;
         touch(key);
         return found->second.info;
     }
-    ++g_misses;
+    ++misses_;
 
     TextureInfo info;
     // P7a-16：顺手按内容嗅探格式（只读文件头）→ 供节点卡片 / 输出面板显示**格式徽标**
@@ -172,7 +143,7 @@ TextureInfo textureFor(const std::string& path)
         info.format = utils::imageFormatName(magic.format);
     }
     // M7-04：解码统一走 utils::image_decode（stb 优先 / WIC 兜底；错误文案可直接显示）
-    ++g_decodes;
+    ++decodes_;
     const utils::DecodedImage decoded = utils::decodeImageRgba8(path);
     if (!decoded.error.empty()) {
         info.error = decoded.error;
@@ -181,7 +152,8 @@ TextureInfo textureFor(const std::string& path)
     else {
         GLint max_texture_size = 0;
         glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
-        if (max_texture_size > 0 && (decoded.width > max_texture_size || decoded.height > max_texture_size)) {
+        if (max_texture_size > 0 &&
+            (decoded.width > max_texture_size || decoded.height > max_texture_size)) {
             info.error = "图片过大（" + std::to_string(decoded.width) + "×" +
                          std::to_string(decoded.height) + " 超过本机 GL 纹理上限 " +
                          std::to_string(static_cast<int>(max_texture_size)) + "）：请先缩小后再预览";
@@ -199,21 +171,21 @@ TextureInfo textureFor(const std::string& path)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, decoded.width, decoded.height, 0, GL_RGBA,
                          GL_UNSIGNED_BYTE, decoded.rgba.data());
             glBindTexture(GL_TEXTURE_2D, 0);
-            ++g_uploads;
+            ++uploads_;
             info.texture = static_cast<unsigned int>(texture);
             info.width   = decoded.width;
             info.height  = decoded.height;
         }
     }
 
-    g_order.push_front(key);
+    order_.push_front(key);
     const std::size_t bytes =
-        (info.texture != 0) ? (static_cast<std::size_t>(info.width) *
-                               static_cast<std::size_t>(info.height) * 4u)
-                            : 0u;
-    g_bytes += bytes;
-    g_cache[key] = CacheEntry{info, g_order.begin(), bytes, g_frame};
-    evict_if_needed();
+        (info.texture != 0)
+            ? (static_cast<std::size_t>(info.width) * static_cast<std::size_t>(info.height) * 4u)
+            : 0u;
+    bytes_ += bytes;
+    entries_[key] = Entry{info, order_.begin(), bytes, frame_};
+    evictIfNeeded();
     return info;
 }
 
@@ -223,63 +195,48 @@ bool imageSize(const std::string& path, int* width, int* height, std::string* er
     return utils::readImageSize(path, width, height, error);
 }
 
-void beginFrame()
+void TextureCache::beginFrame()
 {
     // 逐帧标记（契约：每帧渲染开头调用一次，见 ui/app.cpp）
-    ++g_frame;
+    ++frame_;
 }
 
-void setTextureCapacity(std::size_t capacity)
+void TextureCache::setCapacity(std::size_t capacity)
 {
-    g_capacity = capacity;
-    evict_if_needed();
+    capacity_ = capacity;
+    evictIfNeeded();
 }
 
-std::size_t textureCapacity()
+void TextureCache::setByteBudget(std::size_t bytes)
 {
-    return g_capacity;
+    byte_budget_ = bytes;
+    evictIfNeeded();
 }
 
-void setTextureByteBudget(std::size_t bytes)
+TextureCacheStats TextureCache::stats() const
 {
-    g_byte_budget = bytes;
-    evict_if_needed();
+    TextureCacheStats result;
+    result.requests    = requests_;
+    result.hits        = hits_;
+    result.misses      = misses_;
+    result.decodes     = decodes_;
+    result.uploads     = uploads_;
+    result.evictions   = evictions_;
+    result.entries     = entries_.size();
+    result.bytes       = bytes_;
+    result.capacity    = capacity_;
+    result.byte_budget = byte_budget_;
+    return result;
 }
 
-std::size_t textureByteBudget()
+void TextureCache::releaseAll()
 {
-    return g_byte_budget;
-}
-
-std::size_t cachedTextureCount()
-{
-    return g_cache.size();
-}
-
-TextureCacheStats textureCacheStats()
-{
-    TextureCacheStats stats;
-    stats.requests    = g_requests;
-    stats.hits        = g_hits;
-    stats.misses      = g_misses;
-    stats.decodes     = g_decodes;
-    stats.uploads     = g_uploads;
-    stats.evictions   = g_evictions;
-    stats.entries     = g_cache.size();
-    stats.bytes       = g_bytes;
-    stats.capacity    = g_capacity;
-    stats.byte_budget = g_byte_budget;
-    return stats;
-}
-
-void releaseTextures()
-{
-    for (auto& item : g_cache) {
-        release_entry(item.second);
+    for (auto& item : entries_) {
+        releaseEntry(item.second);
     }
-    g_cache.clear();
-    g_order.clear();
-    g_bytes = 0;
+    entries_.clear();
+    order_.clear();
+    bytes_ = 0;
 }
 
 } // namespace aiwrite::ui

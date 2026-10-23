@@ -658,7 +658,7 @@ void draw_property_panel(const char* window_title, bool* open, Node* node,
             if (!run->images.empty()) {
                 for (std::size_t index = 0; index < run->images.size(); ++index) {
                     ImGui::PushID(static_cast<int>(3000 + index));
-                    const TextureInfo texture = textureFor(run->images[index]);
+                    const TextureInfo texture = editor.textures().textureFor(run->images[index]);
                     if (texture.texture != 0) {
                         const float limit  = std::min(ImGui::GetContentRegionAvail().x, 320.0f);
                         float       width  = static_cast<float>(texture.width);

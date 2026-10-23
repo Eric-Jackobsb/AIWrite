@@ -598,8 +598,8 @@ void drawNodeBody(const CanvasContext& ctx, const engine::Node& node)
     }
 
     // ---- P7a-16：图片卡片（缩略图 + 尺寸 + 格式徽标；格式取内容嗅探结果）----
-    if (const std::string card_image = nodeCardImage(ctx, node); !card_image.empty()) {
-        const TextureInfo texture = textureFor(card_image);
+    if (const std::string card_image = nodeCardImage(ctx, node); !card_image.empty() && ctx.textures != nullptr) {
+        const TextureInfo texture = ctx.textures->textureFor(card_image);
         drawNodeSeparator(ctx);
         if (texture.texture != 0) {
             float width  = static_cast<float>(texture.width);

@@ -51,7 +51,7 @@ void dispatchCommand(AppCommand cmd, const CommandContext& ctx)
         saveWorkflowDialog(state);
         break;
     case AppCommand::Settings:
-        openSettingsPanel();
+        openSettingsPanel(state.settings_panel());
         break;
     case AppCommand::Exit:
         if (ctx.window != nullptr) {
@@ -91,7 +91,7 @@ void dispatchCommand(AppCommand cmd, const CommandContext& ctx)
 
     // ---- 上级节点 ----
     case AppCommand::CompositeNew:
-        compositeNewDialog();
+        compositeNewDialog(state);
         break;
     case AppCommand::CompositePack:
         compositePackDialog(state);
@@ -100,7 +100,7 @@ void dispatchCommand(AppCommand cmd, const CommandContext& ctx)
         // 一律走文件路径：弹新建对话框 → 落盘空白规格 JSON → 打开编辑器读取
         // （不直接创建无文件支撑的内存会话，避免依赖 imgui-node-editor 上下文时序）
         if (!compositeEditorState().active) {
-            compositeNewDialog();
+            compositeNewDialog(state);
         }
         break;
     case AppCommand::CompositeSave: {

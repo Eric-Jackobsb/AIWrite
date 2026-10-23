@@ -3,7 +3,7 @@
 > 日期：2026-10-23 · 触发：用户「现在重构还有没做的部分吗？如果全部完成……再审计一遍代码风险和重复度」
 > 范围：`source/` 全部自有代码（`ui/` `app/` `engine/` `nodes/` `ai/` `web/` `utils/` `tools/`），排除 `third_party/`（61 文件 / 76,007 行）与 `source/python/`
 > 方法：① 进度核对（[refactor/ARCHITECTURE.md](../refactor/ARCHITECTURE.md) §3 / §4 逐条对照）② `check_all` 21 项门禁实测 ③ **克隆检测**（自写窗口哈希扫描器，K=6 有意义行 / 最大延伸 / 禁止自重叠，`28976` 有意义行 / `28971` 窗口）④ 风险面 grep 取证（静态存储期 / 内存 / 并发 / 危险 API / 文件体量）
-> 结论一句话：**重构未完成（15/19 批），验收 8 条判据 6 ✅ + 2 🟡；代码重复度 3.8 %（可接受，但 ai/web 有结构性重复）；P0 风险只有两类，都挂在未完成的 A6/A7/Z2 上。**
+> 结论一句话：**重构 16/19 批（A6 已于同日落地，见 [audit_arch_a6.md](audit_arch_a6.md)），验收 8 条判据 6 ✅ + 2 🟡；代码重复度 3.8 %（可接受，但 ai/web 有结构性重复）；P0 风险只剩两类，都挂在未完成的 A7/Z2 上。**
 
 ---
 
@@ -13,15 +13,15 @@
 |---|---|---|---|
 | 1 运行侧事件化 | R1 · R2 · R3 · R4 | ✅ 4/4 | RunSession · RunEvent 订阅 · ReadOnlyView · 命令路由 |
 | 2 编辑侧事件化 | E1 · E2 · E3 · E4 · E5 · E6 | ✅ 6/6 | EventBus · Undo/autosave 订阅 · WorkflowModel · SelectionState · CanvasInteractor · 打包下沉 |
-| 3 应用级收口 | A1 · A2 · A3 · A4 · A5 | ✅ 5/5 | AppContext · AutosaveService · `editor()` 退场 · 依赖单向 · 全局变量棘轮 |
-| 4 收尾 | **A6 · A7 · Z1 · Z2** | ⬜ **0/4** | 见 §2 |
+| 3 应用级收口 | A1 · A2 · A3 · A4 · A5 · **A6** | ✅ 6/6 | AppContext · AutosaveService · `editor()` 退场 · 依赖单向 · 全局变量棘轮 · **ui 60 条状态对象化** |
+| 4 收尾 | **A7 · Z1 · Z2** | ⬜ **0/3**（原 A6 已从本阶段移出并落地） | 见 §2 |
 
 **验收判据 8 条**（§4）实测状态：
 
 | # | 判据 | 状态 | 证据 |
 |---|---|---|---|
 | 1 | 行为等价（断言数 ≥ 现状 · selftest 0 失败） | ✅ | exec **713/0** · graph **151/0** · composite **112/0** · upload **72/0** · `--run-selftest` PASS · check_links **1889**（门槛 1730） |
-| 2 | 全局变量归零 | 🟡 | **跨 TU `extern` = 0 ✅**；文件级 static **87**（ui 60 / web 15 / utils 12）在棘轮基线内 |
+| 2 | 全局变量归零 | 🟡 | **跨 TU `extern` = 0 ✅**；**文件级 static = 0 ✅（ui 层，A6）**；基线剩 **27 条全是函数内 static**（web 15 / utils 12）⇒ 判据 2 的最后一门 = A7 |
 | 3 | 双画布单套交互 | ✅ | 关键谓词只在 `interactor.cpp`（E5） |
 | 4 | 打包-校验同源 | ✅ | `ce_pack.cpp` 零直写（E6） |
 | 5 | 依赖单向 | ✅ | `check_includes` 201 文件 / 656 行 / 违规 **0** |
@@ -35,18 +35,18 @@
 
 | 批次 | 内容 | 量化 | 关键文件（条数） |
 |---|---|---|---|
-| **ARCH-A6** | ui 层文件级可变状态**逐文件对象化** | **60 条 / 7 文件** | `settings_panel.cpp` **19** · `texture_cache.cpp` **12** · `node_canvas.cpp` **11**（其中 **5 条 R3 外部链接**）· `ce_draw.cpp` **7** · `node_library.cpp` **6** · `console_panel.cpp` 3 · `output_panel.cpp` 2 |
+| ~~**ARCH-A6**~~ ✅ | ui 层文件级可变状态**逐文件对象化** | ~~60 条 / 7 文件~~ → **0** | 已落地 2026-10-23：`settings_panel` 19 → `SettingsPanelState` · `texture_cache` 12 → `class TextureCache` · `node_canvas` 11 → `NodeCanvasState` · `ce_draw` 7 → `CompositeDialogsState` · `node_library` 6 · `console_panel` 3 · `output_panel` 2（[audit_arch_a6.md](audit_arch_a6.md)） |
 | **ARCH-Z2** | `CeSession` 对称拆分（`CeModel` / `CeFile` / `CeSelection` / `CeSpec`）+ ce 渲染 ReadOnlyView 化 | ce 侧 **6 文件 / 1,514 行** | `ce_draw.cpp` 865 · `ce_run.cpp` 203 · `ce_session.cpp` 187 · `composite_editor.cpp` 139 · `ce_state.cpp` 77 · `ce_pack.cpp` 43 |
 | **ARCH-A7** | web / utils 层 27 条 + **删基线、切严格零容忍** | **27 条 / 7 文件** | `webview_host.cpp` **8** · `diagnostics.cpp` **7** · `pipe_client.cpp` 4 · `pydoll_channel.cpp` 3 · `log.cpp` 2 · `config.cpp` 2 · `credential.cpp` 1 |
 | **ARCH-Z1** | 超长文件瘦身（目标 <800 行） | **15 文件 >700 行**（其中 **14 >800**） | `webview_host.cpp` **3195** · `dom_web_client.cpp` **2301** · `provider_spec.cpp` **1609** · `app.cpp` **1321** · `pydoll_channel.cpp` 1188 · `local_nodes.cpp` 1175 · `composite.cpp` 1069 · `node_canvas.cpp` 1017 · `settings_panel.cpp` 893 · `ce_draw.cpp` 865 · `canvas_view.cpp` 844 · `node_registry.cpp` 841 · `property_panel.cpp` 807 · `executor.cpp` 805 · `image_decode.cpp` 705 |
 
-> 附带说明：函数内 `static` **43 处**（`check_globals` 只统计不判失败）——A6/A7 收口后应一并评估，否则「文件级归零但函数内继续长」会绕开规则 6 的机器判据。
+> 附带说明：**函数内** `static` 现 **27 处**（A6 已顺带收掉 `node_canvas` 的 3 条）；`check_globals` 把它们也计入 R2 与基线，所以 A7 = 这 27 条对象化 + **删基线切严格零容忍**，不再留「文件级归零、函数内继续长」的绕行口子。
 
 ---
 
 ## §3 风险清单（按「真会出事」排序，不按字母排序）
 
-### 3.1 P0-① 87 条静态可变状态 =「一次操作触发多次同步 / 关会话残留 / 两画布漂移」的土壤
+### 3.1 P0-① 静态可变状态 =「一次操作触发多次同步 / 关会话残留 / 两画布漂移」的土壤（A6 后 ui 层已清零）
 
 | 危害形态 | 证据 | 为什么现在没暴雷 |
 |---|---|---|
@@ -55,7 +55,7 @@
 | 跨会话残留 | `ce_draw.cpp` 7 条（`g_new_dialog_open` / `g_pack_name` / `g_new_name` …）是对话框与输入缓冲 | `ce_repro` 全帧 OK 只验证渲染路径，不验证「关会话后重开」的干净度 |
 | 缓存双轨 | `texture_cache.cpp` 12 条（含 `std::` 容器） | `TextureCache` 类成员与文件级缓存并存 |
 
-**判断**：这不是「洁癖债」。规则 6 的机器判据已能拦住**新增**（`new > 0 ⇒ exit 1`），但存量 87 条要么对象化、要么永远带着单实例假设跑 —— `ARCH-A6/A7` 就是干这个的。
+**判断**：这不是「洁癖债」。规则 6 的机器判据已能拦住**新增**（`new > 0 ⇒ exit 1`）；**A6 已把 ui 层 60 条全部对象化（87 → 27）**，剩余 27 条函数内单实例由 **ARCH-A7** 收口（`webview_host` / `diagnostics` / `pipe_client` 等）。
 
 ### 3.2 P0-② 判据 7 只覆盖一半：ce 侧渲染仍直读可变对象
 
@@ -121,7 +121,7 @@
 
 | 顺序 | 批次 | 为什么这个顺序 |
 |---|---|---|
-| 1 | **ARCH-A6** | 60 条占存量 69 %，且 `node_canvas` 11 条 / `ce_draw` 7 条是 Z2 的直接依赖（先有对象、再拆分） |
+| 1 | ~~**ARCH-A6**~~ ✅ 已落地（2026-10-23） | 60 条占存量 69 %，且 `node_canvas` 11 条 / `ce_draw` 7 条是 Z2 的直接依赖（先有对象、再拆分）—— 已按此顺序做完，Z2 的 `NodeCanvasState` / `CompositeDialogsState` 前置条件就位 |
 | 2 | **ARCH-Z2** | 同时补齐**判据 7**（ce 渲染 ReadOnlyView 化）—— 与拆分同一改动面，`ce_repro` 全帧对比可作等价证据 |
 | 3 | **ARCH-A7** | 27 条 + **删基线切严格 0** ⇒ 判据 2 由 🟡 转 ✅；此后 `check_globals` 变成零容忍，规则 6 彻底闭环 |
 | 4 | **ARCH-Z1** | 15 个超长文件瘦身（先 `webview_host` / `dom_web_client` / `provider_spec`），顺带治 provider 骨架与平台样板重复 |
@@ -135,7 +135,7 @@
 # 门禁（21 项 · 含构建）
 powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1
 
-# 全局变量棘轮（87 条 / 按文件分布）
+# 全局变量棘轮（A6 后 27 条 / 按文件分布）
 powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_globals.ps1 `
     -Baseline .\source\tools\check_globals_baseline.txt -SummaryOnly
 Select-String -Path .\source\tools\check_globals_baseline.txt -Pattern '^R[123]\|' |

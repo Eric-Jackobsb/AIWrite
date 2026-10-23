@@ -21,12 +21,6 @@ namespace aiwrite::ui {
 namespace {
 
 // ---- PS-04 / §7.1：上级节点列表项操作状态（右键删除 / 复制到我的节点库）----
-std::string g_composite_context_id;             // 右键命中的上级节点 id
-bool        g_composite_context_open = false;   // 右键命中后待打开菜单（须在 PushID 作用域外 OpenPopup）
-std::string g_composite_delete_pending;         // 待删除确认的 id
-bool        g_composite_delete_confirm_open = false;
-std::string g_composite_copy_pending;           // 待复制确认的 id
-bool        g_composite_copy_confirm_open = false;
 
 // 渲染单个节点项：分类色点 + 名称（搜索时在匹配段上画高亮底色）
 bool draw_library_item(const engine::Definition* definition, engine::NodeCategory category,
@@ -86,6 +80,7 @@ bool draw_library_item(const engine::Definition* definition, engine::NodeCategor
 
 void drawNodeLibrary(const char* title, bool* open, EditorController& editor)
 {
+    NodeLibraryState& lib = editor.node_library(); // ARCH-A6：节点库状态（单实例）
     if (open != nullptr && !*open) {
         return;
     }
@@ -176,16 +171,16 @@ void drawNodeLibrary(const char* title, bool* open, EditorController& editor)
 
                 // 右键列表项 → 删除（用户项）/ 只读提示（内置项）
                 if (row_hovered && ImGui::IsMouseClicked(1)) {
-                    g_composite_context_id  = spec->id;
-                    g_composite_context_open = true; // 在 PushID 作用域外统一 OpenPopup（见下）
+                    lib.context_id  = spec->id;
+                    lib.context_open = true; // 在 PushID 作用域外统一 OpenPopup（见下）
                 }
 
                 // 复制按钮（仅内置源项；PS-D9 §7.1）
                 if (builtin) {
                     ImGui::SameLine();
                     if (ImGui::SmallButton("⧉ 复制")) {
-                        g_composite_copy_pending        = spec->id;
-                        g_composite_copy_confirm_open   = true;
+                        lib.copy_pending        = spec->id;
+                        lib.copy_confirm_open   = true;
                     }
                     if (ImGui::IsItemHovered()) {
                         ImGui::SetTooltip("复制一份到我的节点库，之后可编辑（官方预设为只读）");
@@ -213,27 +208,27 @@ void drawNodeLibrary(const char* title, bool* open, EditorController& editor)
             //  ⚠️ OpenPopup 必须与 BeginPopup 处于**同一 ImGui ID 作用域**：若在列表项的
             //     PushID 内 OpenPopup，Popup id 会带上「<列表项id>##composite_item_menu」前缀，
             //     与本处的「##composite_item_menu」不匹配 ⇒ 菜单永不弹出（2026-10-18 修复）。
-            if (g_composite_context_open) {
+            if (lib.context_open) {
                 ImGui::OpenPopup("##composite_item_menu");
-                g_composite_context_open = false;
+                lib.context_open = false;
             }
             if (ImGui::BeginPopup("##composite_item_menu")) {
                 const engine::CompositeSpec* ctx =
-                    engine::CompositeRegistry::instance().find(g_composite_context_id);
+                    engine::CompositeRegistry::instance().find(lib.context_id);
                 const bool ctx_builtin =
                     ctx != nullptr && engine::CompositeRegistry::instance().is_builtin(ctx->id);
                 if (ctx_builtin) {
                     ImGui::TextDisabled("内置官方预设（只读）");
                     ImGui::Separator();
                     if (ImGui::MenuItem("复制到我的节点库…")) {
-                        g_composite_copy_pending      = ctx->id;
-                        g_composite_copy_confirm_open = true;
+                        lib.copy_pending      = ctx->id;
+                        lib.copy_confirm_open = true;
                     }
                 }
                 else if (ctx != nullptr) {
                     if (ImGui::MenuItem("删除上级节点…")) {
-                        g_composite_delete_pending      = ctx->id;
-                        g_composite_delete_confirm_open = true;
+                        lib.delete_pending      = ctx->id;
+                        lib.delete_confirm_open = true;
                     }
                 }
                 ImGui::EndPopup();
@@ -284,76 +279,76 @@ void drawNodeLibrary(const char* title, bool* open, EditorController& editor)
     }
 
     // ---- PS-04 / §7.1：删除 / 复制确认弹窗 ----
-    if (g_composite_delete_confirm_open) {
+    if (lib.delete_confirm_open) {
         ImGui::OpenPopup("删除上级节点##composite_delete");
-        g_composite_delete_confirm_open = false;
+        lib.delete_confirm_open = false;
     }
     if (ImGui::BeginPopupModal("删除上级节点##composite_delete", nullptr,
                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
         const engine::CompositeSpec* target =
-            engine::CompositeRegistry::instance().find(g_composite_delete_pending);
+            engine::CompositeRegistry::instance().find(lib.delete_pending);
         ImGui::TextWrapped("确定删除上级节点「%s」？",
                            target != nullptr ? target->name.c_str()
-                                             : g_composite_delete_pending.c_str());
+                                             : lib.delete_pending.c_str());
         ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f),
                            "此操作不可恢复；画布上正在使用的实例将变成孤儿节点（无规格可执行）。");
         ImGui::Spacing();
         if (ImGui::Button("删除", ImVec2(90.0f, 0.0f))) {
             // 目标节点正被编辑器打开 → 先强制关闭编辑器（§9.1②）
             if (compositeEditorState().active &&
-                compositeEditorState().working.id == g_composite_delete_pending) {
+                compositeEditorState().working.id == lib.delete_pending) {
                 compositeEditorForceClose();
             }
             std::string error;
-            if (!engine::CompositeRegistry::instance().remove(g_composite_delete_pending,
+            if (!engine::CompositeRegistry::instance().remove(lib.delete_pending,
                                                               &error)) {
                 editor.setStatus("删除上级节点失败：" + error);
                 log::warn("[上级节点] 删除失败: " + error);
             }
             else {
-                editor.setStatus("已删除上级节点：" + g_composite_delete_pending);
-                log::info("[上级节点] 已删除 " + g_composite_delete_pending);
+                editor.setStatus("已删除上级节点：" + lib.delete_pending);
+                log::info("[上级节点] 已删除 " + lib.delete_pending);
             }
-            g_composite_delete_pending.clear();
+            lib.delete_pending.clear();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
         if (ImGui::Button("取消", ImVec2(90.0f, 0.0f))) {
-            g_composite_delete_pending.clear();
+            lib.delete_pending.clear();
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
 
-    if (g_composite_copy_confirm_open) {
+    if (lib.copy_confirm_open) {
         ImGui::OpenPopup("复制到我的节点库##composite_copy");
-        g_composite_copy_confirm_open = false;
+        lib.copy_confirm_open = false;
     }
     if (ImGui::BeginPopupModal("复制到我的节点库##composite_copy", nullptr,
                                ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
         const engine::CompositeSpec* target =
-            engine::CompositeRegistry::instance().find(g_composite_copy_pending);
+            engine::CompositeRegistry::instance().find(lib.copy_pending);
         ImGui::TextWrapped("将复制「%s」到我的节点库。复制后可编辑；删除用户副本将恢复官方预设。",
                            target != nullptr ? target->name.c_str()
-                                             : g_composite_copy_pending.c_str());
+                                             : lib.copy_pending.c_str());
         ImGui::Spacing();
         if (ImGui::Button("复制", ImVec2(90.0f, 0.0f))) {
             std::string error;
-            if (!engine::CompositeRegistry::instance().copyToUser(g_composite_copy_pending,
+            if (!engine::CompositeRegistry::instance().copyToUser(lib.copy_pending,
                                                                     &error)) {
                 editor.setStatus("复制到我的节点库失败：" + error);
                 log::warn("[上级节点] 复制失败: " + error);
             }
             else {
-                editor.setStatus("已复制到我的节点库（可编辑）：" + g_composite_copy_pending);
-                log::info("[上级节点] 已复制到用户源 " + g_composite_copy_pending);
+                editor.setStatus("已复制到我的节点库（可编辑）：" + lib.copy_pending);
+                log::info("[上级节点] 已复制到用户源 " + lib.copy_pending);
             }
-            g_composite_copy_pending.clear();
+            lib.copy_pending.clear();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
         if (ImGui::Button("取消", ImVec2(90.0f, 0.0f))) {
-            g_composite_copy_pending.clear();
+            lib.copy_pending.clear();
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();

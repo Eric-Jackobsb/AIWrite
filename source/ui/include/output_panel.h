@@ -24,6 +24,16 @@ namespace aiwrite::ui {
 
 class EditorController;
 
+// ---------------------------------------------------------------------------
+//  ARCH-A6：输出面板的跨帧状态（原 `output_panel.cpp` 的 g_preview_* 两条文件级 static）
+//  * 归属 = `EditorController::output_panel()`（面板与主循环同寿）
+//  * 只放「界面临时状态」：预览弹窗请求与目标路径；运行数据一概不在这里（读 `ReadOnlyView`）
+// ---------------------------------------------------------------------------
+struct OutputPanelState {
+    bool        preview_requested = false; // 本帧请求 OpenPopup（点击缩略图时置位）
+    std::string preview_path;              // 大图弹窗要显示的图片路径
+};
+
 // 单节点结果文本（多输出端口按「端口名：值」依次拼接；无结果返回空串）
 std::string node_output_text(const engine::Graph& graph, const engine::Executor& executor,
                              const std::string& node_id);

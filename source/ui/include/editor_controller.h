@@ -29,8 +29,15 @@
 #include "event_bus.h"
 #include "graph.h"
 #include "recent_files.h"
+#include "composite_editor.h" // ARCH-A6：新建 / 打包对话框状态（UI 瞬时状态）
+#include "console_panel.h"   // ARCH-A6：Console 面板状态（UI 瞬时状态）
+#include "node_library.h"    // ARCH-A6：节点库状态（UI 瞬时状态）
+#include "node_canvas.h"     // ARCH-A6：主画布状态（NodeCanvasState）
 #include "run_session.h"     // ARCH-R1：运行会话（会话级）
 #include "selection_state.h" // ARCH-E4：选中状态独立对象（§1.8.4）
+#include "output_panel.h"    // ARCH-A6：输出面板状态（UI 瞬时状态）
+#include "settings_panel.h"  // ARCH-A6：设置面板状态（UI 瞬时状态）
+#include "texture_cache.h"   // ARCH-A6：纹理缓存（渲染资源，单实例）
 #include "undo_stack.h"
 #include "workflow_file.h"  // ARCH-A1：工作流文件（应用级）
 #include "workflow_model.h" // ARCH-E3：文档级工作流模型
@@ -70,6 +77,36 @@ public:
 
     WorkflowFile&       workflow_file() { return workflow_file_; }
     const WorkflowFile& workflow_file() const { return workflow_file_; }
+
+    // ARCH-A6：设置面板的跨帧状态（原 `settings_panel.cpp` 19 条文件级 static）
+    //  * 唯一实例由本对象持有：菜单命令 / 首启引导 / 主循环绘图三处取同一份
+    SettingsPanelState&       settings_panel() { return settings_panel_; }
+    const SettingsPanelState& settings_panel() const { return settings_panel_; }
+
+    // ARCH-A6：输出面板的跨帧状态（原 `output_panel.cpp` 2 条文件级 static）
+    OutputPanelState&       output_panel() { return output_panel_; }
+    const OutputPanelState& output_panel() const { return output_panel_; }
+
+    // ARCH-A6：纹理缓存（原 `texture_cache.cpp` 12 条文件级 static）
+    //  * 与 GL 上下文同寿：`beginFrame()` 每帧一次、`releaseAll()` 在上下文销毁前
+    TextureCache&       textures() { return textures_; }
+    const TextureCache& textures() const { return textures_; }
+
+    // ARCH-A6：主画布跨帧状态（原 `node_canvas.cpp` 11 条文件级 static + 3 条函数内 static）
+    NodeCanvasState&       node_canvas() { return node_canvas_; }
+    const NodeCanvasState& node_canvas() const { return node_canvas_; }
+
+    // ARCH-A6：新建 / 打包上级节点对话框状态（原 `ce_draw.cpp` 7 条文件级 static）
+    CompositeDialogsState&       composite_dialogs() { return composite_dialogs_; }
+    const CompositeDialogsState& composite_dialogs() const { return composite_dialogs_; }
+
+    // ARCH-A6：Console 面板状态（原 `console_panel.cpp` 3 条文件级 static）
+    ConsolePanelState&       console_panel() { return console_panel_; }
+    const ConsolePanelState& console_panel() const { return console_panel_; }
+
+    // ARCH-A6：节点库状态（原 `node_library.cpp` 6 条文件级 static）
+    NodeLibraryState&       node_library() { return node_library_; }
+    const NodeLibraryState& node_library() const { return node_library_; }
 
     EventBus&       event_bus() { return model_.event_bus(); }
     const EventBus& event_bus() const { return model_.event_bus(); }
@@ -176,6 +213,21 @@ private:
     Diagnostics&     diagnostics_;
     AutosaveService& autosave_;
     WorkflowFile&    workflow_file_;
+
+    // ARCH-A6：UI 瞬时状态（设置面板；打开态 / Config 工作副本 / 两个新建模态草稿）
+    SettingsPanelState settings_panel_;
+    // ARCH-A6：输出面板（大图预览弹窗请求 / 目标路径）
+    OutputPanelState output_panel_;
+    // ARCH-A6：纹理缓存（GR：GL 资源；本对象析构前须由 app 调 releaseAll）
+    TextureCache textures_;
+    // ARCH-A6：主画布（编辑器上下文 / 小地图 / 吸附 / 拖拽 / 右键菜单落点）
+    NodeCanvasState node_canvas_;
+    // ARCH-A6：新建 / 打包上级节点对话框（开关 / 名称缓冲 / 错误文案）
+    CompositeDialogsState composite_dialogs_;
+    // ARCH-A6：Console 面板（级别过滤 / 搜索框 / 自动滚动）
+    ConsolePanelState console_panel_;
+    // ARCH-A6：节点库（右键菜单 / 删除·复制二次确认）
+    NodeLibraryState node_library_;
 
     std::size_t run_sub_handle_ = 0; // ARCH-R2：run.subscribeRunEvents 返回的句柄
 };

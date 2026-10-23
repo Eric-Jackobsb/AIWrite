@@ -47,10 +47,8 @@ using engine::Port;
 using engine::PortDirection;
 using engine::PortType;
 
-ed::EditorContext* g_context             = nullptr;
-bool               g_first_frame         = true;
-bool               g_drag_in_progress    = false; // 一次拖拽只压一次快照
-bool               g_delete_in_progress  = false; // 一次删除批次只压一次快照
+// 主画布跨帧状态（编辑器上下文 / CanvasContext / 小地图 / 吸附 / 拖拽标记 / 右键菜单落点）
+// 见 `NodeCanvasState`（node_canvas.h · ARCH-A6）：原先是 11 条文件级 static + 3 条函数内 static。
 
 // --------------------------------------------- 画布按键绑定（imgui-node-editor）---
 // imgui-node-editor v0.9.3 的 Config 默认值（third_party/.../imgui_node_editor.h:120-123）：
@@ -63,7 +61,6 @@ constexpr int kNodeEditorDragButton   = ImGuiMouseButton_Left;   // 0：左键�
 constexpr int kNodeEditorSelectButton = ImGuiMouseButton_Left;   // 0：左键框选
 constexpr int kNodeEditorNavButton    = ImGuiMouseButton_Right;  // 1：右键平移画布
 constexpr int kAltPanParkedButton     = ImGuiMouseButton_Middle; // 2：Alt 期间「拖节点/框选」的停机位
-bool          g_alt_pan_active        = false;                   // 当前是否处于 Alt 平移模式（日志/提示用）
 
 // 颜色（分类 / 端口类型 / 节点状态）统一由 ui/theme.h 提供（设计 §14.3 / §4.5 / §4.6）
 
@@ -168,9 +165,9 @@ void sanitize_editor_settings(const std::filesystem::path& file)
     }
 }
 
-void ensure_context()
+void ensure_context(NodeCanvasState& nc)
 {
-    if (g_context != nullptr) {
+    if (nc.context != nullptr) {
         return;
     }
 
@@ -188,11 +185,11 @@ void ensure_context()
         config.CustomZoomLevels[i] = levels[i];
     }
 
-    g_context = ed::CreateEditor(&config);
+    nc.context = ed::CreateEditor(&config);
     log::info("[画布] 编辑器上下文已创建");
 
     // 注意：GetStyle/PushStyleColor 作用于"当前编辑器"，必须先 SetCurrentEditor
-    ed::SetCurrentEditor(g_context);
+    ed::SetCurrentEditor(nc.context);
     canvasApplyEditorStyle(canvasThemeMain());
     log::info("[画布] 编辑器样式已应用（缩放范围 0.1x ~ 4.0x）");
 
@@ -202,8 +199,7 @@ void ensure_context()
 }
 
 // 节点宽度 / 文本收口 / 端口绘制 / 节点卡片等只读绘制层已上移 canvas_view.{h,cpp}
-// （CN_editor_refactor CEA-01）。主画布每帧用 g_canvas（CanvasContext）驱动共享绘制。
-CanvasContext g_canvas;
+// （CN_editor_refactor CEA-01）。主画布每帧重填 `state.node_canvas().canvas` 驱动共享绘制。
 
 // 单行省略 elide_to_width 已上移 canvas_view.{h,cpp}（CEA-01）
 
@@ -408,7 +404,7 @@ void handle_delete_key(EditorController& editor)
 //     Graph 位置推给编辑器，**绝不把脏值回写模型**
 //   · 非有限值 / 超上限一律夹紧（interactor 内按 kCanvasPositionLimit）
 // 一次拖拽只压一次撤销快照
-void sync_positions(EditorController& state)
+void sync_positions(EditorController& state, NodeCanvasState& nc)
 {
     bool moved = false;
     for (Node& node : state.model().graph.nodes) {
@@ -418,8 +414,8 @@ void sync_positions(EditorController& state)
             continue; // 编辑器不认识的节点：interactor 已把模型坐标推给编辑器
         }
         if (p.changed) {
-            if (!g_drag_in_progress) {
-                g_drag_in_progress = true;
+            if (!nc.drag_in_progress) {
+                nc.drag_in_progress = true;
                 state.snapshot("移动节点");
             }
             node.x = p.x;
@@ -430,7 +426,7 @@ void sync_positions(EditorController& state)
         }
     }
     if (!moved) {
-        g_drag_in_progress = false; // 拖拽结束
+        nc.drag_in_progress = false; // 拖拽结束
     }
 }
 
@@ -495,7 +491,7 @@ void show_add_node_menu(EditorController& state, const ImVec2& spawn)
 }
 
 // ------------------------------------------------- 宽度自检（不变量）----
-// 画布上**所有节点必须等宽**：宽度 = g_canvas.content_width + 节点内边距（内容宽度由「输入/输出
+// 画布上**所有节点必须等宽**：宽度 = canvas.content_width + 节点内边距（内容宽度由「输入/输出
 // 标签实测最宽」算出、全画布共用）。任何文本项漏了收口、或新加了无界控件，都会在这里被抓到。
 // 尺寸 / 节点数一变就写一条 INFO（可直接拿去核对），破坏不变量时写 WARN（限流 2 秒一条）。
 std::string px_text(float value)
@@ -505,7 +501,7 @@ std::string px_text(float value)
     return std::string(buffer);
 }
 
-void check_uniform_node_width(const Graph& graph)
+void check_uniform_node_width(const Graph& graph, const CanvasContext& canvas)
 {
     static int         frame          = 0;
     static std::string last_signature; // 上一次采样到的「尺寸指纹」
@@ -544,7 +540,7 @@ void check_uniform_node_width(const Graph& graph)
     if (signature != last_signature) {
         last_signature = signature; // 尺寸/节点数一变就重新采样并留证（换工作流也能被记录）
         log::info("[画布] 节点宽度自检：" + std::to_string(counted) + " 个节点，宽 " + px_text(min_w) +
-                  " ~ " + px_text(max_w) + " px（内容区 " + px_text(g_canvas.content_width) +
+                  " ~ " + px_text(max_w) + " px（内容区 " + px_text(canvas.content_width) +
                   " px · 按输入/输出标签自适应；最窄 " + min_id + " / 最宽 " + max_id + "）→ " +
                   (uniform ? "全部等宽 ✅" : "宽度不一致 ❌"));
     }
@@ -561,7 +557,7 @@ void check_uniform_node_width(const Graph& graph)
 
 // 折行自检（一次性 · 首次绘制时跑一遍）：用「超长无空格串 / 纯中文 / 中英混排 / 自带换行」四类样例
 // 验证 wrap_to_width 的每条输出行都放得下 —— 这是「节点宽度固定」的构造性证据（不依赖人工造数据）。
-void log_wrap_selftest()
+void log_wrap_selftest(const CanvasContext& canvas)
 {
     static bool done = false;
     if (done) {
@@ -578,7 +574,7 @@ void log_wrap_selftest()
 
     float worst = 0.0f;
     for (const std::string& sample : samples) {
-        const std::string wrapped = wrapToWidth(sample, g_canvas.content_width, kNodeSummaryLines);
+        const std::string wrapped = wrapToWidth(sample, canvas.content_width, kNodeSummaryLines);
         std::size_t       begin   = 0;
         while (true) {
             const std::size_t end  = wrapped.find('\n', begin);
@@ -593,8 +589,8 @@ void log_wrap_selftest()
         }
     }
     log::info("[画布] 折行自检：" + std::to_string(samples.size()) + " 个样例，最长行 " + px_text(worst) +
-              " px（上限 " + px_text(g_canvas.content_width) + " px）→ " +
-              (worst <= g_canvas.content_width + 0.5f ? "全部收口 ✅" : "有行超宽 ❌"));
+              " px（上限 " + px_text(canvas.content_width) + " px）→ " +
+              (worst <= canvas.content_width + 0.5f ? "全部收口 ✅" : "有行超宽 ❌"));
 }
 
 // --------------------------------- Alt + 左键拖拽平移（新增：无中键 / 笔记本可用）----
@@ -606,11 +602,11 @@ void log_wrap_selftest()
 //       `Detail::Config` 并非 const，因此这里只做「Alt 按下临时改写 → 松开还原」，
 //       既不碰 third_party 源码，也不改变 Alt 未按下时的任何既有行为。
 // 返回：本次是否处于 Alt 平移模式（供调用方做界面提示）。
-bool update_alt_left_pan()
+bool update_alt_left_pan(NodeCanvasState& nc)
 {
     const bool alt = ImGui::GetIO().KeyAlt;
 
-    ed::Config& config = const_cast<ed::Config&>(ed::GetConfig(g_context));
+    ed::Config& config = const_cast<ed::Config&>(ed::GetConfig(nc.context));
 
     const int want_nav    = alt ? ImGuiMouseButton_Left : kNodeEditorNavButton;
     const int want_drag   = alt ? kAltPanParkedButton   : kNodeEditorDragButton;
@@ -619,14 +615,14 @@ bool update_alt_left_pan()
     // 已经是目标状态 → 直接返回（幂等：反复进入本函数不会重复写日志）
     if (config.NavigateButtonIndex == want_nav && config.DragButtonIndex == want_drag &&
         config.SelectButtonIndex == want_select) {
-        g_alt_pan_active = alt;
+        nc.alt_pan_active = alt;
         return alt;
     }
 
     config.NavigateButtonIndex = want_nav;
     config.DragButtonIndex     = want_drag;
     config.SelectButtonIndex   = want_select;
-    g_alt_pan_active           = alt;
+    nc.alt_pan_active           = alt;
 
     log::info(alt ? "[画布] 进入 Alt 平移模式：Alt+左键拖拽平移（右键平移 / 左键拖节点·框选暂挂起）"
                   : "[画布] 退出 Alt 平移模式：恢复右键平移、左键拖节点 / 框选");
@@ -685,7 +681,7 @@ void log_canvas_diagnostic(const EditorController& state, float zoom, double wid
     const double elapsed = std::chrono::duration<double>(now - diag.last).count();
     const double frames  = (diag.frames > 0) ? static_cast<double>(diag.frames) : 1.0;
 
-    const ui::TextureCacheStats stats = ui::textureCacheStats();
+    const ui::TextureCacheStats stats = state.textures().stats(); // ARCH-A6：缓存是显式对象
     const auto delta = [&diag, &stats](std::size_t TextureCacheStats::*member) {
         return stats.*member - (diag.has_prev ? diag.prev.*member : 0);
     };
@@ -739,9 +735,6 @@ void log_canvas_diagnostic(const EditorController& state, float zoom, double wid
 //  M_node_expansion L3（v5 定稿 §4.4.3）：小地图 ④ / 对齐辅助系统 ⑤+⑥ / 辅助开关
 //  会话级开关（不进 config：避免动 settings_validation 断言面）
 // ============================================================================
-bool  g_show_minimap  = true;
-bool  g_snap_enabled  = true;
-float g_snap_distance = 8.0f; // 吸附距离（**屏幕像素**，换算画布坐标用当前缩放）
 
 // ----------------------------------------------------------------------------
 //  小地图 = 纯导航工具（M_node_expansion L3 · 2026-10-15 修正）：
@@ -751,23 +744,21 @@ float g_snap_distance = 8.0f; // 吸附距离（**屏幕像素**，换算画布�
 //       小地图交互由共享 draw_minimap 用「屏蔽前的快照」自行驱动。
 //  CLN-09：几何 / 输入屏蔽 / 绘制已上移 canvas_view 单一来源，本 TU 只留开关与状态。
 // ----------------------------------------------------------------------------
-MinimapState g_minimap; // CLN-09：输入屏蔽快照（blocking/clicked/down/mouse）
 
 
 // 上一帧节点位置（对齐辅助判断「谁在拖动」：imgui-node-editor 无公开拖动查询 API）
-std::unordered_map<std::string, ImVec2> g_prev_positions;
 
-// 拖拽中的节点 id：已上移 canvas_view 共享（CLN-10），主画布传 g_alt_pan_active 互斥。
+// 拖拽中的节点 id：已上移 canvas_view 共享（CLN-10），主画布传 nc.alt_pan_active 互斥。
 // 对齐吸附封装（CLN-10）：开关 + 拖拽判定 + 调共享核心 + 状态更新。
 // 对齐核心逻辑（三边对 / 辅助线端点）已上移 canvas_view::apply_alignment_snap_core 单一来源。
-SnapResult apply_alignment_snap(const Graph& graph)
+SnapResult apply_alignment_snap(const Graph& graph, NodeCanvasState& nc)
 {
     SnapResult result;
-    if (!g_snap_enabled || g_alt_pan_active) {
-        g_prev_positions.clear();
+    if (!nc.snap_enabled || nc.alt_pan_active) {
+        nc.prev_positions.clear();
         return result;
     }
-    const std::string dragged = find_dragged_node(graph, g_alt_pan_active, g_prev_positions);
+    const std::string dragged = find_dragged_node(graph, nc.alt_pan_active, nc.prev_positions);
     if (dragged.empty()) {
         return result;
     }
@@ -775,14 +766,14 @@ SnapResult apply_alignment_snap(const Graph& graph)
         return result;
     }
     const float zoom        = ed::GetCurrentZoom();
-    const float snap_canvas = (zoom > 1e-6f) ? g_snap_distance / zoom : g_snap_distance;
+    const float snap_canvas = (zoom > 1e-6f) ? nc.snap_distance / zoom : nc.snap_distance;
     const ImVec2 dpos  = ed::GetNodePosition(nodeHandle(dragged));
     const ImVec2 dsize = ed::GetNodeSize(nodeHandle(dragged));
     const float  dw    = dsize.x > 1.0f ? dsize.x : 80.0f;
     const float  dh    = dsize.y > 1.0f ? dsize.y : 40.0f;
     result = apply_alignment_snap_core(graph, dragged, dpos, dw, dh, snap_canvas);
     for (const Node& node : graph.nodes) {
-        g_prev_positions[node.id] = ed::GetNodePosition(nodeHandle(node.id));
+        nc.prev_positions[node.id] = ed::GetNodePosition(nodeHandle(node.id));
     }
     return result;
 }
@@ -790,7 +781,7 @@ SnapResult apply_alignment_snap(const Graph& graph)
 // 主画布在 ed::End 之后以 canvas_theme_main() + 状态着色回调调用（见 draw 循环尾）。
 
 // 画布辅助开关弹窗（小地图 / 对齐吸附 / 吸附距离）
-void draw_canvas_assist_popup()
+void draw_canvas_assist_popup(NodeCanvasState& nc)
 {
     if (ImGui::Button("画布辅助")) {
         ImGui::OpenPopup("##canvas_assist");
@@ -798,9 +789,9 @@ void draw_canvas_assist_popup()
     if (ImGui::BeginPopup("##canvas_assist")) {
         ImGui::TextDisabled("画布辅助（会话级设置）");
         ImGui::Separator();
-        ImGui::Checkbox("小地图（左下角）", &g_show_minimap);
-        ImGui::Checkbox("对齐吸附（拖动时）", &g_snap_enabled);
-        ImGui::SliderFloat("吸附距离", &g_snap_distance, 2.0f, 30.0f, "%.0f px");
+        ImGui::Checkbox("小地图（左下角）", &nc.show_minimap);
+        ImGui::Checkbox("对齐吸附（拖动时）", &nc.snap_enabled);
+        ImGui::SliderFloat("吸附距离", &nc.snap_distance, 2.0f, 30.0f, "%.0f px");
         ImGui::EndPopup();
     }
 }
@@ -810,11 +801,10 @@ void draw_canvas_assist_popup()
 void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyView& view,
                     EditorController& editor)
 {
-    ensure_context();
     EditorController& state = editor;
+    NodeCanvasState&  nc    = state.node_canvas(); // ARCH-A6：画布跨帧状态（单实例）
+    ensure_context(nc);
 
-    static ImVec2      spawn_position = ImVec2(0.0f, 0.0f);
-    static std::string context_node;
 
     ImGui::SetNextWindowSize(ImVec2(1000.0f, 600.0f), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin(title)) {
@@ -824,12 +814,12 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
 
     // 新增：Alt+左键拖拽平移（Alt 未按下时完全维持原有绑定，见 update_alt_left_pan）。
     // 放在提示行之前 → 提示能立刻反映本帧的平移模式。
-    g_alt_pan_active = update_alt_left_pan();
+    nc.alt_pan_active = update_alt_left_pan(nc);
 
     ImGui::TextDisabled("输入端口在节点左侧、输出端口在右侧 ｜ 拖左侧圆点连线，类型不符会变红被拒");
     ImGui::SameLine();
     ImGui::TextDisabled("｜ 右键：画布新建 / 节点复制·删除 / 连线删除 ｜ 左键点连线可选中 → Delete 或工具栏「删除选中」");
-    if (g_alt_pan_active) {
+    if (nc.alt_pan_active) {
         ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f),
                            "Alt 平移模式：按住左键拖拽即可平移画布（松开 Alt 即恢复拖动节点/框选）");
     } else {
@@ -837,13 +827,13 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
             "Alt + 左键拖拽：平移画布（无中键鼠标 / 笔记本也可用）｜ 滚轮：以鼠标为中心缩放 0.1x~4.0x");
     }
     ImGui::SameLine();
-    draw_canvas_assist_popup(); // M_node_expansion L3：小地图 / 对齐吸附开关
+    draw_canvas_assist_popup(nc); // M_node_expansion L3：小地图 / 对齐吸附开关
     ImGui::Separator();
 
-    ed::SetCurrentEditor(g_context);
+    ed::SetCurrentEditor(nc.context);
     // 小地图 = 纯导航：该区域鼠标事件只属于小地图（查看 / 跳转），画布不得选中或编辑节点。
     // 必须放在 ed::Begin 之前（ed 在 Begin 内处理鼠标）。
-    blockMinimapInput(g_show_minimap, g_minimap);
+    blockMinimapInput(nc.show_minimap, nc.minimap);
     // CS-01：诊断用的缩放值（必须在 ed::Begin 内取；ed::End() 之后打印整行）
     float diag_zoom = 1.0f;
     ed::Begin("##NodeCanvas", ImVec2(0.0f, 0.0f));
@@ -877,18 +867,19 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     }
     // 宽度自适应 + 节点卡片绘制：走共享 canvas_view 只读绘制层（CEA-01 / CEA-02）
     //   —— 主题 = 主画布默认主题；运行读模型 = view.snapshot（ARCH-R3 渲染只读 ReadOnlyView）
-    g_canvas.graph        = &view.graph();
-    g_canvas.theme        = &canvasThemeMain();
-    g_canvas.run_snapshot = [&view]() -> const engine::RunSnapshot& { return view.snapshot; };
+    nc.canvas.graph        = &view.graph();
+    nc.canvas.theme        = &canvasThemeMain();
+    nc.canvas.run_snapshot = [&view]() -> const engine::RunSnapshot& { return view.snapshot; };
+    nc.canvas.textures     = &state.textures(); // ARCH-A6：卡片缩略图（单实例缓存）
     const auto diag_t0 = std::chrono::steady_clock::now();
-    updateContentWidth(view.graph(), g_canvas);
+    updateContentWidth(view.graph(), nc.canvas);
     const auto diag_t1 = std::chrono::steady_clock::now();
     for (const Node& node : view.nodes_for_render()) {
-        drawNodeBody(g_canvas, node);
+        drawNodeBody(nc.canvas, node);
     }
     const auto diag_t2 = std::chrono::steady_clock::now();
-    log_wrap_selftest();                     // 折行自检（一次性：每条输出行都必须放得下）
-    check_uniform_node_width(view.graph());  // 固定宽度自检（不变量：全部节点等宽）
+    log_wrap_selftest(nc.canvas);                     // 折行自检（一次性：每条输出行都必须放得下）
+    check_uniform_node_width(view.graph(), nc.canvas);  // 固定宽度自检（不变量：全部节点等宽）
     for (const Edge& edge : view.edges_for_render()) {
         const Node* from = view.find_node(edge.from_node);
         const Node* to   = view.find_node(edge.to_node);
@@ -909,27 +900,26 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     handle_delete_items(state);
 
     // ------------------------------------------------- 右键菜单（需挂起画布）----
-    static ed::NodeId context_node_handle; // static：避免每帧重置（历史 bug 根因，见 CHANGELOG）
 
     ed::Suspend();
 
     // 右键菜单按「最具体优先」串联（官方 blueprints-example 写法）：节点 > 背景。
     // 说明：连线右键菜单（「删除连线」「选中该连线」）已按需求下线，见 CHANGELOG「连线右键菜单移除」；
     //       连线删除请用「左键单击连线选中 → 工具栏【删除选中】」。
-    if (ed::ShowNodeContextMenu(&context_node_handle)) {
-        context_node         = "n" + std::to_string(context_node_handle.Get());
-        state.selection().select_node(context_node); // ARCH-E4：选中独立对象
+    if (ed::ShowNodeContextMenu(&nc.context_node_handle)) {
+        nc.context_node         = "n" + std::to_string(nc.context_node_handle.Get());
+        state.selection().select_node(nc.context_node); // ARCH-E4：选中独立对象
         ImGui::OpenPopup("##node_menu");
     }
     else if (ed::ShowBackgroundContextMenu()) {
-        spawn_position = ed::ScreenToCanvas(ImGui::GetMousePos());
+        nc.spawn_position = ed::ScreenToCanvas(ImGui::GetMousePos());
         ImGui::OpenPopup("##canvas_menu");
     }
 
     if (ImGui::BeginPopup("##canvas_menu")) {
         ImGui::TextDisabled("新建节点");
         ImGui::Separator();
-        show_add_node_menu(state, spawn_position);
+        show_add_node_menu(state, nc.spawn_position);
         ImGui::Separator();
         // 设计 §6.1：右键画布 → 粘贴
         if (ImGui::MenuItem("粘贴", nullptr, false, state.has_clipboard())) {
@@ -945,7 +935,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     }
 
     if (ImGui::BeginPopup("##node_menu")) {
-        ImGui::TextDisabled("节点 %s", context_node.c_str());
+        ImGui::TextDisabled("节点 %s", nc.context_node.c_str());
         ImGui::Separator();
         // 设计 §6.1：右键节点 → 复制（粘贴在画布右键菜单）
         if (ImGui::MenuItem("复制", nullptr, false, state.has_selection())) {
@@ -956,7 +946,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
         }
         // CN：上级节点 → 打开独立编辑器
         {
-            const engine::Node* ctx_node = state.model().graph.findNode(context_node);
+            const engine::Node* ctx_node = state.model().graph.findNode(nc.context_node);
             if (ctx_node != nullptr && !ctx_node->composite_id.empty()) {
                 ImGui::Separator();
                 if (ImGui::MenuItem("编辑内部图…")) {
@@ -967,15 +957,15 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
         ImGui::Separator();
         // PD-06①（FEA-M4-11 · 通用重跑）：复用上游结果，受影响节点先清结果与状态
         {
-            const engine::Node* ctx_node = state.model().graph.findNode(context_node);
+            const engine::Node* ctx_node = state.model().graph.findNode(nc.context_node);
             const bool ctx_rerun_ok =
                 ctx_node != nullptr && ctx_node->state != engine::NodeState::Waiting &&
                 !state.session_active();
             if (ImGui::MenuItem("重跑该节点", nullptr, false, ctx_rerun_ok)) {
-                state.startRerunAsync(context_node, engine::RerunScope::NodeOnly);
+                state.startRerunAsync(nc.context_node, engine::RerunScope::NodeOnly);
             }
             if (ImGui::MenuItem("重跑该节点及下游", nullptr, false, ctx_rerun_ok)) {
-                state.startRerunAsync(context_node, engine::RerunScope::Downstream);
+                state.startRerunAsync(nc.context_node, engine::RerunScope::Downstream);
             }
             if (ImGui::IsItemHovered() && ctx_node != nullptr &&
                 ctx_node->state == engine::NodeState::Waiting) {
@@ -1019,7 +1009,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
                                std::fabs(node.y) < kCanvasPositionLimit;
                     });
 
-    if (g_first_frame || state.request_navigate_to_content) {
+    if (nc.first_frame || state.request_navigate_to_content) {
         if (positions_sane) {
             ed::NavigateToContent(0.0f);
         }
@@ -1027,7 +1017,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
             log::warn("[画布] 跳过视图跟随：存在异常节点坐标（已按上限夹紧）");
             state.setStatus("已跳过视图跟随（检测到异常节点坐标）");
         }
-        g_first_frame                     = false;
+        nc.first_frame                     = false;
         state.request_navigate_to_content = false;
     }
 
@@ -1045,11 +1035,11 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     // CLN-10：辅助线绘制上移共享 draw_snap_lines（颜色/线宽传 canvas_theme_main() 的 snap_line）
     // CLN-09：小地图上移共享 draw_minimap（主题 + 节点块色按状态着色回调）
     {
-        const SnapResult snap = apply_alignment_snap(state.model().graph);
+        const SnapResult snap = apply_alignment_snap(state.model().graph, nc);
         if (snap.applied) {
             drawSnapLines(snap, ImGui::GetWindowDrawList(), canvasThemeMain().snap_line, 1.6f);
         }
-        draw_minimap(view.graph(), canvasThemeMain(), g_show_minimap, g_minimap,
+        draw_minimap(view.graph(), canvasThemeMain(), nc.show_minimap, nc.minimap,
                      [](const Node& n) { return state_color(n.state); });
     }
 
@@ -1079,7 +1069,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
         ed::PopStyleColor();
     }
 
-    sync_positions(state);
+    sync_positions(state, nc);
     ed::SetCurrentEditor(nullptr);
 
     options.node_count = static_cast<int>(view.nodes_for_render().size());
@@ -1090,10 +1080,11 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
 
 std::string canvasAddNodeAtCenter(const std::string& type, EditorController& editor)
 {
-    ensure_context();
     EditorController& state = editor;
+    NodeCanvasState&  nc    = state.node_canvas(); // ARCH-A6：画布跨帧状态（单实例）
+    ensure_context(nc);
 
-    ed::SetCurrentEditor(g_context);
+    ed::SetCurrentEditor(nc.context);
     const ImVec2 center_canvas = ed::ScreenToCanvas(ImGui::GetMainViewport()->GetCenter());
     ed::SetCurrentEditor(nullptr);
 
@@ -1108,10 +1099,11 @@ std::string canvasAddNodeAtCenter(const std::string& type, EditorController& edi
 // CN（Composition_node）：依据规格在画布可视中心创建上级节点
 std::string canvasAddCompositeAtCenter(const std::string& composite_id, EditorController& editor)
 {
-    ensure_context();
     EditorController& state = editor;
+    NodeCanvasState&  nc    = state.node_canvas(); // ARCH-A6：画布跨帧状态（单实例）
+    ensure_context(nc);
 
-    ed::SetCurrentEditor(g_context);
+    ed::SetCurrentEditor(nc.context);
     const ImVec2 center_canvas = ed::ScreenToCanvas(ImGui::GetMainViewport()->GetCenter());
     ed::SetCurrentEditor(nullptr);
 

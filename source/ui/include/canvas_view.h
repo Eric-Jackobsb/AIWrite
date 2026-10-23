@@ -25,6 +25,9 @@
 
 namespace aiwrite::ui {
 
+// ARCH-A6：纹理缓存是显式对象（EditorController::textures()）——绘制层只拿指针，不取全局
+class TextureCache;
+
 namespace ed = ax::NodeEditor;
 
 // ------------------------------------------------ 稳定手柄映射（id ↔ handle）---
@@ -105,6 +108,9 @@ struct CanvasContext {
     float                content_width = kNodeContentWidthMin; // 每帧由 update_content_width 重算
     // 运行读模型（PB-01 只读快照；未设置时回退空快照）
     std::function<const engine::RunSnapshot&()> run_snapshot;
+
+    // ARCH-A6：图片缩略图用的纹理缓存（nullptr = 未接线 → 卡片不显示图片，绝不崩）
+    TextureCache* textures = nullptr;
 
     // ---- 内联文本编辑（仅上级节点编辑器开启；主画布保持只读预览不变）----
     // 开启后：TextInput 节点的「文本内容」参数在节点卡片上直接渲染为可编辑多行输入框

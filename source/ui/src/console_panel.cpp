@@ -14,11 +14,7 @@
 namespace aiwrite::ui {
 namespace {
 
-enum class LevelFilter : int { All = 0, Info = 1, Warn = 2, Error = 3 };
 
-LevelFilter g_level_filter = LevelFilter::All;
-char        g_search[128]  = {};
-bool        g_auto_scroll  = true;
 
 // 设计文档 12.1：INFO 灰白 / WARN 黄 / ERROR 红
 ImVec4 level_color(log::Level level)
@@ -66,7 +62,7 @@ std::string consoleVisibleText(int level_filter, const std::string& search)
     return text;
 }
 
-void drawConsolePanel(const char* title, bool* open, float default_height)
+void drawConsolePanel(const char* title, bool* open, ConsolePanelState& state, float default_height)
 {
     if (open != nullptr && !*open) {
         return;
@@ -80,16 +76,16 @@ void drawConsolePanel(const char* title, bool* open, float default_height)
 
     // ---- 过滤工具条 ----
     const char* level_items[] = {"全部", "INFO", "WARN", "ERROR"};
-    int filter_index = static_cast<int>(g_level_filter);
+    int filter_index = static_cast<int>(state.level_filter);
     ImGui::SetNextItemWidth(110.0f);
     if (ImGui::Combo("##ConsoleLevel", &filter_index, level_items, IM_ARRAYSIZE(level_items))) {
-        g_level_filter = static_cast<LevelFilter>(filter_index);
+        state.level_filter = static_cast<LevelFilter>(filter_index);
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(220.0f);
-    ImGui::InputTextWithHint("##ConsoleSearch", "搜索日志...", g_search, IM_ARRAYSIZE(g_search));
+    ImGui::InputTextWithHint("##ConsoleSearch", "搜索日志...", state.search, IM_ARRAYSIZE(state.search));
     ImGui::SameLine();
-    ImGui::Checkbox("自动滚动", &g_auto_scroll);
+    ImGui::Checkbox("自动滚动", &state.auto_scroll);
     ImGui::SameLine();
     if (ImGui::Button("清空")) {
         log::clearEntries();
@@ -98,11 +94,11 @@ void drawConsolePanel(const char* title, bool* open, float default_height)
     ImGui::TextDisabled("上限 %zu 条", log::kMaxEntries);
 
     // ---- 过滤结果：工具条（复制 / 导出）与列表共用，保证「复制的内容 == 屏幕可见」----
-    const bool                    use_level_filter = g_level_filter != LevelFilter::All;
+    const bool                    use_level_filter = state.level_filter != LevelFilter::All;
     const std::vector<log::Entry> rows =
-        log::filter(min_level_of(g_level_filter), use_level_filter, std::string(g_search));
+        log::filter(min_level_of(state.level_filter), use_level_filter, std::string(state.search));
     const std::string visible_text =
-        consoleVisibleText(static_cast<int>(g_level_filter), std::string(g_search));
+        consoleVisibleText(static_cast<int>(state.level_filter), std::string(state.search));
 
     ImGui::Separator();
     if (ImGui::Button("复制可见")) {
@@ -146,7 +142,7 @@ void drawConsolePanel(const char* title, bool* open, float default_height)
     }
     ImGui::Separator();
 
-    const bool stick_to_bottom = g_auto_scroll;
+    const bool stick_to_bottom = state.auto_scroll;
 
     if (ImGui::BeginChild("##ConsoleScroll", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None,
                           ImGuiWindowFlags_HorizontalScrollbar)) {
@@ -163,7 +159,7 @@ void drawConsolePanel(const char* title, bool* open, float default_height)
         // PA-05：用户手动上滚 → 自动暂停（不再强制贴底）
         const bool at_bottom = ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f;
         if (!at_bottom && ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel > 0.0f) {
-            g_auto_scroll = false;
+            state.auto_scroll = false;
         }
         if (stick_to_bottom) {
             ImGui::SetScrollHereY(1.0f);
@@ -171,11 +167,11 @@ void drawConsolePanel(const char* title, bool* open, float default_height)
     }
     ImGui::EndChild();
 
-    if (!g_auto_scroll) {
+    if (!state.auto_scroll) {
         ImGui::TextColored(ImVec4(1.0f, 0.80f, 0.20f, 1.0f), "自动滚动已暂停（检测到手动上滚）");
         ImGui::SameLine();
         if (ImGui::Button("回到底部")) {
-            g_auto_scroll = true;
+            state.auto_scroll = true;
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("恢复自动滚动并贴到底部");

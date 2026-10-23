@@ -59,20 +59,19 @@ std::string node_header(const engine::RunNodeView& info)
     return header;
 }
 
-// P7a-19：缩略图放大 —— 点击后弹出大图（单例状态；避免多节点调用时弹窗 ID 冲突）
-std::string g_preview_path;
-bool        g_preview_requested = false;
-
+// P7a-19：缩略图放大 —— 点击后弹出大图（弹窗请求 / 目标路径都在 `OutputPanelState`；
+// ARCH-A6 起不再是文件级 static，多窗口并按也不互踩）
 // M5-03：渲染节点结果里的图片（缩略图 + 打开所在文件夹）
 //  * 纹理按「路径 + 修改时间 + 大小」缓存（`ui/texture_cache`），重复运行不重复解码
 //  * image_height > 0 时限制最大显示高度（保持宽高比）
 //  * 图片不可用时给出原因（一行红字，不占版面）
-void draw_result_images(const engine::RunNodeView& info, float image_height)
+void draw_result_images(const engine::RunNodeView& info, float image_height,
+                        EditorController& state)
 {
     for (std::size_t index = 0; index < info.images.size(); ++index) {
         const std::string& path = info.images[index];
         ImGui::PushID(static_cast<int>(index));
-        const TextureInfo texture = textureFor(path);
+        const TextureInfo texture = state.textures().textureFor(path);
         if (texture.texture != 0) {
             const float available = ImGui::GetContentRegionAvail().x;
             float       width     = static_cast<float>(texture.width);
@@ -94,8 +93,8 @@ void draw_result_images(const engine::RunNodeView& info, float image_height)
                 ImGui::SetTooltip("点击放大（P7a-19）");
             }
             if (ImGui::IsItemClicked()) {
-                g_preview_path      = path;
-                g_preview_requested = true;
+                state.output_panel().preview_path      = path;
+                state.output_panel().preview_requested = true;
             }
         }
         else {
@@ -114,18 +113,18 @@ void draw_result_images(const engine::RunNodeView& info, float image_height)
 
 // P7a-19：大图弹窗（点击缩略图后由 draw_output_panel 末尾统一调用一次）
 //  * 不吞并 PD-07（输出面板历史 / 搜索）—— 本弹窗只是**只读放大**
-void draw_image_preview_modal()
+void draw_image_preview_modal(EditorController& state)
 {
-    if (g_preview_requested) {
+    if (state.output_panel().preview_requested) {
         ImGui::OpenPopup("##image_preview");
-        g_preview_requested = false;
+        state.output_panel().preview_requested = false;
     }
     if (!ImGui::BeginPopupModal("##image_preview", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         return;
     }
 
-    const TextureInfo texture = textureFor(g_preview_path);
-    ImGui::TextUnformatted(g_preview_path.c_str());
+    const TextureInfo texture = state.textures().textureFor(state.output_panel().preview_path);
+    ImGui::TextUnformatted(state.output_panel().preview_path.c_str());
     if (texture.texture != 0) {
         const ImVec2 viewport = ImGui::GetMainViewport()->Size;
         float        width    = static_cast<float>(texture.width);
@@ -153,7 +152,7 @@ void draw_image_preview_modal()
     }
 
     if (ImGui::Button("打开所在文件夹", ImVec2(140.0f, 0.0f))) {
-        utils::openInExplorer(g_preview_path);
+        utils::openInExplorer(state.output_panel().preview_path);
     }
     ImGui::SameLine();
     if (ImGui::Button("关闭", ImVec2(100.0f, 0.0f))) {
@@ -418,7 +417,7 @@ void drawOutputPanel(const char* title, bool* open, const ReadOnlyView& view,
             // M5-03：图片结果（M7 起只剩「图片输入」等节点的 image 端口输出；
             // ImagePreview 汇点节点已移除）
             if (!info.images.empty()) {
-                draw_result_images(info, 480.0f);
+                draw_result_images(info, 480.0f, state);
             }
             if (body.empty() && info.images.empty() && info.error.empty()) {
                 ImGui::TextDisabled("（该节点无输出）");
@@ -436,7 +435,7 @@ void drawOutputPanel(const char* title, bool* open, const ReadOnlyView& view,
     }
 
     // P7a-19：大图弹窗（每帧最多一次，避免多节点重复 ID）
-    draw_image_preview_modal();
+    draw_image_preview_modal(state);
 
     ImGui::End();
 }

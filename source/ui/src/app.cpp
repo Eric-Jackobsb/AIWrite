@@ -481,7 +481,7 @@ void draw_first_run_guide(Config& config, EditorController& state,
             "在画布上选中 ProviderConfig 节点 → 右侧「参数」面板里选提供商与模型。\n"
             "官方 API 需要 Key（存进本地凭据库，加密保存、不写明文）；网页版站点用内嵌浏览器登录一次即可。");
         if (ImGui::Button("打开设置面板")) {
-            openSettingsPanel();
+            openSettingsPanel(state.settings_panel());
         }
         ImGui::Separator();
 
@@ -859,12 +859,12 @@ int run(const AppOptions& options)
 
         // P0（2026-10-09）：纹理缓存「逐帧标记」——本帧用到的纹理本轮不淘汰。
         // 必须紧跟 NewFrame()（在画布/面板开始取纹理之前），见 ui/texture_cache.h 说明。
-        ui::beginFrame();
+        state.textures().beginFrame();
 
         // [调试·自动复现] --auto-open-composite：程序化走「新建上级节点」路径。
         // 第 6 帧打开对话框并在其可见帧自动点「创建并打开编辑器」（与手工同路径）。
         if (options.auto_open_composite && frame_index == 6) {
-            compositeEditorTestDriveNewDialog();
+            compositeEditorTestDriveNewDialog(state);
             log::info("[自动复现] 已触发「新建上级节点」对话框（第 6 帧）");
         }
         // 若新建因规格校验失败而未打开编辑器：第 12 帧再走「内存会话」路径（旧实现），
@@ -1264,7 +1264,7 @@ int run(const AppOptions& options)
         if (show_console) {
             ImGui::PushFont(fonts.console);
             // PA-08：初始高度来自 config.toml [ui] console_height（面板内容区 + 工具条空间）
-            drawConsolePanel(kWindowConsole, &show_console,
+            drawConsolePanel(kWindowConsole, &show_console, state.console_panel(),
                                static_cast<float>(config.ui.console_height) + 100.0f);
             ImGui::PopFont();
         }
@@ -1297,7 +1297,8 @@ int run(const AppOptions& options)
         ImGui::PushFont(fonts.ui);
         draw_first_run_guide(config, state, webview2, request_first_run_guide);
         request_first_run_guide = false;
-        const SettingsPanelResult settings_result = drawSettingsPanel(config);
+        const SettingsPanelResult settings_result =
+            drawSettingsPanel(state.settings_panel(), config);
         ImGui::PopFont();
         if (settings_result.saved) {
             if (settings_result.visibility_changed) {
@@ -1438,7 +1439,7 @@ int run(const AppOptions& options)
     }
 
     // M5-03：纹理缓存持有 GL 资源 → 必须先于上下文销毁释放
-    ui::releaseTextures();
+    state.textures().releaseAll();
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
