@@ -118,14 +118,17 @@ python ..\source\tools\check_links.py
 
 | 目标 | 状态 |
 |---|---|
-| 单文件 < 800 行 | **provider_spec 家族全部达标**（最大 679）· 全库仍有 **13 个**生产文件 > 800（§8） |
-| 公共 API 零变动 | ✅ `provider_spec.h` 未改；5 个 TU 共享同一份声明 |
-| 重复率 ≤ 3.0 % | 🟡 **3.7 %**（本步 −0.1 个百分点：−1 克隆块）—— 余下靠「provider 骨架模板方法化」（§8 第 2 组） |
+| 单文件 < 800 行 | ✅ **13 个 > 800 的生产文件全部拆分完成**（v1.13/v1.14）：生产模块现存最大 **766**（`engine/src/graph.cpp`，Z1 前已达标 · `image_decode` 757）· 唯一 > 800 的剩余项 = 自检工具 `app/src/cli_selftest.cpp` 1429（§8 风险 3 口径：工具类不计入 Z1） |
+| 公共 API 零变动 | ✅ `provider_spec.h` / `inference_provider.h` / `upload_contract.h` 等公开头一字未改；新头全部 `*_detail.h` / `*_common.h`（模块内） |
+| 重复率 ≤ 3.0 % | ✅ **2.98 %**（876 / 29425 · v1.14 去重专项 6 步，3.7 % → 3.0 %，见 §10） |
 | 依赖单向 / 零全局 / 断链 | ✅ 见 §6 三行门禁 |
 
 ## 8. 遗留与风险（Z1 队列）
 
 已完成：`provider_spec.cpp` ✅（1743 → 5 TU）· **第 2 组 ✅（2026-10-23）**：`webview_host.cpp`（3514 → 8 TU）· `dom_web_client.cpp`（2397 → 4 TU + 2 脚本头）· `pydoll_channel.cpp`（1282 → 3 TU）—— 详见 [audit_arch_z1_web.md](audit_arch_z1_web.md) · `image_decode.cpp` **758** ✅（已 < 800，无需拆）。
+**第 3 组 ✅（ui 5 文件 → 12 TU）**：`node_canvas` 1126 → 2（+ `node_canvas_detail.h`）· `settings_panel` 944 → 3（+ `settings_panel_detail.h`）· `canvas_view` 938 → 2 · `property_panel` 855 → 2（+ `property_panel_detail.h`）· `ce_draw` 846 → 2（`ce_repro` ALL FRAMES OK）。
+**第 4 组 ✅（engine/nodes 4 文件 → 10 TU）**：`executor` 886 → 2 · `node_registry` 899 → 2 · `composite` 1171 → 3 · `local_nodes` 1242 → 4（+ `local_nodes_detail.h`）。
+**去重专项 ✅（v1.14 · 6 步）**：见 §10 —— 重复率 **3.7 % → 2.98 %**（判据 ≤ 3.0 % 达成）。
 **剩余 10 个生产文件**（按「先大后小、先纯逻辑后 GUI」排序，下一组从 `app.cpp` 起）：
 
 | 顺序 | 文件 | 行数 | 拆分预判 |
@@ -157,4 +160,45 @@ python ..\source\tools\check_links.py
 * 整批回滚：`git revert <Z1-a 提交>`（恢复单文件 + `CMakeLists.txt` 4 行 + 删 `provider_spec_detail.h`）。
 * 只回滚站点段：把 `provider_spec_web.cpp` 内容并回 `provider_spec.cpp` 并删除该 TU 的 CMake 行（其余 4 TU 不受影响）。
 * 公共 API 未变 ⇒ **调用方无需任何回滚**（`provider_spec.h` 一字未改）。
+
+## 10. 去重专项（v1.14 · 2026-10-23）
+
+Z1 拆分只搬文件、不改语义 ⇒ 拆分后**暴露**出一批逐字重复块（同簇函数被放进同一模块后更容易看见）。
+本批 6 步按「先机械、后结构」顺序收敛，每步单独构建（0 error / 0 warning）并复测 `dup_scan`：
+
+| 步 | 手段 | 去重对象 | 落点 | 重复行 | 累计 |
+|---|---|---|---|---|---|
+| 1+2 | 公共计数器 + lambda 工厂 | `CheckCounter` 3 份逐字复制 + 7 处内联 `auto check = [&](bool, const char*)` | **新** `utils/include/check_counter.h`（header-only · `make_selftest_check`） | **−90** | 1112 → **1022** |
+| 3 | 同文件 helper | `workflow_io.cpp` 两段「恢复 id / 标题 / 参数」（18 行 ×2） | 同文件匿名命名空间 `apply_recorded_overrides()` | **−36** | → **986** |
+| 4 | 模块内 helper | `local_nodes_llm / vlm` 的 18 行「重试计划」 | `nodes_detail::resolve_retry_plan()`（`local_nodes_detail.h` + `_helpers.cpp`） | **−28** | → **958** |
+| 5 | 共用 TU | `anthropic / gemini` 的「图片 → data URL」12 行 + 「HTTP 失败归因」13 行 | **新** `ai/include/provider_common.h` + `ai/src/provider_common.cpp` | **−30** | → **928** |
+| 6 | 共用 TU | `doubao / kimi` 上传单元的 `prepare`（17 行）+ `deliver`（20 行）骨架 | **新** `ai/include/site_upload_common.h` + `ai/src/site_upload_common.cpp` | **−52** | → **876** |
+
+> 每步「累计」= 在该提交（`1a871fe` / `43f83c7` 及中间工作树）上跑 `dup_scan.py` 的实测值（`git worktree` 校验，非估算）。
+
+**合计**：重复行 **1112 → 876** · 重复率 **3.8 % → 2.98 %**（`meaningful lines 29425`）· 克隆块 **60**（`clone runs`）。
+
+**口径（为什么这样切）**：
+
+1. **只抽「同口径」片段**：站点 / 厂商差异全部以参数或 `why_hint` 保留（例 Kimi 的「待侦察占位」提示文案、Anthropic/Gemini 的错误前缀），
+   因此**行为逐字不变** —— 不引入「新分支」是这批能一次通过 `check_all` 的前提。
+2. **公开头零改动**：4 个新头（`check_counter.h` / `provider_common.h` / `site_upload_common.h`）都写在模块内并明确标注
+   「**不是**公开 API · 只允许 X include」，`check_includes.ps1` 仍 0 violations。
+3. **新 TU 一律手工登记**：`CMakeLists.txt` 无 GLOB ⇒ `provider_common.cpp` / `site_upload_common.cpp` 各加一行注释（见 §3）。
+4. **不做「为凑数」的合并**：`pydoll_channel_selftest` 内部两段 23 行、`image_decode` 双分支 15 行、
+   `dom_web_client_probe ↔ selftest` 15 行等**仍留着** —— 它们是「不同输入口径的断言」，合并会牺牲失败定位精度（§8 风险 2 同口径）。
+
+**验证**（本批实测 · 全绿）：
+
+| 项 | 结果 |
+|---|---|
+| 构建 | **0 error / 0 warning** |
+| `check_all.ps1` | **21/21 PASS**（`--upload-selftest` 72/0 · `--exec-selftest` 713/0 · `--graph-selftest` 151/0 · 夹具 44/17/15 · `ce_repro` ALL FRAMES OK） |
+| `check_includes.ps1` | 254 files · 913 include lines · **0 violations** |
+| `check_globals.ps1` | 254 files · **0 violations**（R1 0 / R2 0 / R3 0 · fn_static 50/50） |
+| `check_links.py` | 1974 links · **0 broken** |
+| `dup_scan.py` | 重复行 **876** · 重复率 **2.98 %**（≤ 3.0 % ✅） |
+
+**回滚**：`git revert 1a871fe 43f83c7`（两步去重提交；拆分提交不受影响 —— 去重只删重复、不改调用契约）。
+
 
