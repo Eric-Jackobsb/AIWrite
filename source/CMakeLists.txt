@@ -399,6 +399,8 @@ add_executable(aiwrite WIN32
     ui/src/text_view.cpp
     ui/src/texture_cache.cpp
     ui/src/settings_panel.cpp
+    ui/src/settings_panel_site.cpp      # ARCH-Z1 拆分（新建网页版站点模态）
+    ui/src/settings_panel_official.cpp  # ARCH-Z1 拆分（新建 API 提供商模态）
     ui/src/composite_editor.cpp  # CN：上级节点编辑器（CLN-13 拆分：画布/上下文/改名域）
     ui/src/ce_state.cpp          # CLN-13 拆分（画布状态容器 + 撤销转发）
     ui/src/ce_model.cpp          # ARCH-Z2 拆分（CeModel：规格工作副本 + 撤销栈）

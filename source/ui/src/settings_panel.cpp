@@ -19,8 +19,13 @@
 #include <string>
 #include <vector>
 
+#include "settings_panel_detail.h"  // ARCH-Z1：模块内契约（模态名 + 5 个内部入口）
+
 namespace aiwrite::ui {
-namespace {
+
+using namespace settings_detail;  // 原匿名命名空间函数（同 TU 直接调用，名字查找不变）
+
+namespace settings_detail {
 
 constexpr const char* kSettingsWindow = "设置";
 
@@ -40,7 +45,6 @@ bool needs_resync(const Config& before, const Config& after)
            before.ui.running_animation != after.ui.running_animation ||
            before.ui.console_height != after.ui.console_height;
 }
-
 // std::string ↔ ImGui InputText 的桥（每帧同步；文本变即回写）
 bool input_text_string(const char* id, std::string& value, std::size_t capacity)
 {
@@ -70,15 +74,12 @@ void load_copy(SettingsPanelState& state, const Config& config)
     state.notice.clear();
     state.loaded = true;
 }
-
 // ============================================================================
 //  PB2-24 要点①：「新建网页版站点…」模态（写 `~/.brain-ai/providers.d/<id>.json`）
 //   * 面板只收集字符串；生成 / 校验 / 落盘全部走 `ai::site_template`（纯函数 ⇒ 可离线断言）
 //   * 成功后**立即** `ai::reload_provider_specs()` + 置 `result.provider_table_reloaded`
 //     ⇒ 下拉即时刷新（宿主 `app.cpp` 据此重建 `provider` 枚举，无需重启）
 // ============================================================================
-
-constexpr const char* kNewSiteModal = "新建网页版站点";
 
 // 模态草稿（g_site_* → `SettingsPanelState::site_*`）：面板只收集字符串；
 // 生成 / 校验 / 落盘全部走 `ai::site_template`（纯函数 ⇒ 可离线断言）。
@@ -104,15 +105,12 @@ bool id_in_table(const std::string& id)
 {
     return !id.empty() && ai::providerSpecs().find(id) != nullptr;
 }
-
 // ============================================================================
 //  自定义 AI 收口：「新建 API 提供商…」模态（写 `~/.brain-ai/providers.d/<id>.json`）
 //   * 与「新建网页版站点…」同一机制（生成 / 校验 / 落盘走 `ai::official_template` 纯函数）
 //   * 成功后**立即** `ai::reloadProviderSpecs()` + 置 `result.provider_table_reloaded`
 //   * 填了 API Key ⇒ 写盘后**立即**入凭据库（Windows DPAPI；不落明文、不进 JSON）
 // ============================================================================
-
-constexpr const char* kNewOfficialModal = "新建 API 提供商";
 
 
 void open_new_official_modal(SettingsPanelState& state)
@@ -131,461 +129,7 @@ void open_new_official_modal(SettingsPanelState& state)
     std::memset(state.off_key, 0, sizeof(state.off_key));
     state.off_modal_open = true;
 }
-
-// std::string 单选（options 非空；值不在列表里 ⇒ 视为第一项，不静默改值）
-bool combo_string(const char* label, std::string& value, const std::vector<std::string>& options)
-{
-    if (options.empty()) {
-        return false;
-    }
-    int index = 0;
-    for (std::size_t i = 0; i < options.size(); ++i) {
-        if (options[i] == value) {
-            index = static_cast<int>(i);
-            break;
-        }
-    }
-    std::vector<const char*> items;
-    items.reserve(options.size());
-    for (const std::string& option : options) {
-        items.push_back(option.c_str());
-    }
-    if (ImGui::Combo(label, &index, items.data(), static_cast<int>(items.size()))) {
-        value = options[static_cast<std::size_t>(index)];
-        return true;
-    }
-    return false;
-}
-
-void draw_new_site_modal(SettingsPanelState& state, SettingsPanelResult& result);
-void draw_new_official_modal(SettingsPanelState& state, SettingsPanelResult& result);
-
-} // namespace
-
-// ---------------------------------------------------------------------------
-//  「新建网页版站点…」模态实现（状态见 `SettingsPanelState::site_*`）
-// ---------------------------------------------------------------------------
-namespace {
-
-// 从加载报告里挑出**点名该 id** 的第一条错误 / 警告（生效失败时给用户看原文）
-std::string site_report_line(const ai::SpecLoadReport& report, const std::string& id)
-{
-    for (const std::string& text : report.errors) {
-        if (text.find(id) != std::string::npos) {
-            return text;
-        }
-    }
-    for (const std::string& text : report.warnings) {
-        if (text.find(id) != std::string::npos) {
-            return text;
-        }
-    }
-    return "（加载报告未点名该 id —— 请确认文件是 UTF-8 JSON 且含 schema_version 信封）";
-}
-
-void draw_new_site_modal(SettingsPanelState& state, SettingsPanelResult& result)
-{
-    if (state.site_modal_open) {
-        ImGui::OpenPopup(kNewSiteModal); // 必须在设置窗口的上下文内调用
-        state.site_modal_open = false;
-    }
-    ImGui::SetNextWindowSize(ImVec2(780.0f, 560.0f), ImGuiCond_Appearing);
-    if (!ImGui::BeginPopupModal(kNewSiteModal, nullptr)) {
-        return;
-    }
-
-    const ai::ProviderSpecs& specs = ai::providerSpecs();
-    ImGui::TextDisabled("三步：① 填 id + 登录页 → ②「创建并重新加载」→ ③「提供商」下拉立即出现（无需重启）");
-    ImGui::TextDisabled("写到哪里：%s", paths::userProvidersDir().string().c_str());
-    ImGui::Separator();
-
-    // ---- 模板来源（照抄内置条目；R18）----
-    const std::vector<std::string> web_ids = specs.ids("web");
-    std::vector<std::string>       sources;
-    sources.push_back("空白模板（只有 id + 登录页）");
-    for (const std::string& id : web_ids) {
-        sources.push_back("照抄 " + id);
-    }
-    int source_index = state.site_source_index;
-    if (source_index < 0 || source_index >= static_cast<int>(sources.size())) {
-        source_index = 0;
-    }
-    std::vector<const char*> source_items;
-    source_items.reserve(sources.size());
-    for (const std::string& label : sources) {
-        source_items.push_back(label.c_str());
-    }
-    ImGui::SetNextItemWidth(380.0f);
-    if (ImGui::Combo("模板来源", &source_index, source_items.data(),
-                     static_cast<int>(source_items.size()))) {
-        state.site_source_index = source_index;
-        state.site_tpl          = (source_index == 0)
-                                  ? ai::siteTemplateDefault()
-                                  : ai::siteTemplateFromSpec(
-                                        specs.find(web_ids[static_cast<std::size_t>(source_index) - 1]));
-        state.site_error.clear();
-        state.site_notice.clear();
-    }
-    ImGui::SameLine();
-    ImGui::TextDisabled("「照抄」= 连站点身份一起带过来，改个 id 就能建（R18）");
-    ImGui::Separator();
-
-    ImGui::BeginChild("##site_fields", ImVec2(0.0f, 350.0f), true);
-    ImGui::TextUnformatted("站点身份");
-    ImGui::TextDisabled("站点 id（= 文件名，只能字母 / 数字 / `-` / `_` / `.`）");
-    ImGui::SetNextItemWidth(300.0f);
-    input_text_string("##site_id", state.site_tpl.id, 64);
-    ImGui::TextDisabled("显示名（下拉里显示的名字）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##site_display", state.site_tpl.display, 120);
-    ImGui::TextDisabled("登录页地址（**站点身份唯一来源**：必须 http:// 或 https://）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##site_login", state.site_tpl.login_url, 400);
-    ImGui::TextDisabled("登录窗口标题（留空 = 自动「AIwrite · <显示名> 登录（登录后关闭窗口）」）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##site_window", state.site_tpl.window_title, 200);
-    ImGui::Separator();
-    ImGui::TextUnformatted("站点选择器（可后补：留空 = 登录型条目 —— 登录 / 登录态可用，生成会在运行期明确报错）");
-    ImGui::TextDisabled("输入框选择器（例 div.chat-input-editor / textarea[placeholder=\"Ask …\"]）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##site_input", state.site_tpl.input_selector, 300);
-    const std::vector<std::string> send_kinds = {"key", "click"};
-    ImGui::SetNextItemWidth(160.0f);
-    combo_string("发送方式", state.site_tpl.send_kind, send_kinds);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(240.0f);
-    input_text_string("##site_send_value", state.site_tpl.send_value, 200);
-    ImGui::SameLine();
-    ImGui::TextDisabled("键名（Enter）或发送按钮选择器");
-    ImGui::TextDisabled("回答容器选择器（需要**先有一条回答**才存在 —— 唯一人工关卡，见 §3.4）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##site_answer", state.site_tpl.answer_selector, 300);
-    const std::vector<std::string> done_kinds = {"（不设完成判据）", "selector_gone",
-                                                 "selector_present"};
-    std::string done_kind = state.site_tpl.done_kind.empty() ? done_kinds.front() : state.site_tpl.done_kind;
-    ImGui::SetNextItemWidth(200.0f);
-    if (combo_string("完成判据", done_kind, done_kinds)) {
-        state.site_tpl.done_kind = (done_kind == done_kinds.front()) ? std::string() : done_kind;
-    }
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(300.0f);
-    input_text_string("##site_done_selector", state.site_tpl.done_selector, 300);
-    ImGui::TextDisabled("登录 Cookie 名（逗号分隔；留空 = 该 origin 只要有 Cookie 即视为已登录）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##site_cookies", state.site_tpl.cookie_names, 300);
-    ImGui::TextDisabled("页面内取 token 表达式（纯 DOM 站点一般留空；例 localStorage.getItem('token')）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##site_token", state.site_tpl.token_expr, 300);
-    ImGui::SetNextItemWidth(160.0f);
-    ImGui::InputInt("轮询间隔（毫秒）", &state.site_tpl.answer_poll_ms, 100, 500);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(160.0f);
-    ImGui::InputInt("最大轮询次数", &state.site_tpl.answer_max_polls, 10, 60);
-    ImGui::TextDisabled("备注（写进条目 notes：如实标注是否实测）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##site_notes", state.site_tpl.notes, 400);
-    ImGui::EndChild();
-    ImGui::Separator();
-
-    // ---- 现场提示：可写性 / 待实测 / 二次确认 ----
-    const std::string pending = ai::siteTemplatePending(state.site_tpl);
-    if (!pending.empty()) {
-        ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f),
-                           "生成未就绪：缺 %s（**登录 / 登录态仍可用**；生成会在运行期明确报错）",
-                           pending.c_str());
-    }
-    const std::string wrong = ai::siteTemplateError(state.site_tpl);
-    if (!wrong.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "✗ %s", wrong.c_str());
-    }
-    else if (id_in_table(state.site_tpl.id)) {
-        ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f),
-                           "表里已有条目「%s」（内置或此前新建）—— 创建将以**用户层条目**替换它",
-                           state.site_tpl.id.c_str());
-    }
-    ImGui::Checkbox("覆盖表里已有条目 / 已存在同名文件（R8：默认不覆盖）", &state.site_overwrite);
-
-    if (ImGui::Button("创建并重新加载", ImVec2(150.0f, 0.0f))) {
-        std::string error = ai::siteTemplateError(state.site_tpl);
-        if (error.empty() && id_in_table(state.site_tpl.id) && !state.site_overwrite) {
-            error = "表里已有条目「" + state.site_tpl.id +
-                    "」——请改 id，或勾选「覆盖表里已有条目」后重试";
-        }
-        if (!error.empty()) {
-            state.site_error  = error;
-            state.site_notice.clear();
-        }
-        else {
-            std::filesystem::path written;
-            if (!ai::write_user_site_file(state.site_tpl, paths::userProvidersDir(),
-                                          state.site_overwrite, &error, &written)) {
-                state.site_error = error;
-                state.site_notice.clear();
-                log::warn("[站点] 新建条目失败：" + error);
-            }
-            else {
-                // 写完**立即**重载并复核该条目是否真的生效（R8：坏表不能只报成功）
-                ai::reloadProviderSpecs();
-                result.provider_table_reloaded = true;
-                const ai::ProviderSpecs& after   = ai::providerSpecs();
-                const ai::ProviderSpec*  created = after.find(state.site_tpl.id);
-                if (created == nullptr || created->kind != "web") {
-                    state.site_error = "已写文件，但重新加载后该条目**未生效**：\n" +
-                                   site_report_line(after.report, state.site_tpl.id) +
-                                   "\n（修好文件后点设置里的「重新加载配置表」）";
-                    state.site_notice.clear();
-                }
-                else {
-                    state.site_overwrite = true; // 再点即覆盖（文件已存在）
-                    state.site_notice = "已创建 " + written.string() + "\n加载：" +
-                                    after.report.summary() +
-                                    "\n「提供商」下拉立即出现该条目（无需重启）；选择器实测见 §3.4";
-                    state.site_error.clear();
-                }
-                log::info("[站点] 新建条目 " + written.string() + " → " + after.report.summary());
-            }
-        }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("打开 providers.d 目录", ImVec2(170.0f, 0.0f))) {
-        if (utils::openFolder(paths::userProvidersDir().string())) {
-            state.site_notice = "已打开 ~/.brain-ai/providers.d（每站一个 JSON，可分享/备份）";
-        }
-        else {
-            state.site_error = "打开失败（目录尚未创建：点「创建并重新加载」会先建目录）";
-        }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("取消", ImVec2(90.0f, 0.0f))) {
-        ImGui::CloseCurrentPopup();
-    }
-
-    if (!state.site_error.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", state.site_error.c_str());
-    }
-    else if (!state.site_notice.empty()) {
-        ImGui::TextColored(ImVec4(0.40f, 0.85f, 0.45f, 1.0f), "%s", state.site_notice.c_str());
-    }
-
-    ImGui::EndPopup();
-}
-
-void draw_new_official_modal(SettingsPanelState& state, SettingsPanelResult& result)
-{
-    if (state.off_modal_open) {
-        ImGui::OpenPopup(kNewOfficialModal); // 必须在设置窗口的上下文内调用
-        state.off_modal_open = false;
-    }
-    ImGui::SetNextWindowSize(ImVec2(660.0f, 600.0f), ImGuiCond_Appearing);
-    if (!ImGui::BeginPopupModal(kNewOfficialModal, nullptr)) {
-        return;
-    }
-
-    const ai::ProviderSpecs& specs = ai::providerSpecs();
-    ImGui::TextDisabled("三步：① 填 id + API 地址 → ②「创建并重新加载」→ ③「提供商」下拉立即出现（无需重启）");
-    ImGui::TextDisabled("写到哪里：%s", paths::userProvidersDir().string().c_str());
-    ImGui::Separator();
-
-    // ---- 模板来源（照抄内置官方条目；R18）----
-    const std::vector<std::string> official_ids = specs.ids("official");
-    std::vector<std::string>       sources;
-    sources.push_back("空白模板（只有 id + API 地址）");
-    for (const std::string& id : official_ids) {
-        sources.push_back("照抄 " + id);
-    }
-    int source_index = state.off_source_index;
-    if (source_index < 0 || source_index >= static_cast<int>(sources.size())) {
-        source_index = 0;
-    }
-    std::vector<const char*> source_items;
-    source_items.reserve(sources.size());
-    for (const std::string& label : sources) {
-        source_items.push_back(label.c_str());
-    }
-    ImGui::SetNextItemWidth(380.0f);
-    if (ImGui::Combo("模板来源", &source_index, source_items.data(),
-                     static_cast<int>(source_items.size()))) {
-        state.off_source_index = source_index;
-        state.off_tpl          = (source_index == 0)
-                                 ? ai::officialTemplateDefault()
-                                 : ai::officialTemplateFromSpec(
-                                       specs.find(official_ids[static_cast<std::size_t>(
-                                           source_index) - 1]));
-        state.off_error.clear();
-        state.off_notice.clear();
-    }
-    ImGui::SameLine();
-    ImGui::TextDisabled("「照抄」= 地址 / 模型 / 能力一起带过来，改个 id 就能建（R18）");
-    ImGui::Separator();
-
-    ImGui::BeginChild("##official_fields", ImVec2(0.0f, 400.0f), true);
-    ImGui::TextUnformatted("提供商身份");
-    ImGui::TextDisabled("提供商 id（= 文件名，只能字母 / 数字 / `-` / `_` / `.`）");
-    ImGui::SetNextItemWidth(300.0f);
-    input_text_string("##off_id", state.off_tpl.id, 64);
-    ImGui::TextDisabled("显示名（下拉里显示的名字）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##off_display", state.off_tpl.display, 120);
-
-    const std::vector<std::string> proto_values = {"openai", "anthropic", "gemini"};
-    const std::vector<std::string> proto_labels = {
-        "openai（OpenAI 兼容，绝大多数服务）",
-        "anthropic（Claude Messages 协议）",
-        "gemini（Google generateContent 协议）"};
-    int proto_index = 0;
-    for (std::size_t i = 0; i < proto_values.size(); ++i) {
-        if (proto_values[i] == state.off_tpl.protocol) {
-            proto_index = static_cast<int>(i);
-            break;
-        }
-    }
-    std::vector<const char*> proto_items;
-    proto_items.reserve(proto_labels.size());
-    for (const std::string& label : proto_labels) {
-        proto_items.push_back(label.c_str());
-    }
-    ImGui::SetNextItemWidth(300.0f);
-    if (ImGui::Combo("协议", &proto_index, proto_items.data(),
-                     static_cast<int>(proto_items.size()))) {
-        state.off_tpl.protocol = proto_values[static_cast<std::size_t>(proto_index)];
-    }
-    ImGui::TextDisabled("API 地址（**完整前缀，含 /v1 等**；例 https://api.example.com/v1）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##off_base", state.off_tpl.api_base, 400);
-    ImGui::TextDisabled("聊天路径（留空 = 按协议默认，如 /chat/completions）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##off_chat", state.off_tpl.chat_path, 300);
-    ImGui::TextDisabled("模型清单（逗号分隔；**留空 = 模型自由填写**，最省事）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##off_models", state.off_tpl.models, 400);
-    ImGui::TextDisabled("视觉默认模型（可留空；如 deepseek-flash / glm-4v-flash）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##off_vision", state.off_tpl.vision_model, 300);
-
-    ImGui::Separator();
-    ImGui::TextUnformatted("能力与凭据");
-    ImGui::Checkbox("支持图片理解（vision）", &state.off_tpl.vision);
-    ImGui::SameLine();
-    ImGui::Checkbox("支持 seed 参数", &state.off_tpl.seed);
-    ImGui::SameLine();
-    ImGui::Checkbox("支持系统角色", &state.off_tpl.system_role);
-    ImGui::TextDisabled("环境变量名（可留空；有则按此读 Key）");
-    ImGui::SetNextItemWidth(300.0f);
-    input_text_string("##off_env", state.off_tpl.env_name, 200);
-    ImGui::TextDisabled("凭据库引用名（留空 = brain-ai/<id>；保存后 Key 归此处）");
-    ImGui::SetNextItemWidth(300.0f);
-    input_text_string("##off_keyref", state.off_tpl.key_ref, 200);
-    ImGui::TextDisabled("API Key（可留空；之后在节点面板「API Key」填一次同样入库。以 Windows DPAPI "
-                       "加密保存，不落明文）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::InputText("##off_key", state.off_key, sizeof(state.off_key), ImGuiInputTextFlags_Password);
-    ImGui::TextDisabled("备注（写进条目 notes：如实标注是否实测）");
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    input_text_string("##off_notes", state.off_tpl.notes, 400);
-    ImGui::EndChild();
-    ImGui::Separator();
-
-    // ---- 现场提示：可写性 / 二次确认 ----
-    const std::string wrong = ai::officialTemplateError(state.off_tpl);
-    if (!wrong.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "✗ %s", wrong.c_str());
-    }
-    else if (id_in_table(state.off_tpl.id)) {
-        ImGui::TextColored(ImVec4(0.85f, 0.70f, 0.30f, 1.0f),
-                           "表里已有条目「%s」（内置或此前新建）—— 创建将以**用户层条目**替换它",
-                           state.off_tpl.id.c_str());
-    }
-    ImGui::Checkbox("覆盖表里已有条目 / 已存在同名文件（R8：默认不覆盖）", &state.off_overwrite);
-
-    if (ImGui::Button("创建并重新加载", ImVec2(150.0f, 0.0f))) {
-        std::string error = ai::officialTemplateError(state.off_tpl);
-        if (error.empty() && id_in_table(state.off_tpl.id) && !state.off_overwrite) {
-            error = "表里已有条目「" + state.off_tpl.id +
-                    "」——请改 id，或勾选「覆盖表里已有条目」后重试";
-        }
-        if (!error.empty()) {
-            state.off_error  = error;
-            state.off_notice.clear();
-        }
-        else {
-            std::filesystem::path written;
-            if (!ai::writeUserOfficialFile(state.off_tpl, paths::userProvidersDir(),
-                                           state.off_overwrite, &error, &written)) {
-                state.off_error = error;
-                state.off_notice.clear();
-                log::warn("[提供商] 新建条目失败：" + error);
-            }
-            else {
-                // API Key 可选：填了即入凭据库（Windows DPAPI；不落明文、不进 JSON）
-                //  * 入库失败**不阻断**创建，但提示必须保留（下面生效复核的 clear 不能盖掉它）
-                const std::string key_ref = utils::trim(state.off_tpl.key_ref).empty()
-                                                ? ("brain-ai/" + state.off_tpl.id)
-                                                : utils::trim(state.off_tpl.key_ref);
-                bool               key_was_filled = !std::string(state.off_key).empty();
-                std::string        key_error_text;
-                if (key_was_filled) {
-                    if (utils::saveCredential(key_ref, state.off_key, &key_error_text)) {
-                        std::memset(state.off_key, 0, sizeof(state.off_key));
-                    }
-                    else {
-                        key_error_text = "条目已创建，但 API Key 入库失败：" + key_error_text +
-                                         "（可在节点面板「API Key」再填一次）";
-                    }
-                }
-                // 写完**立即**重载并复核该条目是否真的生效（R8：坏表不能只报成功）
-                ai::reloadProviderSpecs();
-                result.provider_table_reloaded = true;
-                const ai::ProviderSpecs& after   = ai::providerSpecs();
-                const ai::ProviderSpec*  created = after.find(state.off_tpl.id);
-                if (created == nullptr || created->kind != "official") {
-                    state.off_error = "已写文件，但重新加载后该条目**未生效**：\n" +
-                                  site_report_line(after.report, state.off_tpl.id) +
-                                  "\n（修好文件后点设置里的「重新加载配置表」）";
-                    state.off_notice.clear();
-                }
-                else {
-                    state.off_overwrite = true; // 再点即覆盖（文件已存在）
-                    std::string key_line;
-                    if (!key_error_text.empty()) {
-                        key_line = "\n⚠ " + key_error_text;
-                    }
-                    else if (key_was_filled) {
-                        key_line = "\nAPI Key 已入凭据库（ref=" + key_ref + "，Windows DPAPI，不落明文）";
-                    }
-                    state.off_notice = "已创建 " + written.string() + "\n加载：" +
-                                    after.report.summary() +
-                                    "\n「提供商」下拉立即出现该条目（无需重启）" + key_line;
-                    state.off_error = key_error_text; // 空 = 清掉上一帧的红字；非空 = 保留 Key 失败提示
-                }
-                log::info("[提供商] 新建条目 " + written.string() + " → " + after.report.summary());
-            }
-        }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("打开 providers.d 目录", ImVec2(170.0f, 0.0f))) {
-        if (utils::openFolder(paths::userProvidersDir().string())) {
-            state.off_notice = "已打开 ~/.brain-ai/providers.d（每个提供商一个 JSON，可分享/备份）";
-        }
-        else {
-            state.off_error = "打开失败（目录尚未创建：点「创建并重新加载」会先建目录）";
-        }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("取消", ImVec2(90.0f, 0.0f))) {
-        ImGui::CloseCurrentPopup();
-    }
-
-    if (!state.off_error.empty()) {
-        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", state.off_error.c_str());
-    }
-    else if (!state.off_notice.empty()) {
-        ImGui::TextColored(ImVec4(0.40f, 0.85f, 0.45f, 1.0f), "%s", state.off_notice.c_str());
-    }
-
-    ImGui::EndPopup();
-}
-
-} // namespace
+}  // namespace settings_detail
 
 void openSettingsPanel(SettingsPanelState& state)
 {
@@ -598,7 +142,6 @@ void closeSettingsPanel(SettingsPanelState& state)
     state.open   = false;
     state.loaded = false;
 }
-
 
 SettingsPanelResult drawSettingsPanel(SettingsPanelState& state, Config& config)
 {
@@ -941,4 +484,4 @@ bool settingsPanelVisible(const SettingsPanelState& state)
     return state.open;
 }
 
-} // namespace aiwrite::ui
+}  // namespace aiwrite::ui
