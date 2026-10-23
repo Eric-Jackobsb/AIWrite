@@ -299,7 +299,15 @@ add_library(aiwrite_core STATIC
     web/src/session_snapshot.cpp # M7B 批 2：L2 快照只读视图（MB-D0-8；**只碰元数据**，不读内容）
     web/src/session_store.cpp
     web/src/probe_verdict.cpp    # M_patchAB §2.2/§3.3（PB-07 / PB2-25）：会话诊断纯函数（判据收紧 + 错误串反查）
-    web/src/webview_host.cpp)    # 网页版登录 + 会话 + 协议探测 + 页面内 PoW 求解
+    web/src/webview_host.cpp     # 网页版登录：窗口运行时状态 / 窗口表 / 通用工具（模块内契约定义点）
+    # ARCH-Z1b（2026-10-23）：`webview_host.cpp` 3514 行 → 8 个 TU（模块内契约 = web/include/webview_host_detail.h）
+    web/src/webview_host_window.cpp   # WebView2 环境·控制器回调·window_proc·窗口线程体·网络回执挂钩
+    web/src/webview_host_probe.cpp    # 协议探测（两段式）/ 就绪三级 / 页面状态探针 / wait_ready
+    web/src/webview_host_actions.cpp  # 窗口内动作：脚本槽 / 复位导航 / input[type=file] / CDP 输入
+    web/src/webview_host_pow.cpp      # 页面内 PoW 求解 + 按站点注销（窗口线程侧）
+    web/src/webview_host_api.cpp      # 句柄 / 自检 / 窗口诊断 / prepare_window
+    web/src/webview_host_session.cpp  # 按站点会话：ensure_session / logout_site / 回执 / 上传 / CDP 输入
+    web/src/webview_host_upload.cpp)  # 附件入口只读自动识别（M8-37 resolve_file_input_selector）
 # 头文件根 = **每个模块自己的 `include/`**（模块自带走 src/ + include/）—— 见 AI_README.md §11「代码组织规范」
 #  * 实现（.cpp）在 source/<模块>/src/**；头文件在 source/<模块>/include/**（模块内**拍平**，不再镜像子目录）
 #  * 引用写法 = **裸文件名**（例：#include "graph.h"）⇒ 每个模块的 include/ 都要挂成头文件根，故逐个列出
