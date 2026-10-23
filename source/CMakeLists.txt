@@ -379,6 +379,9 @@ add_executable(aiwrite WIN32
     app/src/cli_selftest.cpp  # CLN-14 拆分（CLI 自检域：run_selftest / 各 selftest）
     app/src/cli_diag.cpp      # CLN-14 拆分（CLI 诊断域：帮助 / pipe / 会话清单 / 表导出）
     ui/src/app.cpp
+    ui/src/app_helpers.cpp    # ARCH-Z1 拆分（字体/深色主题/默认停靠布局/状态栏文案/信息面板/首启引导）
+    ui/src/app_frame.cpp      # ARCH-Z1 拆分（帧首推进 + 菜单栏 + 恢复弹窗）
+    ui/src/app_panels.cpp     # ARCH-Z1 拆分（工具栏/DockSpace/面板接线/状态栏/看门狗/出帧）
     ui/src/console_panel.cpp
     ui/src/property_panel.cpp
     ui/src/panel_widgets.cpp  # CLN-12 拆分（参数控件域）
