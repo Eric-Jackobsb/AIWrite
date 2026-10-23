@@ -384,6 +384,7 @@ add_executable(aiwrite WIN32
     ui/src/app_panels.cpp     # ARCH-Z1 拆分（工具栏/DockSpace/面板接线/状态栏/看门狗/出帧）
     ui/src/console_panel.cpp
     ui/src/property_panel.cpp
+    ui/src/property_panel_runtime.cpp  # ARCH-Z1 拆分（运行状态 / 重跑 / 批量应用·重置 段）
     ui/src/panel_widgets.cpp  # CLN-12 拆分（参数控件域）
     ui/src/panel_web.cpp      # CLN-12 拆分（网页会话 / 提供商域）
     ui/src/editor_controller.cpp   # ARCH-A3（编辑器编排层：editor() 退场 · 启动注入）
