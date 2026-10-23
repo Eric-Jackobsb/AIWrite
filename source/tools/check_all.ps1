@@ -209,10 +209,31 @@ if (-not $SkipLoop) {
     Add-Result 'loop_verify -StatusOnly' ($code -eq 0) "exit=$code（台账重建见 $outFile）"
 }
 
-# ---- ⑥ 文档断链自检（DBG-L01 收口：判据 = **全库 0**） ----
+# ---- ⑥ 依赖单向（ARCH-A4 收口：判据 = engine/nodes/ai/web/utils 不含 ui|app 头 · ui 不含 app 头） ----
+#  * 脚本 = `source/tools/check_includes.ps1`（只读、零副作用；头文件归属按「裸文件名 → 所属层」表判定，
+#    跨层同名 = 归属不明 ⇒ 同样判失败，防止静默放行）
+#  * 退出码 1 = 有违规（逐条 `文件:行 #include "x" ⇒ 归属层` 打印在自检输出里）
+Write-Both "`n== ⑥ 依赖单向（check_includes.ps1 · 规则 1 / 判据 5） =="
+$incScript = Join-Path $sourceDir 'tools\check_includes.ps1'
+if (Test-Path $incScript) {
+    $outFile = Join-Path $logDir "check_all_$stamp`_includes.txt"
+    Push-Location $repoRoot
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $incScript *> $outFile
+    $incCode = $LASTEXITCODE
+    Pop-Location
+    $incText = if (Test-Path $outFile) { Get-Content $outFile -Raw -ErrorAction SilentlyContinue } else { '' }
+    $incLine = (($incText -split "`n") | Where-Object { $_ -match 'checked files' } | Select-Object -Last 1)
+    $incDetail = if ($incLine) { ($incLine -replace '^\s+', '').Trim() } else { '' }
+    Add-Result 'check_includes（依赖单向）' ($incCode -eq 0) $incDetail
+}
+else {
+    Add-Result 'check_includes（依赖单向）' $false "脚本缺失：$incScript"
+}
+
+# ---- ⑦ 文档断链自检（DBG-L01 收口：判据 = **全库 0**） ----
 #  * 脚本 = `source/tools/check_links.py`（仓库根由脚本位置推导；剔除代码块 / 行内代码）
 #  * 只读、零副作用；退出码 1 = 有断链（逐条 `文件:行 -> 目标` 打印在自检输出里）
-Write-Both "`n== ⑥ 文档断链（check_links.py · 全库 0 判据） =="
+Write-Both "`n== ⑦ 文档断链（check_links.py · 全库 0 判据） =="
 $linksScript = Join-Path $sourceDir 'tools\check_links.py'
 if (Test-Path $linksScript) {
     Push-Location $repoRoot
@@ -226,11 +247,11 @@ else {
     Add-Result 'check_links（文档断链）' $false "脚本缺失：$linksScript"
 }
 
-# ---- ⑦ 打包 payload 自检（FEA-M6-06 · 打包流水线入闸；DBG-L01 同款「离线可验证」口径） ----
+# ---- ⑧ 打包 payload 自检（FEA-M6-06 · 打包流水线入闸；DBG-L01 同款「离线可验证」口径） ----
 #  * 跑 package.ps1 -SkipBuild -SkipInstaller：重建 payload + manifest + `.iss ↔ payload` 一致性锁
 #  * 判据：退出码 ∈ {0, 2}（0 = payload+安装包都成功 / 2 = payload 成功、安装包未编译）**且**
 #    `build\dist\payload` 与 manifest.txt 都存在；ISCC 缺失**不是**失败（本机无 Inno Setup 亦可入闸）
-Write-Both "`n== ⑦ 打包 payload（package.ps1 -SkipBuild -SkipInstaller） =="
+Write-Both "`n== ⑧ 打包 payload（package.ps1 -SkipBuild -SkipInstaller） =="
 $packageScript = Join-Path $sourceDir 'tools\package.ps1'
 if (Test-Path $packageScript) {
     $outFile = Join-Path $logDir "check_all_$stamp`_package.txt"

@@ -21,7 +21,7 @@ engine/        领域层：Graph / 校验 / 执行 / 工作流 IO / 上级节点
 ai/ web/ nodes/ utils/   能力层：无 UI 依赖，全部经 engine 间接暴露给 ui
 ```
 
-**规则 1（依赖单向）**：`engine/*`、`nodes/*`、`ai/*`、`web/*`、`utils/*` 的头文件**禁止 include** `ui/*` 与 `app/*`；CI 用 include 扫描断言。
+**规则 1（依赖单向）**：`engine/*`、`nodes/*`、`ai/*`、`web/*`、`utils/*` 的头文件**禁止 include** `ui/*` 与 `app/*`；CI 用 include 扫描断言。 ✅ **已工具化（2026-10-23 · ARCH-A4）**：断言 = [../../source/tools/check_includes.ps1](../../source/tools/check_includes.ps1)（R1 = 能力层不得依赖 `ui|app`；R2 = `ui` 不得依赖 `app`；跨层同名头 ⇒ 归属不明判失败），已接入 `check_all` 第 ⑥ 项。
 
 **规则 2（可验证逻辑归 engine）**：凡是"能被自检覆盖的判定"（校验、打包、边界识别、排序、序列化）**必须**在 engine 实现并被 `api_probe` 覆盖；ui 层只做编排与展示。
 
@@ -369,7 +369,7 @@ SettingsPanel settings(ctx.config());
 | **ARCH-A1** | ~~`AppContext` 收口：Config/Clipboard/Diagnostics/RecentFiles/AutosaveService/WorkflowFile~~ ✅ **已落地（2026-10-23）** | 应用级统一（六服务拆为独立对象 + `AppContext` 容器；`EditorState` 保留薄封装 + `app_ctx()` 访问器 · 过渡形态 = EditorState 成员，A3 迁 app/main 注入） | 构建 0/0 + `--run-selftest` PASS（零断言增减）+ exec 713/0 + graph 151/0 + ce_repro 全帧 OK + check_links **1823**/0 + check_all **19/19** |
 | **ARCH-A2** | ~~`AutosaveService` 独立（A1 已拆出对象；本批 = EditorState autosave 方法随 `editor()` 一并移除）~~ ✅ **已落地（2026-10-23）** | autosave 解耦（`EditorState` 六方法移除：tick / pause / mark_baseline / dirty / flush / restore → 调用方直连 `app_ctx().autosave`；restore 编排落 app 层恢复弹窗） | 构建 0/0 + `--run-selftest` PASS（零断言增减）+ exec 713/0 + graph 151/0 + check_links **1839**/0 + check_all **19/19** |
 | **ARCH-A3** | ~~`editor()` 退场：只保留 `AppContext` 聚合~~ ✅ **已落地（2026-10-23）** | 上帝对象消失（`EditorState` → 无所有权 `EditorController`；`AppContext` 启动组装 + 只注入一次） | 构建 0/0 + `--run-selftest` PASS（零断言增减）+ exec 713/0 + graph 151/0 + ce_repro 全帧 OK + check_links **1845**/0 + check_all **19/19** + `rg "editor\(\)"` = 0 |
-| **ARCH-A4** | 依赖单向 CI 断言：`tools/check_includes.ps1`（禁止 engine/nodes/ai/web/utils include ui/app），接入 `check_all` | 规则 1 工具化 | `check_all` 新项 PASS |
+| **ARCH-A4** | ~~依赖单向 CI 断言：`tools/check_includes.ps1`（禁止 engine/nodes/ai/web/utils include ui/app），接入 `check_all`~~ ✅ **已落地（2026-10-23）** | 规则 1 工具化（`check_includes.ps1`：R1 能力层 ⊅ `ui|app` · R2 `ui` ⊅ `app` · 跨层同名头 = 归属不明 ⇒ 失败；裸文件名 → 所属层反查，覆盖 201 文件 / 656 include 行；`check_all` **19 → 20 项**，新项排第 ⑥） | `check_all` **20/20** + 新项 PASS（201 文件 · 违规 0）· 注入测试 3 种全部变红 · 构建 0/0 + `--run-selftest` PASS + exec 713/0 + graph 151/0 + check_links **1864**/0 |
 | **ARCH-A5** | 全局变量扫描：`tools/check_globals.ps1`（跨 TU extern + 文件级 static 可变状态 = 0），接入 `check_all` | 规则 6 工具化 | `check_all` 新项 PASS |
 
 ### 阶段 4：收尾（ARCH-Z）
@@ -387,7 +387,7 @@ SettingsPanel settings(ctx.config());
 2. **全局变量归零**：`check_globals.ps1` 扫描 `ui/` 跨 TU extern + 文件级 static 可变状态 = 0（`TextureCache` 作为**类成员**自然不计入，无例外条款）。
 3. **双画布单套交互**：`ce_draw.cpp` 与 `node_canvas.cpp` 中不存在重复的"窗口判定 / Delete / 选中同步"实现（`rg` 验证关键谓词只出现在 `interactor.cpp`）。 ✅ **已满足（2026-10-22 · ARCH-E5）**：`GetSelected* / BeginCreate/EndCreate / BeginDelete/EndDelete / Query* / Accept* / Reject* / ClearSelection` 只出现在 `interactor.cpp`；窗口判定只出现在 `interactorWindowActiveMain/Composite`。
 4. **打包-校验同源**：`ce_pack.cpp` 不再直接写 `spec.internal_graph` / `spec.inputs` / `spec.exposed_params`（`rg` 验证为 0 次）。 ✅ **已满足（2026-10-23 · ARCH-E6）**：打包逻辑下沉 `engine::buildCompositeSpecFromSelection`（composite.h/.cpp），ce_pack 仅调用 + 生成后严格校验（`validate_composite_spec` 通过才落盘）；生成阶段自动修正「暴露输入不得有内部入边」（variadic 端口内外并存场景）。
-5. **依赖单向**：`check_includes.ps1` 通过（engine/nodes/ai/web/utils 不含 ui/app 头）。
+5. **依赖单向**：`check_includes.ps1` 通过（engine/nodes/ai/web/utils 不含 ui/app 头）。 ✅ **已满足（2026-10-23 · ARCH-A4）**：`check_includes.ps1` = `checked files: 201 / include lines: 656 / violations: 0`（能力层 130 文件 276 行 include 中归属 `ui|app` 者 0；`ui` 292 行中归属 `app` 者 0）；接入 `check_all` 第 ⑥ 项，三个注入测试均能变红（[audit/audit_arch_a4.md](../audit/audit_arch_a4.md)）。
 6. **`editor()` 退场**：全库 `editor()` 引用为 0（`rg` 验证），只保留 `AppContext`。 ✅ **已满足（2026-10-23 · ARCH-A3）**：`rg "\beditor\(\)" source/` = 0；`AppContext` 只在 `ui/app_context.*` + 启动组装点（`app.cpp` / `cli_selftest.cpp`）出现。
 7. **ReadOnlyView 落地**：渲染路径只读 `ReadOnlyView`（`rg` 验证渲染函数不直接持有 `WorkflowModel&` / `SelectionState&` / `RunSession&` 的裸引用）。
 8. **`AppContext` 运行时不可访问**：`rg "ctx\." source/src/ui/` 为 0；`rg "AppContext" source/src/` 只在 `app/` 下。 ✅ **已满足（2026-10-23 · ARCH-A3）**：UI 面板代码 **0** 处 `AppContext` 代码引用（仅注释提及）；各模块只持 `EditorController&`（内部转发所需引用），启动组装点 = `app.cpp` / `cli_selftest.cpp`。

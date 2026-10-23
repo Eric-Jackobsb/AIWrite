@@ -234,14 +234,20 @@ $env:DEEPSEEK_API_KEY="sk-..." ; .\api_probe.exe --chat "你好"   # V-06（需 
 .\build\bin\api_probe.exe --autosave-assert  # 自动保存/崩溃恢复断言（PC-01/02：原子写 28 项场景；全程在系统临时目录内，不碰用户快照）
                                              # ⚠ 会**临时**写并删除 ~\.brain-ai\providers.d\aiwrite-selftest-site.json（自清理）
 
-# —— 一键跑完所有离线自检（构建 + 离线自检/夹具 + GUI 自检 + 站点台账 + 文档断链 ⇒ `PB2-24` = 13 项、`PC-01/02` = 14 项、**`M_patchAB` 批 5 = 现行 15 项**）——
+# —— 一键跑完所有离线自检（构建 + 离线自检/夹具 + GUI 自检 + 站点台账 + 依赖单向 + 文档断链 + 打包 ⇒ `PB2-24` = 13 项、`PC-01/02` = 14 项、`M_patchAB` 批 5 = 15 项、**`ARCH-A4` = 现行 20 项**）——
 powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_all.ps1
 #   参数：-SkipBuild / -SkipGui / -SkipLoop / -OnlyBuild；打印汇总表 + exit 0/1
 #   物证：build\logs\check_all_<时间戳>.log（各项明细与 build 输出同目录）
 #   构建时也可顺带跑一遍（`PM-03`）：`cd source; .\build.ps1 -SelfCheck`（编译成功后调 check_all，失败指向 check_all 日志）
 
-# —— 文档断链自检（`DBG-L01` 收口 · 判据 = **全库 0** · 已入 `check_all` 第 ⑥ 项）——
-python source\tools\check_links.py            # checked 1197 / broken 0（含仓库根 *.md；剔除代码块与行内代码；退出码 0/1）
+# —— 依赖单向自检（`ARCH-A4` 收口 · 判据 = 能力层不含 ui/app 头 · 已入 `check_all` 第 ⑥ 项）——
+powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\check_includes.ps1
+#   R1：engine/nodes/ai/web/utils 禁止 include 归属 ui/app 的头 ｜ R2：ui 禁止 include app 的头
+#   违规 ⇒ 逐条打印 `文件:行 #include "x" ⇒ 归属层` + exit 1；跨层同名头 = 归属不明同样判失败
+#   实测（2026-10-23）：checked files 201 / include lines 656 / violations 0
+
+# —— 文档断链自检（`DBG-L01` 收口 · 判据 = **全库 0** · 已入 `check_all` 第 ⑦ 项）——
+python source\tools\check_links.py            # checked 1864 / broken 0（含仓库根 *.md；剔除代码块与行内代码；退出码 0/1）
 
 # —— 打包「一键安装包」（Inno Setup · `M6-08`）——
 powershell -NoProfile -ExecutionPolicy Bypass -File .\source\tools\package.ps1 [-Version 0.2.0] [-SkipBuild] [-SkipInstaller]
