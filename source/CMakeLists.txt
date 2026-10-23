@@ -272,7 +272,11 @@ add_library(aiwrite_core STATIC
     ai/src/doubao/site_upload_doubao.cpp # M8-14：豆包站点上传单元（B1/B2 实测）
     ai/src/kimi/site_upload_kimi.cpp   # M8-14：Kimi 站点上传单元（模板性验证站）
     ai/src/deepseek/deepseek_official_provider.cpp
-    ai/src/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）
+    ai/src/provider_spec.cpp          # M_patchB L1：Provider 配置表（API + 网页版同表）· 加载/合并/缓存
+    ai/src/provider_spec_parse.cpp    # ARCH-Z1：配置表解析 / 收尾校验 / 最小兜底表
+    ai/src/provider_spec_web.cpp      # ARCH-Z1：网页版站点派生 / 文案 / 登录态 / 探测适用性
+    ai/src/provider_spec_query.cpp    # ARCH-Z1：配置表纯查询（模型 / 协议 / 默认值 / resolve_*）
+    ai/src/provider_spec_selftest.cpp # ARCH-Z1：配置表离线断言（--provider-selftest 共用）
     ai/src/http_json.cpp              # L2（B2-b）：通用 JSON POST（取消 / 超时 / 错误归因三协议共用）
     ai/src/http_net.cpp               # M_patchAB §2.3（PB-06 剩余）：代理 / 自签证书策略（纯逻辑 + 应用点）
     ai/src/inference_provider.cpp     # L2（PB2-08/12）：统一推理接口 + 能力门控 + openai/网页版实现
