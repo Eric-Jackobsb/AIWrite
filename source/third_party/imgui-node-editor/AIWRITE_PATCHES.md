@@ -3,17 +3,25 @@
 本文件记录 aiwrite 对第三方库 `imgui-node-editor`（v0.9.3）的本地改动、
 已知危险与开发约定。**任何后续循环开发涉及本库时，先读本文件。**
 
+## 0. 仓库瘦身记录（2026-10-24）
+
+上游附带的 `examples/`、`external/`（自带 imgui 1.84 WIP、DXSDK、gl3w、ScopeGuard、stb_image）、
+`docs/`、`.github/`、`misc/` 已**从本仓库移除** —— 它们从未参与编译（本工程的 CMake 只取
+`imgui_node_editor.cpp` / `imgui_node_editor_api.cpp` / `imgui_canvas.cpp` / `crude_json.cpp`）。
+删除后仓库减少约 **3.5 MB / 70 个文件**；`external/` 的 ODR 红线仍然有效：
+**若将来重新引入上游 `external/`，绝不可加入任何 target 的 include 路径。**
+
 ## 1. 配对版本（2026-10-16 核实）
 
 | 组件 | 版本 | 位置 |
 |---|---|---|
 | vcpkg imgui | **1.90.7-docking**（`IMGUI_VERSION_NUM == 19070`） | `vcpkg-installed/x64-windows/include/imgui.h` |
-| 库自带 imgui | **1.84 WIP**（`IMGUI_VERSION_NUM == 18309`） | `third_party/imgui-node-editor/external/imgui/`（**未被编译**） |
+| 库自带 imgui | **1.84 WIP**（`IMGUI_VERSION_NUM == 18309`） | **已移除（2026-10-24）** · 原 `third_party/imgui-node-editor/external/imgui/`（从未被编译） |
 | imgui-node-editor | v0.9.3 | `third_party/imgui-node-editor/`（固定 tag） |
 
 所有 TU（应用 + `imgui_node_editor` 库 + 复现工具）都通过
 `imgui::imgui`（vcpkg）提供的 include 路径编译到 **1.90.7**。
-`external/imgui`（1.84 WIP）不在任何 include 路径上。
+`external/imgui`（1.84 WIP）不在任何 include 路径上；该目录已于 2026-10-24 从仓库移除（见 §0）。
 
 ## 2. ODR 隐患：同名结构体 + 同签名内联函数 → 链接器静默选错实现
 

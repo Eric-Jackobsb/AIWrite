@@ -7,6 +7,7 @@
 #include "node_registry.h"
 #include "provider_resolve.h"
 #include "editor_controller.h"
+#include "commands.h"          // POL-E-01a：右键菜单收敛进命令层（三入口一致）
 #include "theme.h"             // canvas_theme_main（主画布主题）
 #include "config.h"
 #include "texture_cache.h"     // P7a-16：节点卡片缩略图 + 格式徽标
@@ -120,7 +121,7 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
 
     ImGui::TextDisabled("输入端口在节点左侧、输出端口在右侧 ｜ 拖左侧圆点连线，类型不符会变红被拒");
     ImGui::SameLine();
-    ImGui::TextDisabled("｜ 右键：画布新建 / 节点复制·删除 / 连线删除 ｜ 左键点连线可选中 → Delete 或工具栏「删除选中」");
+    ImGui::TextDisabled("｜ 右键：撤销 / 重做 · 画布新建 · 复制 / 粘贴 · 打包为上级节点 ｜ 左键点连线可选中 → Delete 或工具栏「删除选中」");
     if (nc.alt_pan_active) {
         ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f),
                            "Alt 平移模式：按住左键拖拽即可平移画布（松开 Alt 即恢复拖动节点/框选）");
@@ -205,12 +206,20 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
 
     ed::Suspend();
 
+    // POL-E-01a：右键菜单动作统一经 dispatchCommand（与「编辑」菜单 / 工具栏同一实现，
+    // 消除「右键直调 EditorController → 行为与另两入口不一致」的漂移）。
+    const CommandContext menu_ctx{nullptr, nullptr, &state};
+
     // 右键菜单按「最具体优先」串联（官方 blueprints-example 写法）：节点 > 背景。
     // 说明：连线右键菜单（「删除连线」「选中该连线」）已按需求下线，见 CHANGELOG「连线右键菜单移除」；
     //       连线删除请用「左键单击连线选中 → 工具栏【删除选中】」。
     if (ed::ShowNodeContextMenu(&nc.context_node_handle)) {
         nc.context_node         = "n" + std::to_string(nc.context_node_handle.Get());
-        state.selection().select_node(nc.context_node); // ARCH-E4：选中独立对象
+        // POL-E-01a：右键**已在多选内**的节点 → 保留原多选（否则「打包为上级节点」
+        // 永远只剩 1 个节点可选，右键入口形同虚设）；右键未选中的节点 → 收敛为单选。
+        if (!state.selection().is_selected(nc.context_node)) {
+            state.selection().select_node(nc.context_node); // ARCH-E4：选中独立对象
+        }
         ImGui::OpenPopup("##node_menu");
     }
     else if (ed::ShowBackgroundContextMenu()) {
@@ -219,19 +228,28 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     }
 
     if (ImGui::BeginPopup("##canvas_menu")) {
+        // POL-E-01a：撤销 / 重做 —— 谓词与「编辑」菜单同源（state.model().undo），
+        // 动作走命令层（三入口同一实现）
+        if (ImGui::MenuItem("撤销", nullptr, false, state.model().undo.canUndo())) {
+            dispatchCommand(AppCommand::Undo, menu_ctx);
+        }
+        if (ImGui::MenuItem("重做", nullptr, false, state.model().undo.canRedo())) {
+            dispatchCommand(AppCommand::Redo, menu_ctx);
+        }
+        ImGui::Separator();
         ImGui::TextDisabled("新建节点");
         ImGui::Separator();
         show_add_node_menu(state, nc.spawn_position);
         ImGui::Separator();
         // 设计 §6.1：右键画布 → 粘贴
         if (ImGui::MenuItem("粘贴", nullptr, false, state.has_clipboard())) {
-            state.pasteClipboard();
+            dispatchCommand(AppCommand::Paste, menu_ctx);
         }
         if (ImGui::IsItemHovered() && !state.has_clipboard()) {
             ImGui::SetTooltip("剪贴板为空：先在节点右键菜单里「复制」");
         }
         if (ImGui::MenuItem("删除选中（节点 / 连线）", nullptr, false, state.has_selection())) {
-            state.deleteSelected();
+            dispatchCommand(AppCommand::DeleteSelection, menu_ctx);
         }
         ImGui::EndPopup();
     }
@@ -239,9 +257,17 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
     if (ImGui::BeginPopup("##node_menu")) {
         ImGui::TextDisabled("节点 %s", nc.context_node.c_str());
         ImGui::Separator();
+        // POL-E-01a：撤销 / 重做（谓词同「编辑」菜单；动作走命令层）
+        if (ImGui::MenuItem("撤销", nullptr, false, state.model().undo.canUndo())) {
+            dispatchCommand(AppCommand::Undo, menu_ctx);
+        }
+        if (ImGui::MenuItem("重做", nullptr, false, state.model().undo.canRedo())) {
+            dispatchCommand(AppCommand::Redo, menu_ctx);
+        }
+        ImGui::Separator();
         // 设计 §6.1：右键节点 → 复制（粘贴在画布右键菜单）
         if (ImGui::MenuItem("复制", nullptr, false, state.has_selection())) {
-            state.copySelection();
+            dispatchCommand(AppCommand::Copy, menu_ctx);
         }
         if (ImGui::MenuItem("改名（右侧参数面板）")) {
             state.request_focus_title = true;
@@ -254,6 +280,18 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
                 if (ImGui::MenuItem("编辑内部图…")) {
                     compositeEditorOpen(ctx_node->composite_id);
                 }
+            }
+        }
+        // CN-D10：右键多选 → 打包为上级节点（与「上级节点」菜单同一命令路径；
+        // 谓词挡在 <2 —— 不让用户走到 ceSession().error 的「请选中至少 2 个」分支，
+        // 那是上级编辑器会话的错误位，主画布调用会串台）
+        {
+            const bool pack_ok = state.selection().nodes().size() >= 2;
+            if (ImGui::MenuItem("打包为上级节点…", nullptr, false, pack_ok)) {
+                dispatchCommand(AppCommand::CompositePack, menu_ctx);
+            }
+            if (ImGui::IsItemHovered() && !pack_ok) {
+                ImGui::SetTooltip("请先选中至少 2 个节点再打包（Ctrl 点选 / 框选）");
             }
         }
         ImGui::Separator();
@@ -274,8 +312,15 @@ void drawNodeCanvas(const char* title, CanvasOptions& options, const ReadOnlyVie
                 ImGui::SetTooltip("该节点尚未运行过（状态为等待），暂不可重跑");
             }
         }
-        if (ImGui::MenuItem("删除该节点")) {
-            state.deleteSelected();
+        // 删除：多选时明确「删 N 个」（标签如实，避免「删除该节点」实际删掉整批选中）
+        {
+            const std::size_t sel_count = state.selection().nodes().size();
+            const std::string delete_label =
+                sel_count > 1 ? "删除选中的 " + std::to_string(sel_count) + " 个节点"
+                              : "删除该节点";
+            if (ImGui::MenuItem(delete_label.c_str(), nullptr, false, state.has_selection())) {
+                dispatchCommand(AppCommand::DeleteSelection, menu_ctx);
+            }
         }
         ImGui::EndPopup();
     }

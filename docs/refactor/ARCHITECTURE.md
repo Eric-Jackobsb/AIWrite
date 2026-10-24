@@ -531,10 +531,19 @@ SettingsPanel settings(ctx.config());
 
 ---
 
+## §9 冻结与解除（原 `FREEZE.md` 摘要 · 2026-10-24 合并）
+
+- **状态**：🟢 已冻结（2026-10-22 启动）→ **🔵 已解除（2026-10-23）**。
+- **解除依据**：[§4](#4-验收判据) 八条验收判据 **8/8 ✅**（逐条当场复跑取证）；`DevPlan.todo` 的「📦 冻结待解冻」组从未建立 ⇒ 无组可迁。
+- **解除后纪律**：新功能 / 新模块可登记实施；每次改动回归基线 = 构建 0/0 · `check_all` 21/21 · exec 713/0 · graph 151/0 · 文档断链 0。
+- **原文归档**（冻结范围 / 逐批记录 / 解除动作）→ [../Archive/refactor/FREEZE.md](../Archive/refactor/FREEZE.md)。
+
+---
+
 **文档结束 · v1.14 定稿。**
-**状态：ARCH-Z1 已收口 · §4 验收判据 8/8 ✅ · [FREEZE.md](FREEZE.md) 已解除（🟢 → 🔵 · 2026-10-23）。**
+**状态：ARCH-Z1 已收口 · §4 验收判据 8/8 ✅ · 冻结已解除（🟢 → 🔵 · 2026-10-23 · 摘要见 §9）。**
 **下一步（解冻后）：新功能 / 新模块可登记实施（回归基线 §4 仍每次改动必跑：构建 0/0 · `check_all` 21/21 · exec 713 · graph 151 · 断链 0）；若续做 Z1 遗留口径 = 工具类 `app/src/cli_selftest.cpp` 1429 行（另立批）· 去重余量 **2.98 %**（>3.0 % 才需再专项）。**
-**已完成：ARCH-R1（RunSession 对象化）· ARCH-R2（RunEvent 订阅化）· ARCH-R3（ReadOnlyView 渲染视图）· ARCH-R4（命令路由层）· ARCH-E1（EventBus + EditEvent）· ARCH-E2（Undo/autosave 订阅化）· ARCH-E3（WorkflowModel 拆分：Graph + Undo + EventBus 拆出 · 文档级独立）· ARCH-E4（SelectionState 拆分：选中独立）· ARCH-E5（CanvasInteractor 落地：双画布交互收敛为一套）· ARCH-E6（打包下沉：buildCompositeSpecFromSelection 进 engine + 生成后严格校验 · 打包-校验同源）· ARCH-A1（AppContext 收口：Config/Clipboard/Diagnostics/RecentFiles/AutosaveService/WorkflowFile 六项应用级服务统一 · 过渡形态 = EditorState 成员）· ARCH-A2（AutosaveService 独立收尾：EditorState autosave 方法移除 · 调用方直连 app_ctx().autosave · restore 编排落 app 层）· ARCH-A3（`editor()` 退场：AppContext 启动组装 + EditorController 注入）· ARCH-A4（依赖单向断言工具化：`check_includes.ps1`）· ARCH-A5（全局变量断言工具化：`check_globals.ps1` + 棘轮基线 + 跨 TU `extern` 清零）· ARCH-A6（ui 层 60 条文件级 static 逐文件对象化 · 7 个状态对象归 `EditorController` · 基线 **87 → 27**）· ARCH-A7（web/utils 27 条文件级 static 对象化 · **存量 87 → 0** · 删基线切严格零容忍 + 函数内 static 棘轮 51）· ARCH-Z2（`CeSession` 五对象对称拆分：`CeModel` / `CeFile` / `CeSelection` / `CeSpec` + `CeSession` 门面 · ce 渲染 `CeReadOnlyView` 化 · **判据 7 ✅** · 棘轮 51 → 50）· ARCH-Z1（**超长文件瘦身收口**：13 组提交 / 14 个文件全部 < 800 行 + 去重专项 6 步 **3.8 % → 2.98 %** · **§4 判据 8/8 ✅ ⇒ 冻结解除**）—— 审计见 docs/audit/audit_arch_r1.md / audit_arch_r2.md / audit_arch_r3.md / audit_arch_r4.md / audit_arch_e1.md / audit_arch_e2.md / audit_arch_e3.md / audit_arch_e4.md / audit_arch_e5.md / audit_arch_e6.md / audit_arch_a1.md / audit_arch_a2.md / audit_arch_a3.md / audit_arch_a4.md / audit_arch_a5.md / audit_arch_a6.md / audit_arch_a7.md / audit_arch_z2.md / audit_arch_z1.md（§8 收口表 · §10 去重专项 · §11 8/8 复审）/ audit_arch_z1_web.md。**
+**已完成：ARCH-R1（RunSession 对象化）· ARCH-R2（RunEvent 订阅化）· ARCH-R3（ReadOnlyView 渲染视图）· ARCH-R4（命令路由层）· ARCH-E1（EventBus + EditEvent）· ARCH-E2（Undo/autosave 订阅化）· ARCH-E3（WorkflowModel 拆分：Graph + Undo + EventBus 拆出 · 文档级独立）· ARCH-E4（SelectionState 拆分：选中独立）· ARCH-E5（CanvasInteractor 落地：双画布交互收敛为一套）· ARCH-E6（打包下沉：buildCompositeSpecFromSelection 进 engine + 生成后严格校验 · 打包-校验同源）· ARCH-A1（AppContext 收口：Config/Clipboard/Diagnostics/RecentFiles/AutosaveService/WorkflowFile 六项应用级服务统一 · 过渡形态 = EditorState 成员）· ARCH-A2（AutosaveService 独立收尾：EditorState autosave 方法移除 · 调用方直连 app_ctx().autosave · restore 编排落 app 层）· ARCH-A3（`editor()` 退场：AppContext 启动组装 + EditorController 注入）· ARCH-A4（依赖单向断言工具化：`check_includes.ps1`）· ARCH-A5（全局变量断言工具化：`check_globals.ps1` + 棘轮基线 + 跨 TU `extern` 清零）· ARCH-A6（ui 层 60 条文件级 static 逐文件对象化 · 7 个状态对象归 `EditorController` · 基线 **87 → 27**）· ARCH-A7（web/utils 27 条文件级 static 对象化 · **存量 87 → 0** · 删基线切严格零容忍 + 函数内 static 棘轮 51）· ARCH-Z2（`CeSession` 五对象对称拆分：`CeModel` / `CeFile` / `CeSelection` / `CeSpec` + `CeSession` 门面 · ce 渲染 `CeReadOnlyView` 化 · **判据 7 ✅** · 棘轮 51 → 50）· ARCH-Z1（**超长文件瘦身收口**：13 组提交 / 14 个文件全部 < 800 行 + 去重专项 6 步 **3.8 % → 2.98 %** · **§4 判据 8/8 ✅ ⇒ 冻结解除**）—— 审计见 docs/Archive/audit/audit_arch_r1.md / audit_arch_r2.md / audit_arch_r3.md / audit_arch_r4.md / audit_arch_e1.md / audit_arch_e2.md / audit_arch_e3.md / audit_arch_e4.md / audit_arch_e5.md / audit_arch_e6.md / audit_arch_a1.md / audit_arch_a2.md / audit_arch_a3.md / audit_arch_a4.md / audit_arch_a5.md / audit_arch_a6.md / audit_arch_a7.md / audit_arch_z2.md / audit_arch_z1.md（§8 收口表 · §10 去重专项 · §11 8/8 复审）/ audit_arch_z1_web.md**（2026-10-24 已迁 `docs/Archive/audit/` · 索引见 [../audit/refactor_summary.md](../audit/refactor_summary.md)）。**
 
 
 

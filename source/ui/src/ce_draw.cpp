@@ -337,6 +337,14 @@ void drawCompositeEditor(const char* title, bool* open, const CeReadOnlyView& vi
         if (ImGui::BeginPopup("##ce_node_menu")) {
             ImGui::TextDisabled("内部节点 %s", ce_context_node.c_str());
             ImGui::Separator();
+            // POL-E-01a：撤销 / 重做（与 ce 顶栏按钮同一实现：compositeEditorUndo/RedoOnce）
+            if (ImGui::MenuItem("撤销", nullptr, false, compositeEditorCanUndo())) {
+                compositeEditorUndoOnce();
+            }
+            if (ImGui::MenuItem("重做", nullptr, false, compositeEditorCanRedo())) {
+                compositeEditorRedoOnce();
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("改名")) {
                 ceOpenRename(ce_context_node);
             }

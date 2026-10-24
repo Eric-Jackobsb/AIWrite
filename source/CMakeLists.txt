@@ -361,9 +361,10 @@ endif()
 # 与 vcpkg 的 imgui 1.90.7-docking 配对
 #
 # ⚠ ODR 红线（见 third_party/imgui-node-editor/AIWRITE_PATCHES.md）：
-#   本库自带 external/imgui（1.84 WIP），与 vcpkg 的 1.90.7 同名结构体布局不同。
+#   本库曾自带 external/imgui（1.84 WIP），与 vcpkg 的 1.90.7 同名结构体布局不同。
+#   该目录已于 2026-10-24 随未编译的上游示例一并移除；**若将来重新引入，
 #   绝不可把 third_party/imgui-node-editor/external 加入任何 target 的
-#   include 路径——否则链接器静默选错实现，运行期才以内存错乱暴露。
+#   include 路径** —— 否则链接器静默选错实现，运行期才以内存错乱暴露。
 #   imgui_node_editor.h 内已有 IMGUI_VERSION_NUM==19070 静态断言兜底。
 # -----------------------------------------------------------------------------
 add_library(imgui_node_editor STATIC

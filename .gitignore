@@ -78,6 +78,8 @@ Desktop.ini
 *.brain-ai.json
 # UI 布局状态（程序运行期在仓库根生成的 ImGui 窗口布局，本机私有）
 /imgui.ini
+# 窗口栈看门狗输出（app_panels.cpp 在栈深异常时自动生成，属运行期取证，不入库）
+/windowstack_crash.txt
 
 # ------------------------------------------- Python 运行时（Pydoll · M7B）----
 # 说明：`source/python/` 是**源码目录**（守护进程 / 管道 / Pydoll 封装），必须入库；
